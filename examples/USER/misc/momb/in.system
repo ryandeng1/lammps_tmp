@@ -11,7 +11,7 @@ angle_style     charmm
 dihedral_style  charmm
 improper_style  harmonic
 pair_style      hybrid/overlay eam/fs lj/charmm/coul/long 10.0 12.0 momb 12.0 0.75 20.0 morse 5.5
-kspace_style    pppm 1e-4
+kspace_style    pppm 1e-5
 
 # ----------------- Atom Definition Section -----------------
 
@@ -166,15 +166,13 @@ special_bonds   charmm
 
 timestep        0.001
 
-restart         2000 NVT.restart.1_dup NVT.restart.1
-
-minimize		1.0e-3 1.0e-5 1000 10000
+minimize	1.0e-3 1.0e-5 1000 10000
+reset_timestep  0
 
 velocity        all create 413.0 12378 dist gaussian
 
-thermo          0
-thermo_style    custom step pe ke etotal temp vol press lx lz pxx pyy pzz
-thermo_modify   flush yes
+thermo          10
+thermo_style    custom step pe ke etotal temp press pxx pyy pzz
 
 variable STEP equal step
 variable PE equal pe
@@ -190,8 +188,8 @@ variable PYY equal pyy
 variable PZZ equal pzz
 
 fix             1 all nvt temp 413.0 413.0 0.1 fixedpoint 0.0 0.0 0.0
-fix 			thermo_output all print 2000 "${STEP} ${PE} ${KE} ${ETOTAL} ${TEMP} ${VOL} ${PRESS} ${LX} ${LZ} ${PXX} ${PYY} ${PZZ}" file thermo.lammps title "# Step PotEng KinEng TotEng Temp Volume Press Lx Lz Pxx Pyy Pzz"
+#fix 			thermo_output all print 2000 "${STEP} ${PE} ${KE} ${ETOTAL} ${TEMP} ${VOL} ${PRESS} ${LX} ${LZ} ${PXX} ${PYY} ${PZZ}" file thermo.lammps title "# Step PotEng KinEng TotEng Temp Volume Press Lx Lz Pxx Pyy Pzz"
 
-dump		    1 all custom 10 traj_npt.lammpstrj id mol type x y z ix iy iz
+#dump		    1 all custom 10 traj_npt.lammpstrj id mol type x y z ix iy iz
 
 run             100
