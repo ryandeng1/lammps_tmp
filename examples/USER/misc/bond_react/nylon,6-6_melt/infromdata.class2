@@ -20,7 +20,7 @@ dihedral_style class2
 
 improper_style class2
 
-read_data large_nylon_melt.data
+read_data large_nylon_melt.data.gz
 
 velocity all create 800.0 4928459 dist gaussian
 
