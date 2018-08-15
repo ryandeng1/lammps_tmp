@@ -1,114 +1,53 @@
-Commands :h1
+"Previous Section"_Run.html - "LAMMPS WWW Site"_lws -
+"LAMMPS Documentation"_ld - "LAMMPS Commands"_lc - "Next
+Section"_Packages.html :c
+
+:link(lws,http://lammps.sandia.gov)
+:link(ld,Manual.html)
+:link(lc,Commands_all.html#comm)
+
+:line
+
+Commands :h2
+
+These pages describe how a LAMMPS input script is formatted and the
+commands in it are used to define a LAMMPS simulation.
 
 <!-- RST
 
 .. toctree::
    :maxdepth: 1
 
-   angle_coeff
-   angle_style
-   atom_modify
-   atom_style
-   balance
-   bond_coeff
-   bond_style
-   bond_write
-   boundary
-   box
-   change_box
-   clear
-   comm_modify
-   comm_style
-   compute
-   compute_modify
-   create_atoms
-   create_bonds
-   create_box
-   delete_atoms
-   delete_bonds
-   dielectric
-   dihedral_coeff
-   dihedral_style
-   dimension
-   displace_atoms
-   dump
-   dump_cfg_uef
-   dump_h5md
-   dump_image
-   dump_modify
-   dump_molfile
-   dump_netcdf
-   dump_vtk
-   echo
-   fix
-   fix_modify
-   group
-   group2ndx
-   if
-   improper_coeff
-   improper_style
-   include
-   info
-   jump
-   kspace_modify
-   kspace_style
-   label
-   lattice
-   log
-   mass
-   min_modify
-   min_style
-   minimize
-   molecule
-   neb
-   neigh_modify
-   neighbor
-   newton
-   next
-   package
-   pair_coeff
-   pair_modify
-   pair_style
-   pair_write
-   partition
-   prd
-   print
-   processors
-   python
-   quit
-   read_data
-   read_dump
-   read_restart
-   region
-   replicate
-   rerun
-   reset_ids
-   reset_timestep
-   restart
-   run
-   run_style
-   set
-   shell
-   special_bonds
-   suffix
-   tad
-   temper
-   temper_grem
-   temper_npt
-   thermo
-   thermo_modify
-   thermo_style
-   timer
-   timestep
-   uncompute
-   undump
-   unfix
-   units
-   variable
-   velocity
-   write_coeff
-   write_data
-   write_dump
-   write_restart
+   Commands_input
+   Commands_parse
+   Commands_structure
+   Commands_category
+
+.. toctree::
+   :maxdepth: 1
+
+   Commands_all
+   Commands_fix
+   Commands_compute
+   Commands_pair
+   Commands_bond
+   Commands_kspace
 
 END_RST -->
+
+<!-- HTML_ONLY -->
+
+"LAMMPS input scripts"_Commands_input.html
+"Parsing rules for input scripts"_Commands_parse.html
+"Input script structure"_Commands_structure.html
+"Commands by category"_Commands_category.html :all(b)
+
+"All commands"_Commands_all.html 
+"Fix commands"_Commands_fix.html 
+"Compute commands"_Commands_compute.html 
+"Pair commands"_Commands_pair.html 
+"Bond, angle, dihedral, improper commands"_Commands_bond.html
+"KSpace solvers"_Commands_kspace.html  :all(b)
+
+<!-- END_HTML_ONLY -->
+
