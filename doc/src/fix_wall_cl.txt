@@ -5,14 +5,13 @@
 
 :line
 
-fix wall/maxwell command :h3
+fix wall/cl command :h3
 
 [Syntax:]
 
-fix ID group-ID wall/maxwell face pos temp velx vely velz keyword value ... :pre
-
+fix ID group-ID wall/cl face pos temp velx vely velz keyword value ... :pre
 ID, group-ID are documented in "fix"_fix.html command :ulb,l
-wall/maxwell = style name of this fix command :l
+wall/cl = style name of this fix command :l
 one or more face/arg pairs may be appended :l
 face = {xlo} or {xhi} or {ylo} or {yhi} or {zlo} or {zhi} :l
   {xlo},{ylo},{zlo} pos = EDGE or constant or variable
@@ -21,15 +20,15 @@ face = {xlo} or {xhi} or {ylo} or {yhi} or {zlo} or {zhi} :l
     variable = "equal-style variable"_variable.html like v_x or v_wiggle
     temp = wall temperature
     velx, vely, velz = wall velocity along x, y, z directions
-    accom = accommodation coefficient
-
+    accomx, accomy, accomz = accommodation coefficients along x, y, z directions
   {xhi},{yhi},{zhi} pos = EDGE or constant or variable
     EDGE = current hi edge of simulation box
     constant = number like 50.0 or 100.3 (distance units)
     variable = "equal-style variable"_variable.html like v_x or v_wiggle 
     temp = wall temperature 
     velx, vely, velz = wall velocity along x, y, z directions
-    accom = accommodation coefficient :pre
+    accomx, accomy, accomz = accommodation coefficients along x, y, z directions
+    :pre
 
 zero or more keyword/value pairs may be appended :l
 keyword = {units} :l
@@ -41,24 +40,28 @@ keyword = {units} :l
 
 [Examples:]
 
-fix ywalls all wall/maxwell xlo EDGE 300 0.1 0.1 0 0.8 xhi EDGE 200 0.1 0.1 0
-0.8
+fix ywalls all wall/cl xlo EDGE 300 0.1 0.1 0 0.8 0.8 0.9 xhi EDGE 200 0.1 0.1 0
+0.8 0.8 0.9
 
-fix ywalls all wall/maxwell xlo 300 0.1 0.1 0 ylo 300 0.1 0.1 0 0.9 units box
+fix ywalls all wall/cl xlo 300 0.1 0.1 0 ylo 300 0.1 0.1 0 0.9 0.8 0.7 units box
 :pre
 
 [Description:]
 
-This is a stochastic wall model which is the mixture of two fixes (and two wall
-models) wall/reflect and wall/diffusive, proposed by Maxwell "Maxwell"_#Maxwell.
-An atom can be either fully thermalized by the wall and reflected diffusively or
-reflected specularly. In this case, the accommodation coefficient (ACCOM) lying
-between 0 and 1, is introduced to account for the diffusive reflection portion.
-As noted, when ACCOM = 0, the reflection is purely specular and when ACCOM = 1,
-the reflection is purely diffusive. The use of this stochastic model is almost
-the same as wall/reflect but with five additional parameters the wall
-temperature and the wall velocity along 3 directions x, y, z, and the
-accommodation coefficient.
+Cercignani-Lampis (CL) "CL"_#CL propose a stochastic wall model which can model
+the gas-wall collision realistically. Instead of mixing wall/reflect and
+wall/diffusive as in Maxwell model (fix wall/maxwell), the CL model used shifted
+MB distribution for the tangential velocity and exponential bessel for the
+normal velocity. Two accommodation coefficients are used: one for the tangential
+velocity (isotropic) and one for the normal kinetic energy. In this fix, a
+generalized version "To"_#To which can account for the anisotropy of the wall
+surface is implemented, there are three coefficients: two for the tangential
+velocity (two components) and one for the kinetic energy. The code will
+recognize automatically the normal direction of the wall and the other two
+tangential directions. For example, if accomx = 0.5, accomy = 0.2, accomz = 0.3
+and the wall is normal to direction y, accomx and accomz are the tangential
+velocity accommodation coefficients and accomy is the normal kinetic energy
+accommodation coefficients.
 
 The {units} keyword determines the distance units used to define a wall position
 
@@ -81,11 +84,18 @@ command.
 [Related commands:]
 
 "fix wall/reflect"_fix_wall_reflect.html, "fix
-"wall/diffusive"_fix_wall_diffusive.html, "fix wall/cl"_fix_wall_cl.html
-
+"wall/maxwell"_fix_wall_maxwell.html, "fix
+"wall/diffusive"_fix_wall_diffusive.html
+ 
 [Default:] none
 
 :line
 
-:link(Maxwell) [(Maxwell)] Maxwell, J. C. (1867). "On the Dynamical Theory of
-Gases". Philosophical Transactions of the Royal Society of London. 157: 49–88.
+:link(CL) 
+[(CL)] Cercignani and M. Lampis, "Kinetic models for gas-surface
+interactions" Transp. Theory Stat. Phys. 1, 2, 101 (1971). 
+:link(To) 
+[(To)] Q.D.
+To, V.H. Vu, G. Lauriat, and C. Leonard, "Boundary conditions for gas flow
+problems from anisotropic scattering kernels" J. Math. Phys. 56, 103101 (2015).
+
