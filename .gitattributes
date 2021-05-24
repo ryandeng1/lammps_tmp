@@ -2,4 +2,5 @@
 .gitignore export-ignore
 .github export-ignore
 .lgtm.yml export-ignore
+SECURITY.md export-ignore
 lib filter=lfs diff=lfs merge=lfs -text
