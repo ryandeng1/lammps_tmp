@@ -1,3 +1,12 @@
+#===========================================================================#
+#  Toy car driving down a system with a floor and ceiling.                  #
+#                                                                           #
+#  The car is first constructed by condensing particles onto various regions#
+#  that make up the car's parts.  Then the car moves in a lattice Boltzmann #
+#  fluid.  This requires compilation with the RIGID and LATBOLTZ packages   #
+#  You will need to uncomment the dump options to get useful output.        #
+#===========================================================================#
+
 units cgs
 dimension 3
 boundary p p f
@@ -375,7 +384,7 @@ neigh_modify delay 0 every 1 check yes
 #variable commcutoff equal "v_dx*2"
 #comm_modify cutoff ${commcutoff}
 
-dump mydump all atom 10000 out.lammpstrj
+#dump mydump all atom 10000 out.lammpstrj
 thermo 5000
 
 #------------------------------------------------------------------------#
@@ -390,7 +399,7 @@ fix 3 all langevin 31000000.0 50000.0 100.0 5678
 
 fix 2 all nve
 
-restart 100000 ParticleRestart
+#restart 100000 ParticleRestart
 
 run 100000
 
@@ -466,13 +475,13 @@ velocity all set 0.0 -7.5.0 0.0 units box
 
 # viscosity of air is 0.0001847
 
-fix   FL all lb/fluid 1 0.0002 ${density} stencil 2 dx ${dx} zwall_velocity 0 0 dumpxdmf 1000 sflow 0
+fix   FL all lb/fluid 1 0.0002 ${density} stencil 2 dx ${dx} zwall_velocity 0 0 # dumpxdmf 1000 sflow 0
 
 variable vx equal vcm(all,x)
 variable vy equal vcm(all,y)
 variable vz equal vcm(all,z)
 
-dump mydumpvtk all vtk 1000 out*.vtp vx vy vz
+#dump mydumpvtk all vtk 1000 out*.vtp vx vy vz
 
 fix   2 all lb/viscous
 

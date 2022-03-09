@@ -6,11 +6,12 @@
 # under pressure-driven lattice-Boltzmann fluid flow                        #
 #                                                                           #
 # To run this example, LAMMPS needs to be compiled with a the following     #
-# packages: MOLECULE, RIGID, USER-LB, USER-VTK                              #
+# packages: MOLECULE, RIGID, LATBOLTZ, USER-VTK                             #
 #                                                                           #
 #To run this example on N cores, use command:                               # 
-# mpirun -n N /LAMMPS/EXE/FILE -in polymer.in > output.out                  #
+# mpirun -n N /LAMMPS/EXE/FILE -in in.polymer > output.out                  #
 #                                                                           #
+# If uncommented:                                                           #
 # Sample output for polymer from this run can be found in the file:         # 
 #   'translocationdump.lammpstrj'                                           #
 # and viewed using, the VMD software.                                       #
@@ -28,7 +29,7 @@ dimension	3
 boundary	p p p
 atom_style	hybrid molecular
 special_bonds	fene
-read_data	translocation.data
+read_data	data.translocation
 
 #---------------------------------------------------------------------------
 #Creating a atomistic wall on an FCC lattice and removing the block from the
@@ -104,7 +105,7 @@ group WallAtoms  type 3
 #   increases the diffusive dynamics by a corresponding factor of 10.
 #   lattice spacing dx=1.0, and mass unit, dm=0.00009982071 (makes density 1)
 # Use a thermal lattice-Boltzmann fluid (temperature 300K, random number 
-#   seed=15003).  This enables the particles to undergo Brownian motion in 
+#   seed=5252).  This enables the particles to undergo Brownian motion in 
 #   the fluid.
 # In this case we use the scaleGamma argument to set the mass of the WallAtoms
 #   to infinity.
@@ -112,7 +113,7 @@ group WallAtoms  type 3
 #   which should be similar to the average flow field in the case with noise.
 #----------------------------------------------------------------------------
 fix 1 FluidAtoms lb/fluid 1 0.1 0.00009982071 dx 1.0 scaleGamma 3 -1 stencil 2 pressurebcx 1200 noise 300.0 5252
-#fix 1 FluidAtoms lb/fluid 1 0.1 0.00009982071 dx 1.0 scaleGamma 3 -1 stencil 2 pressurebcx 1200 dumpxdmf 1000 flow5252
+#fix 1 FluidAtoms lb/fluid 1 0.1 0.00009982071 dx 1.0 scaleGamma 3 -1 stencil 2 pressurebcx 1200 dumpxdmf 1000 flow 0
 
 #----------------------------------------------------------------------------
 # Apply the force from the fluid to the particles, and integrate their 
@@ -172,9 +173,9 @@ thermo  1000
 # trajectory and vtk format (commented out here). Write xyz dump file
 #--------------------------------------------------------------------------------
 variable numofsteps equal 400001
-dump  1 ForceAtoms custom 500 translocationdump.lammpstrj id xu yu zu vx vy vz
+#dump  1 ForceAtoms custom 500 translocationdump.lammpstrj id xu yu zu vx vy vz
 #dump 2 ForceAtoms vtk 1000 dump*.translocation.vtk id xu yu zu vx vy vz
-dump 4 WallAtoms xyz $(v_numofsteps-1) walldump.xyz
+#dump 4 WallAtoms xyz $(v_numofsteps-1) walldump.xyz
 
 #restart 50000 4nmrestart.*
 

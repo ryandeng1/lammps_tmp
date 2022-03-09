@@ -4,9 +4,10 @@
 # Run consists of a colloidal particle being dragged with a constant force  #
 # through an LB-fluid.  The colloidal particle could be single atom or      #
 # be a composite particle.  Composite particles could be bonded or just     #
-# rigidly constrained to stay together.                                     #
+# rigidly constrained to stay together. You can set flags in the script to  #
+# change these.                                                             #
 #                                                                           #
-# Sample output from this run can be found in the files with ".log"         #
+# Sample output from this run can be found in the files with "log."         #
 # located in the same directory.     	      	                            # 
 #===========================================================================#
 
@@ -133,7 +134,7 @@ if "${is_bonded} == 1" then &
 else &
    "variable comdatafile string drag_n${n_nodes}_st${stpts}_dt${tstep}.out" 
 
-fix printCM all print 100 "$(step) ${cmx} ${cmy} ${cmz} ${vcmx} ${vcmy} ${vcmz}" file ${comdatafile} screen no
+#fix printCM all print 100 "$(step) ${cmx} ${cmy} ${cmz} ${vcmx} ${vcmy} ${vcmz}" file ${comdatafile} screen no
 
 run    10000
 #run   100000

@@ -7,7 +7,7 @@
 # To run this example, LAMMPS needs to be compiled with a the following     #
 # packages: MOLECULE, RIGID, LATBOTLZ                                       #
 #                                                                           #
-# Sample output from this run can be found in the file:                     # 
+# If uncommented, sample output from this run can be found in the file:     # 
 #   'dump.polymer.lammpstrj'                                                #
 # and viewed using, e.g., the VMD software.                                 #
 #                                                                           #
@@ -18,7 +18,7 @@ dimension	3
 boundary	p p f
 atom_style	hybrid molecular
 special_bonds	fene
-read_data	polymer.data
+read_data	data.polymer
 
 #----------------------------------------------------------------------------
 # Need a neighbor bin size smaller than the lattice-Boltzmann grid spacing   
@@ -105,7 +105,7 @@ fix 3 all rigid/small molecule
 fix   4 all lb/momentum 100000 linear 1 1 1
 
 
-dump  1 ForceAtoms custom 10 trapped_polymer.lammpstrj id x y z vx vy vz
+#dump  1 ForceAtoms custom 10 trapped_polymer.lammpstrj id x y z vx vy vz
 
 #run		2000001
 run 10000  

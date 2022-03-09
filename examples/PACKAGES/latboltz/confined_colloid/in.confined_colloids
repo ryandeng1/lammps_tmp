@@ -19,7 +19,7 @@ units       micro
 dimension   3
 boundary    p p f
 atom_style  molecular
-read_data   ../confinedcolloids.dat
+read_data   confinedcolloids.dat
 
 mass * 0.00010287
 
@@ -102,4 +102,5 @@ fix   walllo ForceAtoms wall/lj126 zlo 0.0  20.0 0.8071542386 0.906 units box
 
 thermo 50
 
-run   400
+#run   400
+run 100

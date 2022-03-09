@@ -6,8 +6,6 @@
 # To run this example, LAMMPS needs to be compiled with a the following     #
 # packages: RIGID, LATBOLTZ                                                 #
 #                                                                           #
-# Sample output from this run can be found in the file:                     # 
-#   'planewall.out'                                                         #
 #===========================================================================# 
 
 units          micro
@@ -32,7 +30,7 @@ neighbor       1.0 bin
 neigh_modify   delay 0 every 1 
 comm_modify cutoff 10.0
 
-read_data      one_radius16d2.data
+read_data      data.one_radius16d2
 
 #----------------------------------------------------------------------------
 # None of the particles interact with one another.

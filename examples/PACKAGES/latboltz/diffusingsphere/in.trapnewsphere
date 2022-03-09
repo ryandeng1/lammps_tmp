@@ -2,13 +2,15 @@
 # Large colloidal sphere difusing around.                                   #
 #                                                                           #
 # In the first stage, the sphere is constructed by condensing atoms onto    #
-# the surface of a spherica region.                                         #
+# the surface of a spherical region. There are a flag you can change to     #
+# either bond atoms into a spherical shell or integrate them as a rigid body#
 #                                                                           #
 # To run this example, LAMMPS needs to be compiled with a the following     #
 # packages: RIGID, LATBOTLZ                                                 #
 #                                                                           #
-# Sample output from this run can be found in the file:                     # 
-#   'dump.polymer.lammpstrj'                                                #
+# If you uncomment the "dump..." line, sample output from this run          #
+# can be found in the file:                                                 # 
+#   'dump.trapnewsphere.lammpstrj'                                          #
 # and viewed using, e.g., the VMD software.                                 #
 #                                                                           #
 #===========================================================================#
@@ -60,7 +62,7 @@ fix wall all wall/region mysphere lj93 15.0 1.5 5.28
 
 fix 2 all nve
 
-dump mydump all atom 10000 out.lammpstrj
+#dump mydump all atom 10000 dump.trapnewsphere.lammpstrj
 
 run 20000
 
@@ -191,7 +193,7 @@ if "${is_bonded} == 1" then &
 else &
    "variable comdatafile string trap_n${n_nodes}_st${stpts}_dt${tstep}.out" 
 
-fix printCM all print 10 "$(step) $(f_FL) ${cmx} ${cmy} ${cmz} ${vcmx} ${vcmy} ${vcmz}" file ${comdatafile} screen no
+#fix printCM all print 10 "$(step) $(f_FL) ${cmx} ${cmy} ${cmz} ${vcmx} ${vcmy} ${vcmz}" file ${comdatafile} screen no
 
 run 10000
 #run 25000000

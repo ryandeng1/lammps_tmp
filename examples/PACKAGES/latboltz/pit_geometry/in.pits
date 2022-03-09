@@ -2,7 +2,7 @@
 # Rigid sphere freely moving in a system with pressure driven flow through  #
 #   a pit geometry.                                                         # 
 #                                                                           #
-# The example produces several output files:                                # 
+# If uncommented, the example produces several output files:                # 
 #   'flow.xdmf', 'flow.raw' ... xdmf and accompanying binary file for the   #
 #                               fluid density and velocity which can be read#
 #                               and plotted using Paraview.                 #
@@ -11,7 +11,6 @@
 #                               compiled with the vtk package).  These filed#
 #                               can also be read and plotted using Paraview.#
 #                               XX is the timestep of the dump output.      #
-#   'screen.out'            ... terminal output from the run.               #
 #===========================================================================# 
 
 units          micro
@@ -33,7 +32,7 @@ atom_style     atomic
 neighbor       1.0 bin
 neigh_modify   delay 0 every 1 
 
-read_data      one_radius16d2.data
+read_data      data.one_radius16d2
 
 #----------------------------------------------------------------------------
 # None of the particles interact with one another.
@@ -66,7 +65,7 @@ velocity       all set 0.0 0.0 0.0 units box
 # The initial conditions are set as linear interpolation between boundary
 #    values using the linearInit option.
 #-----------------------------------------------------------------------------
-fix  1 all lb/fluid 1 1.0 1.0 dx 4.0 dumpxdmf 2500 fflow 0 linearInit pressurebcx 0.01 npits 2 20 40 5 0 wp 30
+fix  1 all lb/fluid 1 1.0 1.0 dx 4.0 linearInit pressurebcx 0.01 npits 2 20 40 5 0 wp 30 # dumpxdmf 2500 fflow 0
 
 #-----------------------------------------------------------------------------
 # You can get some other interesting geometries by replacing the npits options
@@ -112,6 +111,6 @@ variable omegaz equal omega(all,z)
 thermo_style   custom step f_1[2] v_vx v_vy v_vz v_omegax v_omegay v_omegaz
 thermo         500
 
-dump dumpvtk all vtk 2500 dumpatoms*.vtp vx vy vz
+#dump dumpvtk all vtk 2500 dumpatoms*.vtp vx vy vz
 
 run	       2500

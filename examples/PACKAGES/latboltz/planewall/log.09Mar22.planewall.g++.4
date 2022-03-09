@@ -1,15 +1,135 @@
-LAMMPS (29 Sep 2021 - Update 1)
+LAMMPS (17 Feb 2022)
+#===========================================================================#
+# Rigid sphere freely moving near a stationary plane wall in a system       #
+#   undergoing shear flow.                                                  #
+# Every 10 time steps the center of mass velocity and angular velocity of   #
+#   the sphere are printed to the screen.                                   #
+# To run this example, LAMMPS needs to be compiled with a the following     #
+# packages: RIGID, LATBOLTZ                                                 #
+#                                                                           #
+#===========================================================================#
+
+units          micro
+dimension      3
+boundary       p p f
+atom_style     atomic
+
+#----------------------------------------------------------------------------
+# Need a neighbor bin size smaller than the lattice-Boltzmann grid spacing
+#   to ensure that the particles belonging to a given processor remain inside
+#   that processors lattice-Boltzmann grid.
+# The arguments for neigh_modify have been set to "delay 0 every 1", again
+#   to ensure that the particles belonging to a given processor remain inside
+#   that processors lattice-Boltzmann grid.  However, these values can likely
+#   be somewhat increased without issue.  If a problem does arise (a particle
+#   is outside of its processors LB grid) an error message is printed and
+#   the simulation is terminated.
+# The communcation cutoff is set to 2.5 dx to ensure that all particles in the
+#   processor ghost fluid region (of width 2dx) are known to local processor.
+#----------------------------------------------------------------------------
+neighbor       1.0 bin
+neigh_modify   delay 0 every 1
+comm_modify cutoff 10.0
+
+read_data      data.one_radius16d2
 Reading data file ...
-  orthogonal box = (-120.00000 -120.00000 -120.00000) to (120.00000 120.00000 120.00000)
+  orthogonal box = (-120 -120 -120) to (120 120 120)
   1 by 2 by 2 MPI processor grid
   reading atoms ...
   320 atoms
-  read_data CPU = 0.008 seconds
+  read_data CPU = 0.015 seconds
+
+#----------------------------------------------------------------------------
+# None of the particles interact with one another.
+#----------------------------------------------------------------------------
+pair_style     lj/cut 2.45
+pair_coeff     * * 0.0 0.0 2.45
+neigh_modify   exclude type 1 1
+
+mass           * 1.0
+
+timestep       4.0
+
+group          sphere1 id <> 1 320
 320 atoms in group sphere1
-Using a lattice-Boltzmann grid of 60 by 60 by 61 total grid points. (../fix_lb_fluid.cpp:475)
-Local Grid Geometry created. (../fix_lb_fluid.cpp:1021)
-First Run initialized
+
+#----------------------------------------------------------------------------
+# Colloidal particle is initially stationary.
+#----------------------------------------------------------------------------
+velocity       all set 0.0 0.0 0.0 units box
+
+#----------------------------------------------------------------------------
+# Create a lattice-Boltzmann fluid covering the simulation domain.
+# All of the particles in the simulation apply a force to the fluid.
+#   (however, this fix does not explicitly apply a force back on to these
+#    particles...this is accomplished through the use of the lb/viscous fix.
+# Use a fluid density = 1.0, fluid viscosity = 1.0 (water), and a lattice
+#   spacing dx=4.0.
+# Use the trilinear interpolation stencil (default) to distribute the force
+#   from a given particle onto the fluid mesh.
+# Create shear in the system, by giving the upper z-wall a velocity of 0.0001
+#   along the y-direction, while keeping the lower z-wall stationary.
+#-----------------------------------------------------------------------------
+fix   1 all lb/fluid 1 1.0 1.0 dx 4.0 zwall_velocity 0.0 0.0001
+Using a lattice-Boltzmann grid of 60 by 60 by 61 total grid points. (../fix_lb_fluid.cpp:486)
+Local Grid Geometry created. (../fix_lb_fluid.cpp:1018)
+
+#----------------------------------------------------------------------------
+# Apply the force due to the fluid onto the particles.
+#----------------------------------------------------------------------------
+fix   2 all lb/viscous
+
+#----------------------------------------------------------------------------
+# Integrate the motion of the particles, constraining them to move and
+#   rotate together as a single rigid spherical object.  Use the first
+#   version to allow the sphere to freely rotate and move with the fluid
+#   and the 2nd version to measure the force and torque on a fixed sphere
+#   in the shear flow which will allow you to measure the Stokes drag and
+#   torque on the sphere.
+#----------------------------------------------------------------------------
+fix   3 all rigid group 1 sphere1
   1 rigid bodies with 320 atoms
+#fix   3 all rigid group 1 sphere1 force * off off off torque * off off off
+
+#----------------------------------------------------------------------------
+# Create variables for the center-of-mass velocities, angular velocities, and
+#   force and torque on the CM.  Then output these quantities to the screen.
+#----------------------------------------------------------------------------
+variable vx equal vcm(all,x)
+variable vy equal vcm(all,y)
+variable vz equal vcm(all,z)
+variable omegax equal omega(all,x)
+variable omegay equal omega(all,y)
+variable omegaz equal omega(all,z)
+variable fx equal fcm(all,x)
+variable fy equal fcm(all,y)
+variable fz equal fcm(all,z)
+variable tx equal torque(all,x)
+variable ty equal torque(all,y)
+variable tz equal torque(all,z)
+
+thermo_style   custom v_vx v_vy v_vz v_omegax v_omegay v_omegaz v_fx v_fy v_fz v_tx v_ty v_tz
+thermo         100
+
+run   7500
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- fix lb/fluid command:
+
+@Article{Denniston et al.,
+ author = {C. Denniston, N. Afrasiabian, M.G. Cole-Andre,F.E. Mackay, S.T.T. Ollila, T. Whitehead},
+ title =   {LAMMPS lb/fluid fix version 2: Improved Hydrodynamic Forces Implemented into LAMMPS through a lattice-Boltzmann fluid}, journal = {Comp.~Phys.~Comm.},
+ year =    2022,
+ volume =  275,
+ pages =   {108318}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+  generated 0 of 0 mixed pair_coeff terms from geometric mixing rule
 Neighbor list info ...
   update every 1 steps, delay 0 steps, check yes
   max neighbors/atom: 2000, page size: 100000
@@ -22,10 +142,6 @@ Neighbor list info ...
       pair build: half/bin/atomonly/newton
       stencil: half/bin/3d
       bin: standard
-Setting up Verlet run ...
-  Unit style    : micro
-  Current step  : 0
-  Time step     : 4
 Per MPI rank memory allocation (min/avg/max) = 8.426 | 8.426 | 8.426 Mbytes
 v_vx v_vy v_vz v_omegax v_omegay v_omegaz v_fx v_fy v_fz v_tx v_ty v_tz 
            0            0            0            0            0            0            0            0            0            0            0            0 
@@ -104,36 +220,30 @@ v_vx v_vy v_vz v_omegax v_omegay v_omegaz v_fx v_fy v_fz v_tx v_ty v_tz
 -2.6074079e-12 4.9575038e-05 -8.5484831e-10 -2.0807608e-07 -7.0458889e-12 1.5917995e-11 -4.6370161e-13 2.3298683e-08 -1.1706817e-11 2.5798545e-10 6.4493257e-12 -9.0570787e-12 
 -3.1912867e-12 4.9603187e-05 -8.7103016e-10 -2.0807419e-07 -6.9729658e-12 1.5869196e-11 -5.4662034e-13 2.1756065e-08 -1.4183469e-11 2.6950321e-10 1.2401403e-11 -9.1121813e-12 
 -2.6896504e-12 4.9629471e-05 -8.8354072e-10 -2.0807269e-07 -6.9518789e-12 1.5862597e-11 7.7697632e-13 2.0315473e-08 -9.1356461e-12 1.9455164e-10 -5.2929772e-13 -4.0871645e-12 
-Loop time of 354.087 on 4 procs for 7500 steps with 320 atoms
+Loop time of 348.592 on 4 procs for 7500 steps with 320 atoms
 
-Performance: 7320228141.222 ns/day, 0.000 hours/ns, 21.181 timesteps/s
+Performance: 7435633235.428 ns/day, 0.000 hours/ns, 21.515 timesteps/s
 99.9% CPU use with 4 MPI tasks x no OpenMP threads
 
 MPI task timing breakdown:
 Section |  min time  |  avg time  |  max time  |%varavg| %total
 ---------------------------------------------------------------
-Pair    | 0.02245    | 0.024017   | 0.025793   |   0.9 |  0.01
-Neigh   | 0.0043829  | 0.0046506  | 0.0049014  |   0.4 |  0.00
-Comm    | 0.16337    | 0.1673     | 0.17244    |   0.9 |  0.05
-Output  | 0.011278   | 0.016279   | 0.031255   |   6.8 |  0.00
-Modify  | 353.57     | 353.58     | 353.6      |   0.1 | 99.86
-Other   |            | 0.2924     |            |       |  0.08
+Pair    | 0.024506   | 0.025477   | 0.026424   |   0.6 |  0.01
+Neigh   | 0.030494   | 0.03257    | 0.034614   |   1.0 |  0.01
+Comm    | 0.2132     | 0.21532    | 0.22048    |   0.6 |  0.06
+Output  | 0.011234   | 0.016341   | 0.031613   |   6.9 |  0.00
+Modify  | 347.96     | 347.98     | 348        |   0.1 | 99.83
+Other   |            | 0.3181     |            |       |  0.09
 
-Nlocal:        80.0000 ave          86 max          74 min
+Nlocal:             80 ave          86 max          74 min
 Histogram: 1 1 0 0 0 0 0 0 1 1
-Nghost:        122.750 ave         126 max         120 min
+Nghost:         122.75 ave         126 max         120 min
 Histogram: 1 0 0 1 0 1 0 0 0 1
-Neighs:         0.00000 ave           0 max           0 min
+Neighs:              0 ave           0 max           0 min
 Histogram: 4 0 0 0 0 0 0 0 0 0
 
 Total # of neighbors = 0
-Ave neighs/atom = 0.0000000
+Ave neighs/atom = 0
 Neighbor list builds = 2
 Dangerous builds = 0
-
-LB equilibriumDist time: 74.234376
-LB update time: 137.610462
-LB PCalc time: 90.368082
-LB fluidForce time: 30.518506
-LB CorrectU time: 20.319747
-Total wall time: 0:05:54
+Total wall time: 0:05:48
