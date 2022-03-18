@@ -3,4 +3,10 @@
 .github export-ignore
 .lgtm.yml export-ignore
 SECURITY.md export-ignore
+*       text=auto
+*.jpg   -text
+*.pdf   -text
+*.gz    -text
+*.png   -text
+*.ps    -text
 lib filter=lfs diff=lfs merge=lfs -text
