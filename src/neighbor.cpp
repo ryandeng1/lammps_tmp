@@ -314,6 +314,7 @@ void Neighbor::init()
 
   // bbox lo/hi ptrs = bounding box of entire domain, stored by Domain
 
+  // TODO: might need to modify this?
   if (triclinic == 0) {
     bboxlo = domain->boxlo;
     bboxhi = domain->boxhi;
@@ -678,6 +679,398 @@ void Neighbor::init()
   init_topology();
 }
 
+void Neighbor::init_stencil_md(Domain* domain_) {
+    int i,j,n;
+
+    ncalls = ndanger = 0;
+    dimension = domain->dimension;
+    triclinic = domain->triclinic;
+    newton_pair = force->newton_pair;
+
+    // error check
+
+    if (delay > 0 && (delay % every) != 0)
+        error->all(FLERR,"Neighbor delay must be 0 or multiple of every setting");
+
+    if (pgsize < 10*oneatom)
+        error->all(FLERR,"Neighbor page size must be >= 10x the one atom setting");
+
+    // ------------------------------------------------------------------
+    // settings
+
+    // bbox lo/hi ptrs = bounding box of entire domain, stored by Domain
+
+    // TODO: might need to modify this?
+    if (triclinic == 0) {
+        bboxlo = domain_->boxlo;
+        bboxhi = domain_->boxhi;
+    } else {
+        assert(false);
+        bboxlo = domain->boxlo_bound;
+        bboxhi = domain->boxhi_bound;
+    }
+
+    // set neighbor cutoffs (force cutoff + skin)
+    // trigger determines when atoms migrate and neighbor lists are rebuilt
+    //   needs to be non-zero for migration distance check
+    //   even if pair = nullptr and no neighbor lists are used
+    // cutneigh = force cutoff + skin if cutforce > 0, else cutneigh = 0
+    // cutneighghost = pair cutghost if it requests it, else same as cutneigh
+
+    triggersq = 0.25*skin*skin;
+    boxcheck = 0;
+    if (domain->box_change && (domain->xperiodic || domain->yperiodic ||
+                               (dimension == 3 && domain->zperiodic)))
+        boxcheck = 1;
+
+    n = atom->ntypes;
+    if (cutneighsq == nullptr) {
+        if (lmp->kokkos) init_cutneighsq_kokkos(n);
+        else memory->create(cutneighsq,n+1,n+1,"neigh:cutneighsq");
+        memory->create(cutneighghostsq,n+1,n+1,"neigh:cutneighghostsq");
+        cuttype = new double[n+1];
+        cuttypesq = new double[n+1];
+    }
+
+    double cutoff,delta,cut;
+    cutneighmin = BIG;
+    cutneighmax = 0.0;
+
+    for (i = 1; i <= n; i++) {
+        cuttype[i] = cuttypesq[i] = 0.0;
+        for (j = 1; j <= n; j++) {
+            if (force->pair) cutoff = sqrt(force->pair->cutsq[i][j]);
+            else cutoff = 0.0;
+            if (cutoff > 0.0) delta = skin;
+            else delta = 0.0;
+            cut = cutoff + delta;
+
+            cutneighsq[i][j] = cut*cut;
+            cuttype[i] = MAX(cuttype[i],cut);
+            cuttypesq[i] = MAX(cuttypesq[i],cut*cut);
+            cutneighmin = MIN(cutneighmin,cut);
+            cutneighmax = MAX(cutneighmax,cut);
+
+            if (force->pair && force->pair->ghostneigh) {
+                cut = force->pair->cutghost[i][j] + skin;
+                cutneighghostsq[i][j] = cut*cut;
+            } else cutneighghostsq[i][j] = cut*cut;
+        }
+    }
+    cutneighmaxsq = cutneighmax * cutneighmax;
+
+    // Define cutoffs for multi
+    if (style == Neighbor::MULTI) {
+        int icollection, jcollection;
+
+        // If collections not yet defined, create default map using types
+        if (!custom_collection_flag) {
+            ncollections = n;
+            interval_collection_flag = 0;
+            if (!type2collection)
+                memory->create(type2collection,n+1,"neigh:type2collection");
+            for (i = 1; i <= n; i++)
+                type2collection[i] = i-1;
+        }
+
+        memory->grow(cutcollectionsq, ncollections, ncollections, "neigh:cutcollectionsq");
+
+        // 3 possible ways of defining collections
+        // 1) Types are used to define collections
+        //    Each collection loops through its owned types, and uses cutneighsq to calculate its cutoff
+        // 2) Collections are defined by intervals, point particles
+        //    Types are first sorted into collections based on cutneighsq[i][i]
+        //    Each collection loops through its owned types, and uses cutneighsq to calculate its cutoff
+        // 3) Collections are defined by intervals, finite particles
+        //
+
+        // Define collection cutoffs
+        for (i = 0; i < ncollections; i++)
+            for (j = 0; j < ncollections; j++)
+                cutcollectionsq[i][j] = 0.0;
+
+        if (!interval_collection_flag) {
+            finite_cut_flag = 0;
+            for (i = 1; i <= n; i++){
+                icollection = type2collection[i];
+                for (j = 1; j <= n; j++){
+                    jcollection = type2collection[j];
+                    if (cutneighsq[i][j] > cutcollectionsq[icollection][jcollection]) {
+                        cutcollectionsq[icollection][jcollection] = cutneighsq[i][j];
+                        cutcollectionsq[jcollection][icollection] = cutneighsq[i][j];
+                    }
+                }
+            }
+        } else {
+            if (force->pair->finitecutflag) {
+                finite_cut_flag = 1;
+                // If cutoffs depend on finite atom sizes, use radii of intervals to find cutoffs
+                double ri, rj, tmp;
+                for (i = 0; i < ncollections; i++){
+                    ri = collection2cut[i]*0.5;
+                    for (j = 0; j < ncollections; j++){
+                        rj = collection2cut[j]*0.5;
+                        tmp = force->pair->radii2cut(ri, rj) + skin;
+                        cutcollectionsq[i][j] = tmp*tmp;
+                    }
+                }
+            } else {
+                finite_cut_flag = 0;
+
+                // Map types to collections
+                if (!type2collection)
+                    memory->create(type2collection,n+1,"neigh:type2collection");
+
+                for (i = 1; i <= n; i++)
+                    type2collection[i] = -1;
+
+                double cuttmp;
+                for (i = 1; i <= n; i++){
+                    // Remove skin added to cutneighsq
+                    cuttmp = sqrt(cutneighsq[i][i]) - skin;
+                    for (icollection = 0; icollection < ncollections; icollection ++){
+                        if (collection2cut[icollection] >= cuttmp) {
+                            type2collection[i] = icollection;
+                            break;
+                        }
+                    }
+
+                    if (type2collection[i] == -1)
+                        error->all(FLERR, "Pair cutoff exceeds interval cutoffs for multi");
+                }
+
+                // Define cutoffs
+                for (i = 1; i <= n; i++){
+                    icollection = type2collection[i];
+                    for (j = 1; j <= n; j++){
+                        jcollection = type2collection[j];
+                        if (cutneighsq[i][j] > cutcollectionsq[icollection][jcollection]) {
+                            cutcollectionsq[icollection][jcollection] = cutneighsq[i][j];
+                            cutcollectionsq[jcollection][icollection] = cutneighsq[i][j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // rRESPA cutoffs
+
+    int respa = 0;
+    if (update->whichflag == 1 && utils::strmatch(update->integrate_style,"^respa")) {
+        if ((dynamic_cast<Respa *>(update->integrate))->level_inner >= 0) respa = 1;
+        if ((dynamic_cast<Respa *>(update->integrate))->level_middle >= 0) respa = 2;
+    }
+
+    if (respa) {
+        double *cut_respa = (dynamic_cast<Respa *>(update->integrate))->cutoff;
+        cut_inner_sq = (cut_respa[1] + skin) * (cut_respa[1] + skin);
+        cut_middle_sq = (cut_respa[3] + skin) * (cut_respa[3] + skin);
+        cut_middle_inside_sq = (cut_respa[0] - skin) * (cut_respa[0] - skin);
+        if (cut_respa[0]-skin < 0) cut_middle_inside_sq = 0.0;
+    }
+
+    // fixchecklist = other classes that can induce reneighboring in decide()
+
+    restart_check = 0;
+    if (output->restart_flag) restart_check = 1;
+
+    delete[] fixchecklist;
+    fixchecklist = nullptr;
+    fixchecklist = new int[modify->nfix];
+
+    fix_check = 0;
+    for (i = 0; i < modify->nfix; i++)
+        if (modify->fix[i]->force_reneighbor)
+            fixchecklist[fix_check++] = i;
+
+    must_check = 0;
+    if (restart_check || fix_check) must_check = 1;
+
+    // set special_flag for 1-2, 1-3, 1-4 neighbors
+    // flag[0] is not used, flag[1] = 1-2, flag[2] = 1-3, flag[3] = 1-4
+    // flag = 0 if both LJ/Coulomb special values are 0.0
+    // flag = 1 if both LJ/Coulomb special values are 1.0
+    // flag = 2 otherwise or if KSpace solver is enabled
+    // pairwise portion of KSpace solver uses all 1-2,1-3,1-4 neighbors
+    // or selected Coulomb-approixmation pair styles require it
+
+    if (force->special_lj[1] == 0.0 && force->special_coul[1] == 0.0)
+        special_flag[1] = 0;
+    else if (force->special_lj[1] == 1.0 && force->special_coul[1] == 1.0)
+        special_flag[1] = 1;
+    else special_flag[1] = 2;
+
+    if (force->special_lj[2] == 0.0 && force->special_coul[2] == 0.0)
+        special_flag[2] = 0;
+    else if (force->special_lj[2] == 1.0 && force->special_coul[2] == 1.0)
+        special_flag[2] = 1;
+    else special_flag[2] = 2;
+
+    if (force->special_lj[3] == 0.0 && force->special_coul[3] == 0.0)
+        special_flag[3] = 0;
+    else if (force->special_lj[3] == 1.0 && force->special_coul[3] == 1.0)
+        special_flag[3] = 1;
+    else special_flag[3] = 2;
+
+    // We cannot remove special neighbors with kspace or kspace-like pair styles
+    // as the exclusion needs to remove the full coulomb and not the damped interaction.
+    // Special treatment is required for hybrid pair styles since Force::pair_match()
+    // will only return a non-null pointer if there is only one substyle of the kind.
+
+    if (force->kspace) {
+        special_flag[1] = special_flag[2] = special_flag[3] = 2;
+    } else {
+        PairHybrid *ph = reinterpret_cast<PairHybrid *>(force->pair_match("^hybrid",0));
+        if (ph) {
+            int flag=0;
+            for (int isub=0; isub < ph->nstyles; ++isub) {
+                if (force->pair_match("coul/wolf",0,isub)
+                    || force->pair_match("coul/dsf",0,isub)
+                    || force->pair_match("coul/exclude",0)
+                    || force->pair_match("thole",0,isub))
+                    ++flag;
+            }
+            if (flag)
+                special_flag[1] = special_flag[2] = special_flag[3] = 2;
+        } else {
+            if (force->pair_match("coul/wolf",0)
+                || force->pair_match("coul/dsf",0)
+                || force->pair_match("coul/exclude",0)
+                || force->pair_match("thole",0))
+                special_flag[1] = special_flag[2] = special_flag[3] = 2;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // xhold array
+
+    // free if not needed for this run
+
+    if (dist_check == 0) {
+        memory->destroy(xhold);
+        maxhold = 0;
+        xhold = nullptr;
+    }
+
+    // first time allocation
+
+    if (dist_check) {
+        if (maxhold == 0) {
+            maxhold = atom->nmax;
+            memory->create(xhold,maxhold,3,"neigh:xhold");
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // exclusion lists
+
+    // depend on type, group, molecule settings from neigh_modify
+    // warn if exclusions used with KSpace solver
+
+    n = atom->ntypes;
+
+    if (nex_type == 0 && nex_group == 0 && nex_mol == 0) exclude = 0;
+    else exclude = 1;
+
+    if (nex_type) {
+        if (lmp->kokkos)
+            init_ex_type_kokkos(n);
+        else {
+            memory->destroy(ex_type);
+            memory->create(ex_type,n+1,n+1,"neigh:ex_type");
+        }
+
+        for (i = 1; i <= n; i++)
+            for (j = 1; j <= n; j++)
+                ex_type[i][j] = 0;
+
+        for (i = 0; i < nex_type; i++) {
+            if (ex1_type[i] <= 0 || ex1_type[i] > n ||
+                ex2_type[i] <= 0 || ex2_type[i] > n)
+                error->all(FLERR,"Invalid atom type in neighbor exclusion list");
+            ex_type[ex1_type[i]][ex2_type[i]] = 1;
+            ex_type[ex2_type[i]][ex1_type[i]] = 1;
+        }
+    }
+
+    if (nex_group) {
+        if (lmp->kokkos)
+            init_ex_bit_kokkos();
+        else {
+            delete[] ex1_bit;
+            delete[] ex2_bit;
+            ex1_bit = new int[nex_group];
+            ex2_bit = new int[nex_group];
+        }
+
+        for (i = 0; i < nex_group; i++) {
+            ex1_bit[i] = group->bitmask[ex1_group[i]];
+            ex2_bit[i] = group->bitmask[ex2_group[i]];
+        }
+    }
+
+    if (nex_mol) {
+        if (lmp->kokkos)
+            init_ex_mol_bit_kokkos();
+        else {
+            delete[] ex_mol_bit;
+            ex_mol_bit = new int[nex_mol];
+        }
+
+        for (i = 0; i < nex_mol; i++)
+            ex_mol_bit[i] = group->bitmask[ex_mol_group[i]];
+    }
+
+    if (exclude && force->kspace && me == 0)
+        error->warning(FLERR,"Neighbor exclusions used with KSpace solver "
+                             "may give inconsistent Coulombic energies");
+
+    if (lmp->kokkos)
+        set_binsize_kokkos();
+
+    // ------------------------------------------------------------------
+    // create pairwise lists
+    // one-time call to init_styles() to scan style files and setup
+    // init_pair() creates auxiliary classes: NBin, NStencil, NPair
+
+    if (firsttime) init_styles();
+    firsttime = 0;
+
+    int same = init_pair();
+
+    // invoke copy_neighbor_info() in Bin,Stencil,Pair classes
+    // copied once per run in case any cutoff, exclusion, special info changed
+
+    for (i = 0; i < nbin; i++) {
+        neigh_bin[i]->copy_neighbor_info_stencil_md(this);
+    }
+    for (i = 0; i < nstencil; i++) {
+        neigh_stencil[i]->copy_neighbor_info();
+    }
+    for (i = 0; i < nlist; i++)
+        if (neigh_pair[i]) {
+            neigh_pair[i]->copy_neighbor_info_stencil_md(this);
+        }
+
+    if (!same && comm->me == 0) print_pairwise_info();
+
+    // can now delete requests so next run can make new ones
+    // print_pairwise_info() made use of requests
+    // set of NeighLists now stores all needed info
+
+    for (i = 0; i < nrequest; i++) {
+        delete requests[i];
+        requests[i] = nullptr;
+    }
+    nrequest = 0;
+
+    // ------------------------------------------------------------------
+    // create topology lists
+    // instantiated topo styles can change from run to run
+
+    init_topology();
+}
 /* ----------------------------------------------------------------------
    create and initialize lists of Nbin, Nstencil, NPair classes
    lists have info on all classes in 3 style*.h files
@@ -794,8 +1187,9 @@ int Neighbor::init_pair()
 #ifdef NEIGH_LIST_DEBUG
   if (comm->me == 0) printf("SAME flag %d\n",same);
 #endif
-
-  if (same) return same;
+  if (same) {
+      return same;
+  }
   requests_new2old();
 
   // delete old lists since creating new ones
@@ -865,10 +1259,15 @@ int Neighbor::init_pair()
   // pass list ptr back to requestor (except for Command class)
   // only for original requests, not ones added by Neighbor class
 
+  // std::cout << "neighbor list nrequest: " << nrequest << std::endl;
   for (i = 0; i < nrequest; i++) {
-    if (requests[i]->kokkos_host || requests[i]->kokkos_device)
-      create_kokkos_list(i);
-    else lists[i] = new NeighList(lmp);
+    if (requests[i]->kokkos_host || requests[i]->kokkos_device) {
+        // std::cout << "KOKKOS??? " << std::endl;
+        create_kokkos_list(i);
+    } else {
+        // std::cout << "NOT KOKKOS???? " << std::endl;
+        lists[i] = new NeighList(lmp);
+    }
     lists[i]->index = i;
     lists[i]->requestor = requests[i]->requestor;
 
@@ -881,6 +1280,7 @@ int Neighbor::init_pair()
     }
 
     if (requests[i]->pair && i < nrequest_original) {
+      // std::cout << "init list pair" << std::endl;
       auto pair = (Pair *) requests[i]->requestor;
       pair->init_list(requests[i]->id,lists[i]);
     } else if (requests[i]->fix && i < nrequest_original) {
@@ -1713,7 +2113,8 @@ void Neighbor::print_pairwise_info()
     else out += fmt::format("bin: {}\n",binnames[lists[i]->bin_method-1]);
 
   }
-  utils::logmesg(lmp,out);
+  // TODO: avoid spam
+  // utils::logmesg(lmp,out);
 }
 
 /* ----------------------------------------------------------------------
@@ -2164,6 +2565,24 @@ void Neighbor::setup_bins()
   last_setup_bins = update->ntimestep;
 }
 
+void Neighbor::setup_bins_stencil_md(Atom* atom_, Domain* domain_, Comm* comm_) {
+    // invoke setup_bins() for all NBin
+    // actual binning is performed in build()
+
+    for (int i = 0; i < nbin; i++)
+        neigh_bin[i]->setup_bins_stencil_md(style, atom_, domain_, comm_);
+
+    // invoke create_setup() and create() for all perpetual NStencil
+    // same ops performed for occasional lists in build_one()
+
+    for (int i = 0; i < nstencil_perpetual; i++) {
+        neigh_stencil[slist[i]]->create_setup();
+        neigh_stencil[slist[i]]->create();
+    }
+
+    last_setup_bins = update->ntimestep;
+}
+
 /* ---------------------------------------------------------------------- */
 
 int Neighbor::decide()
@@ -2336,6 +2755,96 @@ void Neighbor::build(int topoflag)
   // build topology lists for bonds/angles/etc
 
   if ((atom->molecular != Atom::ATOMIC) && topoflag) build_topology();
+}
+
+void Neighbor::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_) {
+    assert(false);
+    int i,m;
+
+    ago = 0;
+    ncalls++;
+    lastcall = update->ntimestep;
+
+    int nlocal = atom_->nlocal;
+    int nall = nlocal + atom_->nghost;
+    // rebuild collection array from scratch
+    if (style == Neighbor::MULTI) {
+        assert(false);
+        build_collection(0);
+    }
+
+    // check that using special bond flags will not overflow neigh lists
+
+    if (nall > NEIGHMASK)
+        error->one(FLERR,"Too many local+ghost atoms for neighbor list");
+
+    // store current atom positions and box size if needed
+
+    if (dist_check) {
+        double **x = atom_->x;
+        if (includegroup) nlocal = atom_->nfirst;
+        if (atom_->nmax > maxhold) {
+            maxhold = atom_->nmax;
+            memory->destroy(xhold);
+            memory->create(xhold,maxhold,3,"neigh:xhold");
+        }
+        for (i = 0; i < nlocal; i++) {
+            xhold[i][0] = x[i][0];
+            xhold[i][1] = x[i][1];
+            xhold[i][2] = x[i][2];
+        }
+        if (boxcheck) {
+            if (triclinic == 0) {
+                boxlo_hold[0] = bboxlo[0];
+                boxlo_hold[1] = bboxlo[1];
+                boxlo_hold[2] = bboxlo[2];
+                boxhi_hold[0] = bboxhi[0];
+                boxhi_hold[1] = bboxhi[1];
+                boxhi_hold[2] = bboxhi[2];
+            } else {
+                assert(false);
+                domain->box_corners();
+                corners = domain->corners;
+                for (i = 0; i < 8; i++) {
+                    corners_hold[i][0] = corners[i][0];
+                    corners_hold[i][1] = corners[i][1];
+                    corners_hold[i][2] = corners[i][2];
+                }
+            }
+        }
+    }
+
+    // bin atoms for all NBin instances
+    // not just NBin associated with perpetual lists, also occasional lists
+    // b/c cannot wait to bin occasional lists in build_one() call
+    // if bin then, atoms may have moved outside of proc domain & bin extent,
+    //   leading to errors or even a crash
+
+    if (style != Neighbor::NSQ) {
+        if (last_setup_bins < 0) {
+            setup_bins_stencil_md(atom_, domain_, comm_);
+        }
+        for (i = 0; i < nbin; i++) {
+            neigh_bin[i]->bin_atoms_setup(nall);
+            neigh_bin[i]->bin_atoms();
+        }
+    }
+
+    // build pairwise lists for all perpetual NPair/NeighList
+    // grow() with nlocal/nall args so that only realloc if have to
+
+    for (i = 0; i < npair_perpetual; i++) {
+        m = plist[i];
+        if (!lists[m]->copy || lists[m]->kk2cpu)
+            lists[m]->grow(nlocal,nall);
+        neigh_pair[m]->build_setup();
+        // neigh_pair[m]->build(lists[m]);
+        neigh_pair[m]->build_stencil_md(lists[m], atom_);
+    }
+
+    // build topology lists for bonds/angles/etc
+
+    if ((atom->molecular != Atom::ATOMIC) && topoflag) build_topology();
 }
 
 /* ----------------------------------------------------------------------

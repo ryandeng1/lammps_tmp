@@ -1782,9 +1782,11 @@ void FixNH::nhc_temp_integrate()
       eta_mass[ich] = boltz * t_target / (t_freq*t_freq);
   }
 
-  if (eta_mass[0] > 0.0)
-    eta_dotdot[0] = (kecurrent - ke_target)/eta_mass[0];
-  else eta_dotdot[0] = 0.0;
+  if (eta_mass[0] > 0.0) {
+      eta_dotdot[0] = (kecurrent - ke_target)/eta_mass[0];
+  } else {
+      eta_dotdot[0] = 0.0;
+  }
 
   double ncfac = 1.0/nc_tchain;
   for (int iloop = 0; iloop < nc_tchain; iloop++) {
@@ -1832,6 +1834,72 @@ void FixNH::nhc_temp_integrate()
       eta_dot[ich] *= expfac;
     }
   }
+}
+
+void FixNH::nhc_temp_integrate_stencil_md(Atom* atom_, Atom* next)
+{
+    int ich;
+    double expfac;
+    double kecurrent = tdof * boltz * t_current;
+
+    // Update masses, to preserve initial freq, if flag set
+
+    if (eta_mass_flag) {
+        eta_mass[0] = tdof * boltz * t_target / (t_freq*t_freq);
+        for (ich = 1; ich < mtchain; ich++)
+            eta_mass[ich] = boltz * t_target / (t_freq*t_freq);
+    }
+
+    if (eta_mass[0] > 0.0)
+        eta_dotdot[0] = (kecurrent - ke_target)/eta_mass[0];
+    else eta_dotdot[0] = 0.0;
+
+    double ncfac = 1.0/nc_tchain;
+    for (int iloop = 0; iloop < nc_tchain; iloop++) {
+
+        for (ich = mtchain-1; ich > 0; ich--) {
+            expfac = exp(-ncfac*dt8*eta_dot[ich+1]);
+            eta_dot[ich] *= expfac;
+            eta_dot[ich] += eta_dotdot[ich] * ncfac*dt4;
+            eta_dot[ich] *= tdrag_factor;
+            eta_dot[ich] *= expfac;
+        }
+
+        expfac = exp(-ncfac*dt8*eta_dot[1]);
+        eta_dot[0] *= expfac;
+        eta_dot[0] += eta_dotdot[0] * ncfac*dt4;
+        eta_dot[0] *= tdrag_factor;
+        eta_dot[0] *= expfac;
+
+        factor_eta = exp(-ncfac*dthalf*eta_dot[0]);
+        nh_v_temp_stencil_md(atom_, next);
+
+        // rescale temperature due to velocity scaling
+        // should not be necessary to explicitly recompute the temperature
+
+        t_current *= factor_eta*factor_eta;
+        kecurrent = tdof * boltz * t_current;
+
+        if (eta_mass[0] > 0.0)
+            eta_dotdot[0] = (kecurrent - ke_target)/eta_mass[0];
+        else eta_dotdot[0] = 0.0;
+
+        for (ich = 0; ich < mtchain; ich++)
+            eta[ich] += ncfac*dthalf*eta_dot[ich];
+
+        eta_dot[0] *= expfac;
+        eta_dot[0] += eta_dotdot[0] * ncfac*dt4;
+        eta_dot[0] *= expfac;
+
+        for (ich = 1; ich < mtchain; ich++) {
+            expfac = exp(-ncfac*dt8*eta_dot[ich+1]);
+            eta_dot[ich] *= expfac;
+            eta_dotdot[ich] = (eta_mass[ich-1]*eta_dot[ich-1]*eta_dot[ich-1]
+                               - boltz * t_target)/eta_mass[ich];
+            eta_dot[ich] += eta_dotdot[ich] * ncfac*dt4;
+            eta_dot[ich] *= expfac;
+        }
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -2090,6 +2158,48 @@ void FixNH::nh_v_temp()
     }
   }
 }
+
+/*
+void FixNH::nh_v_temp_stencil_md(Atom* atom_, Atom* next) {
+    double **v = atom_->v;
+    double **next_v = next->v;
+    int *mask = atom_->mask;
+    // int nlocal = atom_->nlocal;
+    int nlocal = std::min(atom_->nlocal, next->nlocal);
+    if (igroup == atom_->firstgroup) nlocal = atom_->nfirst;
+
+    if (which == NOBIAS) {
+        for (int i = 0; i < nlocal; i++) {
+            if (mask[i] & groupbit) {
+
+//                v[i][0] *= factor_eta;
+//                v[i][1] *= factor_eta;
+//                v[i][2] *= factor_eta;
+
+                next_v[i][0] = v[i][0] * factor_eta;
+                next_v[i][1] = v[i][1] * factor_eta;
+                next_v[i][2] = v[i][2] * factor_eta;
+            }
+        }
+    } else if (which == BIAS) {
+        assert(false);
+        for (int i = 0; i < nlocal; i++) {
+            if (mask[i] & groupbit) {
+                temperature->remove_bias(i,v[i]);
+                next_v[i][0] = v[i][0] * factor_eta;
+                next_v[i][1] = v[i][1] * factor_eta;
+                next_v[i][2] = v[i][2] * factor_eta;
+
+//                v[i][0] *= factor_eta;
+//                v[i][1] *= factor_eta;
+//                v[i][2] *= factor_eta;
+
+                temperature->restore_bias(i,v[i]);
+            }
+        }
+    }
+}
+*/
 
 /* ----------------------------------------------------------------------
    compute sigma tensor

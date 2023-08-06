@@ -51,6 +51,10 @@
 #include "update.h"
 #include "variable.h"
 #include "version.h"
+#include <torch/torch.h>
+#include <torch/script.h>
+#include <torch/csrc/jit/runtime/graph_executor.h>
+
 
 #if defined(LMP_PLUGIN)
 #include "plugin.h"
@@ -849,6 +853,221 @@ void LAMMPS::create()
 #if defined(LMP_PLUGIN)
   plugin_auto_load(this);
 #endif
+
+  for (int i = 0; i < NUM_ZOIDS; i++) {
+      std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_atom;
+      atom_stencil_md.push_back(arr_atom);
+
+      std::array<Domain *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_domain;
+      domain_stencil_md.push_back(arr_domain);
+
+      std::array<Neighbor *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_neighbor;
+      neighbor_stencil_md.push_back(arr_neighbor);
+
+      std::array<Force *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_force;
+      force_stencil_md.push_back(arr_force);
+  }
+
+  for (int i = 0; i < NUM_ZOIDS; i++) {
+      for (int j = 0; j < force_stencil_md[i].size(); j++) {
+          Force* force_ = new Force(this);
+          force_stencil_md[i][j] = force_;
+      }
+      // Force* force = new Force(this);
+      // force_stencil_md.push_back(force);
+      Modify* modify;
+      if (kokkos) {
+          modify = new ModifyKokkos(this);
+      } else {
+          modify = new Modify(this);
+      }
+      modify_stencil_md.push_back(modify);
+
+      for (int j = 0; j < atom_stencil_md[i].size(); j++) {
+          Atom* atom_;
+          if (kokkos) {
+              atom_ = new AtomKokkos(this);
+          } else {
+              atom_ = new Atom(this);
+          }
+
+          if (kokkos) {
+              atom_->create_avec_stencil_md("atomic/kk",0,nullptr,1);
+          } else {
+              atom_->create_avec_stencil_md("atomic", 0, nullptr, 1);
+          }
+          atom_stencil_md[i][j] = atom_;
+      }
+
+      Comm* comm_;
+      if (kokkos) {
+          comm_ = new CommKokkos(this);
+      } else {
+          comm_ = new CommBrick(this);
+      }
+
+      for (int j = 0; j < domain_stencil_md[i].size(); j++) {
+          Domain* domain_;
+          if (kokkos) {
+              domain_ = new DomainKokkos(this);
+          }
+#ifdef LMP_OPENMP
+              else {
+            domain_ = new DomainOMP(this);
+        }
+#else
+          else {
+              domain_ = new Domain(this);
+          }
+#endif
+          domain_stencil_md[i][j] = domain_;
+      }
+
+      for (int j = 0; j < neighbor_stencil_md[i].size(); j++) {
+          Neighbor* neighbor_;
+          if (kokkos) {
+              neighbor_ = new NeighborKokkos(this);
+          } else {
+              neighbor_ = new Neighbor(this);
+          }
+          neighbor_stencil_md[i][j] = neighbor_;
+      }
+
+      /*
+      Domain* domain_;
+      if (kokkos) {
+          domain_ = new DomainKokkos(this);
+      }
+#ifdef LMP_OPENMP
+          else {
+            domain_ = new DomainOMP(this);
+        }
+#else
+      else {
+          domain_ = new Domain(this);
+      }
+#endif
+
+      Neighbor* neighbor_;
+      if (kokkos) {
+          neighbor_ = new NeighborKokkos(this);
+      } else {
+          neighbor_ = new Neighbor(this);
+      }
+      */
+
+      comm_stencil_md.push_back(comm_);
+      // domain_stencil_md.push_back(domain_);
+      // neighbor_stencil_md.push_back(neighbor_);
+  }
+
+  read_model();
+}
+
+void LAMMPS::read_model() {
+    torch::Device device = torch::kCPU;
+    if(torch::cuda::is_available()){
+        int deviceidx = -1;
+        if(comm->nprocs > 1){
+            MPI_Comm shmcomm;
+            MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
+                                MPI_INFO_NULL, &shmcomm);
+            int shmrank;
+            MPI_Comm_rank(shmcomm, &shmrank);
+            deviceidx = shmrank;
+        }
+        if(deviceidx >= 0) {
+            int devicecount = torch::cuda::device_count();
+            if(deviceidx >= devicecount) {
+                if(false) {
+                    // To allow testing multi-rank calls, we need to support multiple ranks with one GPU
+                    std::cerr << "WARNING (Allegro): my rank (" << deviceidx << ") is bigger than the number of visible devices (" << devicecount << "), wrapping around to use device " << deviceidx % devicecount << " again!!!";
+                    deviceidx = deviceidx % devicecount;
+                }
+                else {
+                    // Otherwise, more ranks than GPUs is an error
+                    std::cerr << "ERROR (Allegro): my rank (" << deviceidx << ") is bigger than the number of visible devices (" << devicecount << ")!!!";
+                    error->all(FLERR,"pair_allegro: mismatch between number of ranks and number of available GPUs");
+                }
+            }
+        }
+        device = c10::Device(torch::kCUDA,deviceidx);
+    }
+    else {
+        device = torch::kCPU;
+    }
+    std::string path = "/Users/ryandeng/molecular_dynamics/stencil_md/models/a-HfO2_47k.pth";
+    lmp_model = torch::jit::load(path, device, lmp_model_metadata);
+    lmp_model.eval();
+
+    // Check if model is a NequIP model
+    if (lmp_model_metadata["nequip_version"].empty()) {
+        error->all(FLERR, "The indicated TorchScript file does not appear to be a deployed NequIP model; did you forget to run `nequip-deploy`?");
+    }
+
+    // If the model is not already frozen, we should freeze it:
+    // This is the check used by PyTorch: https://github.com/pytorch/pytorch/blob/master/torch/csrc/jit/api/module.cpp#L476
+    if (lmp_model.hasattr("training")) {
+        // std::cout << "Allegro: Freezing TorchScript model...\n";
+#ifdef DO_TORCH_FREEZE_HACK
+        // Do the hack
+      // Copied from the implementation of torch::jit::freeze,
+      // except without the broken check
+      // See https://github.com/pytorch/pytorch/blob/dfbd030854359207cb3040b864614affeace11ce/torch/csrc/jit/api/module.cpp
+      bool optimize_numerics = true;  // the default
+      // the {} is preserved_attrs
+      auto out_mod = freeze_module(
+        model, {}
+      );
+      // See 1.11 bugfix in https://github.com/pytorch/pytorch/pull/71436
+      auto graph = out_mod.get_method("forward").graph();
+      OptimizeFrozenGraph(graph, optimize_numerics);
+      model = out_mod;
+#else
+        // Do it normally
+        lmp_model = torch::jit::freeze(lmp_model);
+#endif
+    }
+
+#if (TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR <= 10)
+    // Set JIT bailout to avoid long recompilations for many steps
+    size_t jit_bailout_depth;
+    if (metadata["_jit_bailout_depth"].empty()) {
+      // This is the default used in the Python code
+      jit_bailout_depth = 2;
+    } else {
+      jit_bailout_depth = std::stoi(metadata["_jit_bailout_depth"]);
+    }
+    torch::jit::getBailoutDepth() = jit_bailout_depth;
+#else
+    // In PyTorch >=1.11, this is now set_fusion_strategy
+    torch::jit::FusionStrategy strategy;
+    if (lmp_model_metadata["_jit_fusion_strategy"].empty()) {
+        // This is the default used in the Python code
+        strategy = {{torch::jit::FusionBehavior::DYNAMIC, 3}};
+    } else {
+        std::stringstream strat_stream(lmp_model_metadata["_jit_fusion_strategy"]);
+        std::string fusion_type, fusion_depth;
+        while(std::getline(strat_stream, fusion_type, ',')) {
+            std::getline(strat_stream, fusion_depth, ';');
+            strategy.push_back({fusion_type == "STATIC" ? torch::jit::FusionBehavior::STATIC : torch::jit::FusionBehavior::DYNAMIC, std::stoi(fusion_depth)});
+        }
+    }
+    torch::jit::setFusionStrategy(strategy);
+#endif
+
+    // Set whether to allow TF32:
+    bool allow_tf32;
+    if (lmp_model_metadata["allow_tf32"].empty()) {
+        // Better safe than sorry
+        allow_tf32 = false;
+    } else {
+        // It gets saved as an int 0/1
+        allow_tf32 = std::stoi(lmp_model_metadata["allow_tf32"]);
+    }
+    // See https://pytorch.org/docs/stable/notes/cuda.html
+    at::globalContext().setAllowTF32CuBLAS(allow_tf32);
+    at::globalContext().setAllowTF32CuDNN(allow_tf32);
 }
 
 /* ----------------------------------------------------------------------
@@ -985,6 +1204,58 @@ void LAMMPS::destroy()
 
   delete python;
   python = nullptr;
+
+  /*
+  if (!USE_STENCIL_MD) {
+      return;
+  }
+  */
+
+  // stencil md
+  for (int i = 0; i < neighbor_stencil_md.size(); i++) {
+      for (int j = 0; j < neighbor_stencil_md[i].size(); j++) {
+          delete neighbor_stencil_md[i][j];
+      }
+  }
+  for (int i = 0; i < domain_stencil_md.size(); i++) {
+      for (int j = 0; j < domain_stencil_md[i].size(); j++) {
+          delete domain_stencil_md[i][j];
+      }
+  }
+  for (int i = 0; i < atom_stencil_md.size(); i++) {
+    for (int j = 0; j < atom_stencil_md[i].size(); j++) {
+      delete atom_stencil_md[i][j];
+    }
+  }
+  for (int i = 0; i < atom_kokkos_stencil_md.size(); i++) {
+    for (int j = 0; j < atom_kokkos_stencil_md[i].size(); j++) {
+      delete atom_kokkos_stencil_md[i][j];
+    }
+  }
+  for (int i = 0; i < comm_stencil_md.size(); i++) {
+    delete comm_stencil_md[i];
+  }
+  // TODO: the delete method deletes the global modify pointer
+  /*
+  for (int i = 0; i < modify_stencil_md.size(); i++) {
+    delete modify_stencil_md[i];
+  }
+  */
+  for (int i = 0; i < update_stencil_md.size(); i++) {
+    delete update_stencil_md[i];
+  }
+  for (int i = 0; i < force_stencil_md.size(); i++) {
+    for (int j = 0; j < force_stencil_md[i].size(); j++) {
+        delete force_stencil_md[i][j];
+    }
+  }
+
+  // stencil_md
+  delete[] zoid_num_to_idx;
+  delete[] send_to;
+  delete[] recv_from;
+  delete[] send_to_next_dt;
+  delete[] recv_from_next_dt;
 }
 
 /* ----------------------------------------------------------------------

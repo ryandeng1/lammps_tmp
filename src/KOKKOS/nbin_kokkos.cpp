@@ -81,6 +81,12 @@ void NBinKokkos<DeviceType>::bin_atoms_setup(int nall)
 template<class DeviceType>
 void NBinKokkos<DeviceType>::bin_atoms()
 {
+  /*
+  std::cout << "REGULAR MD some numbers: " << " num my bins x: " << mbinx << " num my bins y: " << mbiny << " num my bins z: " << mbinz << " "
+    << " my bins x lo: " << mbinxlo << " my bins y lo: " << mbinylo << " my bins z lo: " << mbinzlo << std::endl;
+  std::cout << "nbins x: " << nbinx << " nbins y: " << nbiny << " nbins z: " << nbinz << std::endl;
+  */
+
   last_bin = update->ntimestep;
 
   k_bins.template sync<DeviceType>();
@@ -99,6 +105,7 @@ void NBinKokkos<DeviceType>::bin_atoms()
 
     atomKK->sync(ExecutionSpaceFromDevice<DeviceType>::space,X_MASK);
     x = atomKK->k_x.view<DeviceType>();
+    // std::cout << "x size: " << x.size() << " num local + num ghost: " << atom->nlocal + atom->nghost << std::endl;
 
     bboxlo_[0] = bboxlo[0]; bboxlo_[1] = bboxlo[1]; bboxlo_[2] = bboxlo[2];
     bboxhi_[0] = bboxhi[0]; bboxhi_[1] = bboxhi[1]; bboxhi_[2] = bboxhi[2];
@@ -122,12 +129,77 @@ void NBinKokkos<DeviceType>::bin_atoms()
   k_atom2bin.template modify<DeviceType>();
 }
 
+template<class DeviceType>
+void NBinKokkos<DeviceType>::bin_atoms_stencil_md(Atom* atom_) {
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+
+    last_bin = update->ntimestep;
+
+    k_bins.template sync<DeviceType>();
+    k_bincount.template sync<DeviceType>();
+    k_atom2bin.template sync<DeviceType>();
+
+    h_resize() = 1;
+
+    while (h_resize() > 0) {
+        h_resize() = 0;
+        Kokkos::deep_copy(d_resize, h_resize);
+
+        MemsetZeroFunctor<DeviceType> f_zero;
+        f_zero.ptr = (void*) k_bincount.view<DeviceType>().data();
+        Kokkos::parallel_for(mbins, f_zero);
+
+        atomKK_->sync(ExecutionSpaceFromDevice<DeviceType>::space,X_MASK);
+        x = atomKK_->k_x.view<DeviceType>();
+
+        bboxlo_[0] = bboxlo[0]; bboxlo_[1] = bboxlo[1]; bboxlo_[2] = bboxlo[2];
+        bboxhi_[0] = bboxhi[0]; bboxhi_[1] = bboxhi[1]; bboxhi_[2] = bboxhi[2];
+
+        NPairKokkosBinAtomsFunctor<DeviceType> f(*this);
+        for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+            // std::cout << "me: " << comm->me << " i: " << i << " x extent: " << x.extent(0) << " " << x.extent(1) << " nlocal: " << atom_->nlocal << " nghost: " << atom_->nghost << std::endl;
+            double a = x(i, 0);
+            double b = x(i, 1);
+            double c = x(i, 2);
+            if (rand() == 3) {
+                std::cout << "a: " << a << " b: " << b << " c: " << c << std::endl;
+            }
+            const int ibin = coord2bin(x(i, 0), x(i, 1), x(i, 2));
+            if (ibin > bins.extent(0)) {
+                std::cout << "ERROR me: " << comm->me << " coord: " << x(i, 0) << " " << x(i, 1) << " " << x(i, 2) << " ibin: " << ibin << " size? " << bins.extent(0) << " " << bins.extent(1) << std::endl;
+                std::cout << "atom id tag: " << atom_->tag[i] << " i: " << i << " nlocal: " << atom_->nlocal << " nghost: " << atom_->nghost << std::endl;
+            }
+            atom2bin(i) = ibin;
+            const int ac = Kokkos::atomic_fetch_add(&bincount[ibin], (int)1);
+            if (ac < (int)bins.extent(1)) {
+                bins(ibin, ac) = i;
+            } else {
+                d_resize() = 1;
+            }
+        }
+        // Kokkos::parallel_for(atom_->nlocal+atom_->nghost, f);
+
+        Kokkos::deep_copy(h_resize, d_resize);
+        if (h_resize()) {
+            atoms_per_bin += 16;
+            k_bins = DAT::tdual_int_2d("bins", mbins, atoms_per_bin);
+            bins = k_bins.view<DeviceType>();
+            c_bins = bins;
+        }
+    }
+
+    k_bins.template modify<DeviceType>();
+    k_bincount.template modify<DeviceType>();
+    k_atom2bin.template modify<DeviceType>();
+}
+
 /* ---------------------------------------------------------------------- */
 
 template<class DeviceType>
 KOKKOS_INLINE_FUNCTION
 void NBinKokkos<DeviceType>::binatomsItem(const int &i) const
 {
+  // errors when i > nlocal for *some* instances, not all of them
   const int ibin = coord2bin(x(i, 0), x(i, 1), x(i, 2));
 
   atom2bin(i) = ibin;

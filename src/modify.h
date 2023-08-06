@@ -101,7 +101,7 @@ class Modify : protected Pointers {
   virtual int min_dof();
   virtual int min_reset_ref();
 
-  Fix *add_fix(int, char **, int trysuffix = 1);
+  Fix *add_fix(int, char **, int trysuffix = 1, bool stencil_md = false);
   Fix *add_fix(const std::string &, int trysuffix = 1);
   Fix *replace_fix(const char *, int, char **, int trysuffix = 1);
   Fix *replace_fix(const std::string &, const std::string &, int trysuffix = 1);
@@ -148,6 +148,12 @@ class Modify : protected Pointers {
   void restart_deallocate(int);
 
   double memory_usage();
+
+  virtual void init_stencil_md(Atom*);
+  virtual void setup_stencil_md(double*, Atom*) {}
+  virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*) {}
+  virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*) {}
+
 
  protected:
   // internal fix counts
@@ -208,6 +214,10 @@ class Modify : protected Pointers {
   typedef Fix *(*FixCreator)(LAMMPS *, int, char **);
   typedef std::map<std::string, FixCreator> FixCreatorMap;
   FixCreatorMap *fix_map;
+
+  typedef Fix *(*FixCreatorStencilMD)(LAMMPS *, Modify*, int, char **);
+  typedef std::map<std::string, FixCreatorStencilMD> FixCreatorStencilMDMap;
+  FixCreatorStencilMDMap *fix_map_stencil_md;
 
  protected:
   void create_factories();

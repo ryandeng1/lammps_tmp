@@ -115,6 +115,10 @@ class AtomKokkos : public Atom {
   void remove_custom(int, int, int) override;
   virtual void deallocate_topology();
   void sync_modify(ExecutionSpace, unsigned int, unsigned int) override;
+
+  void sort_stencil_md() override;
+  void sync_stencil_md(const ExecutionSpace space, unsigned int mask, Atom*);
+  void modified_stencil_md(const ExecutionSpace space, unsigned int mask, Atom*);
  private:
   class AtomVec *new_avec(const std::string &, int, int &) override;
 };

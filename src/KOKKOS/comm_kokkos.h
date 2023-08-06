@@ -62,15 +62,24 @@ class CommKokkos : public CommBrick {
   template<class DeviceType> void exchange_device();
   template<class DeviceType> void borders_device();
 
- protected:
+  void borders_stencil_md_initial_send(Atom*, Domain*, queue_info&, int) override;
+  void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;
+  // void borders_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
+
+  void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;
+  // void exchange_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
+  // template<class DeviceType> void send_data_stencil_md(Atom* atom_, Domain* domain_, queue_info& zoid);
+  void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
+
+protected:
   DAT::tdual_int_2d k_sendlist;
   DAT::tdual_int_scalar k_total_send;
   DAT::tdual_xfloat_2d k_buf_send,k_buf_recv;
   DAT::tdual_int_2d k_exchange_lists;
   DAT::tdual_int_1d k_exchange_sendlist,k_exchange_copylist,k_sendflag;
   DAT::tdual_int_scalar k_count;
-  //double *buf_send;                 // send buffer for all comm
-  //double *buf_recv;                 // recv buffer for all comm
 
   DAT::tdual_int_2d k_swap;
   DAT::tdual_int_2d k_swap2;

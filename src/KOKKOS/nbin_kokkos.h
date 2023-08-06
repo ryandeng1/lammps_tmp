@@ -88,7 +88,15 @@ class NBinKokkos : public NBinStandard {
     } else
       iz = static_cast<int> ((z-bboxlo_[2])*bininvz) - 1;
 
-    return (iz-mbinzlo)*mbiny*mbinx + (iy-mbinylo)*mbinx + (ix-mbinxlo);
+    int res = (iz-mbinzlo)*mbiny*mbinx + (iy-mbinylo)*mbinx + (ix-mbinxlo);
+    if (res < 0) {
+        std::cout << "error: " << ix << " " << iy << " " << iz << std::endl;
+        std::cout << "error: " << mbinx << " " << mbiny << " " << mbinz << std::endl;
+        std::cout << "boxlo: " << bboxlo_[0] << " " << bboxlo_[1] << " " << bboxlo_[2] << std::endl;
+        std::cout << "boxhi: " << bboxhi_[0] << " " << bboxhi_[1] << " " << bboxhi_[2] << std::endl;
+        std::cout << "coord: " << x << " " << y << " " << z << std::endl;
+    }
+    return res;
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -126,6 +134,8 @@ class NBinKokkos : public NBinStandard {
 
     return (iz-mbinzlo)*mbiny*mbinx + (iy-mbinylo)*mbinx + (ix-mbinxlo);
   }
+
+  void bin_atoms_stencil_md(Atom*) override;
 
  private:
   double bboxlo_[3],bboxhi_[3];

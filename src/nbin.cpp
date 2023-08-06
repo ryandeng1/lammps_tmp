@@ -122,6 +122,25 @@ void NBin::copy_neighbor_info()
   if (cutoff_custom > 0.0) cutneighmax = cutoff_custom;
 }
 
+void NBin::copy_neighbor_info_stencil_md(Neighbor* neighbor_)
+{
+    includegroup = neighbor_->includegroup;
+    cutneighmin = neighbor_->cutneighmin;
+    cutneighmax = neighbor_->cutneighmax;
+    binsizeflag = neighbor_->binsizeflag;
+    binsize_user = neighbor_->binsize_user;
+    bboxlo = neighbor_->bboxlo;
+    bboxhi = neighbor_->bboxhi;
+
+    ncollections = neighbor_->ncollections;
+    cutcollectionsq = neighbor_->cutcollectionsq;
+
+    // overwrite Neighbor cutoff with custom value set by requestor
+    // only works for style = BIN (checked by Neighbor class)
+
+    if (cutoff_custom > 0.0) cutneighmax = cutoff_custom;
+}
+
 
 
 /* ----------------------------------------------------------------------

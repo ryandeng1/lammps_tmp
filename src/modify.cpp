@@ -44,6 +44,11 @@ template <typename S, typename T> static S *style_creator(LAMMPS *lmp, int narg,
   return new T(lmp, narg, arg);
 }
 
+template <typename S, typename T> static S *style_creator_stencil_md(LAMMPS *lmp, Modify* modify_, int narg, char **arg)
+{
+    return new T(lmp, modify_, narg, arg);
+}
+
 /* ---------------------------------------------------------------------- */
 
 Modify::Modify(LAMMPS *lmp) : Pointers(lmp)
@@ -99,6 +104,7 @@ void _noopt Modify::create_factories()
   // fill map with fixes listed in style_fix.h
 
   fix_map = new FixCreatorMap();
+  fix_map_stencil_md = new FixCreatorStencilMDMap();
 
 #define FIX_CLASS
 #define FixStyle(key, Class) (*fix_map)[#key] = &style_creator<Fix, Class>;
@@ -115,6 +121,11 @@ void _noopt Modify::create_factories()
 #include "style_compute.h"    // IWYU pragma: keep
 #undef ComputeStyle
 #undef COMPUTE_CLASS
+
+  (*fix_map_stencil_md)["nvt/kk"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
+  (*fix_map_stencil_md)["nvt/kk/device"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
+  (*fix_map_stencil_md)["nvt/kk/host"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -291,6 +302,128 @@ void Modify::init()
   if (comm->me == 0 && checkall)
     error->warning(FLERR, "One or more atoms are time integrated more than once");
 }
+
+void Modify::init_stencil_md(Atom* atom_) {
+    int i, j;
+
+    // delete storage of restart info since it is not valid after 1st run
+
+    restart_deallocate(1);
+
+    // init each compute
+    // set invoked_scalar,vector,etc to -1 to force new run to re-compute them
+    // add initial timestep to all computes that store invocation times
+    //   since any of them may be invoked by initial thermo
+    // do not clear out invocation times stored within a compute,
+    //   b/c some may be holdovers from previous run, like for ave fixes
+
+    // TODO: doesn't seem like computetemp does anything special
+    for (i = 0; i < ncompute; i++) {
+        compute[i]->init();
+        compute[i]->invoked_scalar = -1;
+        compute[i]->invoked_vector = -1;
+        compute[i]->invoked_array = -1;
+        compute[i]->invoked_peratom = -1;
+        compute[i]->invoked_local = -1;
+    }
+    addstep_compute_all(update->ntimestep);
+
+    // init each fix
+    // should not need to come before compute init
+    //   used to b/c temperature computes called fix->dof() in their init,
+    //   and fix rigid required its own init before its dof() could be called,
+    //   but computes now do their DOF in setup()
+
+    for (i = 0; i < nfix; i++) {
+        fix[i]->init_stencil_md(atom_);
+    }
+
+    // set global flag if any fix has its restart_pbc flag set
+
+    restart_pbc_any = 0;
+    for (i = 0; i < nfix; i++)
+        if (fix[i]->restart_pbc) restart_pbc_any = 1;
+
+    // create lists of fixes to call at each stage of run
+    // needs to happen after init() of computes
+    //   b/c a compute::init() can delete a fix, e.g. compute chunk/atom
+
+    list_init(INITIAL_INTEGRATE, n_initial_integrate, list_initial_integrate);
+    list_init(POST_INTEGRATE, n_post_integrate, list_post_integrate);
+    list_init(PRE_EXCHANGE, n_pre_exchange, list_pre_exchange);
+    list_init(PRE_NEIGHBOR, n_pre_neighbor, list_pre_neighbor);
+    list_init(POST_NEIGHBOR, n_post_neighbor, list_post_neighbor);
+    list_init(PRE_FORCE, n_pre_force, list_pre_force);
+    list_init(PRE_REVERSE, n_pre_reverse, list_pre_reverse);
+    list_init(POST_FORCE, n_post_force, list_post_force);
+    list_init_post_force_group(n_post_force_group, list_post_force_group);
+    list_init(FINAL_INTEGRATE, n_final_integrate, list_final_integrate);
+    list_init_end_of_step(END_OF_STEP, n_end_of_step, list_end_of_step);
+    list_init_energy_couple(n_energy_couple, list_energy_couple);
+    list_init_energy_global(n_energy_global, list_energy_global);
+    list_init_energy_atom(n_energy_atom, list_energy_atom);
+
+    list_init(INITIAL_INTEGRATE_RESPA, n_initial_integrate_respa, list_initial_integrate_respa);
+    list_init(POST_INTEGRATE_RESPA, n_post_integrate_respa, list_post_integrate_respa);
+    list_init(POST_FORCE_RESPA, n_post_force_respa, list_post_force_respa);
+    list_init(PRE_FORCE_RESPA, n_pre_force_respa, list_pre_force_respa);
+    list_init(FINAL_INTEGRATE_RESPA, n_final_integrate_respa, list_final_integrate_respa);
+
+    list_init(MIN_PRE_EXCHANGE, n_min_pre_exchange, list_min_pre_exchange);
+    list_init(MIN_PRE_NEIGHBOR, n_min_pre_neighbor, list_min_pre_neighbor);
+    list_init(MIN_POST_NEIGHBOR, n_min_post_neighbor, list_min_post_neighbor);
+    list_init(MIN_PRE_FORCE, n_min_pre_force, list_min_pre_force);
+    list_init(MIN_PRE_REVERSE, n_min_pre_reverse, list_min_pre_reverse);
+    list_init(MIN_POST_FORCE, n_min_post_force, list_min_post_force);
+    list_init(MIN_ENERGY, n_min_energy, list_min_energy);
+
+    // two post_force_any counters used by integrators add in post_force_group
+
+    n_post_force_any = n_post_force + n_post_force_group;
+    n_post_force_respa_any = n_post_force_respa + n_post_force_group;
+
+    // create list of computes that store invocation times
+
+    list_init_compute();
+
+    // error if any fix or compute is using a dynamic group when not allowed
+
+    for (i = 0; i < nfix; i++)
+        if (!fix[i]->dynamic_group_allow && group->dynamic[fix[i]->igroup])
+            error->all(FLERR, "Fix {} does not allow use with a dynamic group", fix[i]->style);
+
+    for (i = 0; i < ncompute; i++)
+        if (!compute[i]->dynamic_group_allow && group->dynamic[compute[i]->igroup])
+            error->all(FLERR, "Compute {} does not allow use with a dynamic group", compute[i]->style);
+
+    // warn if any particle is time integrated more than once
+
+    int nlocal = atom->nlocal;
+    int *mask = atom->mask;
+
+    int *flag = new int[nlocal];
+    for (i = 0; i < nlocal; i++) flag[i] = 0;
+
+    int groupbit;
+    for (i = 0; i < nfix; i++) {
+        if (fix[i]->time_integrate == 0) continue;
+        groupbit = fix[i]->groupbit;
+        for (j = 0; j < nlocal; j++)
+            if (mask[j] & groupbit) flag[j]++;
+    }
+
+    int check = 0;
+    for (i = 0; i < nlocal; i++)
+        if (flag[i] > 1) check = 1;
+
+    delete[] flag;
+
+    int checkall;
+    MPI_Allreduce(&check, &checkall, 1, MPI_INT, MPI_SUM, world);
+    if (comm->me == 0 && checkall)
+        error->warning(FLERR, "One or more atoms are time integrated more than once");
+}
+
 
 /* ----------------------------------------------------------------------
    setup for run, calls setup() of all fixes and computes
@@ -795,7 +928,7 @@ int Modify::min_reset_ref()
    add a new fix or replace one with same ID
 ------------------------------------------------------------------------- */
 
-Fix *Modify::add_fix(int narg, char **arg, int trysuffix)
+Fix *Modify::add_fix(int narg, char **arg, int trysuffix, bool use_stencil_md)
 {
   if (narg < 3) error->all(FLERR, "Illegal fix command");
 
@@ -878,8 +1011,14 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix)
     if (lmp->suffix) {
       std::string estyle = arg[2] + std::string("/") + lmp->suffix;
       if (fix_map->find(estyle) != fix_map->end()) {
-        FixCreator &fix_creator = (*fix_map)[estyle];
-        fix[ifix] = fix_creator(lmp, narg, arg);
+        if (use_stencil_md) {
+            FixCreatorStencilMD &fix_creator = (*fix_map_stencil_md)[estyle];
+            fix[ifix] = fix_creator(lmp, this, narg, arg);
+        } else {
+            FixCreator &fix_creator = (*fix_map)[estyle];
+            fix[ifix] = fix_creator(lmp, narg, arg);
+        }
+
         delete[] fix[ifix]->style;
         fix[ifix]->style = utils::strdup(estyle);
       }

@@ -30,6 +30,13 @@ struct TagFixNH_nve_x{};
 
 struct TagFixNH_nh_v_temp{};
 
+struct TagFixNH_nh_v_temp_stencil_md{};
+
+template<int RMASS>
+struct TagFixNH_nve_v_stencil_md{};
+
+struct TagFixNH_nve_x_stencil_md{};
+
 template<class DeviceType>
 class FixNHKokkos : public FixNH {
  public:
@@ -57,7 +64,26 @@ class FixNHKokkos : public FixNH {
   KOKKOS_INLINE_FUNCTION
   void operator()(TagFixNH_nh_v_temp, const int&) const;
 
- protected:
+  template<int RMASS>
+  KOKKOS_INLINE_FUNCTION
+  void operator()(TagFixNH_nve_v_stencil_md<RMASS>, const int&) const;
+
+  KOKKOS_INLINE_FUNCTION
+  void operator()(TagFixNH_nve_x_stencil_md, const int&) const;
+
+  KOKKOS_INLINE_FUNCTION
+  void operator()(TagFixNH_nh_v_temp_stencil_md, const int&) const;
+
+  void setup_stencil_md(double*, Atom*) override;
+
+  void init_stencil_md(Atom*) override;
+  void nve_v_stencil_md(Atom*, Atom*) override;
+  void nve_x_stencil_md(Atom*, Atom*) override;
+  void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*) override;
+  void initial_integrate_stencil_md(int, Atom*, Atom*, int*) override;
+  void nh_v_temp_stencil_md(Atom*, Atom*) override;
+
+protected:
   void remap() override;
 
   void nve_x() override;            // may be overwritten by child classes
@@ -68,6 +94,13 @@ class FixNHKokkos : public FixNH {
   F_FLOAT factor[3];
 
   class DomainKokkos *domainKK;
+
+  typename ArrayTypes<DeviceType>::t_x_array next_x;
+  typename ArrayTypes<DeviceType>::t_v_array next_v;
+
+  tagint *tag;
+  tagint *next_tag;
+  int* atom_idx_mapping;
 
   typename ArrayTypes<DeviceType>::t_x_array x;
   typename ArrayTypes<DeviceType>::t_v_array v;

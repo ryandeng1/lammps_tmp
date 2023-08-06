@@ -22,6 +22,7 @@
 #include "update.h"
 
 #include <cstring>
+#include <iostream>
 
 using namespace LAMMPS_NS;
 
@@ -44,6 +45,7 @@ ComputeTempKokkos<DeviceType>::ComputeTempKokkos(LAMMPS *lmp, int narg, char **a
 template<class DeviceType>
 double ComputeTempKokkos<DeviceType>::compute_scalar()
 {
+  // if (comm->me == 0) std::cout << "compute scalar" << std::endl;
   atomKK->sync(execution_space,datamask_read);
   atomKK->k_mass.sync<DeviceType>();
 
@@ -75,8 +77,53 @@ double ComputeTempKokkos<DeviceType>::compute_scalar()
   if (dof < 0.0 && natoms_temp > 0.0)
     error->all(FLERR,"Temperature compute degrees of freedom < 0");
   scalar *= tfactor;
-
+  return 4000;
+  std::cout << "REGULAR MD compute scalar res: " << scalar << " temp: " << t << " factor? " << tfactor << " uhh: " << t * tfactor << " nlocal: " << nlocal << std::endl;
   return scalar;
+}
+
+template<class DeviceType>
+double ComputeTempKokkos<DeviceType>::compute_scalar_stencil_md(Atom* atom_)
+{
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    atomKK_->sync_stencil_md(execution_space,datamask_read, atom_);
+    atomKK_->k_mass.sync<DeviceType>();
+
+    invoked_scalar = update->ntimestep;
+
+    v = atomKK_->k_v.view<DeviceType>();
+    if (atomKK_->rmass) {
+        rmass = atomKK_->k_rmass.view<DeviceType>();
+    } else {
+        mass = atomKK_->k_mass.view<DeviceType>();
+    }
+
+    type = atomKK_->k_type.view<DeviceType>();
+    mask = atomKK_->k_mask.view<DeviceType>();
+    int nlocal = atom_->nlocal;
+    double t = 0.0;
+    CTEMP t_kk;
+    copymode = 1;
+    if (atomKK_->rmass) {
+        Kokkos::parallel_reduce(Kokkos::RangePolicy<DeviceType, TagComputeTempScalar<1> >(0,nlocal),*this,t_kk);
+    } else {
+        Kokkos::parallel_reduce(Kokkos::RangePolicy<DeviceType, TagComputeTempScalar<0> >(0,nlocal),*this,t_kk);
+    }
+    copymode = 0;
+
+    t = t_kk.t0; // could make this more efficient
+
+    // MPI_Allreduce(&t,&scalar,1,MPI_DOUBLE,MPI_SUM,world);
+    if (dynamic) dof_compute();
+    if (dof < 0.0 && natoms_temp > 0.0) {
+        error->all(FLERR, "Temperature compute degrees of freedom < 0");
+    }
+    scalar = t * tfactor;
+    // std::cout << "STENCIL MD compute scalar res: " << scalar << " temp: " << t << " factor? " << tfactor << " uhh: " << t * tfactor << " nlocal: " << nlocal << std::endl;
+    return 4000;
+    return scalar;
+    // scalar *= tfactor;
+    // return scalar;
 }
 
 template<class DeviceType>
@@ -87,9 +134,10 @@ void ComputeTempKokkos<DeviceType>::operator()(TagComputeTempScalar<RMASS>, cons
     if (mask[i] & groupbit)
       t_kk.t0 += (v(i,0)*v(i,0) + v(i,1)*v(i,1) + v(i,2)*v(i,2)) * rmass[i];
   } else {
-    if (mask[i] & groupbit)
-      t_kk.t0 += (v(i,0)*v(i,0) + v(i,1)*v(i,1) + v(i,2)*v(i,2)) *
-        mass[type[i]];
+    if (mask[i] & groupbit) {
+        t_kk.t0 += (v(i, 0) * v(i, 0) + v(i, 1) * v(i, 1) + v(i, 2) * v(i, 2)) *
+                   atom->mass[type[i]];
+    }
   }
 }
 

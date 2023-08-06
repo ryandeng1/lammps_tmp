@@ -154,6 +154,8 @@ class NPairKokkos : public NPair {
   void copy_bin_info() override;
   void copy_stencil_info() override;
   void build(class NeighList *) override;
+  void build_stencil_md(class NeighList*, Atom*) override;
+  void copy_neighbor_info_stencil_md(Neighbor*) override;
 
  private:
   int newton_pair;

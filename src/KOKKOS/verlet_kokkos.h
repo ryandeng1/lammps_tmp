@@ -44,7 +44,8 @@ class VerletKokkos : public Verlet {
     f(i,2) += f_merge_copy(i,2);
   }
 
- protected:
+  void force_clear_stencil_md(Atom*, Force*, Neighbor*) override;
+protected:
   DAT::t_f_array f_merge_copy,f;
 };
 }

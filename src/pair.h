@@ -217,6 +217,10 @@ class Pair : protected Pointers {
 
   // management of callbacks to be run from ev_tally()
 
+  virtual void compute_stencil_md(int, int, Atom*, bool[3]) {}
+  virtual void init_style_stencil_md(Neighbor*);
+  virtual void init_stencil_md(Neighbor*);
+
  protected:
   int num_tally_compute;
   class Compute **list_tally_compute;

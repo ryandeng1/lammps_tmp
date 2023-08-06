@@ -109,6 +109,8 @@ class NeighList : protected Pointers {
   void print_attributes();       // debug routine
   int get_maxlocal() { return maxatom; }
   double memory_usage();
+
+  void grow_stencil_md(int, int, Atom*);
 };
 
 }    // namespace LAMMPS_NS

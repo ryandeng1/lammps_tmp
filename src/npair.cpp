@@ -62,7 +62,6 @@ void NPair::post_constructor(NeighRequest *nrq)
 void NPair::copy_neighbor_info()
 {
   // general params
-
   includegroup = neighbor->includegroup;
   exclude = neighbor->exclude;
   skin = neighbor->skin;
@@ -114,6 +113,62 @@ void NPair::copy_neighbor_info()
         mycutneighsq[i][j] = cutoff_custom * cutoff_custom;
     cutneighsq = mycutneighsq;
   }
+}
+
+void NPair::copy_neighbor_info_stencil_md(Neighbor* neighbor_)
+{
+    // general params
+    includegroup = neighbor_->includegroup;
+    exclude = neighbor_->exclude;
+    skin = neighbor_->skin;
+    cutneighsq = neighbor_->cutneighsq;
+    cutneighghostsq = neighbor_->cutneighghostsq;
+    cut_inner_sq = neighbor_->cut_inner_sq;
+    cut_middle_sq = neighbor_->cut_middle_sq;
+    cut_middle_inside_sq = neighbor_->cut_middle_inside_sq;
+    bboxlo = neighbor_->bboxlo;
+    bboxhi = neighbor_->bboxhi;
+
+    // exclusion info
+
+    nex_type = neighbor_->nex_type;
+    ex1_type = neighbor_->ex1_type;
+    ex2_type = neighbor_->ex2_type;
+    ex_type = neighbor_->ex_type;
+
+    nex_group = neighbor_->nex_group;
+    ex1_group = neighbor_->ex1_group;
+    ex2_group = neighbor_->ex2_group;
+    ex1_bit = neighbor_->ex1_bit;
+    ex2_bit = neighbor_->ex2_bit;
+
+    nex_mol = neighbor_->nex_mol;
+    ex_mol_group = neighbor_->ex_mol_group;
+    ex_mol_bit = neighbor_->ex_mol_bit;
+    ex_mol_intra = neighbor_->ex_mol_intra;
+
+    // special info
+
+    special_flag = neighbor_->special_flag;
+
+    // multi info
+
+    ncollections = neighbor_->ncollections;
+    cutcollectionsq = neighbor_->cutcollectionsq;
+
+    // overwrite per-type Neighbor cutoffs with custom value set by requestor
+    // only works for style = BIN (checked by Neighbor class)
+
+    if (cutoff_custom > 0.0) {
+        memory->destroy(mycutneighsq);
+        int n = atom->ntypes;
+        memory->create(mycutneighsq,n+1,n+1,"npair:cutneighsq");
+        int i,j;
+        for (i = 1; i <= n; i++)
+            for (j = 1; j <= n; j++)
+                mycutneighsq[i][j] = cutoff_custom * cutoff_custom;
+        cutneighsq = mycutneighsq;
+    }
 }
 
 /* ----------------------------------------------------------------------

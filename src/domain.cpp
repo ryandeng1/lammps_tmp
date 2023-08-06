@@ -555,6 +555,7 @@ void Domain::pbc()
   if (flag) error->one(FLERR,"Non-numeric atom coords - simulation unstable");
 
   // setup for PBC checks
+  std::cout << boxlo[0] << " " << boxlo[1] << " " << boxlo[2] << " " << boxhi[0] << " " << boxhi[1] << " " << boxhi[2] << std::endl;
 
   if (triclinic == 0) {
     lo = boxlo;
@@ -649,6 +650,123 @@ void Domain::pbc()
       }
     }
   }
+}
+
+void Domain::pbc_stencil_md(Atom* atom_) {
+    int nlocal = atom_->nlocal;
+    if (!nlocal) return;
+    int i;
+    imageint idim,otherdims;
+    double *lo,*hi,*period;
+    double **x = atom_->x;
+    double **v = atom_->v;
+    int *mask = atom_->mask;
+    imageint *image = atom_->image;
+
+    // verify owned atoms have valid numerical coords
+    // may not if computed pairwise force between 2 atoms at same location
+
+    double *coord;
+    int n3 = 3*nlocal;
+    coord = &x[0][0];
+    int flag = 0;
+    for (i = 0; i < n3; i++)
+        if (!std::isfinite(*coord++)) flag = 1;
+    if (flag) error->one(FLERR,"Non-numeric atom coords - simulation unstable");
+
+    // setup for PBC checks
+    if (triclinic == 0) {
+        lo = boxlo;
+        hi = boxhi;
+        period = prd;
+    } else {
+        lo = boxlo_lamda;
+        hi = boxhi_lamda;
+        period = prd_lamda;
+    }
+
+    // apply PBC to each owned atom
+    for (i = 0; i < nlocal; i++) {
+        if (xperiodic) {
+            if (x[i][0] < lo[0]) {
+                x[i][0] += period[0];
+                if (deform_vremap && mask[i] & deform_groupbit) v[i][0] += h_rate[0];
+                idim = image[i] & IMGMASK;
+                otherdims = image[i] ^ idim;
+                idim--;
+                idim &= IMGMASK;
+                image[i] = otherdims | idim;
+            }
+            if (x[i][0] >= hi[0]) {
+                x[i][0] -= period[0];
+                x[i][0] = MAX(x[i][0],lo[0]);
+                if (deform_vremap && mask[i] & deform_groupbit) v[i][0] -= h_rate[0];
+                idim = image[i] & IMGMASK;
+                otherdims = image[i] ^ idim;
+                idim++;
+                idim &= IMGMASK;
+                image[i] = otherdims | idim;
+            }
+        }
+
+        if (yperiodic) {
+            if (x[i][1] < lo[1]) {
+                x[i][1] += period[1];
+                if (deform_vremap && mask[i] & deform_groupbit) {
+                    v[i][0] += h_rate[5];
+                    v[i][1] += h_rate[1];
+                }
+                idim = (image[i] >> IMGBITS) & IMGMASK;
+                otherdims = image[i] ^ (idim << IMGBITS);
+                idim--;
+                idim &= IMGMASK;
+                image[i] = otherdims | (idim << IMGBITS);
+            }
+            if (x[i][1] >= hi[1]) {
+                x[i][1] -= period[1];
+                x[i][1] = MAX(x[i][1],lo[1]);
+                if (deform_vremap && mask[i] & deform_groupbit) {
+                    v[i][0] -= h_rate[5];
+                    v[i][1] -= h_rate[1];
+                }
+                idim = (image[i] >> IMGBITS) & IMGMASK;
+                otherdims = image[i] ^ (idim << IMGBITS);
+                idim++;
+                idim &= IMGMASK;
+                image[i] = otherdims | (idim << IMGBITS);
+            }
+        }
+
+        if (zperiodic) {
+            if (x[i][2] < lo[2]) {
+                x[i][2] += period[2];
+                if (deform_vremap && mask[i] & deform_groupbit) {
+                    v[i][0] += h_rate[4];
+                    v[i][1] += h_rate[3];
+                    v[i][2] += h_rate[2];
+                }
+                idim = image[i] >> IMG2BITS;
+                otherdims = image[i] ^ (idim << IMG2BITS);
+                idim--;
+                idim &= IMGMASK;
+                image[i] = otherdims | (idim << IMG2BITS);
+            }
+            if (x[i][2] >= hi[2]) {
+                x[i][2] -= period[2];
+                x[i][2] = MAX(x[i][2],lo[2]);
+                if (deform_vremap && mask[i] & deform_groupbit) {
+                    v[i][0] -= h_rate[4];
+                    v[i][1] -= h_rate[3];
+                    v[i][2] -= h_rate[2];
+                }
+                idim = image[i] >> IMG2BITS;
+                otherdims = image[i] ^ (idim << IMG2BITS);
+                idim++;
+                idim &= IMGMASK;
+                image[i] = otherdims | (idim << IMG2BITS);
+            }
+        }
+    }
 }
 
 /* ----------------------------------------------------------------------

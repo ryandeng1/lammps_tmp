@@ -32,6 +32,8 @@
 #if defined(LMP_MDI)
 #include <mdi.h>
 #endif
+#include <unistd.h>
+#include <csignal>
 
 using namespace LAMMPS_NS;
 
@@ -94,6 +96,7 @@ int main(int argc, char **argv)
   }
 #else
   try {
+    sleep(10);
     auto lammps = new LAMMPS(argc, argv, lammps_comm);
     lammps->input->file();
     delete lammps;

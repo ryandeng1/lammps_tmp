@@ -294,6 +294,93 @@ void Pair::init()
   }
 }
 
+void Pair::init_stencil_md(Neighbor* neighbor_) {
+    int i,j;
+
+    if (offset_flag && tail_flag)
+        error->all(FLERR,"Cannot have both pair_modify shift and tail set to yes");
+    if (tail_flag && domain->dimension == 2)
+        error->all(FLERR,"Cannot use pair tail corrections with 2d simulations");
+    if (tail_flag && domain->nonperiodic && comm->me == 0)
+        error->warning(FLERR,"Using pair tail corrections with non-periodic system");
+    if (!compute_flag && tail_flag && comm->me == 0)
+        error->warning(FLERR,"Using pair tail corrections with pair_modify compute no");
+    if (!compute_flag && offset_flag && comm->me == 0)
+        error->warning(FLERR,"Using pair potential shift with pair_modify compute no");
+
+    // for manybody potentials
+    // check if bonded exclusions could invalidate the neighbor list
+
+    if (manybody_flag && (atom->molecular != Atom::ATOMIC)) {
+        int flag = 0;
+        if (atom->nbonds > 0 && force->special_lj[1] == 0.0 &&
+            force->special_coul[1] == 0.0) flag = 1;
+        if (atom->nangles > 0 && force->special_lj[2] == 0.0 &&
+            force->special_coul[2] == 0.0) flag = 1;
+        if (atom->ndihedrals > 0 && force->special_lj[3] == 0.0 &&
+            force->special_coul[3] == 0.0) flag = 1;
+        if (flag && comm->me == 0)
+            error->warning(FLERR,"Using a manybody potential with "
+                                 "bonds/angles/dihedrals and special_bond exclusions");
+    }
+
+    // I,I coeffs must be set
+    // init_one() will check if I,J is set explicitly or inferred by mixing
+
+    if (!allocated) {
+        error->all(FLERR,"All pair coeffs are not set");
+    }
+
+    for (i = 1; i <= atom->ntypes; i++) {
+        if (setflag[i][i] == 0) error->all(FLERR,"All pair coeffs are not set");
+    }
+
+    // style-specific initialization
+
+    init_style_stencil_md(neighbor_);
+
+    // call init_one() for each I,J
+    // set cutsq for each I,J, used to neighbor
+    // cutforce = max of all I,J cutoffs
+
+    cutforce = 0.0;
+    etail = ptail = 0.0;
+    mixed_flag = 1;
+    double cut;
+    int mixed_count = 0;
+
+    for (i = 1; i <= atom->ntypes; i++)
+        for (j = i; j <= atom->ntypes; j++) {
+            did_mix = false;
+            cut = init_one(i,j);
+            cutsq[i][j] = cutsq[j][i] = cut*cut;
+            cutforce = MAX(cutforce,cut);
+            if (i != j) {
+                if (setflag[i][j]) mixed_flag = 0;
+                if (did_mix) ++mixed_count;
+            }
+            if (tail_flag) {
+                etail += etail_ij;
+                ptail += ptail_ij;
+                if (i != j) {
+                    etail += etail_ij;
+                    ptail += ptail_ij;
+                }
+            }
+        }
+
+    if (!manybody_flag && (comm->me == 0)) {
+        const int num_mixed_pairs = atom->ntypes * (atom->ntypes - 1) / 2;
+        // CLASS2 always applies sixthpower mixing to epsilon/sigma
+        if (utils::strmatch(force->pair_style,"^lj/class2"))
+            utils::logmesg(lmp,"Generated {} of {} mixed pair_coeff terms from {}/{} mixing rule\n",
+                           mixed_count, num_mixed_pairs, "sixthpower", mixing_rule_names[mix_flag]);
+        else
+            utils::logmesg(lmp,"Generated {} of {} mixed pair_coeff terms from {} mixing rule\n",
+                           mixed_count, num_mixed_pairs, mixing_rule_names[mix_flag]);
+    }
+}
+
 /* ----------------------------------------------------------------------
    reset all type-based params by invoking init_one() for each I,J
    called by fix adapt after it changes one or more params
@@ -333,6 +420,10 @@ void Pair::reinit()
 void Pair::init_style()
 {
   neighbor->add_request(this);
+}
+
+void Pair::init_style_stencil_md(Neighbor* neighbor_) {
+    neighbor_->add_request(this);
 }
 
 /* ----------------------------------------------------------------------

@@ -84,6 +84,8 @@ class ComputeTempKokkos : public ComputeTemp {
   KOKKOS_INLINE_FUNCTION
   void operator()(TagComputeTempVector<RMASS>, const int&, CTEMP&) const;
 
+  double compute_scalar_stencil_md(Atom*) override;
+
  protected:
   typename ArrayTypes<DeviceType>::t_v_array_randomread v;
   typename ArrayTypes<DeviceType>::t_float_1d_randomread rmass;

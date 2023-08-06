@@ -245,6 +245,49 @@ void NeighList::grow(int nlocal, int nall)
   }
 }
 
+void NeighList::grow_stencil_md(int nlocal, int nall, Atom* atom_) {
+    // skip if data structs are already big enough
+
+    if (ssa) {
+        if ((nlocal * 3) + nall <= maxatom) return;
+    } else if (ghost) {
+        if (nall <= maxatom) return;
+    } else {
+        if (nlocal <= maxatom) return;
+    }
+
+    if (ssa) maxatom = (nlocal * 3) + nall;
+    else maxatom = atom_->nmax;
+
+    memory->destroy(ilist);
+    memory->destroy(numneigh);
+    memory->sfree(firstneigh);
+    memory->create(ilist,maxatom,"neighlist:ilist");
+    memory->create(numneigh,maxatom,"neighlist:numneigh");
+    firstneigh = (int **) memory->smalloc(maxatom*sizeof(int *),
+                                          "neighlist:firstneigh");
+
+    if (respainner) {
+        memory->destroy(ilist_inner);
+        memory->destroy(numneigh_inner);
+        memory->sfree(firstneigh_inner);
+        memory->create(ilist_inner,maxatom,"neighlist:ilist_inner");
+        memory->create(numneigh_inner,maxatom,"neighlist:numneigh_inner");
+        firstneigh_inner = (int **) memory->smalloc(maxatom*sizeof(int *),
+                                                    "neighlist:firstneigh_inner");
+    }
+
+    if (respamiddle) {
+        memory->destroy(ilist_middle);
+        memory->destroy(numneigh_middle);
+        memory->sfree(firstneigh_middle);
+        memory->create(ilist_middle,maxatom,"neighlist:ilist_middle");
+        memory->create(numneigh_middle,maxatom,"neighlist:numneigh_middle");
+        firstneigh_middle = (int **) memory->smalloc(maxatom*sizeof(int *),
+                                                     "neighlist:firstneigh_middle");
+    }
+}
+
 /* ----------------------------------------------------------------------
    print attributes of this list and associated request
 ------------------------------------------------------------------------- */

@@ -107,6 +107,7 @@ public:
   int& num_neighs(const int & i) const {
     return d_numneigh(i);
   }
+
  private:
   int maxatoms;
 };

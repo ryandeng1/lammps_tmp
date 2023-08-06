@@ -21,6 +21,7 @@ using namespace LAMMPS_NS;
 
 AtomVecAtomic::AtomVecAtomic(LAMMPS *lmp) : AtomVec(lmp)
 {
+  std::cout << "ATOM VEC ATOMIC??????" << std::endl;
   molecular = Atom::ATOMIC;
   mass_type = PER_TYPE;
 

@@ -88,6 +88,45 @@ void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::copy_neighbor_info()
   k_ex_mol_intra = neighborKK->k_ex_mol_intra;
 }
 
+template<class DeviceType, int HALF, int NEWTON, int GHOST, int TRI, int SIZE>
+void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::copy_neighbor_info_stencil_md(Neighbor* neighbor_)
+{
+    NPair::copy_neighbor_info_stencil_md(neighbor_);
+
+    NeighborKokkos* neighborKK = (NeighborKokkos*) neighbor_;
+
+    // general params
+
+    k_cutneighsq = neighborKK->k_cutneighsq;
+
+    // overwrite per-type Neighbor cutoffs with custom value set by requestor
+    // only works for style = BIN (checked by Neighbor class)
+
+    if (cutoff_custom > 0.0) {
+        int n = atom->ntypes;
+        auto k_mycutneighsq = DAT::tdual_xfloat_2d("neigh:cutneighsq,",n+1,n+1);
+        for (int i = 1; i <= n; i++)
+            for (int j = 1; j <= n; j++)
+                k_mycutneighsq.h_view(i,j) = cutoff_custom * cutoff_custom;
+        k_cutneighsq = k_mycutneighsq;
+    }
+
+    k_cutneighsq.modify<LMPHostType>();
+
+    // exclusion info
+
+    k_ex1_type = neighborKK->k_ex1_type;
+    k_ex2_type = neighborKK->k_ex2_type;
+    k_ex_type = neighborKK->k_ex_type;
+    k_ex1_group = neighborKK->k_ex1_group;
+    k_ex2_group = neighborKK->k_ex2_group;
+    k_ex1_bit = neighborKK->k_ex1_bit;
+    k_ex2_bit = neighborKK->k_ex2_bit;
+    k_ex_mol_group = neighborKK->k_ex_mol_group;
+    k_ex_mol_bit = neighborKK->k_ex_mol_bit;
+    k_ex_mol_intra = neighborKK->k_ex_mol_intra;
+}
+
 /* ----------------------------------------------------------------------
  copy per-atom and per-bin vectors from NBin class to this build class
  ------------------------------------------------------------------------- */
@@ -147,11 +186,17 @@ void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::copy_stencil_info()
 template<class DeviceType, int HALF, int NEWTON, int GHOST, int TRI, int SIZE>
 void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::build(NeighList *list_)
 {
+  // std::cout << "REGULAR MD: " << HALF << " " << NEWTON << " " << GHOST << " " << TRI << " " << SIZE << std::endl;
+
   NeighListKokkos<DeviceType>* list = (NeighListKokkos<DeviceType>*) list_;
   const int nlocal = includegroup?atom->nfirst:atom->nlocal;
   int nall = nlocal;
-  if (GHOST)
-    nall += atom->nghost;
+  if (GHOST) {
+      // std::cout << "REGULAR BUILD NORMAL YES GHOST" << std::endl;
+      nall += atom->nghost;
+  } else {
+      // std::cout << "REGULAR BUILD NORMAL NO GHOST" << std::endl;
+  }
 
   if (nall == 0) return;
 
@@ -332,6 +377,203 @@ void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::build(NeighList *list_)
   if (lmp->kokkos->neigh_transpose)
     TransposeHelperKokkos<DeviceType, typename AT::t_neighbors_2d,
       typename AT::t_neighbors_2d_lr>(list->d_neighbors, list->d_neighbors_transpose);
+}
+
+template<class DeviceType, int HALF, int NEWTON, int GHOST, int TRI, int SIZE>
+void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::build_stencil_md(NeighList *list_, Atom* atom_) {
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+
+    NeighListKokkos<DeviceType>* list = (NeighListKokkos<DeviceType>*) list_;
+    const int nlocal = includegroup?atom_->nfirst:atom_->nlocal;
+    int nall = nlocal;
+    if (GHOST) {
+        // std::cout << "STENCIL MD YES GHOST" << std::endl;
+        nall += atom_->nghost;
+    } else {
+        // std::cout << "STENCIL MD NO GHOST" << std::endl;
+    }
+
+    // std::cout << "nall: " << nall << " nlocal: " << atom_->nlocal << " nghost: " << atom_->nghost << std::endl;
+
+    if (nall == 0) return;
+
+    list->grow(nall);
+
+    NeighborKokkosExecute<DeviceType>
+            data(*list,
+                 k_cutneighsq.view<DeviceType>(),
+                 k_bincount.view<DeviceType>(),
+                 k_bins.view<DeviceType>(),
+                 k_atom2bin.view<DeviceType>(),
+                 mbins,nstencil,
+                 k_stencil.view<DeviceType>(),
+                 k_stencilxyz.view<DeviceType>(),
+                 nlocal,nall,lmp->kokkos->neigh_transpose,
+                 atomKK_->k_x.view<DeviceType>(),
+                 atomKK_->k_radius.view<DeviceType>(),
+                 atomKK_->k_type.view<DeviceType>(),
+                 atomKK_->k_mask.view<DeviceType>(),
+                 atomKK_->k_molecule.view<DeviceType>(),
+                 atomKK_->k_tag.view<DeviceType>(),
+                 atomKK_->k_special.view<DeviceType>(),
+                 atomKK_->k_nspecial.view<DeviceType>(),
+                 atomKK_->molecular,
+                 nbinx,nbiny,nbinz,mbinx,mbiny,mbinz,mbinxlo,mbinylo,mbinzlo,
+                 bininvx,bininvy,bininvz,
+                 exclude, nex_type,
+                 k_ex1_type.view<DeviceType>(),
+                 k_ex2_type.view<DeviceType>(),
+                 k_ex_type.view<DeviceType>(),
+                 nex_group,
+                 k_ex1_group.view<DeviceType>(),
+                 k_ex2_group.view<DeviceType>(),
+                 k_ex1_bit.view<DeviceType>(),
+                 k_ex2_bit.view<DeviceType>(),
+                 nex_mol,
+                 k_ex_mol_group.view<DeviceType>(),
+                 k_ex_mol_bit.view<DeviceType>(),
+                 k_ex_mol_intra.view<DeviceType>(),
+                 bboxhi,bboxlo,
+                 domain->xperiodic,domain->yperiodic,domain->zperiodic,
+                 domain->xprd_half,domain->yprd_half,domain->zprd_half,
+                 skin,d_resize,h_resize,d_new_maxneighs,h_new_maxneighs);
+
+    k_cutneighsq.sync<DeviceType>();
+    k_ex1_type.sync<DeviceType>();
+    k_ex2_type.sync<DeviceType>();
+    k_ex_type.sync<DeviceType>();
+    k_ex1_group.sync<DeviceType>();
+    k_ex2_group.sync<DeviceType>();
+    k_ex1_bit.sync<DeviceType>();
+    k_ex2_bit.sync<DeviceType>();
+    k_ex_mol_group.sync<DeviceType>();
+    k_ex_mol_bit.sync<DeviceType>();
+    k_ex_mol_intra.sync<DeviceType>();
+    k_bincount.sync<DeviceType>();
+    k_bins.sync<DeviceType>();
+    k_atom2bin.sync<DeviceType>();
+
+    if (atom->molecular != Atom::ATOMIC) {
+        if (exclude)
+            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|MASK_MASK|MOLECULE_MASK|TAG_MASK|SPECIAL_MASK, atomKK_);
+        else
+            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|TAG_MASK|SPECIAL_MASK, atomKK_);
+    } else {
+        if (exclude)
+            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|MASK_MASK, atomKK_);
+        else
+            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK, atomKK_);
+    }
+
+    data.special_flag[0] = special_flag[0];
+    data.special_flag[1] = special_flag[1];
+    data.special_flag[2] = special_flag[2];
+    data.special_flag[3] = special_flag[3];
+
+    data.h_resize()=1;
+    while (data.h_resize()) {
+        data.h_new_maxneighs() = list->maxneighs;
+        data.h_resize() = 0;
+
+        Kokkos::deep_copy(d_scalars, h_scalars);
+
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
+        #define BINS_PER_BLOCK 2
+const int factor = atoms_per_bin <64?2:1;
+#else
+        const int factor = 1;
+#endif
+
+        if (GHOST) {
+            NPairKokkosBuildFunctorGhost<DeviceType,HALF> f(data,atoms_per_bin * 5 * sizeof(X_FLOAT) * factor);
+#ifdef LMP_KOKKOS_GPU
+            if (ExecutionSpaceFromDevice<DeviceType>::space == Device) {
+    int team_size = atoms_per_bin*factor;
+    int team_size_max = Kokkos::TeamPolicy<DeviceType>(team_size,Kokkos::AUTO).team_size_max(f,Kokkos::ParallelForTag());
+    if (team_size <= team_size_max) {
+      Kokkos::TeamPolicy<DeviceType> config((mbins+factor-1)/factor,team_size);
+      Kokkos::parallel_for(config, f);
+    } else { // fall back to flat method
+      f.sharedsize = 0;
+      Kokkos::parallel_for(nall, f);
+    }
+  } else
+    Kokkos::parallel_for(nall, f);
+#else
+            Kokkos::parallel_for(nall, f);
+#endif
+        } else {
+            if (SIZE) {
+                NPairKokkosBuildFunctorSize<DeviceType,TRI?0:HALF,NEWTON,TRI> f(data,atoms_per_bin * 6 * sizeof(X_FLOAT) * factor);
+#ifdef LMP_KOKKOS_GPU
+                if (ExecutionSpaceFromDevice<DeviceType>::space == Device) {
+      int team_size = atoms_per_bin*factor;
+      int team_size_max = Kokkos::TeamPolicy<DeviceType>(team_size,Kokkos::AUTO).team_size_max(f,Kokkos::ParallelForTag());
+      if (team_size <= team_size_max) {
+        Kokkos::TeamPolicy<DeviceType> config((mbins+factor-1)/factor,team_size);
+        Kokkos::parallel_for(config, f);
+      } else { // fall back to flat method
+        f.sharedsize = 0;
+        Kokkos::parallel_for(nall, f);
+      }
+    } else
+      Kokkos::parallel_for(nall, f);
+#else
+                Kokkos::parallel_for(nall, f);
+#endif
+            } else {
+                NPairKokkosBuildFunctor<DeviceType,TRI?0:HALF,NEWTON,TRI> f(data,atoms_per_bin * 5 * sizeof(X_FLOAT) * factor);
+#ifdef LMP_KOKKOS_GPU
+                if (ExecutionSpaceFromDevice<DeviceType>::space == Device) {
+      int team_size = atoms_per_bin*factor;
+      int team_size_max = Kokkos::TeamPolicy<DeviceType>(team_size,Kokkos::AUTO).team_size_max(f,Kokkos::ParallelForTag());
+      if (team_size <= team_size_max) {
+        Kokkos::TeamPolicy<DeviceType> config((mbins+factor-1)/factor,team_size);
+        Kokkos::parallel_for(config, f);
+      } else { // fall back to flat method
+        f.sharedsize = 0;
+        Kokkos::parallel_for(nall, f);
+      }
+    } else
+      Kokkos::parallel_for(nall, f);
+#else
+                Kokkos::parallel_for(nall, f);
+#endif
+            }
+        }
+        Kokkos::deep_copy(h_scalars, d_scalars);
+
+        if (data.h_resize()) {
+            list->maxneighs = data.h_new_maxneighs() * 1.2;
+            int maxatoms = list->d_neighbors.extent(0);
+            data.neigh_list.d_neighbors = typename AT::t_neighbors_2d();
+            list->d_neighbors = typename AT::t_neighbors_2d();
+            list->d_neighbors = typename AT::t_neighbors_2d(Kokkos::NoInit("neighlist:neighbors"), maxatoms, list->maxneighs);
+            data.neigh_list.d_neighbors = list->d_neighbors;
+            data.neigh_list.maxneighs = list->maxneighs;
+
+            if (lmp->kokkos->neigh_transpose) {
+                data.neigh_list.d_neighbors_transpose = typename AT::t_neighbors_2d_lr();
+                list->d_neighbors_transpose = typename AT::t_neighbors_2d_lr();
+                list->d_neighbors_transpose = typename AT::t_neighbors_2d_lr(Kokkos::NoInit("neighlist:neighbors"), maxatoms, list->maxneighs);
+                data.neigh_list.d_neighbors_transpose = list->d_neighbors_transpose;
+            }
+        }
+    }
+
+    if (GHOST) {
+        list->inum = atom_->nlocal;
+        list->gnum = nall - atom_->nlocal;
+    } else {
+        list->inum = nall;
+        list->gnum = 0;
+    }
+
+    list->k_ilist.template modify<DeviceType>();
+
+    if (lmp->kokkos->neigh_transpose)
+        TransposeHelperKokkos<DeviceType, typename AT::t_neighbors_2d,
+                typename AT::t_neighbors_2d_lr>(list->d_neighbors, list->d_neighbors_transpose);
 }
 
 /* ---------------------------------------------------------------------- */

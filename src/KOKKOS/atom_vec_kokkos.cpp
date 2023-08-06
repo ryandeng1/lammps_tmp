@@ -412,6 +412,7 @@ struct AtomVecKokkos_UnpackComm {
 
   KOKKOS_INLINE_FUNCTION
   void operator() (const int& i) const {
+      std::cout << "unpack comm" << std::endl;
       _x(i+_first,0) = _buf(i,0);
       _x(i+_first,1) = _buf(i,1);
       _x(i+_first,2) = _buf(i,2);

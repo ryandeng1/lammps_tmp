@@ -298,7 +298,9 @@ void NeighborKokkos::build_kokkos(int topoflag)
 
   if (style != Neighbor::NSQ) {
     for (int i = 0; i < nbin; i++) {
-      if (!neigh_bin[i]->kokkos) atomKK->sync(Host,ALL_MASK);
+      if (!neigh_bin[i]->kokkos) {
+          atomKK->sync(Host,ALL_MASK);
+      }
       neigh_bin[i]->bin_atoms_setup(nall);
       neigh_bin[i]->bin_atoms();
     }
@@ -318,6 +320,113 @@ void NeighborKokkos::build_kokkos(int topoflag)
   // build topology lists for bonds/angles/etc
 
   if ((atom->molecular != Atom::ATOMIC) && topoflag) build_topology();
+}
+
+void NeighborKokkos::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_) {
+    if (device_flag) {
+        build_kokkos_stencil_md<LMPDeviceType>(topoflag, atom_, domain_, comm_);
+    } else {
+        build_kokkos_stencil_md<LMPHostType>(topoflag, atom_, domain_, comm_);
+    }
+}
+
+template<class DeviceType>
+void NeighborKokkos::build_kokkos_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_) {
+    // std::cout << "me: " << comm->me << " CHECK DOMAIN SUB DOMAIN? " << domain_->sublo[0] << " " << domain_->sublo[1] << " " << domain_->sublo[2] << " " << domain_->subhi[0] << " " << domain_->subhi[1] << " " << domain_->subhi[2] << std::endl;
+    // std::cout << "CHECK DOMAIN DOMAIN DOMAIN? " << domain_->boxlo[0] << " " << domain_->boxlo[1] << " " << domain_->boxlo[2] << " " << domain_->boxhi[0] << " " << domain_->boxhi[1] << " " << domain_->boxhi[2] << std::endl;
+    int i,m;
+
+    ago = 0;
+    ncalls++;
+    lastcall = update->ntimestep;
+
+    int nlocal = atom_->nlocal;
+    int nall = nlocal + atom_->nghost;
+
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+
+    // check that using special bond flags will not overflow neigh lists
+
+    if (nall > NEIGHMASK)
+        error->one(FLERR,"Too many local+ghost atoms for neighbor list");
+
+    // store current atom positions and box size if needed
+
+    if (dist_check) {
+        atomKK_->sync_stencil_md(ExecutionSpaceFromDevice<DeviceType>::space,X_MASK, atom_);
+        x = atomKK_->k_x;
+        if (includegroup) {
+            nlocal = atom_->nfirst;
+        }
+        int maxhold_kokkos = xhold.view<DeviceType>().extent(0);
+        if (atom_->nmax > maxhold || maxhold_kokkos < maxhold) {
+            maxhold = atom_->nmax;
+            xhold = DAT::tdual_x_array("neigh:xhold",maxhold);
+        }
+        copymode = 1;
+        Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagNeighborXhold<DeviceType> >(0,nlocal),*this);
+        copymode = 0;
+        xhold.modify<DeviceType>();
+        if (boxcheck) {
+            if (triclinic == 0) {
+                boxlo_hold[0] = bboxlo[0];
+                boxlo_hold[1] = bboxlo[1];
+                boxlo_hold[2] = bboxlo[2];
+                boxhi_hold[0] = bboxhi[0];
+                boxhi_hold[1] = bboxhi[1];
+                boxhi_hold[2] = bboxhi[2];
+            } else {
+                assert(false);
+                domain_->box_corners();
+                corners = domain_->corners;
+                for (i = 0; i < 8; i++) {
+                    corners_hold[i][0] = corners[i][0];
+                    corners_hold[i][1] = corners[i][1];
+                    corners_hold[i][2] = corners[i][2];
+                }
+            }
+        }
+    }
+
+    // bin atoms for all NBin instances
+    // not just NBin associated with perpetual lists
+    // b/c cannot wait to bin occasional lists in build_one() call
+    // if bin then, atoms may have moved outside of proc domain & bin extent,
+    //   leading to errors or even a crash
+
+    if (style != Neighbor::NSQ) {
+        for (int i = 0; i < nbin; i++) {
+            if (!neigh_bin[i]->kokkos) {
+                atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
+            }
+            neigh_bin[i]->bin_atoms_setup(nall);
+            neigh_bin[i]->bin_atoms_stencil_md(atom_);
+            // neigh_bin[i]->bin_atoms();
+        }
+    }
+
+    // build pairwise lists for all perpetual NPair/NeighList
+    // grow() with nlocal/nall args so that only realloc if have to
+
+    for (i = 0; i < npair_perpetual; i++) {
+        m = plist[i];
+        if (!lists[m]->kokkos) {
+            atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
+        }
+        if (!lists[m]->copy) {
+            // lists[m]->grow(nlocal,nall);
+            lists[m]->grow_stencil_md(nlocal,nall, atom_);
+        }
+        neigh_pair[m]->build_setup();
+        // neigh_pair[m]->build(lists[m]);
+        neigh_pair[m]->build_stencil_md(lists[m], atom_);
+    }
+
+    // build topology lists for bonds/angles/etc
+
+    if ((atom->molecular != Atom::ATOMIC) && topoflag) {
+        build_topology();
+    }
 }
 
 template<class DeviceType>

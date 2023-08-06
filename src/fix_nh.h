@@ -42,6 +42,11 @@ class FixNH : public Fix {
   void *extract(const char *, int &) override;
   double memory_usage() override;
 
+  virtual void nve_v_stencil_md(Atom*, Atom*) {}
+  virtual void nve_x_stencil_md(Atom*, Atom*) {}
+  virtual void nhc_temp_integrate_stencil_md(Atom*, Atom*);
+  virtual void nh_v_temp_stencil_md(Atom*, Atom*) {}
+
  protected:
   int dimension, which;
   double dtv, dtf, dthalf, dt4, dt8, dto;

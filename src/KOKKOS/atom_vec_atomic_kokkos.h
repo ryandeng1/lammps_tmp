@@ -69,7 +69,21 @@ class AtomVecAtomicKokkos : public AtomVecKokkos {
   void modified(ExecutionSpace space, unsigned int mask) override;
   void sync_overlapping_device(ExecutionSpace space, unsigned int mask) override;
 
- protected:
+  int unpack_exchange_stencil_md(double*, Atom*, Domain*, std::set<int>&) override;
+  void grow_stencil_md(int, Atom*) override;
+  void grow_pointers_stencil_md(Atom*) override;
+  void unpack_border_stencil_md(int, int, double *, Atom* atom_, int) override;
+  int pack_border_stencil_md(int, int*, double*, int*, int**) override;
+
+  int pack_data_stencil_md(int, int*, double*) override;
+  void unpack_data_stencil_md(Atom*, int, int, double*) override;
+
+  void sync_stencil_md(ExecutionSpace space, unsigned int mask, Atom*) override;
+  void modified_stencil_md(ExecutionSpace space, unsigned int mask, Atom*) override;
+
+  void add_local_atom_stencil_md(Atom*, Domain*, double *, double*, tagint, int, int, imageint) override;
+
+protected:
   tagint *tag;
   imageint *image;
   int *type,*mask;

@@ -262,6 +262,7 @@ struct DomainPBCFunctor {
         image[i] = otherdims | idim;
       }
       if (x(i,0) >= hi[0]) {
+
         x(i,0) -= period[0];
         x(i,0) = MAX(x(i,0),lo[0]);
         if (DEFORM_VREMAP && (mask[i] & deform_groupbit)) v(i,0) -= h_rate[0];
@@ -405,6 +406,67 @@ void DomainKokkos::pbc()
   atomKK->modified(Device,X_MASK|V_MASK|IMAGE_MASK);
 }
 
+void DomainKokkos::pbc_stencil_md(Atom* atom_) {
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    if (lmp->kokkos->exchange_comm_classic) {
+        // reduce GPU data movement
+        atomKK_->sync_stencil_md(Host,X_MASK|V_MASK|MASK_MASK|IMAGE_MASK, atom_);
+        Domain::pbc_stencil_md(atom_);
+        // atomKK->modified(Host,X_MASK|V_MASK|MASK_MASK|IMAGE_MASK);
+        atomKK_->modified_stencil_md(Host,X_MASK|V_MASK|MASK_MASK|IMAGE_MASK, atom_);
+        return;
+    }
+
+    double *lo,*hi,*period;
+    int nlocal = atomKK_->nlocal;
+
+    if (triclinic == 0) {
+        lo = boxlo;
+        hi = boxhi;
+        period = prd;
+    } else {
+        lo = boxlo_lamda;
+        hi = boxhi_lamda;
+        period = prd_lamda;
+    }
+
+    // atomKK_->sync(Device,X_MASK|V_MASK|MASK_MASK|IMAGE_MASK);
+    atomKK_->sync_stencil_md(Device,X_MASK|V_MASK|MASK_MASK|IMAGE_MASK, atom_);
+
+    if (xperiodic || yperiodic || zperiodic) {
+        if (deform_vremap) {
+            DomainPBCFunctor<LMPDeviceType,1,1>
+                    f(lo,hi,period,
+                      atomKK_->k_x,atomKK_->k_v,atomKK_->k_mask,atomKK_->k_image,
+                      deform_groupbit,h_rate,xperiodic,yperiodic,zperiodic);
+            Kokkos::parallel_for(nlocal,f);
+        } else {
+            DomainPBCFunctor<LMPDeviceType,1,0>
+                    f(lo,hi,period,
+                      atomKK_->k_x,atomKK_->k_v,atomKK_->k_mask,atomKK_->k_image,
+                      deform_groupbit,h_rate,xperiodic,yperiodic,zperiodic);
+            Kokkos::parallel_for(nlocal,f);
+        }
+    } else {
+        if (deform_vremap) {
+            DomainPBCFunctor<LMPDeviceType,0,1>
+                    f(lo,hi,period,
+                      atomKK_->k_x,atomKK_->k_v,atomKK_->k_mask,atomKK_->k_image,
+                      deform_groupbit,h_rate,xperiodic,yperiodic,zperiodic);
+            Kokkos::parallel_for(nlocal,f);
+        } else {
+            DomainPBCFunctor<LMPDeviceType,0,0>
+                    f(lo,hi,period,
+                      atomKK_->k_x,atomKK_->k_v,atomKK_->k_mask,atomKK_->k_image,
+                      deform_groupbit,h_rate,xperiodic,yperiodic,zperiodic);
+            Kokkos::parallel_for(nlocal,f);
+        }
+    }
+
+    // atomKK_->modified(Device,X_MASK|V_MASK|IMAGE_MASK);
+    atomKK_->modified_stencil_md(Device,X_MASK|V_MASK|IMAGE_MASK, atom_);
+}
+
 /* ----------------------------------------------------------------------
    remap all points into the periodic box no matter how far away
    adjust 3 image flags encoded in image accordingly
@@ -445,6 +507,41 @@ void DomainKokkos::remap_all()
   atomKK->modified(Device,X_MASK | IMAGE_MASK);
 
   if (triclinic) lamda2x(nlocal);
+}
+
+void DomainKokkos::remap_all_stencil_md(Atom* atom_) {
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    atomKK_->sync_stencil_md(Device,X_MASK | IMAGE_MASK, atom_);
+
+    x = atomKK_->k_x.view<LMPDeviceType>();
+    image = atomKK_->k_image.view<LMPDeviceType>();
+
+    if (triclinic == 0) {
+        for (int i=0; i<3; i++) {
+            lo[i] = boxlo[i];
+            hi[i] = boxhi[i];
+            period[i] = prd[i];
+        }
+    } else {
+        assert(false);
+        /*
+        for (int i=0; i<3; i++) {
+            lo[i] = boxlo_lamda[i];
+            hi[i] = boxhi_lamda[i];
+            period[i] = prd_lamda[i];
+        }
+        x2lamda(nlocal);
+        */
+    }
+
+    copymode = 1;
+    int nlocal = atom_->nlocal;
+    Kokkos::parallel_for(Kokkos::RangePolicy<LMPDeviceType, TagDomain_remap_all>(0,nlocal),*this);
+    copymode = 0;
+
+    atomKK_->modified_stencil_md(Device,X_MASK | IMAGE_MASK, atom_);
+
+    // if (triclinic) lamda2x(nlocal);
 }
 
 KOKKOS_INLINE_FUNCTION

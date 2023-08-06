@@ -25,6 +25,7 @@
 #include "tokenizer.h"
 
 #include <cstring>
+#include <iostream>
 
 using namespace LAMMPS_NS;
 
@@ -70,6 +71,9 @@ AtomVec::AtomVec(LAMMPS *lmp) : Pointers(lmp)
   type = mask = nullptr;
   image = nullptr;
   x = v = f = nullptr;
+
+  // stencil_md
+
 
   threads = nullptr;
 }
@@ -201,6 +205,7 @@ int AtomVec::grow_nmax_bonus(int nmax_bonus)
 
 void AtomVec::grow(int n)
 {
+  std::cout << "atom vec grow" << std::endl;
   int datatype, cols, maxcols;
   void *pdata;
 
@@ -258,6 +263,69 @@ void AtomVec::grow(int n)
     modify->fix[atom->extra_grow[iextra]]->grow_arrays(nmax);
 
   grow_pointers();
+}
+
+void AtomVec::grow_stencil_md(int n, Atom* atom_)
+{
+    std::cout << "atom vec grow stencil md" << std::endl;
+    int datatype, cols, maxcols;
+    void *pdata;
+
+    if (n == 0)
+        grow_nmax();
+    else
+        nmax = MAX(n,nmax);
+    atom_->nmax = nmax;
+    if (nmax < 0 || nmax > MAXSMALLINT) error->one(FLERR, "Per-processor system is too big");
+
+    tag = memory->grow(atom_->tag, nmax, "atom:tag");
+    type = memory->grow(atom_->type, nmax, "atom:type");
+    mask = memory->grow(atom_->mask, nmax, "atom:mask");
+    image = memory->grow(atom_->image, nmax, "atom:image");
+    x = memory->grow(atom_->x, nmax, 3, "atom:x");
+    v = memory->grow(atom_->v, nmax, 3, "atom:v");
+    f = memory->grow(atom_->f, nmax * comm->nthreads, 3, "atom:f");
+
+    std::cout << "ngrow???? " << ngrow << std::endl;
+    for (int i = 0; i < ngrow; i++) {
+        pdata = mgrow.pdata[i];
+        datatype = mgrow.datatype[i];
+        cols = mgrow.cols[i];
+        const int nthreads = threads[i] ? comm->nthreads : 1;
+        if (datatype == Atom::DOUBLE) {
+            if (cols == 0)
+                memory->grow(*((double **) pdata), nmax * nthreads, "atom:dvec");
+            else if (cols > 0)
+                memory->grow(*((double ***) pdata), nmax * nthreads, cols, "atom:darray");
+            else {
+                maxcols = *(mgrow.maxcols[i]);
+                memory->grow(*((double ***) pdata), nmax * nthreads, maxcols, "atom:darray");
+            }
+        } else if (datatype == Atom::INT) {
+            if (cols == 0)
+                memory->grow(*((int **) pdata), nmax * nthreads, "atom:ivec");
+            else if (cols > 0)
+                memory->grow(*((int ***) pdata), nmax * nthreads, cols, "atom:iarray");
+            else {
+                maxcols = *(mgrow.maxcols[i]);
+                memory->grow(*((int ***) pdata), nmax * nthreads, maxcols, "atom:iarray");
+            }
+        } else if (datatype == Atom::BIGINT) {
+            if (cols == 0)
+                memory->grow(*((bigint **) pdata), nmax * nthreads, "atom:bvec");
+            else if (cols > 0)
+                memory->grow(*((bigint ***) pdata), nmax * nthreads, cols, "atom:barray");
+            else {
+                maxcols = *(mgrow.maxcols[i]);
+                memory->grow(*((bigint ***) pdata), nmax * nthreads, maxcols, "atom:barray");
+            }
+        }
+    }
+
+    for (int iextra = 0; iextra < atom_->nextra_grow; iextra++)
+        modify->fix[atom->extra_grow[iextra]]->grow_arrays(nmax);
+
+    grow_pointers_stencil_md(atom_);
 }
 
 /* ----------------------------------------------------------------------
@@ -1171,6 +1239,7 @@ int AtomVec::pack_exchange(int i, double *buf)
   buf[m++] = ubuf(image[i]).d;
 
   if (nexchange) {
+    assert(false);
     for (nn = 0; nn < nexchange; nn++) {
       pdata = mexchange.pdata[nn];
       datatype = mexchange.datatype[nn];
@@ -1333,6 +1402,130 @@ int AtomVec::unpack_exchange(double *buf)
   atom->nlocal++;
   return m;
 }
+
+int AtomVec::unpack_exchange_stencil_md(double *buf, Atom* atom_, Domain* domain_, std::set<int>& s)
+{
+    assert(false);
+    int mm, nn, datatype, cols, collength, ncols;
+    void *pdata, *plength;
+
+    int nlocal = atom_->nlocal;
+    if (nlocal == nmax) {
+        grow_stencil_md(0, atom_);
+    }
+
+    int m = 1;
+    x[nlocal][0] = buf[m++];
+    x[nlocal][1] = buf[m++];
+    x[nlocal][2] = buf[m++];
+    v[nlocal][0] = buf[m++];
+    v[nlocal][1] = buf[m++];
+    v[nlocal][2] = buf[m++];
+
+    tag[nlocal] = (tagint) ubuf(buf[m++]).i;
+    type[nlocal] = (int) ubuf(buf[m++]).i;
+    mask[nlocal] = (int) ubuf(buf[m++]).i;
+    image[nlocal] = (imageint) ubuf(buf[m++]).i;
+
+    std::cout << "domain xperiodic: " << domain_->xperiodic << std::endl;
+    domain_->remap(x[nlocal], image[nlocal]);
+    s.insert(tag[nlocal]);
+    /*
+    if (nexchange) {
+        for (nn = 0; nn < nexchange; nn++) {
+            pdata = mexchange.pdata[nn];
+            datatype = mexchange.datatype[nn];
+            cols = mexchange.cols[nn];
+            if (datatype == Atom::DOUBLE) {
+                if (cols == 0) {
+                    double *vec = *((double **) pdata);
+                    vec[nlocal] = buf[m++];
+                } else if (cols > 0) {
+                    double **array = *((double ***) pdata);
+                    for (mm = 0; mm < cols; mm++) array[nlocal][mm] = buf[m++];
+                } else {
+                    double **array = *((double ***) pdata);
+                    collength = mexchange.collength[nn];
+                    plength = mexchange.plength[nn];
+                    if (collength)
+                        ncols = (*((int ***) plength))[nlocal][collength - 1];
+                    else
+                        ncols = (*((int **) plength))[nlocal];
+                    for (mm = 0; mm < ncols; mm++) array[nlocal][mm] = buf[m++];
+                }
+            } else if (datatype == Atom::INT) {
+                if (cols == 0) {
+                    int *vec = *((int **) pdata);
+                    vec[nlocal] = (int) ubuf(buf[m++]).i;
+                } else if (cols > 0) {
+                    int **array = *((int ***) pdata);
+                    for (mm = 0; mm < cols; mm++) array[nlocal][mm] = (int) ubuf(buf[m++]).i;
+                } else {
+                    int **array = *((int ***) pdata);
+                    collength = mexchange.collength[nn];
+                    plength = mexchange.plength[nn];
+                    if (collength)
+                        ncols = (*((int ***) plength))[nlocal][collength - 1];
+                    else
+                        ncols = (*((int **) plength))[nlocal];
+                    for (mm = 0; mm < ncols; mm++) array[nlocal][mm] = (int) ubuf(buf[m++]).i;
+                }
+            } else if (datatype == Atom::BIGINT) {
+                if (cols == 0) {
+                    bigint *vec = *((bigint **) pdata);
+                    vec[nlocal] = (bigint) ubuf(buf[m++]).i;
+                } else if (cols > 0) {
+                    bigint **array = *((bigint ***) pdata);
+                    for (mm = 0; mm < cols; mm++) array[nlocal][mm] = (bigint) ubuf(buf[m++]).i;
+                } else {
+                    bigint **array = *((bigint ***) pdata);
+                    collength = mexchange.collength[nn];
+                    plength = mexchange.plength[nn];
+                    if (collength)
+                        ncols = (*((int ***) plength))[nlocal][collength - 1];
+                    else
+                        ncols = (*((int **) plength))[nlocal];
+                    for (mm = 0; mm < ncols; mm++) array[nlocal][mm] = (bigint) ubuf(buf[m++]).i;
+                }
+            }
+        }
+    }
+
+    if (bonus_flag) m += unpack_exchange_bonus(nlocal, &buf[m]);
+
+    if (atom_->nextra_grow) {
+        for (int iextra = 0; iextra < atom_->nextra_grow; iextra++)
+            m += modify->fix[atom_->extra_grow[iextra]]->unpack_exchange(nlocal, &buf[m]);
+    }
+    */
+
+    atom_->nlocal++;
+    return m;
+}
+
+void AtomVec::add_local_atom_stencil_md(Atom* atom_, Domain* domain_, double* coord, double* vel, tagint tag_, int type_, int mask_, imageint image_) {
+    assert(false);
+    int idx;
+    int nlocal = atom_->nlocal;
+    if (nlocal == nmax) {
+        grow_stencil_md(0, atom_);
+    }
+
+    x[nlocal][0] = coord[0];
+    x[nlocal][1] = coord[1];
+    x[nlocal][2] = coord[2];
+    v[nlocal][0] = vel[0];
+    v[nlocal][1] = vel[1];
+    v[nlocal][2] = vel[2];
+    tag[nlocal] = (tagint) tag_;
+    type[nlocal] = type_;
+    mask[nlocal] = mask_;
+    image[nlocal] = (imageint) image_;
+
+    domain_->remap(x[nlocal], image[nlocal]);
+    atom_->nlocal++;
+}
+
 
 /* ----------------------------------------------------------------------
    size of restart data for all atoms owned by this proc

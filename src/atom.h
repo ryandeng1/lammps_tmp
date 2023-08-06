@@ -296,6 +296,8 @@ class Atom : protected Pointers {
   void add_peratom_change_columns(const std::string &, int);
   void add_peratom_vary(const std::string &, void *, int, int *, void *, int collength = 0);
   void create_avec(const std::string &, int, char **, int);
+  void create_avec_stencil_md(const std::string &, int, char **, int);
+
   virtual AtomVec *new_avec(const std::string &, int, int &);
 
   void init();
@@ -386,7 +388,10 @@ class Atom : protected Pointers {
   virtual void map_delete();
   int map_find_hash(tagint);
 
- protected:
+  void setup_stencil_md(Domain*);
+  virtual void sort_stencil_md();
+
+protected:
   // global to local ID mapping
 
   int *map_array;      // direct map via array that holds map_tag_max
@@ -421,6 +426,8 @@ class Atom : protected Pointers {
   void set_atomflag_defaults();
   void setup_sort_bins();
   int next_prime(int);
+
+  void setup_sort_bins_stencil_md(Domain*);
 };
 
 }    // namespace LAMMPS_NS

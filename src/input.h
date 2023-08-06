@@ -32,6 +32,11 @@ class Input : protected Pointers {
   char **arg;                  // parsed args for command
   class Variable *variable;    // defined variables
 
+  // helper variables to keep track of commands
+  int narg_atom_style = -1;
+  char** atom_style_args;
+
+
   Input(class LAMMPS *, int, char **);
   ~Input() override;
   void file();                       // process all input

@@ -75,6 +75,52 @@ void ModifyKokkos::setup(int vflag)
     }
 }
 
+void ModifyKokkos::setup_stencil_md(double* x, Atom* atom_)
+{
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    // compute setup needs to come before fix setup
+    //   b/c NH fixes need DOF of temperature computes
+    // fix group setup() is special case since populates a dynamic group
+    //   needs to be done before temperature compute setup
+    for (int i = 0; i < nfix; i++) {
+        if (strcmp(fix[i]->style,"GROUP") == 0) {
+            atomKK_->sync_stencil_md(fix[i]->execution_space,fix[i]->datamask_read, atom_);
+            int prev_auto_sync = lmp->kokkos->auto_sync;
+            if (!fix[i]->kokkosable) lmp->kokkos->auto_sync = 1;
+            fix[i]->setup_stencil_md(x, atom_);
+            lmp->kokkos->auto_sync = prev_auto_sync;
+            atomKK_->modified_stencil_md(fix[i]->execution_space,fix[i]->datamask_modify, atom_);
+        }
+    }
+
+    // TODO: stencil_md-ify
+    for (int i = 0; i < ncompute; i++) {
+        compute[i]->setup();
+    }
+
+    if (update->whichflag == 1)
+        for (int i = 0; i < nfix; i++) {
+            atomKK_->sync_stencil_md(fix[i]->execution_space,fix[i]->datamask_read, atom_);
+            int prev_auto_sync = lmp->kokkos->auto_sync;
+            if (!fix[i]->kokkosable) lmp->kokkos->auto_sync = 1;
+            fix[i]->setup_stencil_md(x, atom_);
+            lmp->kokkos->auto_sync = prev_auto_sync;
+            atomKK_->modified_stencil_md(fix[i]->execution_space,fix[i]->datamask_modify, atom_);
+        }
+    else if (update->whichflag == 2) {
+        assert(false);
+        for (int i = 0; i < nfix; i++) {
+            atomKK_->sync_stencil_md(fix[i]->execution_space, fix[i]->datamask_read, atom_);
+            int prev_auto_sync = lmp->kokkos->auto_sync;
+            if (!fix[i]->kokkosable) lmp->kokkos->auto_sync = 1;
+            fix[i]->min_setup(0);
+            lmp->kokkos->auto_sync = prev_auto_sync;
+            atomKK_->modified_stencil_md(fix[i]->execution_space, fix[i]->datamask_modify, atom_);
+        }
+    }
+}
+
+
 /* ----------------------------------------------------------------------
    setup pre_exchange call, only for fixes that define pre_exchange
    called from Verlet, RESPA, Min, and WriteRestart with whichflag = 0
@@ -248,6 +294,22 @@ void ModifyKokkos::initial_integrate(int vflag)
   }
 }
 
+void ModifyKokkos::initial_integrate_stencil_md(int vflag, Atom* atom_, Atom* next, int* atom_idx_mapping) {
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    for (int i = 0; i < n_initial_integrate; i++) {
+        atomKK_->sync_stencil_md(fix[list_initial_integrate[i]]->execution_space,
+                     fix[list_initial_integrate[i]]->datamask_read, atom_);
+        int prev_auto_sync = lmp->kokkos->auto_sync;
+        if (!fix[list_initial_integrate[i]]->kokkosable) {
+            lmp->kokkos->auto_sync = 1;
+        }
+        fix[list_initial_integrate[i]]->initial_integrate_stencil_md(vflag, atom_, next, atom_idx_mapping);
+        lmp->kokkos->auto_sync = prev_auto_sync;
+        atomKK_->modified_stencil_md(fix[list_initial_integrate[i]]->execution_space,
+                         fix[list_initial_integrate[i]]->datamask_modify, atom_);
+    }
+}
+
 /* ----------------------------------------------------------------------
    post_integrate call, only for relevant fixes
 ------------------------------------------------------------------------- */
@@ -390,6 +452,21 @@ void ModifyKokkos::final_integrate()
     atomKK->modified(fix[list_final_integrate[i]]->execution_space,
                      fix[list_final_integrate[i]]->datamask_modify);
   }
+}
+
+void ModifyKokkos::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping)
+{
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    for (int i = 0; i < n_final_integrate; i++) {
+        atomKK_->sync_stencil_md(fix[list_final_integrate[i]]->execution_space,
+                     fix[list_final_integrate[i]]->datamask_read, atom_);
+        int prev_auto_sync = lmp->kokkos->auto_sync;
+        if (!fix[list_final_integrate[i]]->kokkosable) lmp->kokkos->auto_sync = 1;
+        fix[list_final_integrate[i]]->final_integrate_stencil_md(atom_, next, neighbor_, atom_idx_mapping);
+        lmp->kokkos->auto_sync = prev_auto_sync;
+        atomKK_->modified_stencil_md(fix[list_final_integrate[i]]->execution_space,
+                         fix[list_final_integrate[i]]->datamask_modify, atom_);
+    }
 }
 
 /* ----------------------------------------------------------------------

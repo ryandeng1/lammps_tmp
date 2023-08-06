@@ -480,6 +480,15 @@ void ReadData::command(int narg, char **arg)
       atom->allocate_type_arrays();
       atom->deallocate_topology();
 
+      // stencil_md
+      /*
+      for (int i = 0; i < NUM_ZOIDS; i++) {
+        for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
+            lmp->atom_stencil_md[i][j]->allocate_type_arrays();
+        }
+      }
+      */
+
       // allocate atom arrays to N, rounded up by AtomVec->DELTA
 
       bigint nbig = n;

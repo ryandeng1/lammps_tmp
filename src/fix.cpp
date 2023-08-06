@@ -113,6 +113,8 @@ Fix::Fix(LAMMPS *lmp, int /*narg*/, char **arg) :
   copymode = 0;
 }
 
+Fix::Fix(LAMMPS *lmp, Modify* modify_, int narg, char **arg) : Fix(lmp, narg, arg) {}
+
 /* ---------------------------------------------------------------------- */
 
 Fix::~Fix()

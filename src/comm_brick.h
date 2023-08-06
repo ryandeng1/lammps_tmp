@@ -15,6 +15,7 @@
 #define LMP_COMM_BRICK_H
 
 #include "comm.h"
+#include "stencil_md.h"
 
 namespace LAMMPS_NS {
 
@@ -31,6 +32,20 @@ class CommBrick : public Comm {
   void reverse_comm() override;                 // reverse comm of forces
   void exchange() override;                     // move atoms to new procs
   void borders() override;                      // setup list of atoms to comm
+
+  void exchange_stencil_md_initial_send() override;                     // move atoms to new procs, stencil_md version
+  // void exchange_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
+  void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;                     // move atoms to new procs, stencil_md version
+  void borders_stencil_md_initial_send(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
+  void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;                     // move atoms to new procs, stencil_md version
+
+  // void borders_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
+  void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
+  void construct_second_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void construct_second_send_list_stencil_md_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
 
   void forward_comm(class Pair *) override;                 // forward comm from a Pair
   void reverse_comm(class Pair *) override;                 // reverse comm from a Pair
@@ -75,6 +90,12 @@ class CommBrick : public Comm {
 
   double *buf_send;        // send buffer for all comm
   double *buf_recv;        // recv buffer for all comm
+
+  double** buf_send_stencil_md;
+  double** buf_recv_stencil_md;
+  int* maxsend_stencil_md;
+  int* maxrecv_stencil_md;
+
   int maxsend, maxrecv;    // current size of send/recv buffer
   int smax, rmax;          // max size in atoms of single borders send/recv
 
@@ -93,6 +114,18 @@ class CommBrick : public Comm {
   virtual void free_swap();               // free swap arrays
   virtual void free_multi();              // free multi arrays
   virtual void free_multiold();           // free multi/old arrays
+
+  void grow_list_stencil_md(int, int, int);
+  void grow_second_list_stencil_md(int, int, int);
+  void grow_send_stencil_md(int, int, int);
+  void grow_recv_stencil_md(int, int);
+  int ** sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int ** second_sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int * max_second_sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int * maxsendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int* sendnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int* second_sendnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int* recvnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
 };
 
 }    // namespace LAMMPS_NS

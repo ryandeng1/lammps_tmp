@@ -151,6 +151,7 @@ class Force : protected Pointers {
 
   double memory_usage();
 
+  void init_stencil_md(Neighbor*);
  private:
   void create_factories();
 };

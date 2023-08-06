@@ -50,6 +50,8 @@
 #include <cstring>
 #include <cerrno>
 #include <cctype>
+#include <iostream>
+#include <mpi.h>
 
 using namespace LAMMPS_NS;
 
@@ -174,6 +176,11 @@ Input::~Input()
   delete variable;
 
   delete command_map;
+
+  for (int i = 0; i < narg_atom_style; i++) {
+      memory->sfree(atom_style_args[i]);
+  }
+  memory->sfree(atom_style_args);
 }
 
 /** Process all input from the ``FILE *`` pointer *infile*
@@ -712,6 +719,11 @@ void Input::reallocate(char *&str, int &max, int n)
 
 int Input::execute_command()
 {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (rank == 0) {
+        std::cout << "COMMAND: " << command << std::endl;
+    }
   int flag = 1;
 
   if (!strcmp(command,"clear")) clear();
@@ -1320,7 +1332,18 @@ void Input::atom_style()
   if (narg < 1) error->all(FLERR,"Illegal atom_style command");
   if (domain->box_exist)
     error->all(FLERR,"Atom_style command after simulation box is defined");
+  std::cout << "Atom style: " << arg[0] << " " << narg - 1 << std::endl;
   atom->create_avec(arg[0],narg-1,&arg[1],1);
+
+  atom_style_args = (char **) memory->smalloc(narg*sizeof(char *),"input:atom_style_args");
+  for (int i = 0; i < narg; i++) {
+      atom_style_args[i] = (char *) memory->smalloc(strlen(arg[i]) + 1, "input:atom_style_args");
+  }
+  assert(narg_atom_style == -1);
+  narg_atom_style = narg;
+  for (int i = 0; i < narg; i++) {
+      strcpy(atom_style_args[i], arg[i]);
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1464,8 +1487,10 @@ void Input::dimension()
   // must reset default extra_dof of all computes
   // since some were created before dimension command is encountered
 
-  for (int i = 0; i < modify->ncompute; i++)
-    modify->compute[i]->reset_extra_dof();
+  for (int i = 0; i < modify->ncompute; i++) {
+      modify->compute[i]->reset_extra_dof();
+  }
+  std::cout << "N compute?? " << modify->ncompute << std::endl;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1487,6 +1512,10 @@ void Input::dump_modify()
 void Input::fix()
 {
   modify->add_fix(narg,arg);
+  // do the same for stencil md
+  for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
+      lmp->modify_stencil_md[i]->add_fix(narg, arg, 1, true);
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1679,6 +1708,13 @@ void Input::pair_coeff()
                                                || (strcmp(arg[1],"*") != 0))))
     error->all(FLERR,"Incorrect args for pair coefficients");
   force->pair->coeff(narg,arg);
+
+  // TODO: stencil_md here
+  for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+      for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+          lmp->force_stencil_md[i][j]->pair->coeff(narg, arg);
+      }
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1688,6 +1724,13 @@ void Input::pair_modify()
   if (force->pair == nullptr)
     error->all(FLERR,"Pair_modify command before pair_style is defined");
   force->pair->modify_params(narg,arg);
+
+  // TODO: stencil_md here
+  for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+    for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+        lmp->force_stencil_md[i][j]->pair->modify_params(narg, arg);
+      }
+  }
 }
 
 /* ----------------------------------------------------------------------
@@ -1714,12 +1757,35 @@ void Input::pair_style()
     }
     if (match) {
       force->pair->settings(narg-1,&arg[1]);
+
+      for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+          for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+              lmp->force_stencil_md[i][j]->pair->settings(narg - 1, &arg[1]);
+          }
+          // lmp->force_stencil_md[i]->pair->settings(narg - 1, &arg[1]);
+      }
       return;
     }
   }
 
   force->create_pair(arg[0],1);
   if (force->pair) force->pair->settings(narg-1,&arg[1]);
+
+  // TODO: stencil_md
+  for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+    for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+        lmp->force_stencil_md[i][j]->create_pair(arg[0], 1);
+        if (lmp->force_stencil_md[i][j]->pair) {
+            lmp->force_stencil_md[i][j]->pair->settings(narg - 1, &arg[1]);
+        }
+    }
+    /*
+    lmp->force_stencil_md[i]->create_pair(arg[0], 1);
+    if (lmp->force_stencil_md[i]->pair) {
+        lmp->force_stencil_md[i]->pair->settings(narg - 1, &arg[1]);
+    }
+    */
+  }
 }
 
 /* ---------------------------------------------------------------------- */

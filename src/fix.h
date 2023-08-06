@@ -132,6 +132,9 @@ class Fix : protected Pointers {
   unsigned int datamask_read, datamask_modify;
 
   Fix(class LAMMPS *, int, char **);
+  // used for stencil_md
+  Fix(class LAMMPS *, Modify*, int, char **);
+
   ~Fix() override;
   void modify_params(int, char **);
 
@@ -246,6 +249,11 @@ class Fix : protected Pointers {
   virtual void *extract(const char *, int &) { return nullptr; }
 
   virtual double memory_usage() { return 0.0; }
+
+  virtual void setup_stencil_md(double*, Atom*) {}
+  virtual void init_stencil_md(Atom*) {}
+  virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*) {}
+  virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*) {}
 
  protected:
   int instance_me;    // which Fix class instantiation I am

@@ -112,6 +112,23 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   image = nullptr;
   x = v = f = nullptr;
 
+  // stencil_md
+  /*
+  tag_local = nullptr;
+  type_local = nullptr;
+  image_local = nullptr;
+  mask_local = nullptr;
+  x_local = nullptr;
+  v_local = nullptr;
+  f_local = nullptr;
+  x_ghost = nullptr;
+  v_ghost = nullptr;
+  f_ghost = nullptr;
+  image_ghost = nullptr;
+  type_ghost = nullptr;
+  mask_ghost = nullptr;
+  */
+
   // charged and dipolar particles
 
   q = nullptr;
@@ -296,6 +313,24 @@ Atom::~Atom()
   memory->destroy(x);
   memory->destroy(v);
   memory->destroy(f);
+
+  // stencil_md
+  /*
+  memory->destroy(tag_local);
+  memory->destroy(tag_ghost);
+  memory->destroy(type_local);
+  memory->destroy(type_ghost);
+  memory->destroy(mask_local);
+  memory->destroy(image_local);
+  memory->destroy(x_local);
+  memory->destroy(v_local);
+  memory->destroy(f_local);
+  memory->destroy(mask_ghost);
+  memory->destroy(image_ghost);
+  memory->destroy(x_ghost);
+  memory->destroy(v_ghost);
+  memory->destroy(f_ghost);
+  */
 
   // delete custom atom arrays
 
@@ -673,6 +708,48 @@ void Atom::create_avec(const std::string &style, int narg, char **arg, int trysu
   if (molecular != Atom::ATOMIC) map_style = MAP_YES;
 }
 
+void Atom::create_avec_stencil_md(const std::string &style, int narg, char **arg, int trysuffix)
+{
+    delete[] atom_style;
+    if (avec) delete avec;
+    atom_style = nullptr;
+    avec = nullptr;
+
+    // unset atom style and array existence flags
+    // may have been set by old avec
+
+    set_atomflag_defaults();
+
+    // create instance of AtomVec
+    // use grow() to initialize atom-based arrays to length 1
+    //   so that x[0][0] can always be referenced even if proc has no atoms
+
+    int sflag;
+    avec = new_avec(style,trysuffix,sflag);
+    avec->store_args(narg,arg);
+    avec->process_args(narg,arg);
+    avec->grow_stencil_md(1, this);
+
+    if (sflag) {
+        std::string estyle = style + "/";
+        if (sflag == 1) estyle += lmp->suffix;
+        else estyle += lmp->suffix2;
+        atom_style = utils::strdup(estyle);
+    } else {
+        atom_style = utils::strdup(style);
+    }
+
+    // if molecular system:
+    // atom IDs must be defined
+    // force atom map to be created
+    // map style will be reset to array vs hash to by map_init()
+
+    molecular = avec->molecular;
+    if ((molecular != Atom::ATOMIC) && (tag_enable == 0))
+        error->all(FLERR,"Atom IDs must be used for molecular systems");
+    if (molecular != Atom::ATOMIC) map_style = MAP_YES;
+}
+
 /* ----------------------------------------------------------------------
    generate an AtomVec class, first with suffix appended
 ------------------------------------------------------------------------- */
@@ -746,6 +823,18 @@ void Atom::setup()
   // cannot do this in init() because uses neighbor cutoff
 
   if (sortfreq > 0) setup_sort_bins();
+}
+
+void Atom::setup_stencil_md(Domain* domain_)
+{
+    // setup bins for sorting
+    // cannot do this in init() because uses neighbor cutoff
+
+    if (sortfreq > 0) {
+        setup_sort_bins_stencil_md(domain_);
+    } else {
+        assert(false);
+    }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -2120,6 +2209,105 @@ void Atom::sort()
   //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
 }
 
+void Atom::sort_stencil_md()
+{
+    int i,m,n,ix,iy,iz,ibin,empty;
+
+    // set next timestep for sorting to take place
+
+    nextsort = (update->ntimestep/sortfreq)*sortfreq + sortfreq;
+
+    // re-setup sort bins if needed
+
+    if (domain->box_change) {
+        assert(false);
+        setup_sort_bins();
+    }
+
+    if (nbins == 1) return;
+
+    // reallocate per-atom vectors if needed
+
+    if (nlocal > maxnext) {
+        memory->destroy(next);
+        memory->destroy(permute);
+        maxnext = this->nmax;
+        memory->create(next,maxnext,"atom:next");
+        memory->create(permute,maxnext,"atom:permute");
+    }
+
+    // insure there is one extra atom location at end of arrays for swaps
+
+    if (nlocal == nmax) {
+        avec->grow_stencil_md(0, this);
+    }
+
+    // bin atoms in reverse order so linked list will be in forward order
+
+    for (i = 0; i < nbins; i++) binhead[i] = -1;
+
+    for (i = nlocal-1; i >= 0; i--) {
+        ix = static_cast<int> ((x[i][0]-bboxlo[0])*bininvx);
+        iy = static_cast<int> ((x[i][1]-bboxlo[1])*bininvy);
+        iz = static_cast<int> ((x[i][2]-bboxlo[2])*bininvz);
+        ix = MAX(ix,0);
+        iy = MAX(iy,0);
+        iz = MAX(iz,0);
+        ix = MIN(ix,nbinx-1);
+        iy = MIN(iy,nbiny-1);
+        iz = MIN(iz,nbinz-1);
+        ibin = iz*nbiny*nbinx + iy*nbinx + ix;
+        next[i] = binhead[ibin];
+        binhead[ibin] = i;
+    }
+
+    // permute = desired permutation of atoms
+    // permute[I] = J means Ith new atom will be Jth old atom
+
+    n = 0;
+    for (m = 0; m < nbins; m++) {
+        i = binhead[m];
+        while (i >= 0) {
+            permute[n++] = i;
+            i = next[i];
+        }
+    }
+
+    // current = current permutation, just reuse next vector
+    // current[I] = J means Ith current atom is Jth old atom
+
+    int *current = next;
+    for (i = 0; i < nlocal; i++) current[i] = i;
+
+    // reorder local atom list, when done, current = permute
+    // perform "in place" using copy() to extra atom location at end of list
+    // inner while loop processes one cycle of the permutation
+    // copy before inner-loop moves an atom to end of atom list
+    // copy after inner-loop moves atom at end of list back into list
+    // empty = location in atom list that is currently empty
+
+    for (i = 0; i < nlocal; i++) {
+        if (current[i] == permute[i]) continue;
+        avec->copy(i,nlocal,0);
+        empty = i;
+        while (permute[empty] != i) {
+            avec->copy(permute[empty],empty,0);
+            empty = current[empty] = permute[empty];
+        }
+        avec->copy(nlocal,empty,0);
+        current[empty] = permute[empty];
+    }
+
+    // sanity check that current = permute
+
+    //int flag = 0;
+    //for (i = 0; i < nlocal; i++)
+    //  if (current[i] != permute[i]) flag = 1;
+    //int flagall;
+    //MPI_Allreduce(&flag,&flagall,1,MPI_INT,MPI_SUM,world);
+    //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
+}
+
 /* ----------------------------------------------------------------------
    setup bins for spatial sorting of atoms
 ------------------------------------------------------------------------- */
@@ -2254,6 +2442,134 @@ void Atom::setup_sort_bins()
   }
 }
 
+void Atom::setup_sort_bins_stencil_md(Domain* domain_) {
+    // binsize:
+    // user setting if explicitly set
+    // default = 1/2 of neighbor cutoff
+    // check if neighbor cutoff = 0.0
+    // and in that case, disable sorting
+
+    double binsize = 0.0;
+    if (userbinsize > 0.0) binsize = userbinsize;
+    else if (neighbor->cutneighmax > 0.0) binsize = 0.5 * neighbor->cutneighmax;
+
+    if ((binsize == 0.0) && (sortfreq > 0)) {
+        sortfreq = 0;
+        if (comm->me == 0)
+            error->warning(FLERR,"No pairwise cutoff or binsize set. Atom sorting therefore disabled.");
+        return;
+    }
+
+    double bininv = 1.0/binsize;
+
+    // nbin xyz = local bins
+    // bbox lo/hi = bounding box of my sub-domain
+
+    if (domain->triclinic) {
+        domain->bbox(domain->sublo_lamda, domain->subhi_lamda, bboxlo, bboxhi);
+    } else {
+        bboxlo[0] = domain_->sublo[0];
+        bboxlo[1] = domain_->sublo[1];
+        bboxlo[2] = domain_->sublo[2];
+        bboxhi[0] = domain_->subhi[0];
+        bboxhi[1] = domain_->subhi[1];
+        bboxhi[2] = domain_->subhi[2];
+    }
+
+    nbinx = static_cast<int> ((bboxhi[0]-bboxlo[0]) * bininv);
+    nbiny = static_cast<int> ((bboxhi[1]-bboxlo[1]) * bininv);
+    nbinz = static_cast<int> ((bboxhi[2]-bboxlo[2]) * bininv);
+    if (domain_->dimension == 2) nbinz = 1;
+
+    if (nbinx == 0) nbinx = 1;
+    if (nbiny == 0) nbiny = 1;
+    if (nbinz == 0) nbinz = 1;
+
+    bininvx = nbinx / (bboxhi[0]-bboxlo[0]);
+    bininvy = nbiny / (bboxhi[1]-bboxlo[1]);
+    bininvz = nbinz / (bboxhi[2]-bboxlo[2]);
+
+#ifdef LMP_INTEL
+    if (neighbor->has_intel_request() && userbinsize == 0.0) {
+    if (neighbor->binsizeflag) bininv = 1.0/neighbor->binsize_user;
+
+    double nx_low = neighbor->bboxlo[0];
+    double ny_low = neighbor->bboxlo[1];
+    double nz_low = neighbor->bboxlo[2];
+    double nxbbox = neighbor->bboxhi[0] - nx_low;
+    double nybbox = neighbor->bboxhi[1] - ny_low;
+    double nzbbox = neighbor->bboxhi[2] - nz_low;
+    int nnbinx = static_cast<int> (nxbbox * bininv);
+    int nnbiny = static_cast<int> (nybbox * bininv);
+    int nnbinz = static_cast<int> (nzbbox * bininv);
+    if (domain->dimension == 2) nnbinz = 1;
+
+    if (nnbinx == 0) nnbinx = 1;
+    if (nnbiny == 0) nnbiny = 1;
+    if (nnbinz == 0) nnbinz = 1;
+
+    double binsizex = nxbbox/nnbinx;
+    double binsizey = nybbox/nnbiny;
+    double binsizez = nzbbox/nnbinz;
+
+    bininvx = 1.0 / binsizex;
+    bininvy = 1.0 / binsizey;
+    bininvz = 1.0 / binsizez;
+
+    int lxo = (bboxlo[0] - nx_low) * bininvx;
+    int lyo = (bboxlo[1] - ny_low) * bininvy;
+    int lzo = (bboxlo[2] - nz_low) * bininvz;
+    bboxlo[0] = nx_low + static_cast<double>(lxo) / bininvx;
+    bboxlo[1] = ny_low + static_cast<double>(lyo) / bininvy;
+    bboxlo[2] = nz_low + static_cast<double>(lzo) / bininvz;
+    nbinx = static_cast<int>((bboxhi[0] - bboxlo[0]) * bininvx) + 1;
+    nbiny = static_cast<int>((bboxhi[1] - bboxlo[1]) * bininvy) + 1;
+    nbinz = static_cast<int>((bboxhi[2] - bboxlo[2]) * bininvz) + 1;
+    bboxhi[0] = bboxlo[0] + static_cast<double>(nbinx) / bininvx;
+    bboxhi[1] = bboxlo[1] + static_cast<double>(nbiny) / bininvy;
+    bboxhi[2] = bboxlo[2] + static_cast<double>(nbinz) / bininvz;
+  }
+#endif
+
+#ifdef LMP_GPU
+    if (userbinsize == 0.0) {
+    FixGPU *fix = dynamic_cast<FixGPU *>(modify->get_fix_by_id("package_gpu"));
+    if (fix) {
+      const double subx = domain->subhi[0] - domain->sublo[0];
+      const double suby = domain->subhi[1] - domain->sublo[1];
+      const double subz = domain->subhi[2] - domain->sublo[2];
+
+      binsize = fix->binsize(subx, suby, subz, atom->nlocal,neighbor->cutneighmax);
+      bininv = 1.0 / binsize;
+
+      nbinx = static_cast<int> (ceil(subx * bininv));
+      nbiny = static_cast<int> (ceil(suby * bininv));
+      nbinz = static_cast<int> (ceil(subz * bininv));
+      if (domain->dimension == 2) nbinz = 1;
+
+      if (nbinx == 0) nbinx = 1;
+      if (nbiny == 0) nbiny = 1;
+      if (nbinz == 0) nbinz = 1;
+
+      bininvx = bininv;
+      bininvy = bininv;
+      bininvz = bininv;
+    }
+  }
+#endif
+
+    if (1.0*nbinx*nbiny*nbinz > INT_MAX) error->one(FLERR,"Too many atom sorting bins");
+
+    nbins = nbinx*nbiny*nbinz;
+
+    // reallocate per-bin memory if needed
+
+    if (nbins > maxbin) {
+        memory->destroy(binhead);
+        maxbin = nbins;
+        memory->create(binhead,maxbin,"atom:binhead");
+    }
+}
 /* ----------------------------------------------------------------------
    register a callback to a fix so it can manage atom-based arrays
    happens when fix is created

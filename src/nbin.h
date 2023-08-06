@@ -56,12 +56,17 @@ class NBin : protected Pointers {
 
   virtual void bin_atoms_setup(int) = 0;
   virtual void setup_bins(int) = 0;
+  virtual void setup_bins_stencil_md(int, Atom*, Domain*, Comm*) {}
   virtual void bin_atoms() = 0;
   virtual double memory_usage() { return 0.0; }
 
   // Kokkos package
 
   int kokkos;    // 1 if class stores Kokkos data
+
+  virtual void bin_atoms_setup_stencil_md(int) {}
+  virtual void bin_atoms_stencil_md(Atom*) {}
+  virtual void copy_neighbor_info_stencil_md(Neighbor*);
 
  protected:
   // data from Neighbor class

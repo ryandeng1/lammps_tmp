@@ -129,6 +129,9 @@ class AtomVecKokkos : public AtomVec {
 
   int no_comm_vel_flag,no_border_vel_flag;
 
+  virtual void sync_stencil_md(ExecutionSpace space, unsigned int mask, Atom*) {};
+  virtual void modified_stencil_md(ExecutionSpace space, unsigned int mask, Atom*) {};
+
  protected:
 
   HAT::t_x_array h_x;

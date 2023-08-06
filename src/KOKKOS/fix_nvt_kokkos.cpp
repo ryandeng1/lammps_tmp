@@ -43,6 +43,23 @@ FixNVTKokkos<DeviceType>::FixNVTKokkos(LAMMPS *lmp, int narg, char **arg) :
   this->tcomputeflag = 1;
 }
 
+template<class DeviceType>
+FixNVTKokkos<DeviceType>::FixNVTKokkos(LAMMPS *lmp, Modify* modify_, int narg, char **arg) :
+        FixNHKokkos<DeviceType>(lmp, narg, arg) {
+    this->kokkosable = 1;
+    if (!this->tstat_flag)
+        this->error->all(FLERR,"Temperature control must be used with fix nvt/kk");
+    if (this->pstat_flag)
+        this->error->all(FLERR,"Pressure control can not be used with fix nvt/kk");
+
+    // create a new compute temp style
+    // id = fix-ID + temp
+
+    this->id_temp = utils::strdup(std::string(this->id)+"_temp");
+    modify_->add_compute(fmt::format("{} {} temp/kk",this->id_temp,this->group->names[this->igroup]));
+    this->tcomputeflag = 1;
+}
+
 namespace LAMMPS_NS {
 template class FixNVTKokkos<LMPDeviceType>;
 #ifdef LMP_KOKKOS_GPU

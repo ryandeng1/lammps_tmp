@@ -208,6 +208,63 @@ void Force::init()
   }
 }
 
+void Force::init_stencil_md(Neighbor* neighbor_) {
+    qqrd2e = qqr2e / dielectric;
+
+    // check if pair style must be specified after restart
+    if (pair_restart) {
+        if (!pair)
+            error->all(FLERR, "Must re-specify non-restarted pair style ({}) after read_restart",
+                       pair_restart);
+    }
+
+    if (kspace) {
+        assert(false);
+        kspace->init();    // kspace must come before pair
+    }
+    if (pair) {
+        pair->init_stencil_md(neighbor_);        // so g_ewald is defined
+    }
+    if (bond) {
+        assert(false);
+        bond->init();
+    }
+    if (angle) {
+        assert(false);
+        angle->init();
+    }
+    if (dihedral) {
+        assert(false);
+        dihedral->init();
+    }
+    if (improper) {
+        assert(false);
+        improper->init();
+    }
+
+    // print warnings if topology and force field are inconsistent
+
+    if (comm->me == 0) {
+        if (!bond && (atom->nbonds > 0)) {
+            error->warning(FLERR, "Bonds are defined but no bond style is set");
+            if ((special_lj[1] != 1.0) || (special_coul[1] != 1.0))
+                error->warning(FLERR, "Likewise 1-2 special neighbor interactions != 1.0");
+        }
+        if (!angle && (atom->nangles > 0)) {
+            error->warning(FLERR, "Angles are defined but no angle style is set");
+            if ((special_lj[2] != 1.0) || (special_coul[2] != 1.0))
+                error->warning(FLERR, "Likewise 1-3 special neighbor interactions != 1.0");
+        }
+        if (!dihedral && (atom->ndihedrals > 0)) {
+            error->warning(FLERR, "Dihedrals are defined but no dihedral style is set");
+            if ((special_lj[3] != 1.0) || (special_coul[3] != 1.0))
+                error->warning(FLERR, "Likewise 1-4 special neighbor interactions != 1.0");
+        }
+        if (!improper && (atom->nimpropers > 0))
+            error->warning(FLERR, "Impropers are defined but no improper style is set");
+    }
+}
+
 /* ---------------------------------------------------------------------- */
 
 void Force::setup()

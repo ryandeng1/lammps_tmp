@@ -116,6 +116,7 @@ class Domain : protected Pointers {
   virtual void set_local_box();
   virtual void reset_box();
   virtual void pbc();
+  virtual void pbc_stencil_md(Atom*);
   void image_check();
   void box_too_small_check();
   void subbox_too_small_check(double);
@@ -170,6 +171,8 @@ class Domain : protected Pointers {
     if (zperiodic && fabs(dz) > zprd_half) return 1;
     return 0;
   }
+
+  virtual void remap_all_stencil_md(Atom*) {}
 
  protected:
   double small[3];    // fractions of box lengths

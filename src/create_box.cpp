@@ -102,6 +102,13 @@ void CreateBox::command(int narg, char **arg)
   atom->ndihedraltypes = 0;
   atom->nimpropertypes = 0;
 
+  // stencil_md
+  for (int i = 0; i < NUM_ZOIDS; i++) {
+      for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
+          lmp->atom_stencil_md[i][j]->ntypes = atom->ntypes;
+      }
+  }
+
   // process optional args that can overwrite default settings
 
   int iarg = 2;
@@ -174,4 +181,13 @@ void CreateBox::command(int narg, char **arg)
   domain->set_global_box();
   comm->set_proc_grid();
   domain->set_local_box();
+
+  // stencil_md
+  /*
+  for (int i = 0; i < NUM_ZOIDS; i++) {
+    for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
+      lmp->atom_stencil_md[i][j]->allocate_type_arrays();
+    }
+  }
+  */
 }

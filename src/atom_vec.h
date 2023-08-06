@@ -16,6 +16,7 @@
 
 #include "pointers.h"    // IWYU pragma: export
 #include <vector>
+#include <set>
 
 namespace LAMMPS_NS {
 
@@ -105,6 +106,16 @@ class AtomVec : protected Pointers {
   virtual int pack_exchange(int, double *);
   virtual int unpack_exchange(double *);
 
+  virtual int unpack_exchange_stencil_md(double*, Atom*, Domain*, std::set<int>&);
+  virtual void grow_stencil_md(int, Atom*);
+
+  // virtual int pack_border_stencil_md(int, int*, double*, int, int*, Atom*) {return 0;}
+  virtual int pack_border_stencil_md(int, int*, double*, int*, int**) {assert(false); return 0;}
+  virtual void unpack_border_stencil_md(int, int, double*, Atom*, int) {assert(false); }
+
+  virtual int pack_data_stencil_md(int, int*, double*) {assert(false); return 0; }
+  virtual void unpack_data_stencil_md(Atom*, int, int, double*) {assert(false); }
+
   virtual int pack_exchange_bonus(int, double *) { return 0; }
   virtual int unpack_exchange_bonus(int, double *) { return 0; }
 
@@ -172,7 +183,13 @@ class AtomVec : protected Pointers {
   virtual int pack_vel_hybrid(int, double *) { return 0; }
   virtual int write_vel_hybrid(FILE *, double *) { return 0; }
 
- protected:
+  int get_nmax() {return nmax;}
+  int get_nexchange() {return nexchange;}
+  virtual void grow_pointers_stencil_md(Atom*) {};
+  virtual void add_local_atom_stencil_md(Atom*, Domain*, double *, double*, tagint, int, int, imageint);
+  // virtual void add_ghost_atom_stencil_md(Atom*, Domain*, double *, double*, tagint, int, int, imageint);
+
+protected:
   int nmax;             // local copy of atom->nmax
   int deform_vremap;    // local copy of domain properties
   int deform_groupbit;
@@ -217,6 +234,7 @@ class AtomVec : protected Pointers {
   bool *threads;
 
   // local methods
+
 
   void grow_nmax();
   int grow_nmax_bonus(int);

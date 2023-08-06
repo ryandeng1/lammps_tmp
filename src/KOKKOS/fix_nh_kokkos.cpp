@@ -72,6 +72,18 @@ void FixNHKokkos<DeviceType>::init()
   atomKK->k_mass.sync<DeviceType>();
 }
 
+template<class DeviceType>
+void FixNHKokkos<DeviceType>::init_stencil_md(Atom* atom_)
+{
+    // TODO: k_mass specifically is a global setting so don't need to init it here.
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    // uses a bunch of global settings here
+    FixNH::init();
+
+    // atomKK_->k_mass.modify<LMPHostType>();
+    // atomKK_->k_mass.sync<DeviceType>();
+}
+
 /* ----------------------------------------------------------------------
    compute T,P before integrator starts
 ------------------------------------------------------------------------- */
@@ -168,6 +180,103 @@ void FixNHKokkos<DeviceType>::setup(int /*vflag*/)
   }
 }
 
+template<class DeviceType>
+void FixNHKokkos<DeviceType>::setup_stencil_md(double* x, Atom* atom_)
+{
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    // tdof needed by compute_temp_target()
+    t_current = temperature->compute_scalar_stencil_md(atom_);
+    *x += t_current;
+    // std::cout << "T_curre  nt: " << t_current << " atom nlocal: " << atom_->nlocal << " me: " << comm->me << std::endl;
+    tdof = temperature->dof;
+
+    // t_target is needed by NPH and NPT in compute_scalar()
+    // If no thermostat or using fix nphug,
+    // t_target must be defined by other means.
+
+    if (tstat_flag && strcmp(style,"nphug") != 0) {
+        compute_temp_target();
+    } else if (pstat_flag) {
+        assert(false);
+        // t0 = reference temperature for masses
+        // cannot be done in init() b/c temperature cannot be called there
+        // is b/c Modify::init() inits computes after fixes due to dof dependence
+        // guesstimate a unit-dependent t0 if actual T = 0.0
+        // if it was read in from a restart file, leave it be
+
+        if (t0 == 0.0) {
+            atomKK_->sync_stencil_md(temperature->execution_space,temperature->datamask_read, atom_);
+            t0 = temperature->compute_scalar();
+            atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
+            if (t0 == 0.0) {
+                if (strcmp(update->unit_style,"lj") == 0) t0 = 1.0;
+                else t0 = 300.0;
+            }
+        }
+        t_target = t0;
+    }
+
+    if (pstat_flag) {
+        assert(false);
+        compute_press_target();
+    }
+
+    atomKK_->sync_stencil_md(temperature->execution_space,temperature->datamask_read, atom_);
+    t_current = temperature->compute_scalar_stencil_md(atom_);
+    atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
+    tdof = temperature->dof;
+
+    if (pstat_flag) {
+        assert(false);
+        //atomKK->sync(pressure->execution_space,pressure->datamask_read);
+        //atomKK->modified(pressure->execution_space,pressure->datamask_modify);
+        if (pstyle == ISO) pressure->compute_scalar();
+        else pressure->compute_vector();
+        couple();
+        pressure->addstep(update->ntimestep+1);
+    }
+
+    // masses and initial forces on thermostat variables
+
+    if (tstat_flag) {
+        eta_mass[0] = tdof * boltz * t_target / (t_freq*t_freq);
+        for (int ich = 1; ich < mtchain; ich++)
+            eta_mass[ich] = boltz * t_target / (t_freq*t_freq);
+        for (int ich = 1; ich < mtchain; ich++) {
+            eta_dotdot[ich] = (eta_mass[ich-1]*eta_dot[ich-1]*eta_dot[ich-1] -
+                               boltz * t_target) / eta_mass[ich];
+        }
+    }
+
+    // masses and initial forces on barostat variables
+
+    if (pstat_flag) {
+        double kt = boltz * t_target;
+        double nkt = (atom_->natoms + 1) * kt;
+
+        for (int i = 0; i < 3; i++)
+            if (p_flag[i])
+                omega_mass[i] = nkt/(p_freq[i]*p_freq[i]);
+
+        if (pstyle == TRICLINIC) {
+            for (int i = 3; i < 6; i++)
+                if (p_flag[i]) omega_mass[i] = nkt/(p_freq[i]*p_freq[i]);
+        }
+
+        // masses and initial forces on barostat thermostat variables
+
+        if (mpchain) {
+            etap_mass[0] = boltz * t_target / (p_freq_max*p_freq_max);
+            for (int ich = 1; ich < mpchain; ich++)
+                etap_mass[ich] = boltz * t_target / (p_freq_max*p_freq_max);
+            for (int ich = 1; ich < mpchain; ich++)
+                etap_dotdot[ich] =
+                        (etap_mass[ich-1]*etap_dot[ich-1]*etap_dot[ich-1] -
+                         boltz * t_target) / etap_mass[ich];
+        }
+    }
+}
+
 /* ----------------------------------------------------------------------
    1st half of Verlet update
 ------------------------------------------------------------------------- */
@@ -229,6 +338,90 @@ void FixNHKokkos<DeviceType>::initial_integrate(int /*vflag*/)
   }
 }
 
+template<class DeviceType>
+void FixNHKokkos<DeviceType>::initial_integrate_stencil_md(int /*vflag*/, Atom* atom_, Atom* next, int* atom_idx_mapping) {
+    this->atom_idx_mapping = atom_idx_mapping;
+    // copy atom_ velocities into next velocities, have to vix for inverted zoids
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    AtomKokkos* atomKK_next = (AtomKokkos*) next;
+    v = atomKK_->k_v.view<DeviceType>();
+    next_v = atomKK_next->k_v.view<DeviceType>();
+    tag = atom_->tag;
+    next_tag = next->tag;
+
+
+    for (int i = 0; i < atom_->nlocal; i++) {
+        if (atom_idx_mapping[i] != -1) {
+            for (int j = 0; j < 3; j++) {
+                next_v(atom_idx_mapping[i], j) = v(i, j);
+            }
+        }
+    }
+
+    // update eta_press_dot
+    if (pstat_flag && mpchain) {
+        assert(false);
+        nhc_press_integrate();
+    }
+
+    // update eta_dot
+
+    if (tstat_flag) {
+        compute_temp_target();
+        nhc_temp_integrate_stencil_md(atom_, next);
+    }
+
+    // need to recompute pressure to account for change in KE
+    // t_current is up-to-date, but compute_temperature is not
+    // compute appropriately coupled elements of mvv_current
+
+    if (pstat_flag) {
+        assert(false);
+        atomKK->sync(temperature->execution_space,temperature->datamask_read);
+        atomKK->modified(temperature->execution_space,temperature->datamask_modify);
+        //atomKK->sync(pressure->execution_space,pressure->datamask_read);
+        //atomKK->modified(pressure->execution_space,pressure->datamask_modify);
+        if (pstyle == ISO) {
+            temperature->compute_scalar();
+            pressure->compute_scalar();
+        } else {
+            temperature->compute_vector();
+            pressure->compute_vector();
+        }
+        couple();
+        pressure->addstep(update->ntimestep+1);
+    }
+
+    if (pstat_flag) {
+        assert(false);
+        compute_press_target();
+        nh_omega_dot();
+        nh_v_press();
+    }
+
+    nve_v_stencil_md(atom_, next);
+
+    // remap simulation box by 1/2 step
+
+    if (pstat_flag) {
+        assert(false);
+        remap();
+    }
+
+    nve_x_stencil_md(atom_, next);
+
+    // remap simulation box by 1/2 step
+    // redo KSpace coeffs since volume has changed
+
+    if (pstat_flag) {
+        assert(false);
+        remap();
+        if (kspace_flag) force->kspace->setup();
+    }
+
+    this->atom_idx_mapping = NULL;
+}
+
 /* ----------------------------------------------------------------------
    2nd half of Verlet update
 ------------------------------------------------------------------------- */
@@ -279,6 +472,69 @@ void FixNHKokkos<DeviceType>::final_integrate()
 
   if (tstat_flag) nhc_temp_integrate();
   if (pstat_flag && mpchain) nhc_press_integrate();
+}
+
+template<class DeviceType>
+void FixNHKokkos<DeviceType>::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping) {
+    this->atom_idx_mapping = atom_idx_mapping;
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    nve_v_stencil_md(atom_, next);
+
+    // re-compute temp before nh_v_press()
+    // only needed for temperature computes with BIAS on reneighboring steps:
+    //   b/c some biases store per-atom values (e.g. temp/profile)
+    //   per-atom values are invalid if reneigh/comm occurred
+    //     since temp->compute() in initial_integrate()
+
+    if (which == BIAS && neighbor_->ago == 0) {
+        atomKK_->sync_stencil_md(temperature->execution_space,temperature->datamask_read, atom_);
+        t_current = temperature->compute_scalar_stencil_md(atom_);
+        atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
+    }
+
+    if (pstat_flag) {
+        assert(false);
+        nh_v_press();
+    }
+
+    // compute new T,P after velocities rescaled by nh_v_press()
+    // compute appropriately coupled elements of mvv_current
+
+    atomKK_->sync_stencil_md(temperature->execution_space,temperature->datamask_read, atom_);
+    t_current = temperature->compute_scalar_stencil_md(atom_);
+    atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
+    tdof = temperature->dof;
+
+    if (pstat_flag) {
+        assert(false);
+        //atomKK->sync(pressure->execution_space,pressure->datamask_read);
+        //atomKK->modified(pressure->execution_space,pressure->datamask_modify);
+        if (pstyle == ISO) pressure->compute_scalar();
+        else {
+            temperature->compute_vector();
+            pressure->compute_vector();
+        }
+        couple();
+        pressure->addstep(update->ntimestep+1);
+    }
+
+    if (pstat_flag) {
+        assert(false);
+        nh_omega_dot();
+    }
+
+    // update eta_dot
+    // update eta_press_dot
+
+    if (tstat_flag) {
+        // nhc_temp_integrate_stencil_md(atom_);
+        nhc_temp_integrate_stencil_md(atom_, next);
+    }
+    if (pstat_flag && mpchain) {
+        assert(false);
+        nhc_press_integrate();
+    }
+    this->atom_idx_mapping = NULL;
 }
 
 /* ----------------------------------------------------------------------
@@ -502,7 +758,6 @@ void FixNHKokkos<DeviceType>::nh_v_press()
     temperature->restore_bias_all();
     atomKK->modified(temperature->execution_space,temperature->datamask_modify);
   }
-
 }
 
 template<class DeviceType>
@@ -541,6 +796,18 @@ void FixNHKokkos<DeviceType>::nve_v()
   int nlocal = atomKK->nlocal;
   if (igroup == atomKK->firstgroup) nlocal = atomKK->nfirst;
 
+    bool found_atom = false;
+    int idx = -1;
+    for (int i = 0; i < atom->nlocal; i++) {
+        if (atom->tag[i] == 10675) {
+            found_atom = true;
+            idx = i;
+            std::cout << "regular md nve v force: " << f(idx, 0) << " " << f(idx, 1) << " " << f(idx, 2) << std::endl;
+            std::cout << "regular md before nve v found atom. Prev vel: " << v(idx, 0) << " " << v(idx, 1) << " " << v(idx, 2) << " factor eta: " << factor_eta << std::endl;
+        }
+    }
+
+
   copymode = 1;
   if (rmass.data())
     Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_v<1> >(0,nlocal),*this);
@@ -549,6 +816,46 @@ void FixNHKokkos<DeviceType>::nve_v()
   copymode = 0;
 
   atomKK->modified(execution_space,V_MASK);
+
+    if (found_atom) {
+        std::cout << "regular md after nve v found atom. New vel: " << v(idx, 0) << " " << v(idx, 1) << " " << v(idx, 2) << std::endl;
+    }
+
+}
+
+template<class DeviceType>
+void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next) {
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    atomKK_->sync_stencil_md(execution_space,X_MASK | V_MASK | F_MASK | MASK_MASK | RMASS_MASK | TYPE_MASK, atom_);
+
+    v = atomKK_->k_v.view<DeviceType>();
+    f = atomKK_->k_f.view<DeviceType>();
+    rmass = atomKK_->k_rmass.view<DeviceType>();
+    mass = atomKK_->k_mass.view<DeviceType>();
+    type = atomKK_->k_type.view<DeviceType>();
+    mask = atomKK_->k_mask.view<DeviceType>();
+    // int nlocal = atomKK_->nlocal;
+    // int nlocal = std::min(atom_->nlocal, next->nlocal);
+    int nlocal = atom_->nlocal;
+    if (igroup == atomKK_->firstgroup) nlocal = atomKK_->nfirst;
+
+    AtomKokkos* atomKK_next = (AtomKokkos*) next;
+    atomKK_next->sync_stencil_md(execution_space,X_MASK | V_MASK | F_MASK | MASK_MASK | RMASS_MASK | TYPE_MASK, next);
+    next_v = atomKK_next->k_v.view<DeviceType>();
+
+    tag = atom_->tag;
+    next_tag = next->tag;
+
+    copymode = 1;
+    if (rmass.data()) {
+        Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_v_stencil_md<1> >(0,nlocal),*this);
+    } else {
+        Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_v_stencil_md<0> >(0,nlocal),*this);
+    }
+    copymode = 0;
+
+    atomKK_->modified_stencil_md(execution_space,V_MASK, atomKK_);
+    atomKK_next->modified_stencil_md(execution_space,V_MASK, next);
 }
 
 template<class DeviceType>
@@ -565,11 +872,45 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v<RMASS>, const int &i) co
   } else {
     if (mask[i] & groupbit) {
       const F_FLOAT dtfm = dtf / mass[type[i]];
+      // const F_FLOAT dtfm = dtf / atom->mass[type[i]];
       v(i,0) += dtfm*f(i,0);
       v(i,1) += dtfm*f(i,1);
       v(i,2) += dtfm*f(i,2);
     }
   }
+}
+
+template<class DeviceType>
+template<int RMASS>
+KOKKOS_INLINE_FUNCTION
+void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v_stencil_md<RMASS>, const int &i) const {
+    if (RMASS) {
+        assert(false);
+        if (mask[i] & groupbit) {
+            const F_FLOAT dtfm = dtf / rmass[i];
+            v(i,0) += dtfm*f(i,0);
+            v(i,1) += dtfm*f(i,1);
+            v(i,2) += dtfm*f(i,2);
+        }
+    } else {
+        if (mask[i] & groupbit) {
+            const F_FLOAT dtfm = dtf / atom->mass[type[i]];
+            if (atom_idx_mapping[i] != -1) {
+                int next_idx = atom_idx_mapping[i];
+                next_v(next_idx, 0) += dtfm*f(i, 0);
+                next_v(next_idx, 1) += dtfm*f(i, 1);
+                next_v(next_idx, 2) += dtfm*f(i, 2);
+            }
+
+            /*
+            next_v(i, 0) = v(i, 0) + dtfm*f(i, 0);
+            next_v(i, 1) = v(i, 1) + dtfm*f(i, 1);
+            next_v(i, 2) = v(i, 2) + dtfm*f(i, 2);
+            */
+        }
+
+
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -589,6 +930,7 @@ void FixNHKokkos<DeviceType>::nve_x()
   if (igroup == atomKK->firstgroup) nlocal = atomKK->nfirst;
 
   // x update by full step only for atoms in group
+  tag = atom->tag;
 
   copymode = 1;
   Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x>(0,nlocal),*this);
@@ -596,13 +938,66 @@ void FixNHKokkos<DeviceType>::nve_x()
 }
 
 template<class DeviceType>
+void FixNHKokkos<DeviceType>::nve_x_stencil_md(Atom* atom_, Atom* next) {
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    atomKK_->sync_stencil_md(execution_space,X_MASK | V_MASK | MASK_MASK, atom_);
+    atomKK_->modified_stencil_md(execution_space,X_MASK, atom_);
+
+
+    x = atomKK_->k_x.view<DeviceType>();
+    v = atomKK_->k_v.view<DeviceType>();
+    mask = atomKK_->k_mask.view<DeviceType>();
+    // int nlocal = atomKK_->nlocal;
+    // int nlocal = std::min(atom_->nlocal, next->nlocal);
+    int nlocal = atom_->nlocal;
+    if (igroup == atomKK_->firstgroup) nlocal = atomKK_->nfirst;
+
+    tag = atom_->tag;
+    next_tag = next->tag;
+
+    AtomKokkos* atomKK_next = (AtomKokkos*) next;
+    atomKK_next->sync_stencil_md(execution_space,X_MASK | V_MASK | MASK_MASK, next);
+    atomKK_next->modified_stencil_md(execution_space,X_MASK, next);
+    next_x = atomKK_next->k_x.view<DeviceType>();
+    next_v = atomKK_next->k_v.view<DeviceType>();
+
+    // x update by full step only for atoms in group
+    copymode = 1;
+    // Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x_stencil_md>(0,nlocal),*this);
+    Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x_stencil_md>(0,nlocal),*this);
+    copymode = 0;
+}
+
+template<class DeviceType>
 KOKKOS_INLINE_FUNCTION
 void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x, const int &i) const {
   if (mask[i] & groupbit) {
+    double prev = x(i, 0);
     x(i,0) += dtv * v(i,0);
     x(i,1) += dtv * v(i,1);
     x(i,2) += dtv * v(i,2);
+    if (tag[i] == 10675) {
+        std::cout << "REGULAR MD UPDATING ATOM. dtv: " << dtv << " vel: " << v(i, 0) << " prev: " << prev << " now: " << x(i, 0) << std::endl;
+    }
   }
+}
+
+template<class DeviceType>
+KOKKOS_INLINE_FUNCTION
+void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x_stencil_md, const int &i) const {
+    if (mask[i] & groupbit) {
+        if (atom_idx_mapping[i] != -1) {
+            int next_idx = atom_idx_mapping[i];
+            next_x(next_idx, 0) = x(i, 0) + dtv * next_v(next_idx, 0);
+            next_x(next_idx, 1) = x(i, 1) + dtv * next_v(next_idx, 1);
+            next_x(next_idx, 2) = x(i, 2) + dtv * next_v(next_idx, 2);
+        }
+        /*
+        next_x(i, 0) = x(i, 0) + dtv * v(i, 0);
+        next_x(i, 1) = x(i, 1) + dtv * v(i, 1);
+        next_x(i, 2) = x(i, 2) + dtv * v(i, 2);
+        */
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -612,6 +1007,7 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x, const int &i) const {
 template<class DeviceType>
 void FixNHKokkos<DeviceType>::nh_v_temp()
 {
+
   v = atomKK->k_v.view<DeviceType>();
   mask = atomKK->k_mask.view<DeviceType>();
   int nlocal = atomKK->nlocal;
@@ -624,6 +1020,15 @@ void FixNHKokkos<DeviceType>::nh_v_temp()
   }
 
   atomKK->sync(execution_space,V_MASK | MASK_MASK);
+  bool found_atom = false;
+  int idx = -1;
+    for (int i = 0; i < atom->nlocal; i++) {
+        if (atom->tag[i] == 10675) {
+            found_atom = true;
+            idx = i;
+            // std::cout << "regular md before nh v temp found atom. Prev vel: " << v(idx, 0) << " " << v(idx, 1) << " " << v(idx, 2) << " factor eta: " << factor_eta << std::endl;
+        }
+    }
 
   copymode = 1;
   Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nh_v_temp>(0,nlocal),*this);
@@ -636,6 +1041,9 @@ void FixNHKokkos<DeviceType>::nh_v_temp()
     temperature->restore_bias_all();
     atomKK->modified(temperature->execution_space,temperature->datamask_modify);
   }
+  if (found_atom) {
+      // std::cout << "regular md after nh v temp found atom. New vel: " << v(idx, 0) << " " << v(idx, 1) << " " << v(idx, 2) << std::endl;
+  }
 }
 
 template<class DeviceType>
@@ -646,6 +1054,68 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nh_v_temp, const int &i) const
     v(i,1) *= factor_eta;
     v(i,2) *= factor_eta;
   }
+}
+
+template<class DeviceType>
+void FixNHKokkos<DeviceType>::nh_v_temp_stencil_md(Atom* atom_, Atom* next) {
+    // TODO: check sync
+    // std::cout << "nh v temp stencil md" << std::endl;
+
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    AtomKokkos* atomKK_next = (AtomKokkos*) next;
+    v = atomKK_->k_v.view<DeviceType>();
+    next_v = atomKK_next->k_v.view<DeviceType>();
+    mask = atomKK_->k_mask.view<DeviceType>();
+
+    tag = atom_->tag;
+    next_tag = next->tag;
+
+    // int nlocal = std::min(atomKK_->nlocal, atomKK_next->nlocal);
+    int nlocal = atom_->nlocal;
+
+    if (igroup == atomKK->firstgroup) nlocal = atomKK->nfirst;
+
+    if (which == BIAS) {
+        atomKK_->sync_stencil_md(temperature->execution_space,temperature->datamask_read, atom_);
+        temperature->remove_bias_all();
+        atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
+    }
+
+    atomKK_->sync_stencil_md(execution_space,V_MASK | MASK_MASK, atom_);
+
+    copymode = 1;
+    Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nh_v_temp_stencil_md>(0,nlocal),*this);
+    copymode = 0;
+
+    atomKK_->modified_stencil_md(execution_space,V_MASK, atom_);
+
+    if (which == BIAS) {
+        atomKK_->sync_stencil_md(temperature->execution_space,temperature->datamask_read, atom_);
+        temperature->restore_bias_all();
+        atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
+    }
+}
+
+template<class DeviceType>
+KOKKOS_INLINE_FUNCTION
+void FixNHKokkos<DeviceType>::operator()(TagFixNH_nh_v_temp_stencil_md, const int &i) const {
+    if (mask[i] & groupbit) {
+        /*
+        next_v(i, 0) = v(i, 0) * factor_eta;
+        next_v(i, 1) = v(i, 1) * factor_eta;
+        next_v(i, 2) = v(i, 2) * factor_eta;
+        */
+        // TODO: change, but since factor_eta is 1 for testing, not a big deal right now
+//        if (tag_to_idx[tag[i]] != -1) {
+//            next_v(tag_to_idx[tag[i]], 0) = v(i, 0) * factor_eta;
+//            next_v(tag_to_idx[tag[i]], 1) = v(i, 1) * factor_eta;
+//            next_v(tag_to_idx[tag[i]], 2) = v(i, 2) * factor_eta;
+//        }
+
+//        v(i,0) *= factor_eta;
+//        v(i,1) *= factor_eta;
+//        v(i,2) *= factor_eta;
+    }
 }
 
 /* ----------------------------------------------------------------------

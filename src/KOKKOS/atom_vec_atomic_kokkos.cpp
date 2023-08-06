@@ -82,6 +82,43 @@ void AtomVecAtomicKokkos::grow(int n)
       modify->fix[atom->extra_grow[iextra]]->grow_arrays(nmax);
 }
 
+void AtomVecAtomicKokkos::grow_stencil_md(int n, Atom* atom_) {
+    auto DELTA = LMP_KOKKOS_AV_DELTA;
+    int step = MAX(DELTA,nmax*0.01);
+    if (n == 0) {
+        nmax += step;
+    } else {
+        nmax = n;
+    }
+
+    AtomKokkos* atomKK_ = (AtomKokkos *) atom_;
+
+    atomKK_->nmax = nmax;
+    if (atomKK_->nmax < 0 || atomKK_->nmax > MAXSMALLINT) {
+        error->one(FLERR, "Per-processor system is too big");
+    }
+
+    atomKK_->sync_stencil_md(Device,ALL_MASK, atom_);
+    atomKK_->modified_stencil_md(Device,ALL_MASK, atom_);
+
+    memoryKK->grow_kokkos(atomKK_->k_tag,atomKK_->tag,nmax,"atom:tag");
+    memoryKK->grow_kokkos(atomKK_->k_type,atomKK_->type,nmax,"atom:type");
+    memoryKK->grow_kokkos(atomKK_->k_mask,atomKK_->mask,nmax,"atom:mask");
+    memoryKK->grow_kokkos(atomKK_->k_image,atomKK_->image,nmax,"atom:image");
+
+    memoryKK->grow_kokkos(atomKK_->k_x,atomKK_->x,nmax,"atom:x");
+    memoryKK->grow_kokkos(atomKK_->k_v,atomKK_->v,nmax,"atom:v");
+    memoryKK->grow_kokkos(atomKK_->k_f,atomKK_->f,nmax,"atom:f");
+
+    grow_pointers_stencil_md(atom_);
+    atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
+
+    if (atom_->nextra_grow) {
+        assert(false);
+        for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+            modify->fix[atom->extra_grow[iextra]]->grow_arrays(nmax);
+    }
+}
 /* ----------------------------------------------------------------------
    reset local array ptrs
 ------------------------------------------------------------------------- */
@@ -113,12 +150,42 @@ void AtomVecAtomicKokkos::grow_pointers()
   h_f = atomKK->k_f.h_view;
 }
 
+void AtomVecAtomicKokkos::grow_pointers_stencil_md(Atom* atom_) {
+    AtomKokkos* atomKK_ = (AtomKokkos *) atom_;
+    tag = atomKK_->tag;
+    d_tag = atomKK_->k_tag.d_view;
+    h_tag = atomKK_->k_tag.h_view;
+
+    type = atomKK_->type;
+    d_type = atomKK_->k_type.d_view;
+    h_type = atomKK_->k_type.h_view;
+    mask = atomKK_->mask;
+    d_mask = atomKK_->k_mask.d_view;
+    h_mask = atomKK_->k_mask.h_view;
+    image = atomKK_->image;
+    d_image = atomKK_->k_image.d_view;
+    h_image = atomKK_->k_image.h_view;
+
+    x = atomKK_->x;
+    d_x = atomKK_->k_x.d_view;
+    h_x = atomKK_->k_x.h_view;
+    v = atomKK_->v;
+    d_v = atomKK_->k_v.d_view;
+    h_v = atomKK_->k_v.h_view;
+    f = atomKK_->f;
+    d_f = atomKK_->k_f.d_view;
+    h_f = atomKK_->k_f.h_view;
+}
+
 /* ----------------------------------------------------------------------
    copy atom I info to atom J
 ------------------------------------------------------------------------- */
 
 void AtomVecAtomicKokkos::copy(int i, int j, int delflag)
 {
+  if (i != j) {
+      assert(h_tag[i] != h_tag[j]);
+  }
   h_tag[j] = h_tag[i];
   h_type[j] = h_type[i];
   mask[j] = mask[i];
@@ -130,9 +197,11 @@ void AtomVecAtomicKokkos::copy(int i, int j, int delflag)
   h_v(j,1) = h_v(i,1);
   h_v(j,2) = h_v(i,2);
 
-  if (atom->nextra_grow)
-    for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
-      modify->fix[atom->extra_grow[iextra]]->copy_arrays(i,j,delflag);
+  if (atom->nextra_grow) {
+      assert(false);
+      for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+          modify->fix[atom->extra_grow[iextra]]->copy_arrays(i, j, delflag);
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -270,11 +339,105 @@ int AtomVecAtomicKokkos::pack_border(int n, int *list, double *buf,
     }
   }
 
-  if (atom->nextra_border)
-    for (int iextra = 0; iextra < atom->nextra_border; iextra++)
-      m += modify->fix[atom->extra_border[iextra]]->pack_border(n,list,&buf[m]);
+  if (atom->nextra_border) {
+      for (int iextra = 0; iextra < atom->nextra_border; iextra++)
+          m += modify->fix[atom->extra_border[iextra]]->pack_border(n, list, &buf[m]);
+  }
 
   return m;
+}
+
+
+int AtomVecAtomicKokkos::pack_data_stencil_md(int n, int *list, double *buf) {
+    int m = 0;
+    for (int i = 0; i < n; i++) {
+        int j = list[i];
+        buf[m++] = h_x(j,0);
+        buf[m++] = h_x(j,1);
+        buf[m++] = h_x(j,2);
+        /*
+        if (h_tag(j) == 33016) {
+            std::cout << "Sending the target atom. j: " << j << " actual val? " << ubuf(h_tag(j)).d << " again? " <<  (tagint)  (ubuf(h_tag(j)).i) << std::endl;
+            std::vector<int> tags;
+            for (int k = 0; k < n; k++) {
+                // std::cout << "Haha me. idx: " << k << " list val: " << list[k] << " tag: " << h_tag(list[k]) << std::endl;
+                tags.push_back(h_tag(list[k]));
+            }
+            std::cout << "ORDER OF TAGS SENT: " << tags << std::endl;
+            std::cout << "Tags sent size: " << tags.size() << std::endl;
+        }
+        */
+        buf[m++] = ubuf(h_tag(j)).d;
+        buf[m++] = ubuf(h_type(j)).d;
+        buf[m++] = ubuf(h_mask(j)).d;
+        buf[m++] = h_f(j, 0);
+        buf[m++] = h_f(j, 1);
+        buf[m++] = h_f(j, 2);
+    }
+    return m;
+}
+
+void AtomVecAtomicKokkos::unpack_data_stencil_md(Atom* atom_, int n, int first, double *buf) {
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    int i,m,last;
+
+    m = 0;
+    last = first + n;
+    while (last > nmax) {
+        grow_stencil_md(0, atom_);
+    }
+
+    std::vector<int> tags;
+    bool assert_false = false;
+    for (i = first; i < last; i++) {
+        h_x(i,0) = buf[m++];
+        h_x(i,1) = buf[m++];
+        h_x(i,2) = buf[m++];
+
+        if (h_tag(i) != (tagint)  ubuf(buf[m]).i) {
+            /*
+            std::cout << "ERROR idx: " << i << " My tag: " << h_tag(i) << " tag received: " << (tagint)  ubuf(buf[m]).i << std::endl;
+            for (int j = first; j < last; j++) {
+                if (h_tag(j) == (tagint)  ubuf(buf[m]).i) {
+                    std::cout << "true idx is: " << j << std::endl;
+                }
+            }
+            */
+            assert_false = true;
+            // assert(false);
+        }
+
+        // assert(h_tag(i) == (tagint)  ubuf(buf[m]).i);
+        tags.push_back(h_tag(i));
+        h_tag(i) =  (tagint)  ubuf(buf[m++]).i;
+        h_type(i) = (int) ubuf(buf[m++]).i;
+        h_mask(i) = (int) ubuf(buf[m++]).i;
+        h_f(i, 0) += buf[m++];
+        h_f(i, 1) += buf[m++];
+        h_f(i, 2) += buf[m++];
+
+    }
+    if (assert_false) {
+        std::cout << "ORDER OF TAGS RECEIVED: " << tags << std::endl;
+        std::cout << "Tags received size: " << tags.size() << std::endl;
+        std::cout << "first: " << first << " last: " << last << " nlocal: " << atom_->nlocal << std::endl;
+        assert(false);
+    }
+
+    atomKK_->modified_stencil_md(Host,X_MASK|TAG_MASK|TYPE_MASK|MASK_MASK, atom_);
+
+    if (atom->nextra_border) {
+        assert(false);
+        for (int iextra = 0; iextra < atom->nextra_border; iextra++)
+            m += modify->fix[atom->extra_border[iextra]]->
+                    unpack_border(n,first,&buf[m]);
+    }
+
+}
+
+int AtomVecAtomicKokkos::pack_border_stencil_md(int n, int *list, double *buf, int* pbc_flag, int** pbc) {
+    assert(false);
+    return 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -431,6 +594,36 @@ void AtomVecAtomicKokkos::unpack_border(int n, int first, double *buf)
     for (int iextra = 0; iextra < atom->nextra_border; iextra++)
       m += modify->fix[atom->extra_border[iextra]]->
         unpack_border(n,first,&buf[m]);
+}
+
+void AtomVecAtomicKokkos::unpack_border_stencil_md(int n, int first, double *buf, Atom* atom_, int zoid_num) {
+    AtomKokkos* atomKK_ = (AtomKokkos* ) atom_;
+    int i,m,last;
+
+    m = 0;
+    last = first + n;
+
+    while (last > nmax) {
+        grow_stencil_md(0, atom_);
+    }
+
+    for (i = first; i < last; i++) {
+        h_x(i,0) = buf[m++];
+        h_x(i,1) = buf[m++];
+        h_x(i,2) = buf[m++];
+        h_tag(i) =  (tagint)  ubuf(buf[m++]).i;
+        h_type(i) = (int) ubuf(buf[m++]).i;
+        h_mask(i) = (int) ubuf(buf[m++]).i;
+    }
+    atomKK_->modified_stencil_md(Host,X_MASK|TAG_MASK|TYPE_MASK|MASK_MASK, atom_);
+
+    if (atom->nextra_border) {
+        assert(false);
+        for (int iextra = 0; iextra < atom->nextra_border; iextra++)
+            m += modify->fix[atom->extra_border[iextra]]->
+                    unpack_border(n, first, &buf[m]);
+    }
+    // std::cout << "h_x extent: " << h_x.extent(0) << " " << h_x.extent(1) << std::endl;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -699,6 +892,67 @@ int AtomVecAtomicKokkos::unpack_exchange(double *buf)
   return m;
 }
 
+int AtomVecAtomicKokkos::unpack_exchange_stencil_md(double *buf, Atom* atom_, Domain* domain_, std::set<int>& s) {
+    int nlocal = atom_->nlocal;
+    if (nlocal == nmax) {
+        grow_stencil_md(0, atom_);
+    }
+
+    AtomKokkos* atomKK_ = (AtomKokkos *) atom_;
+    atomKK_->modified_stencil_md(Host,X_MASK | V_MASK | TAG_MASK | TYPE_MASK |
+                          MASK_MASK | IMAGE_MASK, atom_);
+
+    int m = 1;
+    h_x(nlocal,0) = buf[m++];
+    h_x(nlocal,1) = buf[m++];
+    h_x(nlocal,2) = buf[m++];
+    h_v(nlocal,0) = buf[m++];
+    h_v(nlocal,1) = buf[m++];
+    h_v(nlocal,2) = buf[m++];
+    h_tag(nlocal) = (tagint) ubuf(buf[m++]).i;
+    h_type(nlocal) = (int) ubuf(buf[m++]).i;
+    h_mask(nlocal) = (int) ubuf(buf[m++]).i;
+    h_image(nlocal) = (imageint) ubuf(buf[m++]).i;
+
+    if (atom_->nextra_grow) {
+        assert(false);
+        for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+            m += modify->fix[atom->extra_grow[iextra]]->
+                    unpack_exchange(nlocal, &buf[m]);
+
+    }
+
+    s.insert(h_tag(nlocal));
+    atom_->nlocal++;
+    return m;
+}
+
+void AtomVecAtomicKokkos::add_local_atom_stencil_md(Atom* atom_, Domain* domain_, double * coord, double* vel,
+                                                    tagint tag, int type, int mask, imageint image) {
+    int nlocal = atom_->nlocal;
+    if (nlocal == nmax) {
+        grow_stencil_md(0, atom_);
+    }
+
+    AtomKokkos* atomKK_ = (AtomKokkos *) atom_;
+    atomKK_->modified_stencil_md(Host,X_MASK | V_MASK | TAG_MASK | TYPE_MASK |
+                                      MASK_MASK | IMAGE_MASK, atom_);
+
+    int m = 1;
+    h_x(nlocal,0) = coord[0];
+    h_x(nlocal,1) = coord[1];
+    h_x(nlocal,2) = coord[2];
+    h_v(nlocal,0) = vel[0];
+    h_v(nlocal,1) = vel[1];
+    h_v(nlocal,2) = vel[2];
+    h_tag(nlocal) = tag;
+    h_type(nlocal) = type;
+    h_mask(nlocal) = mask;
+    h_image(nlocal) = image;
+
+    atom_->nlocal++;
+}
+
 /* ----------------------------------------------------------------------
    size of restart data for all atoms owned by this proc
    include extra data stored by fixes
@@ -923,6 +1177,28 @@ void AtomVecAtomicKokkos::sync(ExecutionSpace space, unsigned int mask)
   }
 }
 
+void AtomVecAtomicKokkos::sync_stencil_md(ExecutionSpace space, unsigned int mask, Atom* atom_)
+{
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    if (space == Device) {
+        if (mask & X_MASK) atomKK_->k_x.sync<LMPDeviceType>();
+        if (mask & V_MASK) atomKK_->k_v.sync<LMPDeviceType>();
+        if (mask & F_MASK) atomKK_->k_f.sync<LMPDeviceType>();
+        if (mask & TAG_MASK) atomKK_->k_tag.sync<LMPDeviceType>();
+        if (mask & TYPE_MASK) atomKK_->k_type.sync<LMPDeviceType>();
+        if (mask & MASK_MASK) atomKK_->k_mask.sync<LMPDeviceType>();
+        if (mask & IMAGE_MASK) atomKK_->k_image.sync<LMPDeviceType>();
+    } else {
+        if (mask & X_MASK) atomKK_->k_x.sync<LMPHostType>();
+        if (mask & V_MASK) atomKK_->k_v.sync<LMPHostType>();
+        if (mask & F_MASK) atomKK_->k_f.sync<LMPHostType>();
+        if (mask & TAG_MASK) atomKK_->k_tag.sync<LMPHostType>();
+        if (mask & TYPE_MASK) atomKK_->k_type.sync<LMPHostType>();
+        if (mask & MASK_MASK) atomKK_->k_mask.sync<LMPHostType>();
+        if (mask & IMAGE_MASK) atomKK_->k_image.sync<LMPHostType>();
+    }
+}
+
 /* ---------------------------------------------------------------------- */
 
 void AtomVecAtomicKokkos::sync_overlapping_device(ExecutionSpace space, unsigned int mask)
@@ -981,5 +1257,27 @@ void AtomVecAtomicKokkos::modified(ExecutionSpace space, unsigned int mask)
     if (mask & MASK_MASK) atomKK->k_mask.modify<LMPHostType>();
     if (mask & IMAGE_MASK) atomKK->k_image.modify<LMPHostType>();
   }
+}
+
+void AtomVecAtomicKokkos::modified_stencil_md(ExecutionSpace space, unsigned int mask, Atom* atom_)
+{
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+    if (space == Device) {
+        if (mask & X_MASK) atomKK_->k_x.modify<LMPDeviceType>();
+        if (mask & V_MASK) atomKK_->k_v.modify<LMPDeviceType>();
+        if (mask & F_MASK) atomKK_->k_f.modify<LMPDeviceType>();
+        if (mask & TAG_MASK) atomKK_->k_tag.modify<LMPDeviceType>();
+        if (mask & TYPE_MASK) atomKK_->k_type.modify<LMPDeviceType>();
+        if (mask & MASK_MASK) atomKK_->k_mask.modify<LMPDeviceType>();
+        if (mask & IMAGE_MASK) atomKK_->k_image.modify<LMPDeviceType>();
+    } else {
+        if (mask & X_MASK) atomKK_->k_x.modify<LMPHostType>();
+        if (mask & V_MASK) atomKK_->k_v.modify<LMPHostType>();
+        if (mask & F_MASK) atomKK_->k_f.modify<LMPHostType>();
+        if (mask & TAG_MASK) atomKK_->k_tag.modify<LMPHostType>();
+        if (mask & TYPE_MASK) atomKK_->k_type.modify<LMPHostType>();
+        if (mask & MASK_MASK) atomKK_->k_mask.modify<LMPHostType>();
+        if (mask & IMAGE_MASK) atomKK_->k_image.modify<LMPHostType>();
+    }
 }
 

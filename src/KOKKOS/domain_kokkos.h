@@ -32,6 +32,7 @@ class DomainKokkos : public Domain {
   ~DomainKokkos() override = default;
   void reset_box() override;
   void pbc() override;
+  void pbc_stencil_md(Atom*) override;
   void remap_all();
   void image_flip(int, int, int);
   void x2lamda(int) override;
@@ -42,6 +43,8 @@ class DomainKokkos : public Domain {
   void x2lamda(double *a, double *b, double *c, double *d) {
     Domain::x2lamda(a,b,c,d);
   }
+
+  void remap_all_stencil_md(Atom*) override;
 
   int closest_image(const int, int) const;
 

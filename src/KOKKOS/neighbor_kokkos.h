@@ -89,6 +89,9 @@ class NeighborKokkos : public Neighbor {
   void modify_mol_group_grow_kokkos();
   void modify_mol_intra_grow_kokkos();
   void set_binsize_kokkos() override;
+
+  void build_stencil_md(int, Atom*, Domain*, Comm*) override;
+  template<class DeviceType> void build_kokkos_stencil_md(int, Atom*, Domain*, Comm*);
 };
 
 }
