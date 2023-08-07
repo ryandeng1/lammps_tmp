@@ -1163,7 +1163,7 @@ void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom*, NUM
             }
 
             for (int j = start_idx; j < end_idx; j++) {
-                tags.push_back(atom_->tag[j];
+                tags.push_back(atom_->tag[j]);
             }
 
             int nsend = end_idx - start_idx;
