@@ -350,7 +350,6 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, queue_info& zoid, int tim
     std::set<int> in_bucket_atoms;
     std::map<int, int> atom_idx_to_recv_zoid_num;
 
-
     std::map<int, std::set<int>> atom_idx_to_recv_zoid_num2;
     std::map<int, int> tag_to_recv_zoid_num;
     for (int i = 0; i < recv_from.size(); i++) {

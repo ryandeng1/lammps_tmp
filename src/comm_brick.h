@@ -115,6 +115,9 @@ class CommBrick : public Comm {
   virtual void free_multi();              // free multi arrays
   virtual void free_multiold();           // free multi/old arrays
 
+  void grow_send_sendlist_stencil_md(int, int, int);
+  void grow_recv_sendlist_stencil_md(int, int);
+
   void grow_list_stencil_md(int, int, int);
   void grow_second_list_stencil_md(int, int, int);
   void grow_send_stencil_md(int, int, int);
@@ -126,6 +129,11 @@ class CommBrick : public Comm {
   int* sendnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int* second_sendnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int* recvnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+  int ** buf_sendlist_stencil_md;
+  int ** buf_recv_sendlist_stencil_md;
+  int * maxsend_sendlist_stencil_md;
+  int * maxrecv_sendlist_stencil_md;
 };
 
 }    // namespace LAMMPS_NS

@@ -81,6 +81,13 @@ CommBrick::~CommBrick()
   memory->destroy(buf_send);
   memory->destroy(buf_recv);
 
+  for (int i = 0; i < maxswap; i++) {
+      memory->destroy(buf_sendlist_stencil_md[i]);
+      memory->destroy(buf_recv_sendlist_stencil_md[i]);
+  }
+  memory->sfree(buf_sendlist_stencil_md);
+  memory->sfree(buf_recv_sendlist_stencil_md);
+
   for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
       if (sendlist_stencil_md[i]) {
           for (int j = 0; j < maxswap; j++) {
@@ -182,6 +189,22 @@ void CommBrick::init_buffers()
           max_second_sendlist_stencil_md[i][j] = BUFMIN;
           memory->create(second_sendlist_stencil_md[i][j], BUFMIN, "comm:second_sendlist_stencil_md[i]");
       }
+  }
+
+  maxsend_sendlist_stencil_md = maxrecv_sendlist_stencil_md = nullptr;
+  memory->create(maxsend_sendlist_stencil_md, maxswap, "comm:maxsendlist");
+  memory->create(maxrecv_sendlist_stencil_md, maxswap, "comm:maxsendlist");
+
+  for (int i = 0; i < maxswap; i++) {
+    maxsend_sendlist_stencil_md[i] = BUFMIN;
+    maxrecv_sendlist_stencil_md[i] = BUFMIN;
+  }
+
+  buf_sendlist_stencil_md = (int **) memory->smalloc(maxswap * sizeof(int*), "comm:bufsend_stencil_md");
+  buf_recv_sendlist_stencil_md = (int **) memory->smalloc(maxswap * sizeof(int*), "comm:bufsend_stencil_md");
+  for (int i = 0; i < maxswap; i++) {
+    memory->create(buf_sendlist_stencil_md[i], maxsend_sendlist_stencil_md[i], "comm:buf_send_stencil_md");
+    memory->create(buf_recv_sendlist_stencil_md[i], maxrecv_sendlist_stencil_md[i], "comm:buf_send_stencil_md");
   }
 }
 
@@ -1146,8 +1169,8 @@ void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom*, NUM
         queue_info& send_zoid = lmp->zoid_num_to_zoid[send_zoid_num];
 
         int num_send_per_timestep[NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
-        std::vector<int> tags;
 
+        std::vector<int> tags;
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             Atom* atom_ = atom_arr[t];
             int nsend_stencil_md = 0;
@@ -1162,28 +1185,35 @@ void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom*, NUM
                 end_idx = zoid.second_recv_stencil_md[t][i + 1];
             }
 
-            for (int j = start_idx; j < end_idx; j++) {
-                tags.push_back(atom_->tag[j]);
-            }
-
             int nsend = end_idx - start_idx;
             num_send_per_timestep[t] = nsend;
+
+            for (int idx = start_idx; idx < end_idx; idx++) {
+                tags.push_back(atom_->tag[idx]);
+            }
         }
 
         int total = 0;
         for (int k = 0; k < NUM_TIMESTEPS_IN_PARALLEL + 1; k++) {
             total += num_send_per_timestep[k];
         }
+        if (total != tags.size()) {
+            std::cout << "total: " << total << " tags size: " << tags.size() << std::endl;
+        }
+        assert(total == tags.size());
+        if (total >= maxsend_sendlist_stencil_md[i]) {
+            grow_send_sendlist_stencil_md(total, i, 0);
+        }
+
+        for (int k = 0; k < tags.size(); k++) {
+            buf_sendlist_stencil_md[i][k] = tags[k];
+        }
+
         MPI_Request r1;
         MPI_Isend(num_send_per_timestep, NUM_TIMESTEPS_IN_PARALLEL + 1, MPI_INT, send_zoid_num % comm->nprocs, send_zoid_num, world, &r1);
         if (total) {
-            int* tmp_buf = new int[total];
-            int idx = 0;
-            for (int k = 0; k < NUM_TIMESTEPS_IN_PARALLEL + 1; k++) {
-
-            }
             MPI_Request r2;
-            MPI_Isend(tmp_buf, total, MPI_INT, send_zoid_num % comm->nprocs, send_zoid_num, world, &r2);
+            MPI_Isend(buf_sendlist_stencil_md[i], total, MPI_INT, send_zoid_num % comm->nprocs, send_zoid_num, world, &r2);
         }
     }
 }
@@ -1210,20 +1240,22 @@ void CommBrick::construct_second_send_list_stencil_md_receive(std::array<Atom*, 
             total += nrecv_per_timestep[t];
         }
 
-        int* tmp_buf = new int[total];
+        if (total >= maxrecv_sendlist_stencil_md[i]) {
+            grow_recv_sendlist_stencil_md(total, i);
+        }
+
         if (total) {
-            MPI_Recv(tmp_buf, total, MPI_INT,
+            MPI_Recv(buf_recv_sendlist_stencil_md[i], total, MPI_INT,
                      recv_zoid_num % comm->nprocs, zoid_num, world, MPI_STATUS_IGNORE);
         }
 
         int tmp_buf_idx = 0;
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            // int second_nsend_stencil_md = 0;
             for (int j = 0; j < nrecv_per_timestep[t]; j++) {
                 if (j == max_second_sendlist_stencil_md[t][i]) {
                     grow_second_list_stencil_md(i, j, t);
                 }
-                second_sendlist_stencil_md[t][i][j] = tmp_buf[tmp_buf_idx++];
+                second_sendlist_stencil_md[t][i][j] = buf_recv_sendlist_stencil_md[i][tmp_buf_idx++];
             }
             second_sendnum_stencil_md[t][i] = nrecv_per_timestep[t];
         }
@@ -2483,6 +2515,20 @@ void CommBrick::grow_send_stencil_md(int n, int idx, int flag)
     }
 }
 
+void CommBrick::grow_send_sendlist_stencil_md(int n, int idx, int flag) {
+    if (flag == 0) {
+        maxsend_sendlist_stencil_md[idx] = static_cast<int> (BUFFACTOR * n);
+        memory->destroy(buf_sendlist_stencil_md[idx]);
+        buf_sendlist_stencil_md[idx] = memory->create(buf_sendlist_stencil_md[idx],maxsend_sendlist_stencil_md[idx]+bufextra,"comm:buf_send");
+    } else if (flag == 1) {
+        maxsend_sendlist_stencil_md[idx] = static_cast<int> (BUFFACTOR * n);
+        buf_sendlist_stencil_md[idx] = memory->grow(buf_sendlist_stencil_md[idx],maxsend_sendlist_stencil_md[idx]+bufextra,"comm:buf_send");
+    } else {
+        memory->destroy(buf_sendlist_stencil_md[idx]);
+        buf_sendlist_stencil_md[idx] = memory->grow(buf_sendlist_stencil_md[idx],maxsend_sendlist_stencil_md[idx]+bufextra,"comm:buf_send");
+    }
+}
+
 /* ----------------------------------------------------------------------
    free/malloc the size of the recv buffer as needed with BUFFACTOR
 ------------------------------------------------------------------------- */
@@ -2501,6 +2547,12 @@ void CommBrick::grow_recv_stencil_md(int n, int idx)
     memory->create(buf_recv_stencil_md[idx],maxrecv_stencil_md[idx],"comm:buf_recv");
 }
 
+void CommBrick::grow_recv_sendlist_stencil_md(int n, int idx) {
+    maxrecv_sendlist_stencil_md[idx] = static_cast<int> (BUFFACTOR * n);
+    memory->destroy(buf_recv_sendlist_stencil_md[idx]);
+    memory->create(buf_recv_sendlist_stencil_md[idx],maxrecv_sendlist_stencil_md[idx],"comm:buf_recv");
+}
+
 /* ----------------------------------------------------------------------
    realloc the size of the iswap sendlist as needed with BUFFACTOR
 ------------------------------------------------------------------------- */
@@ -2516,7 +2568,6 @@ void CommBrick::grow_list_stencil_md(int iswap, int n, int timestep) {
     maxsendlist_stencil_md[timestep][iswap] = static_cast<int> (BUFFACTOR * n);
     memory->grow(sendlist_stencil_md[timestep][iswap], maxsendlist_stencil_md[timestep][iswap], "comm:sendlist_stencil_md[iswap]");
 }
-
 
 void CommBrick::grow_second_list_stencil_md(int iswap, int n, int timestep) {
     // std::cout << "iswap: " << iswap << " n: " << n << " timestep: " << timestep << std::endl;
