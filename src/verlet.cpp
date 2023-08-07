@@ -955,10 +955,8 @@ void Verlet::setup_stencil_md() {
                 queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][i];
-                    if (i == 0) {
-                        std::cout << "Zoid: " << zoid_num << " nlocal: " << atom_->nlocal << " nghost: " << atom_->nghost << std::endl;
-                    }
-                    if (i > 0) {
+                    // second_recv contains ghost atoms of a particular atom (not time 0, and not the last timestep)
+                    if (i > 0 && i < NUM_TIMESTEPS_IN_PARALLEL) {
                         int num_recv_from = lmp->recv_from[zoid_num].size();
                         zoid.second_recv_stencil_md[i] = new int[num_recv_from];
                         group_ghost_atoms_stencil_md(lmp->atom_stencil_md[zoid_num][i], zoid, i);
@@ -976,11 +974,18 @@ void Verlet::setup_stencil_md() {
             int zoid_num = tmp.num;
             queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
             if (zoid_num % comm->nprocs == comm->me) {
-                assert(zoid.init_first_recv);
+                int num_recv_from = lmp->recv_from[zoid_num].size();
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
+                    for (int k = 0; k < num_recv_from; k++) {
+                        std::cout << "Dep: " << dep << " Zoid second recv stencil md: " << zoid.second_recv_stencil_md[t][k]
+                            << " for t: " << t << " k: " << k << " out of: " << num_recv_from << std::endl;
+                    }
+                }
             }
         }
     }
 
+    // construct second_send list, sending ghost->ghost
     for (int dep = 0; dep < 3 + 1; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& tmp = lmp->queues[dep][j];
@@ -1001,6 +1006,19 @@ void Verlet::setup_stencil_md() {
             if (zoid_num % comm->nprocs == comm->me) {
                 // lmp->comm_stencil_md[zoid_num]->construct_send_list_stencil_md(lmp->atom_stencil_md[zoid_num], zoid);
                 lmp->comm_stencil_md[zoid_num]->construct_second_send_list_stencil_md_receive(lmp->atom_stencil_md[zoid_num], zoid);
+            }
+        }
+    }
+
+    // construct first send_list, sending ghost->local
+    for (int dep = 0; dep < 3 + 1; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& tmp = lmp->queues[dep][j];
+            int zoid_num = tmp.num;
+            queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
+            if (zoid_num % comm->nprocs == comm->me) {
+                // lmp->comm_stencil_md[zoid_num]->construct_send_list_stencil_md(lmp->atom_stencil_md[zoid_num], zoid);
+                lmp->comm_stencil_md[zoid_num]->construct_send_list_stencil_md(lmp->atom_stencil_md[zoid_num], zoid);
             }
         }
     }
