@@ -1185,6 +1185,8 @@ void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom*, NUM
                 end_idx = zoid.second_recv_stencil_md[t][i + 1];
             }
 
+            std::cout << "start idx: " << start_idx << " end_idx: " << end_idx << std::endl;
+
             int nsend = end_idx - start_idx;
             num_send_per_timestep[t] = nsend;
 
