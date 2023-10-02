@@ -1178,8 +1178,8 @@ void CommBrick::construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_I
                 bool borders_zoid = true;
 
                 for (int dim = 0; dim < domain->dimension; dim++) {
-                    double lo = send_zoid.zoid.cuts[dim].lower + (t) * send_zoid.zoid.cuts[dim].slope_lower;
-                    double hi = send_zoid.zoid.cuts[dim].upper + (t) * send_zoid.zoid.cuts[dim].slope_upper;
+                    double lo = send_zoid.zoid.cuts[dim].lower + (t + 1) * send_zoid.zoid.cuts[dim].slope_lower;
+                    double hi = send_zoid.zoid.cuts[dim].upper + (t + 1) * send_zoid.zoid.cuts[dim].slope_upper;
 
                     double value = pos[dim];
 
@@ -1604,10 +1604,10 @@ void CommBrick::send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL
             assert(n == sendnum_stencil_md[t][i] * sz);
             num_send[t] = sendnum_stencil_md[t][i];
 
-            if (t == 0 && send_zoid_num == 33) {
+            if (t == 0 && (send_zoid_num == 33 || send_zoid_num == 17)) {
                 for (int h = 0; h < sendnum_stencil_md[t][i]; h++) {
                     int atom_idx = sendlist_stencil_md[t][i][h];
-                    if (atom_->tag[atom_idx] == 10152) {
+                    if (atom_->tag[atom_idx] == 13466) {
                         std::cout << "zoid: " << zoid_num << " Idx: " << h << " atom idx: " << atom_idx << " Tag sent: " << atom_->tag[atom_idx]
                         << " Pos: " << atom_->x[atom_idx][0] << " " << atom_->x[atom_idx][1] << " " << atom_->x[atom_idx][2]
                         << " force: " << atom_->f[atom_idx][0] << " " << atom_->f[atom_idx][1] << " " << atom_->f[atom_idx][2] << std::endl;

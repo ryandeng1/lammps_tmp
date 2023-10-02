@@ -716,13 +716,13 @@ void Verlet::setup_stencil_md() {
             int zoid_dep_neighbor = get_zoid_dep(j);
             if (zoid_dep_neighbor > zoid_dep && is_close(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
                 // TODO: test this extra condition
-                if (zoid_dep_neighbor == zoid_dep + 1) {
+                if (zoid_dep_neighbor == zoid_dep + 1 || true) {
                     lmp->send_to_neighbors[i].push_back(j);
                 }
             }
 
             if (zoid_dep_neighbor < zoid_dep && is_close(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
-                if (zoid_dep_neighbor == zoid_dep - 1) {
+                if (zoid_dep_neighbor == zoid_dep - 1 || true) {
                     lmp->recv_from_neighbors[i].push_back(j);
                 }
             }
@@ -993,6 +993,8 @@ void Verlet::setup_stencil_md() {
                 }
             }
         }
+
+        MPI_Barrier(world);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -1203,7 +1205,7 @@ void Verlet::setup_stencil_md() {
                 Atom* atom_ = lmp->atom_stencil_md[zoid_num][0];
                 Atom* next = lmp->atom_stencil_md[zoid_num][1];
                 for (int i = 0; i < atom_->nlocal; i++) {
-                    if (atom_->tag[i] == 10152) {
+                    if (atom_->tag[i] == 139) {
                         std::cout << "Zoid num: " << zoid_num << " has atom tag: " << atom_->tag[i] << " with pos: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2] << std::endl;
                         std::cout << "-----------Zoid: " << zoid_num << " ---------------------" << std::endl;
                         for (int dim = 0; dim < 3; dim++) {
@@ -1485,12 +1487,12 @@ void Verlet::setup_stencil_md() {
     }
 
     int total_atoms_evaled = 0;
-    MPI_Allreduce(&total_atoms_evaled, &total_evaled, 1, MPI_INT, MPI_SUM, world);
-    if (total_atoms_evaled != atom->natoms) {
-        std::cout << "atoms evaled: " << total_atoms_evaled << " total number of atoms: " << atom->natoms << std::endl;
-    }
+    MPI_Allreduce(&total_evaled, &total_atoms_evaled, 1, MPI_INT, MPI_SUM, world);
+
+    std::cout << "atoms evaled: " << total_atoms_evaled << " total number of atoms: " << atom->natoms << std::endl;
 
     MPI_Barrier(world);
+    assert(false);
 
     delete[] send_f;
     delete[] recv_f;
