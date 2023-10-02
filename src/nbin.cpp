@@ -122,8 +122,7 @@ void NBin::copy_neighbor_info()
   if (cutoff_custom > 0.0) cutneighmax = cutoff_custom;
 }
 
-void NBin::copy_neighbor_info_stencil_md(Neighbor* neighbor_)
-{
+void NBin::copy_neighbor_info_stencil_md(Neighbor* neighbor_) {
     includegroup = neighbor_->includegroup;
     cutneighmin = neighbor_->cutneighmin;
     cutneighmax = neighbor_->cutneighmax;

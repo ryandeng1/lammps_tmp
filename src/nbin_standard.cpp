@@ -224,15 +224,21 @@ void NBinStandard::setup_bins_stencil_md(int style, Atom* atom_, Domain* domain_
     //   domain->bbox() converts lamda extent to box coords and computes bbox
 
     double bbox[3],bsubboxlo[3],bsubboxhi[3];
-    double *cutghost = comm->cutghost;
+    // double *cutghost = comm->cutghost;
+    double cutghost[3] = {ALLEGRO_SLOPE, ALLEGRO_SLOPE, ALLEGRO_SLOPE};
+    // std::cout << "cutghost: " << cutghost[0] << " " << cutghost[1] << " " << cutghost[2] << std::endl;
 
     if (triclinic == 0) {
-        bsubboxlo[0] = domain_->sublo[0] - cutghost[0];
-        bsubboxlo[1] = domain_->sublo[1] - cutghost[1];
-        bsubboxlo[2] = domain_->sublo[2] - cutghost[2];
-        bsubboxhi[0] = domain_->subhi[0] + cutghost[0];
-        bsubboxhi[1] = domain_->subhi[1] + cutghost[1];
-        bsubboxhi[2] = domain_->subhi[2] + cutghost[2];
+        bsubboxlo[0] = domain_->sublo[0] - 2 * cutghost[0];
+        bsubboxlo[1] = domain_->sublo[1] - 2 * cutghost[1];
+        bsubboxlo[2] = domain_->sublo[2] - 2 * cutghost[2];
+        bsubboxhi[0] = domain_->subhi[0] + 2 * cutghost[0];
+        bsubboxhi[1] = domain_->subhi[1] + 2 * cutghost[1];
+        bsubboxhi[2] = domain_->subhi[2] + 2 * cutghost[2];
+//        for (int dim = 0; dim < 3; dim++) {
+//            std::cout << "domain sublo: " << domain_->sublo[dim] << " subhi: " << domain_->subhi[dim] << std::endl;
+//            std::cout << "setup bins lo: " << bsubboxlo[dim] << " hi: " << bsubboxhi[dim] << std::endl;
+//        }
     } else {
         double lo[3],hi[3];
         lo[0] = domain_->sublo_lamda[0] - cutghost[0];
@@ -392,6 +398,86 @@ void NBinStandard::bin_atoms()
       binhead[ibin] = i;
     }
   }
+}
+
+void NBinStandard::bin_atoms_stencil_md(Atom* atom_) {
+    int i,ibin;
+
+    last_bin = update->ntimestep;
+    for (i = 0; i < mbins; i++) binhead[i] = -1;
+
+    // bin in reverse order so linked list will be in forward order
+    // also puts ghost atoms at end of list, which is necessary
+
+    double **x = atom_->x;
+    int *mask = atom_->mask;
+    int nlocal = atom_->nlocal;
+    int nall = nlocal + atom_->nghost;
+
+    if (includegroup) {
+        int bitmask = group->bitmask[includegroup];
+        for (i = nall-1; i >= nlocal; i--) {
+            if (mask[i] & bitmask) {
+                ibin = coord2bin(x[i]);
+                atom2bin[i] = ibin;
+                bins[i] = binhead[ibin];
+                binhead[ibin] = i;
+            }
+        }
+        for (i = atom_->nfirst-1; i >= 0; i--) {
+            ibin = coord2bin(x[i]);
+            atom2bin[i] = ibin;
+            bins[i] = binhead[ibin];
+            binhead[ibin] = i;
+        }
+
+    } else {
+        for (i = nall-1; i >= 0; i--) {
+            ibin = coord2bin(x[i]);
+            if (ibin < 0) {
+                std::cout << "ibin: " << ibin << " coord: " << x[i][0] << " " << x[i][1] << " " << x[i][2] << std::endl;
+                std::cout << "nlocal: " << atom_->nlocal << " " << " nghost: " << atom_->nghost << std::endl;
+                std::cout << "box lo: " << bboxlo[0] << " " << bboxlo[1] << " " << bboxlo[2] << std::endl;
+                std::cout << "box hi: " << bboxhi[0] << " " << bboxhi[1] << " " << bboxhi[2] << std::endl;
+
+                int ix,iy,iz;
+
+                if (x[i][0] >= bboxhi[0])
+                    ix = static_cast<int> ((x[i][0]-bboxhi[0])*bininvx) + nbinx;
+                else if (x[i][0] >= bboxlo[0]) {
+                    ix = static_cast<int> ((x[i][0]-bboxlo[0])*bininvx);
+                    ix = MIN(ix,nbinx-1);
+                } else
+                    ix = static_cast<int> ((x[i][0]-bboxlo[0])*bininvx) - 1;
+
+                if (x[i][1] >= bboxhi[1])
+                    iy = static_cast<int> ((x[i][1]-bboxhi[1])*bininvy) + nbiny;
+                else if (x[i][1] >= bboxlo[1]) {
+                    iy = static_cast<int> ((x[i][1]-bboxlo[1])*bininvy);
+                    iy = MIN(iy,nbiny-1);
+                } else
+                    iy = static_cast<int> ((x[i][1]-bboxlo[1])*bininvy) - 1;
+
+                if (x[i][2] >= bboxhi[2])
+                    iz = static_cast<int> ((x[i][2]-bboxhi[2])*bininvz) + nbinz;
+                else if (x[i][2] >= bboxlo[2]) {
+                    iz = static_cast<int> ((x[i][2]-bboxlo[2])*bininvz);
+                    iz = MIN(iz,nbinz-1);
+                } else
+                    iz = static_cast<int> ((x[i][2]-bboxlo[2])*bininvz) - 1;
+
+                std::cout << "ix: " << ix << " iy: " << iy << " iz: " << iz << std::endl;
+                std::cout << "first term: " << (iz-mbinzlo)*mbiny*mbinx << " mbinzlo: " << mbinzlo << std::endl;
+                std::cout << "second term: " << (iy-mbinylo)*mbinx << " mbinylo: " << mbinylo << std::endl;
+                std::cout << "third term: " << (ix-mbinxlo) << " mbinzlo: " << mbinxlo << std::endl;
+                std::cout << "bininvx: " << bininvx << " " << bininvy << " " << bininvz << std::endl;
+                int ibin2 =  (iz-mbinzlo)*mbiny*mbinx + (iy-mbinylo)*mbinx + (ix-mbinxlo);
+            }
+            atom2bin[i] = ibin;
+            bins[i] = binhead[ibin];
+            binhead[ibin] = i;
+        }
+    }
 }
 
 /* ---------------------------------------------------------------------- */

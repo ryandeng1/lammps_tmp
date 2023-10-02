@@ -401,7 +401,6 @@ void NeighborKokkos::build_kokkos_stencil_md(int topoflag, Atom* atom_, Domain* 
             }
             neigh_bin[i]->bin_atoms_setup(nall);
             neigh_bin[i]->bin_atoms_stencil_md(atom_);
-            // neigh_bin[i]->bin_atoms();
         }
     }
 

@@ -349,12 +349,13 @@ void FixNHKokkos<DeviceType>::initial_integrate_stencil_md(int /*vflag*/, Atom* 
     tag = atom_->tag;
     next_tag = next->tag;
 
-
     for (int i = 0; i < atom_->nlocal; i++) {
         if (atom_idx_mapping[i] != -1) {
             for (int j = 0; j < 3; j++) {
                 next_v(atom_idx_mapping[i], j) = v(i, j);
             }
+        } else {
+            std::cout << "ATOM IDX MAPPING -1 for idx: " << i << " out of: " << atom_->nlocal << std::endl;
         }
     }
 
@@ -796,18 +797,6 @@ void FixNHKokkos<DeviceType>::nve_v()
   int nlocal = atomKK->nlocal;
   if (igroup == atomKK->firstgroup) nlocal = atomKK->nfirst;
 
-    bool found_atom = false;
-    int idx = -1;
-    for (int i = 0; i < atom->nlocal; i++) {
-        if (atom->tag[i] == 10675) {
-            found_atom = true;
-            idx = i;
-            std::cout << "regular md nve v force: " << f(idx, 0) << " " << f(idx, 1) << " " << f(idx, 2) << std::endl;
-            std::cout << "regular md before nve v found atom. Prev vel: " << v(idx, 0) << " " << v(idx, 1) << " " << v(idx, 2) << " factor eta: " << factor_eta << std::endl;
-        }
-    }
-
-
   copymode = 1;
   if (rmass.data())
     Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_v<1> >(0,nlocal),*this);
@@ -816,10 +805,6 @@ void FixNHKokkos<DeviceType>::nve_v()
   copymode = 0;
 
   atomKK->modified(execution_space,V_MASK);
-
-    if (found_atom) {
-        std::cout << "regular md after nve v found atom. New vel: " << v(idx, 0) << " " << v(idx, 1) << " " << v(idx, 2) << std::endl;
-    }
 
 }
 
@@ -920,6 +905,7 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v_stencil_md<RMASS>, const
 template<class DeviceType>
 void FixNHKokkos<DeviceType>::nve_x()
 {
+  std::cout << "nve x" << std::endl;
   atomKK->sync(execution_space,X_MASK | V_MASK | MASK_MASK);
   atomKK->modified(execution_space,X_MASK);
 
@@ -976,9 +962,6 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x, const int &i) const {
     x(i,0) += dtv * v(i,0);
     x(i,1) += dtv * v(i,1);
     x(i,2) += dtv * v(i,2);
-    if (tag[i] == 10675) {
-        std::cout << "REGULAR MD UPDATING ATOM. dtv: " << dtv << " vel: " << v(i, 0) << " prev: " << prev << " now: " << x(i, 0) << std::endl;
-    }
   }
 }
 
@@ -991,12 +974,9 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x_stencil_md, const int &i
             next_x(next_idx, 0) = x(i, 0) + dtv * next_v(next_idx, 0);
             next_x(next_idx, 1) = x(i, 1) + dtv * next_v(next_idx, 1);
             next_x(next_idx, 2) = x(i, 2) + dtv * next_v(next_idx, 2);
+        } else {
+
         }
-        /*
-        next_x(i, 0) = x(i, 0) + dtv * v(i, 0);
-        next_x(i, 1) = x(i, 1) + dtv * v(i, 1);
-        next_x(i, 2) = x(i, 2) + dtv * v(i, 2);
-        */
     }
 }
 

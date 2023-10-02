@@ -77,8 +77,19 @@ class LAMMPS {
   std::deque<queue_info> queues[2 * (3 + 1)];
 
   // get zoids which are neighbors of this zoid
-  std::vector<int>* send_to;
-  std::vector<int>* recv_from;
+  // std::vector<int>* send_to;
+  // std::vector<int>* recv_from;
+
+  // TODO: use this, replace send_to_next_dt and recv_from_next_dt with this as well
+  std::vector<int>* send_to_neighbors;
+  std::vector<int>* recv_from_neighbors;
+
+  std::vector<int>* send_to_shared_ghost;
+  std::vector<int>* recv_from_shared_ghost;
+  std::vector<int>* send_shared_ghost_list[NUM_TIMESTEPS_IN_PARALLEL];
+  std::vector<int>* recv_shared_ghost_list[NUM_TIMESTEPS_IN_PARALLEL];
+
+
   // for each zoid, each timestep
   // technically, don't need ghost???, only need local?
   // std::map<int, std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1]
@@ -89,6 +100,8 @@ class LAMMPS {
   std::vector<int>* recv_from_next_dt;
   int* zoid_num_to_idx;
   queue_info* zoid_num_to_zoid;
+
+  std::map<int, int> shared_ghost_tag_to_zoid_responsible[NUM_TIMESTEPS_IN_PARALLEL];
 
   torch::jit::Module lmp_model;
   std::unordered_map<std::string, std::string> lmp_model_metadata = {

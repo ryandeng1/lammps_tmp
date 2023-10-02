@@ -33,7 +33,7 @@ class NPair : protected Pointers {
   virtual void copy_neighbor_info();
   void build_setup();
   virtual void build(class NeighList *) = 0;
-  virtual void build_stencil_md(class NeighList*, Atom*) {}
+  virtual void build_stencil_md(class NeighList*, Atom*) {assert(false);}
 
   virtual void copy_neighbor_info_stencil_md(Neighbor*);
 

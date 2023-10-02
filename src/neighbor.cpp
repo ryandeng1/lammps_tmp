@@ -700,10 +700,24 @@ void Neighbor::init_stencil_md(Domain* domain_) {
 
     // bbox lo/hi ptrs = bounding box of entire domain, stored by Domain
 
-    // TODO: might need to modify this?
+    // TODO: might need to modify this? delete the pointers?
     if (triclinic == 0) {
-        bboxlo = domain_->boxlo;
-        bboxhi = domain_->boxhi;
+        bboxlo = new double[3];
+        bboxhi = new double[3];
+
+        for (int dim = 0; dim < 3; dim++) {
+            bboxlo[dim] = domain->boxlo[dim] - ALLEGRO_SLOPE;
+            bboxhi[dim] = domain->boxhi[dim] + ALLEGRO_SLOPE;
+        }
+        // bboxlo = domain->boxlo;
+        // bboxhi = domain->boxhi;
+
+        /*
+        for (int dim = 0; dim < 3; dim++) {
+            bboxlo[dim] -= ALLEGRO_SLOPE;
+            bboxhi[dim] += ALLEGRO_SLOPE;
+        }
+        */
     } else {
         assert(false);
         bboxlo = domain->boxlo_bound;
@@ -1046,7 +1060,7 @@ void Neighbor::init_stencil_md(Domain* domain_) {
         neigh_bin[i]->copy_neighbor_info_stencil_md(this);
     }
     for (i = 0; i < nstencil; i++) {
-        neigh_stencil[i]->copy_neighbor_info();
+        neigh_stencil[i]->copy_neighbor_info_stencil_md(this);
     }
     for (i = 0; i < nlist; i++)
         if (neigh_pair[i]) {
@@ -1259,9 +1273,8 @@ int Neighbor::init_pair()
   // pass list ptr back to requestor (except for Command class)
   // only for original requests, not ones added by Neighbor class
 
-  // std::cout << "neighbor list nrequest: " << nrequest << std::endl;
   for (i = 0; i < nrequest; i++) {
-    if (requests[i]->kokkos_host || requests[i]->kokkos_device) {
+    if ((requests[i]->kokkos_host || requests[i]->kokkos_device)) {
         // std::cout << "KOKKOS??? " << std::endl;
         create_kokkos_list(i);
     } else {

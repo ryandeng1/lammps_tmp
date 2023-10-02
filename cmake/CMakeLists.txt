@@ -274,6 +274,7 @@ set(STANDARD_PACKAGES
   ML-QUIP
   ML-RANN
   ML-SNAP
+  ML-POD
   MOFFF
   MOLECULE
   MOLFILE
@@ -439,7 +440,7 @@ if(BUILD_OMP)
   target_link_libraries(lmp PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
-if(PKG_MSCG OR PKG_ATC OR PKG_AWPMD OR PKG_ML-QUIP OR PKG_LATTE OR PKG_ELECTRODE)
+if(PKG_MSCG OR PKG_ATC OR PKG_AWPMD OR PKG_ML-QUIP OR PKG_ML-POD OR PKG_LATTE OR PKG_ELECTRODE)
   enable_language(C)
   find_package(LAPACK)
   find_package(BLAS)
@@ -643,7 +644,7 @@ foreach(PKG_LIB POEMS ATC AWPMD H5MD MESONT)
   endif()
 endforeach()
 
-if(PKG_ELECTRODE)
+if(PKG_ELECTRODE OR PKG_ML-POD)
   target_link_libraries(lammps PRIVATE ${LAPACK_LIBRARIES})
 endif()
 

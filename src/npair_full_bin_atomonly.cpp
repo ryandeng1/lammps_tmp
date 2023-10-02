@@ -90,3 +90,64 @@ void NPairFullBinAtomonly::build(NeighList *list)
   list->inum = inum;
   list->gnum = 0;
 }
+
+void NPairFullBinAtomonly::build_stencil_md(NeighList *list, Atom* atom_) {
+    int i, j, k, n, itype, jtype, ibin;
+    double xtmp, ytmp, ztmp, delx, dely, delz, rsq;
+    int *neighptr;
+
+    double **x = atom_->x;
+    int *type = atom_->type;
+    int *mask = atom_->mask;
+    tagint *molecule = atom_->molecule;
+    int nlocal = atom_->nlocal;
+    if (includegroup) nlocal = atom_->nfirst;
+
+    int *ilist = list->ilist;
+    int *numneigh = list->numneigh;
+    int **firstneigh = list->firstneigh;
+    MyPage<int> *ipage = list->ipage;
+
+    int inum = 0;
+    ipage->reset();
+
+    for (i = 0; i < nlocal; i++) {
+        n = 0;
+        neighptr = ipage->vget();
+
+        itype = type[i];
+        xtmp = x[i][0];
+        ytmp = x[i][1];
+        ztmp = x[i][2];
+
+        // loop over all atoms in surrounding bins in stencil including self
+        // skip i = j
+
+        ibin = atom2bin[i];
+
+        for (k = 0; k < nstencil; k++) {
+            for (j = binhead[ibin + stencil[k]]; j >= 0; j = bins[j]) {
+                if (i == j) continue;
+
+                jtype = type[j];
+                if (exclude && exclusion(i, j, itype, jtype, mask, molecule)) continue;
+
+                delx = xtmp - x[j][0];
+                dely = ytmp - x[j][1];
+                delz = ztmp - x[j][2];
+                rsq = delx * delx + dely * dely + delz * delz;
+
+                if (rsq <= cutneighsq[itype][jtype]) neighptr[n++] = j;
+            }
+        }
+
+        ilist[inum++] = i;
+        firstneigh[i] = neighptr;
+        numneigh[i] = n;
+        ipage->vgot(n);
+        if (ipage->status()) error->one(FLERR, "Neighbor list overflow, boost neigh_modify one");
+    }
+
+    list->inum = inum;
+    list->gnum = 0;
+}

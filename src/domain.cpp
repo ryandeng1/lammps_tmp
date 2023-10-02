@@ -555,7 +555,7 @@ void Domain::pbc()
   if (flag) error->one(FLERR,"Non-numeric atom coords - simulation unstable");
 
   // setup for PBC checks
-  std::cout << boxlo[0] << " " << boxlo[1] << " " << boxlo[2] << " " << boxhi[0] << " " << boxhi[1] << " " << boxhi[2] << std::endl;
+  // std::cout << boxlo[0] << " " << boxlo[1] << " " << boxlo[2] << " " << boxhi[0] << " " << boxhi[1] << " " << boxhi[2] << std::endl;
 
   if (triclinic == 0) {
     lo = boxlo;

@@ -193,7 +193,6 @@ void PairAllegro<precision>::coeff(int narg, char **arg) {
   }
 
   // std::cout << "Allegro: Loading model from " << arg[2] << "\n";
-
   model = lmp->lmp_model;
 
   /*

@@ -237,8 +237,12 @@ void NPair::copy_stencil_info()
 
 void NPair::build_setup()
 {
-  if (nb) copy_bin_info();
-  if (ns) copy_stencil_info();
+  if (nb) {
+      copy_bin_info();
+  }
+  if (ns) {
+      copy_stencil_info();
+  }
 
   // set here, since build_setup() always called before build()
   last_build = update->ntimestep;

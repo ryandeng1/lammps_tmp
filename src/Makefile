@@ -100,6 +100,7 @@ PACKAGE = \
 	ml-pace \
 	ml-quip \
 	ml-rann \
+	ml-pod \
 	ml-snap \
 	mofff \
 	molecule \
@@ -177,6 +178,7 @@ PACKMOST = \
 	mc \
 	meam \
 	misc \
+	ml-pod \
 	ml-snap \
 	mofff \
 	molecule \

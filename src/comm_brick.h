@@ -44,8 +44,16 @@ class CommBrick : public Comm {
   void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
 
+  int* send_exclude_eval_tags(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void receive_exclude_eval_tags(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
   void construct_second_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_second_send_list_stencil_md_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
+  void construct_shared_ghost_send_list_stencil_md(Atom*, queue_info& zoid, std::vector<int>&) override;
+
+  void send_shared_ghost_stencil_md(Atom* atom_, queue_info& zoid, std::set<int>& indices, std::vector<int>& neighbors, bool) override;
+  void receive_shared_ghost_stencil_md(Atom* atom_, queue_info& zoid, std::vector<int>& neighbors) override;
 
   void forward_comm(class Pair *) override;                 // forward comm from a Pair
   void reverse_comm(class Pair *) override;                 // reverse comm from a Pair
@@ -122,6 +130,10 @@ class CommBrick : public Comm {
   void grow_second_list_stencil_md(int, int, int);
   void grow_send_stencil_md(int, int, int);
   void grow_recv_stencil_md(int, int);
+
+  void grow_send2_stencil_md(int, int, int);
+  void grow_recv2_stencil_md(int, int);
+
   int ** sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int ** second_sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int * max_second_sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -134,6 +146,16 @@ class CommBrick : public Comm {
   int ** buf_recv_sendlist_stencil_md;
   int * maxsend_sendlist_stencil_md;
   int * maxrecv_sendlist_stencil_md;
+
+  double** buf_send2_stencil_md;
+  double** buf_recv2_stencil_md;
+  int* maxsend2_stencil_md;
+  int* maxrecv2_stencil_md;
+
+  // TODO: change this to int*, just use std::vector<int> rn to avoid the headache
+  std::vector<int> sendlist_shared_ghost_stencil_md[NUM_TIMESTEPS_IN_PARALLEL];
+  // int ** sendlist_shared_ghost_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  // int* sendnum_shared_ghost_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
 };
 
 }    // namespace LAMMPS_NS

@@ -36,6 +36,7 @@ class NBinStandard : public NBin {
   double memory_usage() override;
 
   void setup_bins_stencil_md(int, Atom*, Domain*, Comm*) override;
+  void bin_atoms_stencil_md(Atom*) override;
 };
 
 }    // namespace LAMMPS_NS

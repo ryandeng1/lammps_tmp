@@ -73,6 +73,7 @@ AtomVec::AtomVec(LAMMPS *lmp) : Pointers(lmp)
   x = v = f = nullptr;
 
   // stencil_md
+  eval_mask_stencil_md = nullptr;
 
 
   threads = nullptr;
@@ -285,6 +286,8 @@ void AtomVec::grow_stencil_md(int n, Atom* atom_)
     x = memory->grow(atom_->x, nmax, 3, "atom:x");
     v = memory->grow(atom_->v, nmax, 3, "atom:v");
     f = memory->grow(atom_->f, nmax * comm->nthreads, 3, "atom:f");
+
+    eval_mask_stencil_md = memory->grow(atom_->eval_mask_stencil_md, nmax, "atom:eval_mask_stencil_md");
 
     std::cout << "ngrow???? " << ngrow << std::endl;
     for (int i = 0; i < ngrow; i++) {
@@ -1501,6 +1504,44 @@ int AtomVec::unpack_exchange_stencil_md(double *buf, Atom* atom_, Domain* domain
 
     atom_->nlocal++;
     return m;
+}
+
+int AtomVec::pack_shared_ghost_stencil_md(Atom* atom_, std::set<int>& indices, double* buf, bool debug) {
+    int buf_idx = 0;
+    for (int i : indices) {
+        buf[buf_idx++] = ubuf(atom_->tag[i]).d;
+        buf[buf_idx++] = atom_->f[i][0];
+        buf[buf_idx++] = atom_->f[i][1];
+        buf[buf_idx++] = atom_->f[i][2];
+        if (debug) {
+            // std::cout << "ZOID SENDING: " << atom_->tag[i] << " other val? " << ubuf(atom_->tag[i]).d << " idx: " << i << std::endl;
+        }
+    }
+
+    return buf_idx;
+}
+
+void AtomVec::unpack_shared_ghost_stencil_md(Atom* atom_, int nrecv, double* buf) {
+    int m = 0;
+    for (int i = 0; i < nrecv; i++) {
+        bool found = false;
+        double val = buf[m];
+        tagint tag = (tagint) ubuf(buf[m++]).i;
+        for (int idx = 0; idx < atom_->nlocal + atom_->nghost; idx++) {
+            if (atom_->tag[idx] == tag) {
+                assert(!found);
+                atom_->f[idx][0] += buf[m++];
+                atom_->f[idx][1] += buf[m++];
+                atom_->f[idx][2] += buf[m++];
+                found = true;
+                // atom_->eval_mask_stencil_md[idx] = 0;
+            }
+        }
+        if (!found) {
+            std::cout << "RECEIVED TAG: " << tag  << " idx: " << i << " out of: " << nrecv << std::endl;
+        }
+        assert(found);
+    }
 }
 
 void AtomVec::add_local_atom_stencil_md(Atom* atom_, Domain* domain_, double* coord, double* vel, tagint tag_, int type_, int mask_, imageint image_) {

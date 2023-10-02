@@ -33,6 +33,8 @@
 #include "update.h"
 #include "variable.h"
 
+#include "stencil_md.h"
+
 #include "library.h"
 
 #include <algorithm>
@@ -112,22 +114,7 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   image = nullptr;
   x = v = f = nullptr;
 
-  // stencil_md
-  /*
-  tag_local = nullptr;
-  type_local = nullptr;
-  image_local = nullptr;
-  mask_local = nullptr;
-  x_local = nullptr;
-  v_local = nullptr;
-  f_local = nullptr;
-  x_ghost = nullptr;
-  v_ghost = nullptr;
-  f_ghost = nullptr;
-  image_ghost = nullptr;
-  type_ghost = nullptr;
-  mask_ghost = nullptr;
-  */
+  eval_mask_stencil_md = nullptr;
 
   // charged and dipolar particles
 
@@ -314,23 +301,7 @@ Atom::~Atom()
   memory->destroy(v);
   memory->destroy(f);
 
-  // stencil_md
-  /*
-  memory->destroy(tag_local);
-  memory->destroy(tag_ghost);
-  memory->destroy(type_local);
-  memory->destroy(type_ghost);
-  memory->destroy(mask_local);
-  memory->destroy(image_local);
-  memory->destroy(x_local);
-  memory->destroy(v_local);
-  memory->destroy(f_local);
-  memory->destroy(mask_ghost);
-  memory->destroy(image_ghost);
-  memory->destroy(x_ghost);
-  memory->destroy(v_ghost);
-  memory->destroy(f_ghost);
-  */
+  memory->destroy(eval_mask_stencil_md);
 
   // delete custom atom arrays
 
@@ -830,7 +801,7 @@ void Atom::setup_stencil_md(Domain* domain_)
     // setup bins for sorting
     // cannot do this in init() because uses neighbor cutoff
 
-    if (sortfreq > 0) {
+    if (sortfreq > 0 || true) {
         setup_sort_bins_stencil_md(domain_);
     } else {
         assert(false);
@@ -2209,8 +2180,8 @@ void Atom::sort()
   //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
 }
 
-void Atom::sort_stencil_md()
-{
+void Atom::sort_stencil_md() {
+    assert(false);
     int i,m,n,ix,iy,iz,ibin,empty;
 
     // set next timestep for sorting to take place
@@ -2221,7 +2192,7 @@ void Atom::sort_stencil_md()
 
     if (domain->box_change) {
         assert(false);
-        setup_sort_bins();
+        // setup_sort_bins_stencil_md();
     }
 
     if (nbins == 1) return;
@@ -2250,6 +2221,23 @@ void Atom::sort_stencil_md()
         ix = static_cast<int> ((x[i][0]-bboxlo[0])*bininvx);
         iy = static_cast<int> ((x[i][1]-bboxlo[1])*bininvy);
         iz = static_cast<int> ((x[i][2]-bboxlo[2])*bininvz);
+
+        double new_pos[3] = {x[i][0], x[i][1], x[i][2]};
+        for (int dim = 0; dim < 3; dim++) {
+            if (new_pos[dim] < 0) {
+                new_pos[dim] += domain->prd[dim];
+            }
+            if (new_pos[dim] > domain->prd[dim]) {
+                new_pos[dim] -= domain->prd[dim];
+            }
+        }
+        for (int dim = 0; dim < 3; dim++) {
+            assert(new_pos[dim] >= 0 && new_pos[dim] < domain->prd[dim]);
+        }
+        ix = static_cast<int> ((new_pos[0]-bboxlo[0])*bininvx);
+        iy = static_cast<int> ((new_pos[1]-bboxlo[1])*bininvy);
+        iz = static_cast<int> ((new_pos[2]-bboxlo[2])*bininvz);
+
         ix = MAX(ix,0);
         iy = MAX(iy,0);
         iz = MAX(iz,0);
@@ -2267,7 +2255,18 @@ void Atom::sort_stencil_md()
     n = 0;
     for (m = 0; m < nbins; m++) {
         i = binhead[m];
+        bool found = false;
         while (i >= 0) {
+            if (tag[i] == 17413) {
+                found = true;
+            }
+            i = next[i];
+        }
+
+        while (i >= 0) {
+            if (found) {
+                std::cout << "IN BIN IDX: " << i << " TAGS: " << tag[i] << std::endl;
+            }
             permute[n++] = i;
             i = next[i];
         }
@@ -2300,9 +2299,14 @@ void Atom::sort_stencil_md()
 
     // sanity check that current = permute
 
-    //int flag = 0;
-    //for (i = 0; i < nlocal; i++)
-    //  if (current[i] != permute[i]) flag = 1;
+    int flag = 0;
+    for (i = 0; i < nlocal; i++)
+        if (current[i] != permute[i]) flag = 1;
+
+    if (flag) {
+        std::cout << "Sort did not work" << std::endl;
+        assert(false);
+    }
     //int flagall;
     //MPI_Allreduce(&flag,&flagall,1,MPI_INT,MPI_SUM,world);
     //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
@@ -2466,14 +2470,24 @@ void Atom::setup_sort_bins_stencil_md(Domain* domain_) {
     // bbox lo/hi = bounding box of my sub-domain
 
     if (domain->triclinic) {
+        assert(false);
         domain->bbox(domain->sublo_lamda, domain->subhi_lamda, bboxlo, bboxhi);
     } else {
+        /*
         bboxlo[0] = domain_->sublo[0];
         bboxlo[1] = domain_->sublo[1];
         bboxlo[2] = domain_->sublo[2];
         bboxhi[0] = domain_->subhi[0];
         bboxhi[1] = domain_->subhi[1];
         bboxhi[2] = domain_->subhi[2];
+        */
+        // Ensure the same sort of `sorting` across all zoids
+        bboxlo[0] = domain->boxlo[0];
+        bboxlo[1] = domain->boxlo[1];
+        bboxlo[2] = domain->boxlo[2];
+        bboxhi[0] = domain->boxhi[0];
+        bboxhi[1] = domain->boxhi[1];
+        bboxhi[2] = domain->boxhi[2];
     }
 
     nbinx = static_cast<int> ((bboxhi[0]-bboxlo[0]) * bininv);

@@ -122,6 +122,10 @@ void VerletKokkos::setup(int flag)
   force_clear();
   modify->setup_pre_force(vflag);
 
+    std::cout << "Domain check. " << " num atoms: " << atom->natoms << std::endl;
+    for (int dim = 0; dim < 3; dim++) {
+        std::cout << "Domain sublo: " << domain->sublo[dim] << " subhi: " << domain->subhi[dim] << std::endl;
+    }
   if (pair_compute_flag) {
     atomKK->sync(force->pair->execution_space,force->pair->datamask_read);
     std::cout << "REGULAR MD START force compute Me: " << comm->me << std::endl;
@@ -130,6 +134,9 @@ void VerletKokkos::setup(int flag)
     atomKK->modified(force->pair->execution_space,force->pair->datamask_modify);
   }
   else if (force->pair) force->pair->compute_dummy(eflag,vflag);
+
+  // sum up forces
+
 
   if (atom->molecular != Atom::ATOMIC) {
     if (force->bond) {
@@ -164,7 +171,42 @@ void VerletKokkos::setup(int flag)
   }
 
   modify->setup_pre_reverse(eflag,vflag);
-  if (force->newton) comm->reverse_comm();
+  if (force->newton) {
+      for (int k = 0; k < atom->nlocal; k++) {
+          if (atom->tag[k] == 95960) {
+              std::cout << "BEFORE FORCE: " << atom->f[k][0] << " " << atom->f[k][1] << " " << atom->f[k][2] << std::endl;
+          }
+      }
+      comm->reverse_comm();
+      for (int k = 0; k < atom->nlocal; k++) {
+          if (atom->tag[k] == 95960) {
+              std::cout << "AFTER FORCE: " << atom->f[k][0] << " " << atom->f[k][1] << " " << atom->f[k][2] << std::endl;
+          }
+      }
+  }
+
+  double neigh_cutoff = force->pair->cutforce  + neighbor->skin;
+  std::cout << "neigh cutoff: " << neigh_cutoff << std::endl;
+
+  double x_ = 0.0;
+  double y_ = 0.0;
+  double z_ = 0.0;
+  for (int i = 0; i < atom->nlocal; i++) {
+    x_ += atom->f[i][0];
+    y_ += atom->f[i][1];
+    z_ += atom->f[i][2];
+  }
+
+  double total_x = 0;
+  double total_y = 0;
+  double total_z = 0;
+  MPI_Reduce(&x_, &total_x, 1, MPI_DOUBLE, MPI_SUM, 0, world);
+  MPI_Reduce(&y_, &total_y, 1, MPI_DOUBLE, MPI_SUM, 0, world);
+  MPI_Reduce(&z_, &total_z, 1, MPI_DOUBLE, MPI_SUM, 0, world);
+
+  if (comm->me == 0) {
+      std::cout << "Sum x: " << total_x << " Sum y: " << total_y << " Sum z: " << total_z << std::endl;
+  }
 
   lmp->kokkos->auto_sync = 0;
   modify->setup(vflag);
@@ -174,11 +216,6 @@ void VerletKokkos::setup(int flag)
 
   std::cout << "ME: " << comm->me << " START SETUP STENCIL MD" << std::endl;
   setup_stencil_md();
-  for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
-    if (comm->me == 0) {
-        std::cout << "Atom tag: " << lmp->atom_stencil_md[0][i]->tag[0] << std::endl;
-    }
-  }
   std::cout << "ME: " << comm->me << " DONE SETUP STENCIL MD" << std::endl;
 }
 
@@ -310,8 +347,22 @@ void VerletKokkos::run(int n) {
         }
     }
 
+    int test_atom_tag = 48139;
+
+    bool test_correctness = true;
+
+    double* test_f[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
+        test_f[i] = new double[3 * (atom->natoms + 1)];
+        memset(test_f[i], 0, sizeof(test_f[i]));
+    }
+
+    double* send_x = new double[3 * (atom->natoms + 1)];
+    memset(send_x, 0, sizeof(send_x));
+
     timer->init_timeout();
-    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL; i++) {
+    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
         if (timer->check_timeout(i)) {
             update->nsteps = i;
             break;
@@ -324,12 +375,34 @@ void VerletKokkos::run(int n) {
 
         timer->stamp();
         std::cout << "REGULAR MD INITIAL INTEGRATE" << std::endl;
+        if (test_correctness) {
+            memset(send_x, 0, sizeof(send_x));
+
+            for (int j = 0; j < atom->nlocal; j++) {
+                int tag = atom->tag[j];
+                assert(tag >= 0 && tag <= atom->natoms);
+                send_x[tag * 3 + 0] = atom->f[j][0];
+                send_x[tag * 3 + 1] = atom->f[j][1];
+                send_x[tag * 3 + 2] = atom->f[j][2];
+            }
+
+            MPI_Allreduce(
+                    send_x,
+                    test_f[i],
+                    (atom->natoms + 1) * 3,
+                    MPI_DOUBLE,
+                    MPI_SUM,
+                    world);
+
+        }
         modify->initial_integrate(vflag);
         if (n_post_integrate) modify->post_integrate();
         timer->stamp(Timer::MODIFY);
 
-        // regular communication vs neighbor list rebuild
+        // after initial integrate. gather in positions to test correctness
 
+
+        // regular communication vs neighbor list rebuild
         nflag = neighbor->decide();
 
         if (nflag == 0 || true) {
@@ -543,6 +616,8 @@ void VerletKokkos::run(int n) {
         }
     }
 
+    delete[] send_x;
+
     atomKK->sync(Host, ALL_MASK);
     lmp->kokkos->auto_sync = 1;
 
@@ -558,78 +633,41 @@ void VerletKokkos::run(int n) {
         }
     }
 
-
-    for (int dep = 0; dep < 1; dep++) {
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
-            int zoid_idx = lmp->zoid_num_to_idx[lmp->queues[dep][j].num];
-            int zoid_num = lmp->queues[dep][j].num;
-            if (!(zoid_num % comm->nprocs == comm->me)) {
-                continue;
-            }
-            std::set<int> s[NUM_TIMESTEPS_IN_PARALLEL + 1];
-            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                Atom *atom_ = lmp->atom_stencil_md[zoid_idx][t];
-                for (int idx = 0; idx < atom_->nlocal; idx++) {
-                    s[t].insert(atom_->tag[idx]);
-                    if (atom_->tag[idx] == check_atom_tag) {
-                        std::cout << "stencil md found atom. Time idx: " << t << " curr tag: " << atom_->tag[idx]
-                                  << " idx? " << idx << std::endl;
-                        std::cout << "Zoid: " << zoid_num << " num local: " << atom_->nlocal << std::endl;
-                        std::cout << std::setprecision(std::numeric_limits<double>::digits10 + 1)
-                                  << "found atom stencil md. pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1]
-                                  << " " << atom_->x[idx][2] << std::endl;
-                    }
-                }
-            }
-
-            std::set<int> intersection = s[0];
-            for (int i = 1; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
-                std::set<int> tmp;
-                std::set_intersection(intersection.begin(), intersection.end(), s[i].begin(), s[i].end(),
-                                      std::inserter(tmp, tmp.begin()));
-                intersection = tmp;
-            }
-            // std::cout << "Zoid: " << zoid_idx << " has atoms: " << intersection << std::endl;
-        }
-    }
-
-
+    std::vector<int*> send_bufs;
 
     // start compute
-    for (int dep = 0; dep < 1; dep++) {
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
-            int zoid_idx = lmp->zoid_num_to_idx[lmp->queues[dep][j].num];
             int zoid_num = lmp->queues[dep][j].num;
-            if (!(zoid_num % comm->nprocs == comm->me)) {
+            if (zoid_num % comm->nprocs != comm->me) {
                 continue;
             }
+
             if (dep > 0) {
-                auto &atom_arr = lmp->atom_stencil_md[zoid_idx];
-                Comm *comm_ = lmp->comm_stencil_md[zoid_idx];
+                auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+                Comm *comm_ = lmp->comm_stencil_md[zoid_num];
                 comm_->receive_data_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
+                comm_->receive_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
             }
 
             int **atom_idx_mapping = lmp->queues[dep][j].atom_idx_mapping;
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
-                int time_idx = t % (NUM_TIMESTEPS_IN_PARALLEL + 1);
+                int time_idx = t % NUM_TIMESTEPS_IN_PARALLEL;
                 int next_time_idx = (t + 1) % (NUM_TIMESTEPS_IN_PARALLEL + 1);
-                assert(time_idx < next_time_idx);
-                Atom *atom_ = lmp->atom_stencil_md[zoid_idx][time_idx];
-                Atom *atom_next_timestep = lmp->atom_stencil_md[zoid_idx][next_time_idx];
+                queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
+                Atom *atom_ = lmp->atom_stencil_md[zoid_num][time_idx];
+                Atom *atom_next_timestep = lmp->atom_stencil_md[zoid_num][next_time_idx];
                 AtomKokkos *atomKK_ = (AtomKokkos *) atom_;
-                Neighbor *neighbor_ = lmp->neighbor_stencil_md[zoid_idx][time_idx];
-                Force *force_ = lmp->force_stencil_md[zoid_idx][time_idx];
-                Modify *modify_ = lmp->modify_stencil_md[zoid_idx];
+                Neighbor *neighbor_ = lmp->neighbor_stencil_md[zoid_num][time_idx];
+                Force *force_ = lmp->force_stencil_md[zoid_num][time_idx];
+                Modify *modify_ = lmp->modify_stencil_md[zoid_num];
 
-                if (comm->me == 0) {
-                    std::cout << "STENCIL MD INITIAL INTEGRATE for t: " << time_idx << " and next t: " << next_time_idx
-                              << std::endl;
-                }
-                // copy force from previous timestep
-                if (t > 0 && true) {
-                    int prev_time_idx = (t - 1) % (NUM_TIMESTEPS_IN_PARALLEL + 1);
-                    Atom *prev_atom = lmp->atom_stencil_md[zoid_idx][prev_time_idx];
-                    int *tag_to_idx = new int[atom->natoms];
+                // copy force from previous timestep since they store the force I need to evaluate my atoms for the next timestep
+                // TODO: get rid of this shit
+                if (t > 0) {
+                    int prev_time_idx = (t - 1);
+                    Atom *prev_atom = lmp->atom_stencil_md[zoid_num][prev_time_idx];
+                    int *tag_to_idx = new int[atom->natoms + 1];
                     for (int i = 0; i < atom->natoms; i++) {
                         tag_to_idx[i] = -1;
                     }
@@ -646,6 +684,22 @@ void VerletKokkos::run(int n) {
                     delete[] tag_to_idx;
                 }
 
+                for (int k = 0; k < atom_->nlocal; k++) {
+                    int tag = atom_->tag[k];
+                    double* f_ = atom_->f[k];
+                    for (int dim = 0; dim < 3; dim++) {
+                        if (fabs(f_[dim] - test_f[t][tag * 3 + dim]) > 3e-3) {
+                            std::cout << "idx: " << k << " out of: " << atom_->nlocal << std::endl;
+                            std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t << " tag: " << tag << " different. " << std::endl;
+                            std::cout << "What I have: " << f_[0] << " " << f_[1] << " " << f_[2] << std::endl;
+                            std::cout << "What does LAMMPS have? " << test_f[t][tag * 3 + 0] << " " << test_f[t][tag * 3 + 1] << " " << test_f[t][tag * 3 + 2] << std::endl;
+                            std::cout << "Diff: " << fabs(f_[dim] - test_f[t][tag * 3 + dim]) << std::endl;
+                            assert(false);
+                        }
+                    }
+                }
+
+                std::cout << "STENCIL MD INITIAL INTEGRATE FOR ZOID: " << zoid_num << " for t: " << t << std::endl;
                 modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t]);
                 force_clear_stencil_md(atom_, force_, neighbor_);
 
@@ -660,7 +714,7 @@ void VerletKokkos::run(int n) {
                 unsigned int datamask_exclude = 0;
                 int allow_overlap = lmp->kokkos->allow_overlap;
 
-                if (allow_overlap && atomKK->k_f.h_view.data() != atomKK->k_f.d_view.data()) {
+                if (allow_overlap && atomKK_->k_f.h_view.data() != atomKK_->k_f.d_view.data()) {
 
                     datamask_exclude = (F_MASK | ENERGY_MASK | VIRIAL_MASK);
 
@@ -706,12 +760,12 @@ void VerletKokkos::run(int n) {
                     atomKK_->sync_stencil_md(force->pair->execution_space, force->pair->datamask_read, atom_);
                     atomKK_->sync_stencil_md(force->pair->execution_space,
                                              ~(~force->pair->datamask_read | datamask_exclude), atom_);
-                    bool tmp[3] = {false, false, false};
-                    queue_info &zoid = lmp->zoid_num_to_zoid[zoid_num];
-                    for (int dim = 0; dim < 3; dim++) {
-                        tmp[dim] = (zoid.where[dim] == PBC);
-                    }
-                    force_->pair->compute_stencil_md(eflag, vflag, atom_, tmp);
+                    // force_->pair->compute_stencil_md(eflag, vflag, atom_, atom_next_timestep, lmp->queues[dep][j].atom_idx_mapping[t], lmp->zoid_num_to_zoid[zoid_num]);
+                    Atom* next_next_timestep = lmp->atom_stencil_md[zoid_num][(t + 2) % (NUM_TIMESTEPS_IN_PARALLEL + 1)];
+                    Force* next_force = lmp->force_stencil_md[zoid_num][t + 1];
+                    force_clear_stencil_md(atom_next_timestep, next_force, neighbor_);
+                    next_force->pair->compute_stencil_md(eflag, vflag, atom_next_timestep, next_next_timestep, lmp->queues[dep][j].atom_idx_mapping[t + 1], lmp->zoid_num_to_zoid[zoid_num]);
+                    // force_->pair->compute_stencil_md(eflag, vflag, atom_next_timestep, next_next_timestep, lmp->queues[dep][j].atom_idx_mapping[t], lmp->zoid_num_to_zoid[zoid_num]);
                     atomKK_->modified_stencil_md(force->pair->execution_space, force->pair->datamask_modify, atom_);
                     atomKK_->modified_stencil_md(force->pair->execution_space,
                                                  ~(~force->pair->datamask_modify | datamask_exclude), atom_);
@@ -719,6 +773,7 @@ void VerletKokkos::run(int n) {
                 }
 
                 if (execute_on_host) {
+                    assert(false);
                     std::cout << "Execute on host" << std::endl;
                     if (pair_compute_flag && force->pair->datamask_modify != datamask_exclude)
                         Kokkos::fence();
@@ -726,67 +781,6 @@ void VerletKokkos::run(int n) {
                     if (pair_compute_flag && force->pair->execution_space != Host) {
                         Kokkos::deep_copy(LMPHostType(), atomKK->k_f.h_view, 0.0);
                     }
-                }
-
-                if (atomKK->molecular) {
-                    if (force->bond) {
-                        assert(false);
-                        atomKK_->sync(force->bond->execution_space, ~(~force->bond->datamask_read | datamask_exclude));
-                        force->bond->compute(eflag, vflag);
-                        atomKK_->modified(force->bond->execution_space,
-                                          ~(~force->bond->datamask_modify | datamask_exclude));
-                    }
-                    if (force->angle) {
-                        assert(false);
-                        atomKK_->sync(force->angle->execution_space,
-                                      ~(~force->angle->datamask_read | datamask_exclude));
-                        force->angle->compute(eflag, vflag);
-                        atomKK->modified(force->angle->execution_space,
-                                         ~(~force->angle->datamask_modify | datamask_exclude));
-                    }
-                    if (force->dihedral) {
-                        assert(false);
-                        atomKK_->sync(force->dihedral->execution_space,
-                                      ~(~force->dihedral->datamask_read | datamask_exclude));
-                        force->dihedral->compute(eflag, vflag);
-                        atomKK->modified(force->dihedral->execution_space,
-                                         ~(~force->dihedral->datamask_modify | datamask_exclude));
-                    }
-                    if (force->improper) {
-                        assert(false);
-                        atomKK_->sync(force->improper->execution_space,
-                                      ~(~force->improper->datamask_read | datamask_exclude));
-                        force->improper->compute(eflag, vflag);
-                        atomKK_->modified(force->improper->execution_space,
-                                          ~(~force->improper->datamask_modify | datamask_exclude));
-                    }
-                    timer->stamp(Timer::BOND);
-                }
-
-                if (kspace_compute_flag) {
-                    assert(false);
-                    atomKK->sync(force->kspace->execution_space, ~(~force->kspace->datamask_read | datamask_exclude));
-                    force->kspace->compute(eflag, vflag);
-                    atomKK->modified(force->kspace->execution_space,
-                                     ~(~force->kspace->datamask_modify | datamask_exclude));
-                    timer->stamp(Timer::KSPACE);
-                }
-
-                if (execute_on_host) {
-                    if (f_merge_copy.extent(0) < atomKK->k_f.extent(0))
-                        f_merge_copy = DAT::t_f_array("VerletKokkos::f_merge_copy", atomKK->k_f.extent(0));
-                    f = atomKK->k_f.d_view;
-                    Kokkos::deep_copy(LMPHostType(), f_merge_copy, atomKK->k_f.h_view);
-                    Kokkos::parallel_for(atomKK->k_f.extent(0),
-                                         ForceAdder<DAT::t_f_array, DAT::t_f_array>(atomKK->k_f.d_view, f_merge_copy));
-                    atomKK->k_f.clear_sync_state(); // special case
-                    atomKK->k_f.modify<LMPDeviceType>();
-                }
-
-                if (n_pre_reverse) {
-                    assert(false);
-                    modify->pre_reverse(eflag, vflag);
-                    timer->stamp(Timer::MODIFY);
                 }
 
                 // reverse communication of forces
@@ -809,6 +803,7 @@ void VerletKokkos::run(int n) {
                     std::cout << "STENCIL MD FINAL INTEGRATE for t: " << time_idx << " and next t: " << next_time_idx
                               << std::endl;
                 }
+
                 modify_->final_integrate_stencil_md(atom_, atom_next_timestep, neighbor_, atom_idx_mapping[t]);
 
                 if (n_end_of_step) {
@@ -829,36 +824,38 @@ void VerletKokkos::run(int n) {
             }
 
             // send data
-            if (dep < 3) {
+            if (dep < NUM_DEPS - 1) {
                 queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
-                auto &atom_arr = lmp->atom_stencil_md[zoid_idx];
-                Comm *comm_ = lmp->comm_stencil_md[zoid_idx];
+                auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+                Comm *comm_ = lmp->comm_stencil_md[zoid_num];
                 comm_->send_data_stencil_md(atom_arr, zoid);
+                int* buf = comm_->send_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
+                send_bufs.push_back(buf);
             }
         }
     }
 
-    for (int dep = 0; dep < 1; dep++) {
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
-            int zoid_idx = lmp->zoid_num_to_idx[lmp->queues[dep][j].num];
-            int zoid_num = lmp->queues[dep][j].num;
-            if (!(zoid_num % comm->nprocs == comm->me)) {
-                continue;
-            }
-            int time_idx = NUM_TIMESTEPS_IN_PARALLEL % (NUM_TIMESTEPS_IN_PARALLEL + 1);
-            Atom *atom_ = lmp->atom_stencil_md[zoid_idx][time_idx];
-            Atom *start = lmp->atom_stencil_md[zoid_idx][0];
-            for (int idx = 0; idx < atom_->nlocal; idx++) {
-                if (atom_->tag[idx] == check_atom_tag) {
-                    std::cout << "Time idx: " << time_idx << " curr tag: " << atom_->tag[idx] << " idx? " << idx
-                              << std::endl;
-                    std::cout << "Zoid: " << zoid_num << " num local: " << atom_->nlocal << std::endl;
-                    std::cout << "found atom stencil md. pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1] << " "
-                              << atom_->x[idx][2] << std::endl;
+    /*
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int i = 0; i < NUM_ZOIDS; i++) {
+            if (i % comm->nprocs == comm->me) {
+                Atom* atom_ = lmp->atom_stencil_md[i][t];
+                for (int j = 0; j < atom_->nlocal; j++) {
+                    int tag = atom_->tag[j];
+                    double* pos = atom_->f[j];
+                    for (int dim = 0; dim < 3; dim++) {
+                        if (fabs(pos[dim] - test_f[t][tag * 3 + dim]) > 1e-4) {
+                            std::cout << "Dim: " << dim << " Zoid: " << i << " timestep: " << t << " tag: " << tag << " different. " << std::endl;
+                            std::cout << "What I have: " << pos[0] << " " << pos[1] << " " << pos[2] << std::endl;
+                            std::cout << "What does LAMMPS have? " << test_f[t][tag * 3 + 0] << " " << test_f[t][tag * 3 + 1] << " " << test_f[t][tag * 3 + 2] << std::endl;
+                            assert(false);
+                        }
+                    }
                 }
             }
         }
     }
+    */
 }
 
 /* ----------------------------------------------------------------------

@@ -818,8 +818,13 @@ void LAMMPS::create()
   if (kokkos) comm = new CommKokkos(this);
   else comm = new CommBrick(this);
 
-  if (kokkos) neighbor = new NeighborKokkos(this);
-  else neighbor = new Neighbor(this);
+  if (kokkos) {
+      std::cout << "NEIGHBOR KOKKOS" << std::endl;
+      neighbor = new NeighborKokkos(this);
+  } else {
+      std::cout << "NEIGHBOR NO KOKKOS" << std::endl;
+      neighbor = new Neighbor(this);
+  }
 
   if (kokkos) domain = new DomainKokkos(this);
 #ifdef LMP_OPENMP
@@ -933,32 +938,7 @@ void LAMMPS::create()
           neighbor_stencil_md[i][j] = neighbor_;
       }
 
-      /*
-      Domain* domain_;
-      if (kokkos) {
-          domain_ = new DomainKokkos(this);
-      }
-#ifdef LMP_OPENMP
-          else {
-            domain_ = new DomainOMP(this);
-        }
-#else
-      else {
-          domain_ = new Domain(this);
-      }
-#endif
-
-      Neighbor* neighbor_;
-      if (kokkos) {
-          neighbor_ = new NeighborKokkos(this);
-      } else {
-          neighbor_ = new Neighbor(this);
-      }
-      */
-
       comm_stencil_md.push_back(comm_);
-      // domain_stencil_md.push_back(domain_);
-      // neighbor_stencil_md.push_back(neighbor_);
   }
 
   read_model();
@@ -1003,6 +983,8 @@ void LAMMPS::read_model() {
     // Check if model is a NequIP model
     if (lmp_model_metadata["nequip_version"].empty()) {
         error->all(FLERR, "The indicated TorchScript file does not appear to be a deployed NequIP model; did you forget to run `nequip-deploy`?");
+    } else {
+        std::cout << "NEQUIP VERSION: " << lmp_model_metadata["nequip_version"] << std::endl;
     }
 
     // If the model is not already frozen, we should freeze it:
@@ -1022,7 +1004,8 @@ void LAMMPS::read_model() {
       // See 1.11 bugfix in https://github.com/pytorch/pytorch/pull/71436
       auto graph = out_mod.get_method("forward").graph();
       OptimizeFrozenGraph(graph, optimize_numerics);
-      model = out_mod;
+      // model = out_mod;
+      lmp_model = out_mod;
 #else
         // Do it normally
         lmp_model = torch::jit::freeze(lmp_model);
@@ -1252,8 +1235,8 @@ void LAMMPS::destroy()
 
   // stencil_md
   delete[] zoid_num_to_idx;
-  delete[] send_to;
-  delete[] recv_from;
+  // delete[] send_to;
+  // delete[] recv_from;
   delete[] send_to_next_dt;
   delete[] recv_from_next_dt;
 }

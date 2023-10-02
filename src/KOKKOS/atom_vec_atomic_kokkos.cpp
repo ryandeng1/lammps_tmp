@@ -110,6 +110,8 @@ void AtomVecAtomicKokkos::grow_stencil_md(int n, Atom* atom_) {
     memoryKK->grow_kokkos(atomKK_->k_v,atomKK_->v,nmax,"atom:v");
     memoryKK->grow_kokkos(atomKK_->k_f,atomKK_->f,nmax,"atom:f");
 
+    memoryKK->grow_kokkos(atomKK_->k_eval_mask_stencil_md, atomKK_->eval_mask_stencil_md, nmax, "atom:eval_mask_stencil_md");
+
     grow_pointers_stencil_md(atom_);
     atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
 
@@ -175,6 +177,8 @@ void AtomVecAtomicKokkos::grow_pointers_stencil_md(Atom* atom_) {
     f = atomKK_->f;
     d_f = atomKK_->k_f.d_view;
     h_f = atomKK_->k_f.h_view;
+
+    eval_mask_stencil_md = atomKK_->eval_mask_stencil_md;
 }
 
 /* ----------------------------------------------------------------------
@@ -340,6 +344,7 @@ int AtomVecAtomicKokkos::pack_border(int n, int *list, double *buf,
   }
 
   if (atom->nextra_border) {
+      assert(false);
       for (int iextra = 0; iextra < atom->nextra_border; iextra++)
           m += modify->fix[atom->extra_border[iextra]]->pack_border(n, list, &buf[m]);
   }
@@ -355,18 +360,6 @@ int AtomVecAtomicKokkos::pack_data_stencil_md(int n, int *list, double *buf) {
         buf[m++] = h_x(j,0);
         buf[m++] = h_x(j,1);
         buf[m++] = h_x(j,2);
-        /*
-        if (h_tag(j) == 33016) {
-            std::cout << "Sending the target atom. j: " << j << " actual val? " << ubuf(h_tag(j)).d << " again? " <<  (tagint)  (ubuf(h_tag(j)).i) << std::endl;
-            std::vector<int> tags;
-            for (int k = 0; k < n; k++) {
-                // std::cout << "Haha me. idx: " << k << " list val: " << list[k] << " tag: " << h_tag(list[k]) << std::endl;
-                tags.push_back(h_tag(list[k]));
-            }
-            std::cout << "ORDER OF TAGS SENT: " << tags << std::endl;
-            std::cout << "Tags sent size: " << tags.size() << std::endl;
-        }
-        */
         buf[m++] = ubuf(h_tag(j)).d;
         buf[m++] = ubuf(h_type(j)).d;
         buf[m++] = ubuf(h_mask(j)).d;
@@ -377,7 +370,7 @@ int AtomVecAtomicKokkos::pack_data_stencil_md(int n, int *list, double *buf) {
     return m;
 }
 
-void AtomVecAtomicKokkos::unpack_data_stencil_md(Atom* atom_, int n, int first, double *buf) {
+void AtomVecAtomicKokkos::unpack_data_stencil_md(Atom* atom_, int n, int first, double *buf, int* idxs, int num_idxs, bool debug) {
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
     int i,m,last;
 
@@ -387,39 +380,116 @@ void AtomVecAtomicKokkos::unpack_data_stencil_md(Atom* atom_, int n, int first, 
         grow_stencil_md(0, atom_);
     }
 
-    std::vector<int> tags;
+    std::vector<int> tags_curr;
+    std::vector<int> tags_received;
     bool assert_false = false;
-    for (i = first; i < last; i++) {
-        h_x(i,0) = buf[m++];
-        h_x(i,1) = buf[m++];
-        h_x(i,2) = buf[m++];
 
-        if (h_tag(i) != (tagint)  ubuf(buf[m]).i) {
-            /*
-            std::cout << "ERROR idx: " << i << " My tag: " << h_tag(i) << " tag received: " << (tagint)  ubuf(buf[m]).i << std::endl;
-            for (int j = first; j < last; j++) {
-                if (h_tag(j) == (tagint)  ubuf(buf[m]).i) {
-                    std::cout << "true idx is: " << j << std::endl;
-                }
-            }
-            */
-            assert_false = true;
-            // assert(false);
+    if (n != num_idxs) {
+        // std::cout << "n: " << n << " num idxs: " << num_idxs << std::endl;
+    }
+    // assert(n == num_idxs);
+
+    // for (i = first; i < last; i++) {
+    // for (int j = 0; j < num_idxs; j++) {
+    for (int j = 0; j < n; j++) {
+        // int idx = idxs[j];
+        int idx;
+
+        /*
+        double x_ = h_x(idx, 0);
+        double y_ = h_x(idx, 1);
+        double z_ = h_x(idx, 2);
+        double f_x = h_f(idx, 0);
+        double f_y = h_f(idx, 1);
+        double f_z = h_f(idx, 2);
+        tagint t_ = h_tag(idx);
+        int type_ = h_type(idx);
+        */
+
+        double tmp_x = buf[m++];
+        double tmp_y = buf[m++];
+        double tmp_z = buf[m++];
+
+        tagint target_tag = (tagint)  ubuf(buf[m]).i;
+
+        if (!atom_->tag_to_idx.count(target_tag)) {
+            assert(false);
         }
 
-        // assert(h_tag(i) == (tagint)  ubuf(buf[m]).i);
-        tags.push_back(h_tag(i));
-        h_tag(i) =  (tagint)  ubuf(buf[m++]).i;
-        h_type(i) = (int) ubuf(buf[m++]).i;
-        h_mask(i) = (int) ubuf(buf[m++]).i;
-        h_f(i, 0) += buf[m++];
-        h_f(i, 1) += buf[m++];
-        h_f(i, 2) += buf[m++];
+        idx = atom_->tag_to_idx[target_tag];
 
+        if (h_tag(idx) != target_tag) {
+            int r;
+            MPI_Comm_rank(MPI_COMM_WORLD, &r);
+
+            for (int k = 0; k < j; k++) {
+                std::cout << "idx: " << k << " prev idx: " << idxs[k] << " got pos: " << h_x(idxs[k], 0) << " " << h_x(idxs[k], 1) << " " << h_x(idxs[k], 2) << " with tag: " << h_tag(idxs[k]) << std::endl;
+            }
+
+            tagint target = (tagint)  ubuf(buf[m]).i;
+            bool found = false;
+            for (int h = 0; h < atom_->nlocal + atom_->nghost; h++) {
+                if (atom_->tag[h] == target) {
+                    std::cout << "ACTUAL IDX: " << h << " out of nlocal: " << atom_->nlocal << std::endl;
+                    std::cout << "Pos: " << atom_->x[h][0] << " " << atom_->x[h][1] << " " << atom_->x[h][2] << std::endl;
+                    found = true;
+                }
+            }
+            std::cout << "FOUND? " << found << std::endl;
+            std::cout << "FIRST: " << first << " num to unpack: " << n << std::endl;
+            std::cout << "IDX: " << idx << " NLOCAL: " << atom_->nlocal << " real idx: " << idx << " other real idx: " << j << std::endl;
+            std::cout << "ERROR idx: " << idx << " My tag: " << h_tag(idx) << " tag received: " << (tagint)  ubuf(buf[m]).i << std::endl;
+            std::cout << "my pos: " << tmp_x << " " << tmp_y << " " << tmp_z << std::endl;
+            std::cout << "other pos: " << h_x(idx, 0) << " " << h_x(idx, 1) << " " << h_x(idx, 2) << std::endl;
+            assert(false);
+        }
+
+        double old_x = h_x(idx, 0);
+        double old_y = h_x(idx, 1);
+        double old_z = h_x(idx, 2);
+        double old_type = h_type(idx);
+
+        h_tag(idx) =  (tagint)  ubuf(buf[m++]).i;
+        h_type(idx) = (int) ubuf(buf[m++]).i;
+        h_mask(idx) = (int) ubuf(buf[m++]).i;
+
+        double f_x = buf[m++];
+        double f_y = buf[m++];
+        double f_z = buf[m++];
+
+        h_f(idx, 0) += f_x;
+        h_f(idx, 1) += f_y;
+        h_f(idx, 2) += f_z;
+
+        if (h_tag(idx) == 13466) {
+            std::cout << "RYAN force now? " <<  f_x << " " <<  f_y << " " << f_z << std::endl;
+        }
+
+        /*
+        h_x(idx, 0) = tmp_x;
+        h_x(idx, 1) = tmp_y;
+        h_x(idx, 2) = tmp_z;
+
+        if (fabs(h_x(idx, 0) - old_x) > 1e-6 || fabs(h_x(idx, 1) - old_y) > 1e-6 || fabs(h_x(idx, 2) - old_z) > 1e-6) {
+            std::cout << "prev x: " << old_x << " prev y: " << old_y << " prev_z: " << old_z << std::endl;
+            std::cout << "new: " << h_x(idx, 0) << " " << h_x(idx, 1) << " " << h_x(idx, 2) << std::endl;
+            assert(false);
+        }
+        */
+        assert(h_type(idx) == old_type);
+        /*
+        assert(fabs(h_x(idx, 0) - old_x) <= 1e-6);
+        assert(fabs(h_x(idx, 1) - old_y) <= 1e-6);
+        assert(fabs(h_x(idx, 2) - old_z) <= 1e-6);
+        */
     }
+
     if (assert_false) {
-        std::cout << "ORDER OF TAGS RECEIVED: " << tags << std::endl;
-        std::cout << "Tags received size: " << tags.size() << std::endl;
+        std::cout << "ORDER OF TAGS CURRENT: " << tags_curr << std::endl;
+        std::cout << "Tags received size: " << tags_curr.size() << std::endl;
+
+        std::cout << "ORDER OF TAGS RECEIVED: " << tags_received << std::endl;
+        std::cout << "ORDER OF TAGS RECEIVED: " << tags_received.size() << std::endl;
         std::cout << "first: " << first << " last: " << last << " nlocal: " << atom_->nlocal << std::endl;
         assert(false);
     }
@@ -596,7 +666,7 @@ void AtomVecAtomicKokkos::unpack_border(int n, int first, double *buf)
         unpack_border(n,first,&buf[m]);
 }
 
-void AtomVecAtomicKokkos::unpack_border_stencil_md(int n, int first, double *buf, Atom* atom_, int zoid_num) {
+int AtomVecAtomicKokkos::unpack_border_stencil_md(int n, int first, double *buf, Atom* atom_, int zoid_num) {
     AtomKokkos* atomKK_ = (AtomKokkos* ) atom_;
     int i,m,last;
 
@@ -607,13 +677,56 @@ void AtomVecAtomicKokkos::unpack_border_stencil_md(int n, int first, double *buf
         grow_stencil_md(0, atom_);
     }
 
-    for (i = first; i < last; i++) {
+    std::set<int> tags;
+    for (int idx = 0; idx < atom_->nlocal + atom_->nghost; idx++) {
+        tags.insert(atom_->tag[idx]);
+    }
+
+    assert(tags.size() == atom_->nlocal + atom_->nghost);
+
+    int insert_idx = first;
+    std::set<int> inserted_tags;
+    // for (i = first; i < last; i++) {
+    for (int j = 0; j < n; j++) {
+        /*
         h_x(i,0) = buf[m++];
         h_x(i,1) = buf[m++];
         h_x(i,2) = buf[m++];
         h_tag(i) =  (tagint)  ubuf(buf[m++]).i;
         h_type(i) = (int) ubuf(buf[m++]).i;
         h_mask(i) = (int) ubuf(buf[m++]).i;
+        */
+        double x0 = buf[m++];
+        double x1 = buf[m++];
+        double x2 = buf[m++];
+        tagint tag_ = (tagint)  ubuf(buf[m++]).i;
+        int type_ = (int) ubuf(buf[m++]).i;
+        int mask_ = ubuf(buf[m++]).i;
+
+        if (tags.find(tag_) == tags.end()) {
+            if (inserted_tags.find(tag_) != inserted_tags.end()) {
+                std::cout << "Tag: " << tag_ << " is repeated. What index? " << insert_idx << " nlocal: " << atom_->nlocal << std::endl;
+            }
+            assert(inserted_tags.find(tag_) == inserted_tags.end());
+            /*
+            h_x(i,0) = x0;
+            h_x(i,1) = x1;
+            h_x(i,2) = x2;
+            h_tag(i) =  tag;
+            h_type(i) = type;
+            h_mask(i) = mask;
+            */
+
+            h_x(insert_idx,0) = x0;
+            h_x(insert_idx,1) = x1;
+            h_x(insert_idx,2) = x2;
+            h_tag(insert_idx) =  tag_;
+            h_type(insert_idx) = type_;
+            h_mask(insert_idx) = mask_;
+
+            inserted_tags.insert(tag_);
+            insert_idx++;
+        }
     }
     atomKK_->modified_stencil_md(Host,X_MASK|TAG_MASK|TYPE_MASK|MASK_MASK, atom_);
 
@@ -623,7 +736,8 @@ void AtomVecAtomicKokkos::unpack_border_stencil_md(int n, int first, double *buf
             m += modify->fix[atom->extra_border[iextra]]->
                     unpack_border(n, first, &buf[m]);
     }
-    // std::cout << "h_x extent: " << h_x.extent(0) << " " << h_x.extent(1) << std::endl;
+
+    return insert_idx - first;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1188,6 +1302,7 @@ void AtomVecAtomicKokkos::sync_stencil_md(ExecutionSpace space, unsigned int mas
         if (mask & TYPE_MASK) atomKK_->k_type.sync<LMPDeviceType>();
         if (mask & MASK_MASK) atomKK_->k_mask.sync<LMPDeviceType>();
         if (mask & IMAGE_MASK) atomKK_->k_image.sync<LMPDeviceType>();
+        atomKK_->k_eval_mask_stencil_md.sync<LMPDeviceType>();
     } else {
         if (mask & X_MASK) atomKK_->k_x.sync<LMPHostType>();
         if (mask & V_MASK) atomKK_->k_v.sync<LMPHostType>();
@@ -1196,7 +1311,9 @@ void AtomVecAtomicKokkos::sync_stencil_md(ExecutionSpace space, unsigned int mas
         if (mask & TYPE_MASK) atomKK_->k_type.sync<LMPHostType>();
         if (mask & MASK_MASK) atomKK_->k_mask.sync<LMPHostType>();
         if (mask & IMAGE_MASK) atomKK_->k_image.sync<LMPHostType>();
+        atomKK_->k_eval_mask_stencil_md.sync<LMPHostType>();
     }
+
 }
 
 /* ---------------------------------------------------------------------- */

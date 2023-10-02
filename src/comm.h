@@ -92,8 +92,17 @@ class Comm : protected Pointers {
   virtual void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
   virtual void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
 
+  virtual int* send_exclude_eval_tags(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
+  virtual void receive_exclude_eval_tags(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
+
+
   virtual void construct_second_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
   virtual void construct_second_send_list_stencil_md_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
+
+  virtual void construct_shared_ghost_send_list_stencil_md(Atom*, queue_info& zoid, std::vector<int>&) {assert(false);}
+
+  virtual void send_shared_ghost_stencil_md(Atom* atom_, queue_info& zoid, std::set<int>& indices, std::vector<int>& neighbors, bool) {assert(false);}
+  virtual void receive_shared_ghost_stencil_md(Atom* atom_, queue_info& zoid, std::vector<int>& neighbors) {assert(false);};
 
   // forward/reverse comm from a Pair, Bond, Fix, Compute, Dump
   virtual void forward_comm(class Pair *) = 0;

@@ -15,12 +15,15 @@ constexpr int RIGHT = -2;
 constexpr int MIDDLE = -3;
 constexpr int PBC = -4;
 
-// bool USE_STENCIL_MD = false;
+constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 2;
-constexpr double ADDITIONAL_CUTOFF = 0.5;
+constexpr double ADDITIONAL_CUTOFF = 0.2;
+
+// constexpr double ALLEGRO_SLOPE = 5.5 + ADDITIONAL_CUTOFF;
+constexpr double ALLEGRO_SLOPE = 5.5 + ADDITIONAL_CUTOFF;
 
 struct cut_info {
     double lower;
@@ -45,10 +48,13 @@ struct queue_info {
     int where[3];
     int** atom_idx_mapping;
     int* first_recv_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
-    int* second_recv_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
     bool init_first_recv = false;
-    // int* sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+    int** first_recv_stencil_md2[NUM_TIMESTEPS_IN_PARALLEL + 1];
+    int* first_recv_sz_stencil_md2[NUM_TIMESTEPS_IN_PARALLEL + 1];
 };
+
+int get_zoid_dep(int);
 
 bool is_close(int*, int*);
 
@@ -56,7 +62,6 @@ bool is_dep(int *, int *);
 
 bool is_dep_inverted(int *, int *);
 
-// void get_zoids(double, double *, double *, std::deque<queue_info> *);
 void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *queues);
 
 void print_cuts(const cuts_t&);

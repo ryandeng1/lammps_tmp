@@ -69,6 +69,8 @@ class Atom : protected Pointers {
   imageint *image;
   double **x, **v, **f;
 
+  int* eval_mask_stencil_md;
+
   // charged and dipolar particles
 
   double *rmass;
@@ -284,6 +286,10 @@ class Atom : protected Pointers {
   typedef std::map<std::string, AtomVecCreator> AtomVecCreatorMap;
   AtomVecCreatorMap *avec_map;
 
+  std::set<int> fully_eval_ghost_tags;
+  std::map<int, std::set<int>> fully_eval_neighbor_to_ghost_tags;
+  std::map<std::pair<int, int>, std::set<int>> fully_eval_neighbor_to_ghost_tags_trio;
+
   // --------------------------------------------------------------------
   // functions
 
@@ -390,6 +396,8 @@ class Atom : protected Pointers {
 
   void setup_stencil_md(Domain*);
   virtual void sort_stencil_md();
+
+  std::map<int, int> tag_to_idx;
 
 protected:
   // global to local ID mapping

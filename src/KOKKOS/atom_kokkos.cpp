@@ -267,7 +267,9 @@ void AtomKokkos::sort_stencil_md() {
         assert(false);
         setup_sort_bins();
     }
-    if (nbins == 1) return;
+    if (nbins == 1) {
+        return;
+    }
 
     // reallocate per-atom vectors if needed
 
@@ -300,6 +302,23 @@ void AtomKokkos::sort_stencil_md() {
         ix = static_cast<int>((h_x(i, 0) - bboxlo[0]) * bininvx);
         iy = static_cast<int>((h_x(i, 1) - bboxlo[1]) * bininvy);
         iz = static_cast<int>((h_x(i, 2) - bboxlo[2]) * bininvz);
+
+        double new_pos[3] = {x[i][0], x[i][1], x[i][2]};
+        for (int dim = 0; dim < 3; dim++) {
+            if (new_pos[dim] < 0) {
+                new_pos[dim] += domain->prd[dim];
+            }
+            if (new_pos[dim] > domain->prd[dim]) {
+                new_pos[dim] -= domain->prd[dim];
+            }
+        }
+        for (int dim = 0; dim < 3; dim++) {
+            assert(new_pos[dim] >= 0 && new_pos[dim] < domain->prd[dim]);
+        }
+        ix = static_cast<int> ((new_pos[0]-bboxlo[0])*bininvx);
+        iy = static_cast<int> ((new_pos[1]-bboxlo[1])*bininvy);
+        iz = static_cast<int> ((new_pos[2]-bboxlo[2])*bininvz);
+
         ix = MAX(ix, 0);
         iy = MAX(iy, 0);
         iz = MAX(iz, 0);
@@ -309,6 +328,10 @@ void AtomKokkos::sort_stencil_md() {
         ibin = iz * nbiny * nbinx + iy * nbinx + ix;
         next[i] = binhead[ibin];
         binhead[ibin] = i;
+
+        if (tag[i] == 9163) {
+            std::cout << "ix: " << ix << " iy: " << iy << " iz: " << iz << " bin: " << ibin << std::endl;
+        }
     }
 
     // permute = desired permutation of atoms
@@ -317,10 +340,26 @@ void AtomKokkos::sort_stencil_md() {
     n = 0;
     for (m = 0; m < nbins; m++) {
         i = binhead[m];
+        bool found = false;
         while (i >= 0) {
+            if (tag[i] == 17413) {
+                found = true;
+            }
+            i = next[i];
+        }
+
+        i = binhead[m];
+        while (i >= 0) {
+            if (found) {
+                std::cout << "IN BIN IDX: " << i << " TAGS: " << tag[i] << std::endl;
+            }
             permute[n++] = i;
             i = next[i];
         }
+//        while (i >= 0) {
+//            permute[n++] = i;
+//            i = next[i];
+//        }
     }
 
     // current = current permutation, just reuse next vector

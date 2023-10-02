@@ -52,6 +52,7 @@ NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::NPairKokkos(LAMMPS *lmp) : N
 template<class DeviceType, int HALF, int NEWTON, int GHOST, int TRI, int SIZE>
 void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::copy_neighbor_info()
 {
+  std::cout << "Neigh pair copy neighbor info regular md" << std::endl;
   NPair::copy_neighbor_info();
 
   NeighborKokkos* neighborKK = (NeighborKokkos*) neighbor;
@@ -455,14 +456,14 @@ void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::build_stencil_md(NeighL
 
     if (atom->molecular != Atom::ATOMIC) {
         if (exclude)
-            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|MASK_MASK|MOLECULE_MASK|TAG_MASK|SPECIAL_MASK, atomKK_);
+            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|MASK_MASK|MOLECULE_MASK|TAG_MASK|SPECIAL_MASK, atom_);
         else
-            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|TAG_MASK|SPECIAL_MASK, atomKK_);
+            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|TAG_MASK|SPECIAL_MASK, atom_);
     } else {
         if (exclude)
-            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|MASK_MASK, atomKK_);
+            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK|MASK_MASK, atom_);
         else
-            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK, atomKK_);
+            atomKK_->sync_stencil_md(Device,X_MASK|RADIUS_MASK|TYPE_MASK, atom_);
     }
 
     data.special_flag[0] = special_flag[0];

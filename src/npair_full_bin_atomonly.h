@@ -31,6 +31,8 @@ class NPairFullBinAtomonly : public NPair {
  public:
   NPairFullBinAtomonly(class LAMMPS *);
   void build(class NeighList *) override;
+  void build_stencil_md(class NeighList*, Atom*) override;
+
 };
 
 }    // namespace LAMMPS_NS

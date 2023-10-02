@@ -111,10 +111,13 @@ class AtomVec : protected Pointers {
 
   // virtual int pack_border_stencil_md(int, int*, double*, int, int*, Atom*) {return 0;}
   virtual int pack_border_stencil_md(int, int*, double*, int*, int**) {assert(false); return 0;}
-  virtual void unpack_border_stencil_md(int, int, double*, Atom*, int) {assert(false); }
+  virtual int unpack_border_stencil_md(int, int, double*, Atom*, int) {assert(false); }
 
   virtual int pack_data_stencil_md(int, int*, double*) {assert(false); return 0; }
-  virtual void unpack_data_stencil_md(Atom*, int, int, double*) {assert(false); }
+  virtual void unpack_data_stencil_md(Atom*, int, int, double*, int*, int, bool=false) {assert(false); }
+
+  int pack_shared_ghost_stencil_md(Atom*, std::set<int>&, double* buf, bool debug=false);
+  void unpack_shared_ghost_stencil_md(Atom*, int, double* buf);
 
   virtual int pack_exchange_bonus(int, double *) { return 0; }
   virtual int unpack_exchange_bonus(int, double *) { return 0; }
@@ -199,6 +202,8 @@ protected:
   int *type, *mask;
   imageint *image;
   double **x, **v, **f;
+
+  int* eval_mask_stencil_md;
 
   // standard list of peratom fields always operated on by different methods
   // common to all styles, so not listed in field strings

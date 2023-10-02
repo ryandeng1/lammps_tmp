@@ -40,6 +40,7 @@ class Verlet : public Integrate {
   void group_ghost_atoms_stencil_md(Atom*, queue_info&, int);
   virtual void force_clear_stencil_md(Atom*, Force*, Neighbor*);
   void setup_atom_arr_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, Domain*);
+  void regroup_shared_local_toms_stencil_md(Atom*, queue_info&, int);
 
 
 protected:
