@@ -15,15 +15,14 @@ constexpr int RIGHT = -2;
 constexpr int MIDDLE = -3;
 constexpr int PBC = -4;
 
-constexpr int NUM_DEPS = 4;
+constexpr int NUM_DEPS = 8;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 2;
 constexpr double ADDITIONAL_CUTOFF = 0.2;
 
-// constexpr double ALLEGRO_SLOPE = 5.5 + ADDITIONAL_CUTOFF;
-constexpr double ALLEGRO_SLOPE = 5.5 + ADDITIONAL_CUTOFF;
+constexpr double ALLEGRO_SLOPE = 2 * (3.0 + ADDITIONAL_CUTOFF);
 
 struct cut_info {
     double lower;

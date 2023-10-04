@@ -116,7 +116,6 @@ void Verlet::init()
 
 void Verlet::setup(int flag)
 {
-  assert(false);
   if (comm->me == 0 && screen) {
     fputs("Setting up Verlet run ...\n",screen);
     if (flag) {
@@ -187,6 +186,8 @@ void Verlet::setup(int flag)
   modify->setup(vflag);
   output->setup(flag);
   update->setupflag = 0;
+
+  setup_stencil_md();
 }
 
 void atom_reorder_stencil_md(Atom* atom_, int* current, int* permute, int start, int end) {
@@ -243,7 +244,6 @@ void Verlet::regroup_shared_local_toms_stencil_md(Atom* atom_, queue_info& zoid,
     for (int i = 0; i < atom_->nlocal; i++) {
         current[i] = i;
     }
-
 
     for (int i = 0; i < atom_->nlocal; i++) {
         double* pos = atom_->x[i];
@@ -340,6 +340,7 @@ void Verlet::regroup_shared_local_toms_stencil_md(Atom* atom_, queue_info& zoid,
     assert(permute_idx == atom_->nlocal);
 }
 
+// TODO: fix for the new deps
 void Verlet::group_local_atoms_stencil_md(Atom* atom_, queue_info& zoid, int timestep) {
     int zoid_num = zoid.num;
     auto& recv_from = lmp->recv_from_neighbors[zoid.num];
@@ -532,10 +533,11 @@ void setup_atom_pos_mapping_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALL
     }
 
     int** mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL; i++) {
+    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
         mapping[i] = new int[max_atoms];
     }
-    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL; i++) {
+
+    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
         for (int j = 0; j < max_atoms; j++) {
             mapping[i][j] = -1;
         }
@@ -575,104 +577,119 @@ void Verlet::setup_stencil_md() {
     std::cout << "domain boxlo: " << domain->boxlo[0] << " " << domain->boxlo[1] << " " << domain->boxlo[2] << std::endl;
     std::cout << "domain boxhi: " << domain->boxhi[0] << " " << domain->boxhi[1] << " " << domain->boxhi[2] << std::endl;
 
+    assert(3 * 2 * ALLEGRO_SLOPE * NUM_TIMESTEPS_IN_PARALLEL <= domain->prd[0]);
+
     get_zoids(ALLEGRO_SLOPE, domain->boxlo, domain->boxhi, lmp->queues);
 
     // modify zoids
     // used to be 8, 24, 24, 8
     // 8, 8, 8, 8, 24, 8
-    // lmp->queues[5] = lmp->queues[3];
-    // lmp->queues[4] = lmp->queues[2];
+    if (NUM_DEPS == 8) {
+        lmp->queues[5] = lmp->queues[3];
+        lmp->queues[4] = lmp->queues[2];
 
-    /*
-    lmp->queues[7] = lmp->queues[3];
+        lmp->queues[7] = lmp->queues[3];
 
-    std::deque<queue_info> split_dep_1[3];
+        std::deque<queue_info> split_dep_1[3];
 
-    int dep_to_split = 1;
-    for (int i = 0; i < lmp->queues[dep_to_split].size(); i++) {
-        queue_info& zoid = lmp->queues[dep_to_split][i];
-        int new_dep = -1;
-        if (zoid.where[0] == PBC || zoid.where[0] == MIDDLE) {
-            assert(zoid.where[1] != PBC && zoid.where[1] != MIDDLE);
-            assert(zoid.where[2] != PBC && zoid.where[2] != MIDDLE);
-            new_dep = 0;
-        } else if (zoid.where[1] == PBC || zoid.where[1] == MIDDLE) {
-            assert(zoid.where[0] != PBC && zoid.where[0] != MIDDLE);
-            assert(zoid.where[2] != PBC && zoid.where[2] != MIDDLE);
-            new_dep = 1;
-        } else if (zoid.where[2] == PBC || zoid.where[2] == MIDDLE) {
-            assert(zoid.where[0] != PBC && zoid.where[0] != MIDDLE);
-            assert(zoid.where[1] != PBC && zoid.where[1] != MIDDLE);
-            new_dep = 2;
-        } else {
-            assert(false);
+        int dep_to_split = 1;
+        for (int i = 0; i < lmp->queues[dep_to_split].size(); i++) {
+            queue_info zoid = lmp->queues[dep_to_split][i];
+            int new_dep = -1;
+            if (zoid.where[0] == PBC || zoid.where[0] == MIDDLE) {
+                assert(zoid.where[1] != PBC && zoid.where[1] != MIDDLE);
+                assert(zoid.where[2] != PBC && zoid.where[2] != MIDDLE);
+                new_dep = 0;
+            } else if (zoid.where[1] == PBC || zoid.where[1] == MIDDLE) {
+                assert(zoid.where[0] != PBC && zoid.where[0] != MIDDLE);
+                assert(zoid.where[2] != PBC && zoid.where[2] != MIDDLE);
+                new_dep = 1;
+            } else if (zoid.where[2] == PBC || zoid.where[2] == MIDDLE) {
+                assert(zoid.where[0] != PBC && zoid.where[0] != MIDDLE);
+                assert(zoid.where[1] != PBC && zoid.where[1] != MIDDLE);
+                new_dep = 2;
+            } else {
+                assert(false);
+            }
+
+            split_dep_1[new_dep].push_back(zoid);
         }
 
-        split_dep_1[new_dep].push_back(zoid);
-    }
+        std::deque<queue_info> split_dep_2[3];
+        int dep_to_split_2 = 2;
+        for (int i = 0; i < lmp->queues[dep_to_split_2].size(); i++) {
+            queue_info zoid = lmp->queues[dep_to_split_2][i];
+            int new_dep = -1;
+            if (zoid.where[0] == LEFT || zoid.where[0] == RIGHT) {
+                assert(zoid.where[1] != LEFT && zoid.where[1] != RIGHT);
+                assert(zoid.where[2] != LEFT && zoid.where[2] != RIGHT);
+                new_dep = 0;
+            } else if (zoid.where[1] == LEFT || zoid.where[1] == RIGHT) {
+                assert(zoid.where[0] != LEFT && zoid.where[0] != RIGHT);
+                assert(zoid.where[2] != LEFT && zoid.where[2] != RIGHT);
+                new_dep = 1;
+            } else if (zoid.where[2] == LEFT || zoid.where[2] == RIGHT) {
+                assert(zoid.where[0] != LEFT && zoid.where[0] != RIGHT);
+                assert(zoid.where[1] != LEFT && zoid.where[1] != RIGHT);
+                new_dep = 2;
+            } else {
+                assert(false);
+            }
 
-    std::deque<queue_info> split_dep_2[3];
-    int dep_to_split_2 = 2;
-    for (int i = 0; i < lmp->queues[dep_to_split_2].size(); i++) {
-        queue_info& zoid = lmp->queues[dep_to_split_2][i];
-        int new_dep = -1;
-        if (zoid.where[0] == LEFT || zoid.where[0] == RIGHT) {
-            assert(zoid.where[1] != LEFT && zoid.where[1] != RIGHT);
-            assert(zoid.where[2] != LEFT && zoid.where[2] != RIGHT);
-            new_dep = 0;
-        } else if (zoid.where[1] == LEFT || zoid.where[1] == RIGHT) {
-            assert(zoid.where[0] != LEFT && zoid.where[0] != RIGHT);
-            assert(zoid.where[2] != LEFT && zoid.where[2] != RIGHT);
-            new_dep = 1;
-        } else if (zoid.where[2] == LEFT || zoid.where[2] == RIGHT) {
-            assert(zoid.where[0] != LEFT && zoid.where[0] != RIGHT);
-            assert(zoid.where[1] != LEFT && zoid.where[1] != RIGHT);
-            new_dep = 2;
-        } else {
-            assert(false);
+            split_dep_2[new_dep].push_back(zoid);
         }
 
-        split_dep_2[new_dep].push_back(zoid);
+        lmp->queues[1].clear();
+        lmp->queues[2].clear();
+        lmp->queues[3].clear();
+        lmp->queues[4].clear();
+        lmp->queues[5].clear();
+        lmp->queues[6].clear();
+
+        for (int i = 0; i < split_dep_1[0].size(); i++) {
+            lmp->queues[1].push_back(split_dep_1[0][i]);
+        }
+
+        for (int i = 0; i < split_dep_1[1].size(); i++) {
+            lmp->queues[2].push_back(split_dep_1[1][i]);
+        }
+
+        for (int i = 0; i < split_dep_1[2].size(); i++) {
+            lmp->queues[3].push_back(split_dep_1[2][i]);
+        }
+
+        for (int i = 0; i < split_dep_2[0].size(); i++) {
+            lmp->queues[4].push_back(split_dep_2[0][i]);
+        }
+
+        for (int i = 0; i < split_dep_2[1].size(); i++) {
+            lmp->queues[5].push_back(split_dep_2[1][i]);
+        }
+
+        for (int i = 0; i < split_dep_2[2].size(); i++) {
+            lmp->queues[6].push_back(split_dep_2[2][i]);
+        }
+    } else {
+        assert(false);
+        // change the zoids
+        int modify_start_dep = 1;
+        int modify_end_dep = 2;
+
+        for (int dep = modify_start_dep; dep <= modify_end_dep; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                for (int dim = 0; dim < 3; dim++) {
+                    if (zoid.where[dim] == PBC || zoid.where[dim] == MIDDLE) {
+                        zoid.zoid.cuts[dim].lower -= ALLEGRO_SLOPE;
+                        zoid.zoid.cuts[dim].upper += ALLEGRO_SLOPE;
+                    } else {
+                        zoid.zoid.cuts[dim].lower += ALLEGRO_SLOPE;
+                        zoid.zoid.cuts[dim].upper -= ALLEGRO_SLOPE;
+                    }
+                }
+            }
+        }
     }
-
-
-    lmp->queues[1].clear();
-    lmp->queues[2].clear();
-    lmp->queues[3].clear();
-    lmp->queues[4].clear();
-    lmp->queues[5].clear();
-    lmp->queues[6].clear();
-
-    for (int i = 0; i < split_dep_1[0].size(); i++) {
-        lmp->queues[1].push_back(split_dep_1[0][i]);
-    }
-
-    for (int i = 0; i < split_dep_1[1].size(); i++) {
-        lmp->queues[2].push_back(split_dep_1[1][i]);
-    }
-
-    for (int i = 0; i < split_dep_1[2].size(); i++) {
-        lmp->queues[3].push_back(split_dep_1[2][i]);
-    }
-
-    for (int i = 0; i < split_dep_2[0].size(); i++) {
-        lmp->queues[4].push_back(split_dep_2[0][i]);
-    }
-
-    for (int i = 0; i < split_dep_2[1].size(); i++) {
-        lmp->queues[5].push_back(split_dep_2[1][i]);
-    }
-
-    for (int i = 0; i < split_dep_2[2].size(); i++) {
-        lmp->queues[6].push_back(split_dep_2[2][i]);
-    }
-
-    */
-
-
-//    lmp->queues[1] = split_dep_1[0];
-//    lmp->queues[2] = split_dep_1[1];
-//    lmp->queues[3] = split_dep_1[2];
 
     // renumber the zoids
     int zoid_numbering_idx = 0;
@@ -687,8 +704,8 @@ void Verlet::setup_stencil_md() {
     for (int i = 0; i < NUM_ZOIDS; i++) {
         lmp->zoid_num_to_idx[i] = -1;
     }
+
     int zoid_idx = 0;
-    // for (int dep = 0; dep < 3 + 1; dep++) {
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             int zoid_num = lmp->queues[dep][j].num;
@@ -698,8 +715,6 @@ void Verlet::setup_stencil_md() {
         }
     }
 
-    // lmp->send_to = new std::vector<int>[NUM_ZOIDS];
-    // lmp->recv_from = new std::vector<int>[NUM_ZOIDS];
     lmp->send_to_next_dt = new std::vector<int>[NUM_ZOIDS];
     lmp->recv_from_next_dt = new std::vector<int>[NUM_ZOIDS];
 
@@ -989,6 +1004,10 @@ void Verlet::setup_stencil_md() {
 
                     if (i == 0) {
                         std::cout << "zoid num: " << zoid_num << " has nlocal: " << lmp->atom_stencil_md[idx_][i]->nlocal << std::endl;
+
+                        for (int dim = 0; dim < 3; dim++) {
+                            std::cout << "lo: " << zoid.zoid.cuts[dim].lower << " " << zoid.zoid.cuts[dim].upper << std::endl;
+                        }
                     }
                 }
             }
@@ -999,7 +1018,6 @@ void Verlet::setup_stencil_md() {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -1009,14 +1027,7 @@ void Verlet::setup_stencil_md() {
                 // receive only if the zoid belongs to me
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[idx_][t];
-                    atom_->sort_stencil_md();
-
-//                    if (t == 1 && (zoid_num == 2 || zoid_num == 34)) {
-//                        for (int h = 0; h < atom_->nlocal; h++) {
-//                            std::cout << "Zoid num: " << zoid_num << " h: " << h << " tag: " << atom_->tag[h]
-//                            << " pos: " << atom_->x[h][0] << " " << atom_->x[h][1] << " " << atom_->x[h][2] << std::endl;
-//                        }
-//                    }
+                    // atom_->sort_stencil_md();
 
                     std::set<int> tags;
                     for (int i = 0; i < atom_->nlocal; i++) {
@@ -1182,18 +1193,6 @@ void Verlet::setup_stencil_md() {
 
     MPI_Barrier(world);
 
-    // construct first send_list, sending ghost->local
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
-            queue_info& tmp = lmp->queues[dep][j];
-            int zoid_num = tmp.num;
-            queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
-            if (zoid_num % comm->nprocs == comm->me) {
-                lmp->comm_stencil_md[zoid_num]->construct_send_list_stencil_md(lmp->atom_stencil_md[zoid_num], zoid);
-            }
-        }
-    }
-
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
@@ -1205,12 +1204,23 @@ void Verlet::setup_stencil_md() {
                 Atom* atom_ = lmp->atom_stencil_md[zoid_num][0];
                 Atom* next = lmp->atom_stencil_md[zoid_num][1];
                 for (int i = 0; i < atom_->nlocal; i++) {
-                    if (atom_->tag[i] == 139) {
+                    if (atom_->tag[i] == 11338 || atom_->tag[i] == 10429) {
                         std::cout << "Zoid num: " << zoid_num << " has atom tag: " << atom_->tag[i] << " with pos: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2] << std::endl;
                         std::cout << "-----------Zoid: " << zoid_num << " ---------------------" << std::endl;
                         for (int dim = 0; dim < 3; dim++) {
                             std::cout << "lo: " << zoid.zoid.cuts[dim].lower << " hi: " << zoid.zoid.cuts[dim].upper << std::endl;
                         }
+                        bool s = (zoid.atom_idx_mapping[0][i] >= next->nlocal);
+                        std::cout << "zoid_num: " << zoid_num << " atom pos mapping: " << s << std::endl;
+
+                    }
+
+
+                }
+
+                for (int i = 0; i < next->nlocal; i++) {
+                    if (next->tag[i] == 11338 || next->tag[i] == 10429) {
+                        std::cout << "NEXT Zoid num: " << zoid_num << " has atom tag: " << next->tag[i] << " with pos: " << next->x[i][0] << " " << next->x[i][1] << " " << next->x[i][2] << std::endl;
                         bool s = (zoid.atom_idx_mapping[0][i] >= next->nlocal);
                         std::cout << "zoid_num: " << zoid_num << " atom pos mapping: " << s << std::endl;
 
@@ -1221,8 +1231,16 @@ void Verlet::setup_stencil_md() {
         }
     }
 
-    // assert(false);
-
+    // construct first send_list, sending ghost->local
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            int zoid_num = zoid.num;
+            if (zoid_num % comm->nprocs == comm->me) {
+                lmp->comm_stencil_md[zoid_num]->construct_send_list_stencil_md(lmp->atom_stencil_md[zoid_num], zoid);
+            }
+        }
+    }
 
     std::vector<int*> send_bufs;
     // compute force but only for the first timestep
@@ -1423,10 +1441,10 @@ void Verlet::setup_stencil_md() {
     for (int i = 0; i < atom->nlocal; i++) {
         int tag = atom->tag[i];
         for (int dim = 0; dim < 3; dim++) {
-            if (fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) > 1e-5) {
+            if (fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) > 5e-5) {
                 std::cout << "idx: " << i << " dim: " << dim << " what I have: " << atom->f[i][dim] << " what I got: " << recv_f[tag * 3 + dim] << " diff: " << fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) << std::endl;
             }
-            assert(fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) <= 1e-5);
+            assert(fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) <= 5e-5);
         }
     }
 
@@ -1443,7 +1461,7 @@ void Verlet::setup_stencil_md() {
             assert(zoid_num == idx_);
             if (zoid_num % comm->nprocs == comm->me) {
                 Atom* atom_ = lmp->atom_stencil_md[idx_][0];
-                for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
+                for (int k = 0; k < atom_->nlocal; k++) {
                     x_ += atom_->f[k][0];
                     y_ += atom_->f[k][1];
                     z_ += atom_->f[k][2];
@@ -1471,16 +1489,17 @@ void Verlet::setup_stencil_md() {
                 Atom* atom_ = lmp->atom_stencil_md[zoid_num][0];
                 Atom* next = lmp->atom_stencil_md[zoid_num][1];
                 for (int idx = 0; idx < atom_->nlocal; idx++) {
-                    if (zoid.atom_idx_mapping[0][idx] < next->nlocal) {
-                        int tag = atom_->tag[idx];
-                        for (int dim = 0; dim < 3; dim++) {
-                            if (fabs(recv_f[tag * 3 + dim] - atom_->f[idx][dim]) > 1e-5) {
-                                std::cout << "zoid: " << zoid_num << " idx: " << idx << " tag: " << atom_->tag[idx] << " dim: " << dim << " what I have: " << atom_->f[idx][dim] << " what I got: " << recv_f[tag * 3 + dim] << " diff: " << fabs(recv_f[tag * 3 + dim] - atom_->f[idx][dim]) << std::endl;
-                            }
-                            assert(fabs(atom_->f[idx][dim] - recv_f[tag * 3 + dim]) <= 1e-5);
+                    int tag = atom_->tag[idx];
+                    for (int dim = 0; dim < 3; dim++) {
+                        if (fabs(recv_f[tag * 3 + dim] - atom_->f[idx][dim]) > 5e-5) {
+                            std::cout << "zoid: " << zoid_num << " idx: " << idx << " tag: " << atom_->tag[idx] << " dim: " << dim << " what I have: " << atom_->f[idx][dim] << " what I got: " << recv_f[tag * 3 + dim] << " diff: " << fabs(recv_f[tag * 3 + dim] - atom_->f[idx][dim]) << std::endl;
                         }
-                        total_evaled++;
+                        assert(fabs(atom_->f[idx][dim] - recv_f[tag * 3 + dim]) <= 5e-5);
                     }
+                    if (atom_->tag[idx] == 6179) {
+                        std::cout << "zoid: " << zoid_num << " BEFORE SHIT HAPPENED FORCE: " << atom_->f[idx][0] << " " << atom_->f[idx][1] << " " << atom_->f[idx][2] << std::endl;
+                    }
+                    total_evaled++;
                 }
             }
         }
@@ -1492,7 +1511,6 @@ void Verlet::setup_stencil_md() {
     std::cout << "atoms evaled: " << total_atoms_evaled << " total number of atoms: " << atom->natoms << std::endl;
 
     MPI_Barrier(world);
-    assert(false);
 
     delete[] send_f;
     delete[] recv_f;

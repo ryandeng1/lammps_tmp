@@ -252,7 +252,7 @@ void FixNHKokkos<DeviceType>::setup_stencil_md(double* x, Atom* atom_)
 
     if (pstat_flag) {
         double kt = boltz * t_target;
-        double nkt = (atom_->natoms + 1) * kt;
+        double nkt = (atom->natoms + 1) * kt;
 
         for (int i = 0; i < 3; i++)
             if (p_flag[i])
@@ -285,6 +285,8 @@ template<class DeviceType>
 void FixNHKokkos<DeviceType>::initial_integrate(int /*vflag*/)
 {
   // update eta_press_dot
+
+  tag = atom->tag;
 
   if (pstat_flag && mpchain) nhc_press_integrate();
 
@@ -356,6 +358,7 @@ void FixNHKokkos<DeviceType>::initial_integrate_stencil_md(int /*vflag*/, Atom* 
             }
         } else {
             std::cout << "ATOM IDX MAPPING -1 for idx: " << i << " out of: " << atom_->nlocal << std::endl;
+            assert(false);
         }
     }
 
@@ -819,8 +822,7 @@ void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next) {
     mass = atomKK_->k_mass.view<DeviceType>();
     type = atomKK_->k_type.view<DeviceType>();
     mask = atomKK_->k_mask.view<DeviceType>();
-    // int nlocal = atomKK_->nlocal;
-    // int nlocal = std::min(atom_->nlocal, next->nlocal);
+
     int nlocal = atom_->nlocal;
     if (igroup == atomKK_->firstgroup) nlocal = atomKK_->nfirst;
 
@@ -849,6 +851,7 @@ KOKKOS_INLINE_FUNCTION
 void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v<RMASS>, const int &i) const {
   if (RMASS) {
     if (mask[i] & groupbit) {
+      assert(false);
       const F_FLOAT dtfm = dtf / rmass[i];
       v(i,0) += dtfm*f(i,0);
       v(i,1) += dtfm*f(i,1);
@@ -858,9 +861,17 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v<RMASS>, const int &i) co
     if (mask[i] & groupbit) {
       const F_FLOAT dtfm = dtf / mass[type[i]];
       // const F_FLOAT dtfm = dtf / atom->mass[type[i]];
+      double v0 = v(i, 0);
+      double v1 = v(i, 1);
+      double v2 = v(i, 2);
       v(i,0) += dtfm*f(i,0);
       v(i,1) += dtfm*f(i,1);
       v(i,2) += dtfm*f(i,2);
+      if (atom->tag[i] == 15883 && false) {
+          std::cout << "REGULAR MD INTEGRATE FORCE: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2) << std::endl;
+          std::cout << "REGULAR MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
+          std::cout << "REGULAR MD NEW VEL: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2) << std::endl;
+      }
     }
   }
 }
@@ -882,19 +893,21 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v_stencil_md<RMASS>, const
             const F_FLOAT dtfm = dtf / atom->mass[type[i]];
             if (atom_idx_mapping[i] != -1) {
                 int next_idx = atom_idx_mapping[i];
+                double v0 = next_v(next_idx, 0);
+                double v1 = next_v(next_idx, 1);
+                double v2 = next_v(next_idx, 2);
                 next_v(next_idx, 0) += dtfm*f(i, 0);
                 next_v(next_idx, 1) += dtfm*f(i, 1);
                 next_v(next_idx, 2) += dtfm*f(i, 2);
+                assert(tag[i] == next_tag[next_idx]);
+                if (tag[i] == 10967 && false) {
+                    std::cout << "STENCIL MD INTEGRATE FORCE: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2) << std::endl;
+                    std::cout << "STENCIL MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
+                    std::cout << "STENCIL MD NEW VEL: " << next_v(next_idx, 0) << " " << next_v(next_idx, 1) << " " << next_v(next_idx, 2) << std::endl;
+                    std::cout << "next vel next_idx: " << next_idx << std::endl;
+                }
             }
-
-            /*
-            next_v(i, 0) = v(i, 0) + dtfm*f(i, 0);
-            next_v(i, 1) = v(i, 1) + dtfm*f(i, 1);
-            next_v(i, 2) = v(i, 2) + dtfm*f(i, 2);
-            */
         }
-
-
     }
 }
 
@@ -905,18 +918,17 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v_stencil_md<RMASS>, const
 template<class DeviceType>
 void FixNHKokkos<DeviceType>::nve_x()
 {
-  std::cout << "nve x" << std::endl;
   atomKK->sync(execution_space,X_MASK | V_MASK | MASK_MASK);
   atomKK->modified(execution_space,X_MASK);
 
   x = atomKK->k_x.view<DeviceType>();
   v = atomKK->k_v.view<DeviceType>();
   mask = atomKK->k_mask.view<DeviceType>();
+
   int nlocal = atomKK->nlocal;
   if (igroup == atomKK->firstgroup) nlocal = atomKK->nfirst;
 
   // x update by full step only for atoms in group
-  tag = atom->tag;
 
   copymode = 1;
   Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x>(0,nlocal),*this);
@@ -929,12 +941,9 @@ void FixNHKokkos<DeviceType>::nve_x_stencil_md(Atom* atom_, Atom* next) {
     atomKK_->sync_stencil_md(execution_space,X_MASK | V_MASK | MASK_MASK, atom_);
     atomKK_->modified_stencil_md(execution_space,X_MASK, atom_);
 
-
     x = atomKK_->k_x.view<DeviceType>();
     v = atomKK_->k_v.view<DeviceType>();
     mask = atomKK_->k_mask.view<DeviceType>();
-    // int nlocal = atomKK_->nlocal;
-    // int nlocal = std::min(atom_->nlocal, next->nlocal);
     int nlocal = atom_->nlocal;
     if (igroup == atomKK_->firstgroup) nlocal = atomKK_->nfirst;
 
@@ -958,10 +967,12 @@ template<class DeviceType>
 KOKKOS_INLINE_FUNCTION
 void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x, const int &i) const {
   if (mask[i] & groupbit) {
-    double prev = x(i, 0);
     x(i,0) += dtv * v(i,0);
     x(i,1) += dtv * v(i,1);
     x(i,2) += dtv * v(i,2);
+    if (atom->tag[i] == 10967) {
+        std::cout << "REGULAR MD VEL: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2) << std::endl;
+    }
   }
 }
 
@@ -974,8 +985,12 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x_stencil_md, const int &i
             next_x(next_idx, 0) = x(i, 0) + dtv * next_v(next_idx, 0);
             next_x(next_idx, 1) = x(i, 1) + dtv * next_v(next_idx, 1);
             next_x(next_idx, 2) = x(i, 2) + dtv * next_v(next_idx, 2);
+            assert(tag[i] == next_tag[next_idx]);
+            if (tag[i] == 10967) {
+                std::cout << "i: " << i << " next idx: " << next_idx << " STENCIL MD VEL: " << next_v(next_idx, 0) << " " << next_v(next_idx, 1) << " " << next_v(next_idx, 2) << " other one: " << std::endl;
+            }
         } else {
-
+            assert(false);
         }
     }
 }

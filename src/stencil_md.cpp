@@ -8,46 +8,46 @@
 #include <iostream>
 #include "stencil_md.h"
 
-int get_zoid_dep(int zoid_num) {
-    int my_zoid_dep = -1;
-    if (zoid_num < 8) {
-        my_zoid_dep = 0;
-    } else if (zoid_num< 32) {
-        my_zoid_dep = 1;
-    } else if (zoid_num < 56) {
-        my_zoid_dep = 2;
-    } else {
-        assert(zoid_num < 64);
-        my_zoid_dep = 3;
-    }
-    assert(my_zoid_dep != -1);
-    return my_zoid_dep;
-}
-
-// use this if guarantee don't want shared ghosts
 //int get_zoid_dep(int zoid_num) {
 //    int my_zoid_dep = -1;
 //    if (zoid_num < 8) {
 //        my_zoid_dep = 0;
-//    } else if (zoid_num< 16) {
+//    } else if (zoid_num< 32) {
 //        my_zoid_dep = 1;
-//    } else if (zoid_num < 24) {
-//        my_zoid_dep = 2;
-//    } else if (zoid_num < 32) {
-//        my_zoid_dep = 3;
-//    } else if (zoid_num < 40) {
-//        my_zoid_dep = 4;
-//    } else if (zoid_num < 48) {
-//        my_zoid_dep = 5;
 //    } else if (zoid_num < 56) {
-//        my_zoid_dep = 6;
-//    } else if (zoid_num < 64) {
-//        my_zoid_dep = 7;
+//        my_zoid_dep = 2;
+//    } else {
+//        assert(zoid_num < 64);
+//        my_zoid_dep = 3;
 //    }
-//
 //    assert(my_zoid_dep != -1);
 //    return my_zoid_dep;
 //}
+
+// use this if guarantee don't want shared ghosts
+int get_zoid_dep(int zoid_num) {
+    int my_zoid_dep = -1;
+    if (zoid_num < 8) {
+        my_zoid_dep = 0;
+    } else if (zoid_num< 16) {
+        my_zoid_dep = 1;
+    } else if (zoid_num < 24) {
+        my_zoid_dep = 2;
+    } else if (zoid_num < 32) {
+        my_zoid_dep = 3;
+    } else if (zoid_num < 40) {
+        my_zoid_dep = 4;
+    } else if (zoid_num < 48) {
+        my_zoid_dep = 5;
+    } else if (zoid_num < 56) {
+        my_zoid_dep = 6;
+    } else if (zoid_num < 64) {
+        my_zoid_dep = 7;
+    }
+
+    assert(my_zoid_dep != -1);
+    return my_zoid_dep;
+}
 
 bool is_close(int* pos1, int* pos2) {
     for (int i = 0; i < 3; i++) {
@@ -237,10 +237,10 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
                     cuts_t middle_zoid = q_info.zoid;
                     // middle_zoid.cuts[dim].lower = start + mid;
                     // middle_zoid.cuts[dim].upper = start + mid;
-                    // middle_zoid.cuts[dim].lower = start + mid - slope;
-                    // middle_zoid.cuts[dim].upper = start + mid + slope;
-                    middle_zoid.cuts[dim].lower = start + mid - 2 * slope;
-                    middle_zoid.cuts[dim].upper = start + mid + 2 * slope;
+                    middle_zoid.cuts[dim].lower = start + mid - slope;
+                    middle_zoid.cuts[dim].upper = start + mid + slope;
+                    // middle_zoid.cuts[dim].lower = start + mid - 2 * slope;
+                    // middle_zoid.cuts[dim].upper = start + mid + 2 * slope;
                     middle_zoid.cuts[dim].slope_lower = -slope;
                     middle_zoid.cuts[dim].slope_upper = slope;
 
@@ -257,12 +257,12 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
                     if (std::abs(lb - lattice[dim]) <= 1e-8) {
                         // initial cut
                         cuts_t pbc_zoid = q_info.zoid;
-                        pbc_zoid.cuts[dim].lower = -2 * slope;
-                        pbc_zoid.cuts[dim].upper = 2 * slope;
+                        // pbc_zoid.cuts[dim].lower = -2 * slope;
+                        // pbc_zoid.cuts[dim].upper = 2 * slope;
                         // pbc_zoid.cuts[dim].lower = start;
                         // pbc_zoid.cuts[dim].upper = start;
-                        // pbc_zoid.cuts[dim].slope_lower = -slope;
-                        // pbc_zoid.cuts[dim].slope_upper = slope;
+                        pbc_zoid.cuts[dim].lower = -slope;
+                        pbc_zoid.cuts[dim].upper = slope;
 
                         pbc_zoid.cuts[dim].slope_lower = -slope;
                         pbc_zoid.cuts[dim].slope_upper =  slope;

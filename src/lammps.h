@@ -74,7 +74,7 @@ class LAMMPS {
   // std::vector<std::array<class Modify*, NUM_TIMESTEPS_IN_PARALLEL + 1>> modify_stencil_md;
   // std::vector<std::array<class Update*, NUM_TIMESTEPS_IN_PARALLEL + 1>> update_stencil_md;
   std::vector<std::array<class Force*, NUM_TIMESTEPS_IN_PARALLEL + 1>> force_stencil_md;
-  std::deque<queue_info> queues[2 * (3 + 1)];
+  std::deque<queue_info> queues[NUM_DEPS];
 
   // get zoids which are neighbors of this zoid
   // std::vector<int>* send_to;

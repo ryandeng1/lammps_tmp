@@ -75,7 +75,7 @@ class AtomVecAtomicKokkos : public AtomVecKokkos {
   int unpack_border_stencil_md(int, int, double *, Atom* atom_, int) override;
   int pack_border_stencil_md(int, int*, double*, int*, int**) override;
 
-  int pack_data_stencil_md(int, int*, double*) override;
+  int pack_data_stencil_md(int, int*, double*, int*, bool*, bool*) override;
   void unpack_data_stencil_md(Atom*, int, int, double*, int*, int, bool=false) override;
 
   void sync_stencil_md(ExecutionSpace space, unsigned int mask, Atom*) override;

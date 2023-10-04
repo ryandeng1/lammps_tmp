@@ -880,13 +880,13 @@ void LAMMPS::create()
       }
       // Force* force = new Force(this);
       // force_stencil_md.push_back(force);
-      Modify* modify;
+      Modify* modify_;
       if (kokkos) {
-          modify = new ModifyKokkos(this);
+          modify_ = new ModifyKokkos(this);
       } else {
-          modify = new Modify(this);
+          modify_ = new Modify(this);
       }
-      modify_stencil_md.push_back(modify);
+      modify_stencil_md.push_back(modify_);
 
       for (int j = 0; j < atom_stencil_md[i].size(); j++) {
           Atom* atom_;
@@ -1210,11 +1210,6 @@ void LAMMPS::destroy()
       delete atom_stencil_md[i][j];
     }
   }
-  for (int i = 0; i < atom_kokkos_stencil_md.size(); i++) {
-    for (int j = 0; j < atom_kokkos_stencil_md[i].size(); j++) {
-      delete atom_kokkos_stencil_md[i][j];
-    }
-  }
   for (int i = 0; i < comm_stencil_md.size(); i++) {
     delete comm_stencil_md[i];
   }
@@ -1235,8 +1230,6 @@ void LAMMPS::destroy()
 
   // stencil_md
   delete[] zoid_num_to_idx;
-  // delete[] send_to;
-  // delete[] recv_from;
   delete[] send_to_next_dt;
   delete[] recv_from_next_dt;
 }

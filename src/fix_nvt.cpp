@@ -34,3 +34,18 @@ FixNVT::FixNVT(LAMMPS *lmp, int narg, char **arg) : FixNH(lmp, narg, arg)
   modify->add_compute(fmt::format("{} {} temp", id_temp, group->names[igroup]));
   tcomputeflag = 1;
 }
+
+FixNVT::FixNVT(LAMMPS *lmp, Modify* modify_, int narg, char **arg) : FixNH(lmp, narg, arg) {
+    std::cout << "HELLO MAN" << std::endl;
+    if (!tstat_flag) error->all(FLERR, "Temperature control must be used with fix nvt");
+    if (pstat_flag) error->all(FLERR, "Pressure control can not be used with fix nvt");
+
+    // create a new compute temp style
+    // id = fix-ID + temp
+
+    id_temp = utils::strdup(std::string(id) + "_temp");
+    modify_->add_compute(fmt::format("{} {} temp", id_temp, group->names[igroup]));
+    tcomputeflag = 1;
+}
+
+

@@ -125,7 +125,7 @@ void _noopt Modify::create_factories()
   (*fix_map_stencil_md)["nvt/kk"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
   (*fix_map_stencil_md)["nvt/kk/device"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
   (*fix_map_stencil_md)["nvt/kk/host"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
-
+  (*fix_map_stencil_md)["nvt"] = &style_creator_stencil_md<Fix, FixNVT>;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1004,12 +1004,18 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix, bool use_stencil_md)
 
   // create the Fix
   // try first with suffix appended
-
   fix[ifix] = nullptr;
+
+  if (use_stencil_md) {
+      std::cout << "HERE: " << trysuffix << " " << lmp->suffix_enable << std::endl;
+  }
 
   if (trysuffix && lmp->suffix_enable) {
     if (lmp->suffix) {
       std::string estyle = arg[2] + std::string("/") + lmp->suffix;
+      if (use_stencil_md) {
+          std::cout << "estyle: " << estyle << std::endl;
+      }
       if (fix_map->find(estyle) != fix_map->end()) {
         if (use_stencil_md) {
             FixCreatorStencilMD &fix_creator = (*fix_map_stencil_md)[estyle];
@@ -1366,6 +1372,7 @@ Compute *Modify::add_compute(int narg, char **arg, int trysuffix)
   if (narg < 3) error->all(FLERR, "Illegal compute command");
 
   // error check
+  std::cout << "ADDING COMPUTE: " << arg[0] << std::endl;
 
   for (int icompute = 0; icompute < ncompute; icompute++)
     if (strcmp(arg[0], compute[icompute]->id) == 0)

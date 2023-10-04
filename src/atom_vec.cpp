@@ -268,7 +268,6 @@ void AtomVec::grow(int n)
 
 void AtomVec::grow_stencil_md(int n, Atom* atom_)
 {
-    std::cout << "atom vec grow stencil md" << std::endl;
     int datatype, cols, maxcols;
     void *pdata;
 
@@ -289,7 +288,6 @@ void AtomVec::grow_stencil_md(int n, Atom* atom_)
 
     eval_mask_stencil_md = memory->grow(atom_->eval_mask_stencil_md, nmax, "atom:eval_mask_stencil_md");
 
-    std::cout << "ngrow???? " << ngrow << std::endl;
     for (int i = 0; i < ngrow; i++) {
         pdata = mgrow.pdata[i];
         datatype = mgrow.datatype[i];

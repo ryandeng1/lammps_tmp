@@ -113,7 +113,7 @@ class AtomVec : protected Pointers {
   virtual int pack_border_stencil_md(int, int*, double*, int*, int**) {assert(false); return 0;}
   virtual int unpack_border_stencil_md(int, int, double*, Atom*, int) {assert(false); }
 
-  virtual int pack_data_stencil_md(int, int*, double*) {assert(false); return 0; }
+  virtual int pack_data_stencil_md(int, int*, double*, int*, bool*, bool*) {assert(false); return 0; }
   virtual void unpack_data_stencil_md(Atom*, int, int, double*, int*, int, bool=false) {assert(false); }
 
   int pack_shared_ghost_stencil_md(Atom*, std::set<int>&, double* buf, bool debug=false);

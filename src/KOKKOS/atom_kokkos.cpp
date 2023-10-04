@@ -98,6 +98,9 @@ AtomKokkos::~AtomKokkos()
 
   memoryKK->destroy_kokkos(k_dvector, dvector);
   dvector = nullptr;
+
+  // stencil md
+  memoryKK->destroy_kokkos(k_eval_mask_stencil_md, eval_mask_stencil_md);
 }
 
 /* ---------------------------------------------------------------------- */

@@ -147,6 +147,9 @@ class CommBrick : public Comm {
   int * maxsend_sendlist_stencil_md;
   int * maxrecv_sendlist_stencil_md;
 
+  bool** send_force_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  bool** send_pos_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
   double** buf_send2_stencil_md;
   double** buf_recv2_stencil_md;
   int* maxsend2_stencil_md;

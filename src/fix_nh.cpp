@@ -1805,7 +1805,10 @@ void FixNH::nhc_temp_integrate()
     eta_dot[0] *= tdrag_factor;
     eta_dot[0] *= expfac;
 
-    factor_eta = exp(-ncfac*dthalf*eta_dot[0]);
+    // TODO: revert
+    // factor_eta = exp(-ncfac*dthalf*eta_dot[0]);
+    factor_eta = 1.0;
+    std::cout << "factor_eta: " << exp(-ncfac*dthalf*eta_dot[0]) << std::endl;
     nh_v_temp();
 
     // rescale temperature due to velocity scaling
@@ -1871,7 +1874,9 @@ void FixNH::nhc_temp_integrate_stencil_md(Atom* atom_, Atom* next)
         eta_dot[0] *= tdrag_factor;
         eta_dot[0] *= expfac;
 
-        factor_eta = exp(-ncfac*dthalf*eta_dot[0]);
+        // TODO: revert back
+        // factor_eta = exp(-ncfac*dthalf*eta_dot[0]);
+        factor_eta = 1.0;
         nh_v_temp_stencil_md(atom_, next);
 
         // rescale temperature due to velocity scaling

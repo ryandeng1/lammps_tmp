@@ -195,6 +195,8 @@ void PairPOD::compute(int eflag, int vflag)
       double rcutsq = fastpodptr->rcut*fastpodptr->rcut;
       double evdwl = 0.0;
 
+      std::cout << "rcut: " << fastpodptr->rcut << " neigh cut: " << neighbor->cutneighmax << std::endl;
+
 //     fastpodptr->timing = 1;
 //     if (fastpodptr->timing == 1)
 //       for (int i=0; i<20; i++) fastpodptr->comptime[i] = 0;
@@ -203,7 +205,7 @@ void PairPOD::compute(int eflag, int vflag)
       int i = ilist[ii];
       int jnum = numneigh[i];
 
-    if (atom->tag[i] == 10152) {
+    if (atom->tag[i] == 10265) {
         for (int j = 0; j < numneigh[i]; j++) {
             int neigh = firstneigh[i][j];
             double delx = x[neigh][0] - x[i][0];    // xj - xi
@@ -211,7 +213,9 @@ void PairPOD::compute(int eflag, int vflag)
             double delz = x[neigh][2] - x[i][2];    // xj - xi
             double rsq = delx * delx + dely * dely + delz * delz;
             if (rsq < fastpodptr->rcut*fastpodptr->rcut && rsq > 1e-20) {
-                std::cout << "REGULAR MD neigh: " << neigh << " tag: " << atom->tag[neigh] << " pos neigh: " << atom->x[neigh][0] << " " << atom->x[neigh][1] << " " << atom->x[neigh][2] << std::endl;
+                std::cout << "REGULAR MD neigh: " << neigh << " tag: "
+                << atom->tag[neigh] << " pos neigh: " << atom->x[neigh][0] << " " << atom->x[neigh][1] << " " << atom->x[neigh][2]
+                << " pos me: " << atom->x[i][0] << " " << atom->x[i][1] << " " << atom->x[i][2] << std::endl;
             }
         }
     }
@@ -261,7 +265,7 @@ void PairPOD::compute(int eflag, int vflag)
   }
 
   for (int i = 0; i < atom->nlocal; i++) {
-      if (atom->tag[i] == 10152) {
+      if (atom->tag[i] == 10265) {
           std::cout << "test regular md idx: " << i << " force: " << atom->f[i][0] << " " << atom->f[i][1] << " " << atom->f[i][2] << std::endl;
       }
   }
@@ -296,12 +300,14 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom* atom_, Atom* next, 
     // initialize global descriptors to zero
 
     std::vector<int> out_of_bounds_atoms;
-    for (int ii = 0; ii < inum; ii++) {
-        const int i = ilist[ii];
-        assert(ii == ilist[ii]);
+    if (next != NULL) {
+        for (int ii = 0; ii < inum; ii++) {
+            const int i = ilist[ii];
+            assert(ii == ilist[ii]);
 
-        if (mapping[i] >= next->nlocal) {
-            out_of_bounds_atoms.push_back(ii);
+            if (mapping[i] >= next->nlocal) {
+                out_of_bounds_atoms.push_back(ii);
+            }
         }
     }
 
@@ -311,22 +317,25 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom* atom_, Atom* next, 
         double rcutsq = fastpodptr->rcut*fastpodptr->rcut;
         double evdwl = 0.0;
         assert(ignum == atom_->nlocal + atom_->nghost);
+
         for (int i = 0; i < atom_->nlocal; i++) {
-            if (atom_->tag[i] == 10152) {
-                std::cout << "zoid num: " << zoid.num << " BEFORE test stencil md idx: " << i << " out of: " << atom_->nlocal << " tag: " << atom_->tag[i] << " force: " << atom_->f[i][0] << " " << atom_->f[i][1] << " " << atom_->f[i][2] << std::endl;
+            if (atom_->tag[i] == 10265) {
+                std::cout << "zoid num: " << zoid.num << " BEFORE test stencil md idx: " << i << " out of: "
+                << atom_->nlocal << " tag: " << atom_->tag[i] << " force: "
+                << atom_->f[i][0] << " " << atom_->f[i][1] << " " << atom_->f[i][2]
+                << " eval mask? " << atom_->eval_mask_stencil_md[i] << std::endl;
             }
         }
+
         for (int ii = 0; ii < out_of_bounds_atoms.size(); ii++) {
-            // TODO: no evaluating center atoms as out of bounds
-            continue;
             int i = ilist[out_of_bounds_atoms[ii]];
             int jnum = numneigh[i];
 
             for (int jj = 0; jj < jnum; jj++) {
                 int neigh = firstneigh[i][jj];
-
-                if (atom_->tag[neigh] == 8644) {
-                    std::cout << "zoid: " << zoid.num << " has the overlapping neighbor? flag: " << atom_->eval_mask_stencil_md[neigh] << std::endl;
+                assert(neigh >= 0 && neigh < atom_->nlocal + atom_->nghost);
+                if (atom_->tag[neigh] == 10265) {
+                    std::cout << "zoid_num: " << zoid.num << " neigh tag: " << atom_->tag[neigh] << " can eval: " << atom_->eval_mask_stencil_md[neigh] << std::endl;
                 }
 
                 if (neigh >= atom_->nlocal && atom_->eval_mask_stencil_md[neigh] != 0) {
@@ -378,20 +387,23 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom* atom_, Atom* next, 
                         }
                     }
 
-                    /*
+                    if (atom_->tag[neigh] == 10265) {
+                        std::cout << "zoid: " << zoid.num << " got to it first. WHERE IS IT THEN. " << std::endl;
+                    }
+
                     for (int k = 0; k < numneigh[neigh]; k++) {
                         int neigh_neigh = firstneigh[neigh][k];
-                        if (atom_->tag[neigh_neigh] == 95960) {
-                            std::cout << "me: " << comm->me << " atom tag: " << atom_->tag[neigh_neigh] << " appears for center atom: " << atom_->tag[neigh] << " while eval partial " << " original atom: " << atom_->tag[i] << " zoid: " << zoid.num << std::endl;
-                            for (int dim = 0; dim < 3; dim++) {
-                                std::cout << "lo: " << zoid.zoid.cuts[dim].lower << " hi: " << zoid.zoid.cuts[dim].upper << std::endl;
-                            }
-                            std::cout << "original atom pos: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2] << std::endl;
-                            std::cout << "center atom pos: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " " << atom_->x[neigh][2] << std::endl;
-                            std::cout << "my atom pos: " << atom_->x[neigh_neigh][0] << " " << atom_->x[neigh_neigh][1] << " " << atom_->x[neigh_neigh][2] << std::endl;
+                        if (atom_->tag[neigh_neigh] == 10265) {
+                            std::cout << "out of bounds eval center atom: " << atom_->tag[neigh] << " with edge to: " << atom_->tag[neigh_neigh] << std::endl;
+                            // std::cout << "me: " << comm->me << " atom tag: " << atom_->tag[neigh_neigh] << " appears for center atom: " << atom_->tag[neigh] << " while eval partial " << " original atom: " << atom_->tag[i] << " zoid: " << zoid.num << std::endl;
+                            // std::cout << "center atom pos: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " " << atom_->x[neigh][2] << std::endl;
+                        }
+                        if (atom_->tag[neigh] == 10265) {
+                            std::cout << "zoid: " << zoid.num << " eval ghost target atom: "
+                            << atom_->tag[neigh] << " neighbor tag: " << atom_->tag[neigh_neigh]
+                            << "neighbor pos: " << atom_->x[neigh_neigh][0] << " " << atom_->x[neigh_neigh][1] << " " << atom_->x[neigh_neigh][2] << std::endl;
                         }
                     }
-                    */
                 }
             }
         }
@@ -401,19 +413,10 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom* atom_, Atom* next, 
             int i = ilist[ii];
             assert(ii == i);
 
-//            for (int j = 0; j < numneigh[i]; j++) {
-//                int neigh = firstneigh[i][j];
-//                double delx = x[neigh][0] - x[i][0];    // xj - xi
-//                double dely = x[neigh][1] - x[i][1];    // xj - xi
-//                double delz = x[neigh][2] - x[i][2];    // xj - xi
-//                double rsq = delx * delx + dely * dely + delz * delz;
-//                if (rsq < rcutsq && rsq > 1e-20 && atom_->tag[neigh] == 95960) {
-//                    std::cout << "evaling local atom which is neighbor of target atom: " << atom_->tag[i] << " flag: " << atom_->eval_mask_stencil_md[i] << std::endl;
-//                }
-//            }
-
             if (atom_->eval_mask_stencil_md[i] == 0) {
-                // std::cout << "zoid: " << zoid.num << " idx: " << i << " tag: " << atom_->tag[i] << " not evaled" << " out of: " << inum << std::endl;
+                if (atom_->tag[i] == 10265) {
+                    std::cout << "what the fuck? not evaling tag: " << atom_->tag[i] << " inside zoid: " << zoid.num << std::endl;
+                }
                 continue;
             }
 
@@ -423,11 +426,11 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom* atom_, Atom* next, 
                 double dely = x[neigh][1] - x[i][1];    // xj - xi
                 double delz = x[neigh][2] - x[i][2];    // xj - xi
                 double rsq = delx * delx + dely * dely + delz * delz;
-                if (rsq < rcutsq && rsq > 1e-20 && atom_->tag[neigh] == 10152) {
+                if (rsq < rcutsq && rsq > 1e-20 && (atom_->tag[neigh] == 10265)) {
                     std::cout << "zoid num: " << zoid.num << " Eval center target atom: " << atom_->tag[i] << " neighbor tag: " << atom_->tag[neigh] << " pos neigh: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " " << atom_->x[neigh][2] << std::endl;
                 }
-                if (atom_->tag[i] == 10152) {
-                    std::cout << "gottem target atom:  " << atom_->tag[i] << " with neigh: " << atom_->tag[neigh] << std::endl;
+                if (atom_->tag[i] == 10265) {
+                    std::cout << "zoid num: " << zoid.num << " gottem target atom:  " << atom_->tag[i] << " with neigh idx: " << neigh << " tag: " << atom_->tag[neigh] << " pos: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " " << atom_->x[neigh][2] << std::endl;
                 }
             }
 
@@ -474,7 +477,7 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom* atom_, Atom* next, 
     }
 
     for (int i = 0; i < atom_->nlocal; i++) {
-        if (atom_->tag[i] == 10152) {
+        if (atom_->tag[i] == 10265) {
             std::cout << "zoid num: " << zoid.num << " AFTER test stencil md idx: " << i << " out of: " << atom_->nlocal << " tag: " << atom_->tag[i] << " force: " << atom_->f[i][0] << " " << atom_->f[i][1] << " " << atom_->f[i][2] << std::endl;
         }
     }

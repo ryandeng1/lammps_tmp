@@ -353,19 +353,41 @@ int AtomVecAtomicKokkos::pack_border(int n, int *list, double *buf,
 }
 
 
-int AtomVecAtomicKokkos::pack_data_stencil_md(int n, int *list, double *buf) {
+int AtomVecAtomicKokkos::pack_data_stencil_md(int n, int *list, double *buf, int* pbc, bool* send_force, bool* send_pos) {
     int m = 0;
     for (int i = 0; i < n; i++) {
         int j = list[i];
-        buf[m++] = h_x(j,0);
-        buf[m++] = h_x(j,1);
-        buf[m++] = h_x(j,2);
+        double x_ = h_x(j, 0);
+        double y_ = h_x(j, 1);
+        double z_ = h_x(j, 2);
+        x_ += pbc[0]*domain->xprd;
+        y_ += pbc[1]*domain->yprd;
+        z_ += pbc[2]*domain->zprd;
+        if (send_pos[i]) {
+            buf[m++] = x_;
+            buf[m++] = y_;
+            buf[m++] = z_;
+        } else {
+            buf[m++] = std::numeric_limits<double>::infinity();
+            buf[m++] = std::numeric_limits<double>::infinity();
+            buf[m++] = std::numeric_limits<double>::infinity();
+        }
+
         buf[m++] = ubuf(h_tag(j)).d;
         buf[m++] = ubuf(h_type(j)).d;
         buf[m++] = ubuf(h_mask(j)).d;
-        buf[m++] = h_f(j, 0);
-        buf[m++] = h_f(j, 1);
-        buf[m++] = h_f(j, 2);
+        if (h_tag(j) == 10265) {
+            std::cout << "send_force: " << send_force[i] << " force: " << h_f(j, 0) << " " << h_f(j, 1) << " " << h_f(j, 2) << std::endl;
+        }
+        if (send_force[i]) {
+            buf[m++] = h_f(j, 0);
+            buf[m++] = h_f(j, 1);
+            buf[m++] = h_f(j, 2);
+        } else {
+            buf[m++] = 0.0;
+            buf[m++] = 0.0;
+            buf[m++] = 0.0;
+        }
     }
     return m;
 }
@@ -461,8 +483,15 @@ void AtomVecAtomicKokkos::unpack_data_stencil_md(Atom* atom_, int n, int first, 
         h_f(idx, 1) += f_y;
         h_f(idx, 2) += f_z;
 
-        if (h_tag(idx) == 13466) {
-            std::cout << "RYAN force now? " <<  f_x << " " <<  f_y << " " << f_z << std::endl;
+        if (!std::isinf(tmp_x)) {
+            h_x(idx, 0) = tmp_x;
+            assert(!std::isinf(tmp_y));
+            assert(!std::isinf(tmp_z));
+            h_x(idx, 1) = tmp_y;
+            h_x(idx, 2) = tmp_z;
+        } else {
+            assert(std::isinf(tmp_y));
+            assert(std::isinf(tmp_z));
         }
 
         /*
