@@ -332,8 +332,6 @@ void NeighborKokkos::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_
 
 template<class DeviceType>
 void NeighborKokkos::build_kokkos_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_) {
-    // std::cout << "me: " << comm->me << " CHECK DOMAIN SUB DOMAIN? " << domain_->sublo[0] << " " << domain_->sublo[1] << " " << domain_->sublo[2] << " " << domain_->subhi[0] << " " << domain_->subhi[1] << " " << domain_->subhi[2] << std::endl;
-    // std::cout << "CHECK DOMAIN DOMAIN DOMAIN? " << domain_->boxlo[0] << " " << domain_->boxlo[1] << " " << domain_->boxlo[2] << " " << domain_->boxhi[0] << " " << domain_->boxhi[1] << " " << domain_->boxhi[2] << std::endl;
     int i,m;
 
     ago = 0;

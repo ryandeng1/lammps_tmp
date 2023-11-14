@@ -116,6 +116,10 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
 
   eval_mask_stencil_md = nullptr;
 
+  eval_f_stencil_md = nullptr;
+
+  actually_eval_mask_stencil_md = nullptr;
+
   // charged and dipolar particles
 
   q = nullptr;
@@ -302,6 +306,8 @@ Atom::~Atom()
   memory->destroy(f);
 
   memory->destroy(eval_mask_stencil_md);
+
+  memory->destroy(actually_eval_mask_stencil_md);
 
   // delete custom atom arrays
 

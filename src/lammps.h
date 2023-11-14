@@ -48,7 +48,6 @@ class LAMMPS {
   class Python *python;            // Python interface
   class CiteMe *citeme;            // handle citation info
 
-
   // Stencil MD classes
   /*
   std::vector<class Atom*> atom_stencil_md;
@@ -62,46 +61,36 @@ class LAMMPS {
   // std::vector<class Domain*> domain_stencil_md;
   std::vector<std::array<class Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>> atom_stencil_md;
   std::vector<std::array<class AtomKokkos*, NUM_TIMESTEPS_IN_PARALLEL + 1>> atom_kokkos_stencil_md;
-  // std::vector<std::array<class Neighbor*, NUM_TIMESTEPS_IN_PARALLEL + 1>> neighbor_stencil_md;
   std::vector<class Comm*> comm_stencil_md;
-  // std::vector<std::array<class Comm*, NUM_TIMESTEPS_IN_PARALLEL + 1>> comm_stencil_md;
   std::vector<std::array<class Domain*, NUM_TIMESTEPS_IN_PARALLEL + 1>> domain_stencil_md;
   std::vector<std::array<class Neighbor*, NUM_TIMESTEPS_IN_PARALLEL + 1>> neighbor_stencil_md;
 
+  // need a separate comm, but can reuse neighbor lists
+  // need a separate comm for the send_lists, as sending to "next" zoid is different compared to sending to "prev" zoid as I walk down the
+  // array
+  std::vector<class Comm*> comm_stencil_md_next_dt;
+
   std::vector<class Modify*> modify_stencil_md;
   std::vector<class Update*> update_stencil_md;
-  // std::vector<class Force*> force_stencil_md;
-  // std::vector<std::array<class Modify*, NUM_TIMESTEPS_IN_PARALLEL + 1>> modify_stencil_md;
-  // std::vector<std::array<class Update*, NUM_TIMESTEPS_IN_PARALLEL + 1>> update_stencil_md;
   std::vector<std::array<class Force*, NUM_TIMESTEPS_IN_PARALLEL + 1>> force_stencil_md;
   std::deque<queue_info> queues[NUM_DEPS];
 
-  // get zoids which are neighbors of this zoid
-  // std::vector<int>* send_to;
-  // std::vector<int>* recv_from;
+  std::deque<queue_info> queues_next_dt[NUM_DEPS];
 
   // TODO: use this, replace send_to_next_dt and recv_from_next_dt with this as well
   std::vector<int>* send_to_neighbors;
   std::vector<int>* recv_from_neighbors;
 
-  std::vector<int>* send_to_shared_ghost;
-  std::vector<int>* recv_from_shared_ghost;
-  std::vector<int>* send_shared_ghost_list[NUM_TIMESTEPS_IN_PARALLEL];
-  std::vector<int>* recv_shared_ghost_list[NUM_TIMESTEPS_IN_PARALLEL];
+  std::vector<int>* send_to_neighbors_next_dt;
+  std::vector<int>* recv_from_neighbors_next_dt;
 
+  // std::vector<int>* send_to_next_dt;
+  // std::vector<int>* recv_from_next_dt;
 
-  // for each zoid, each timestep
-  // technically, don't need ghost???, only need local?
-  // std::map<int, std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1]
-  // std::vector<int>* recv_from_list;
-  // std::vector<int>* send_to_list;
-
-  std::vector<int>* send_to_next_dt;
-  std::vector<int>* recv_from_next_dt;
   int* zoid_num_to_idx;
   queue_info* zoid_num_to_zoid;
-
-  std::map<int, int> shared_ghost_tag_to_zoid_responsible[NUM_TIMESTEPS_IN_PARALLEL];
+  queue_info* zoid_num_to_zoid_next_dt;
+  // int* zoid_num_to_idx_next_dt;
 
   torch::jit::Module lmp_model;
   std::unordered_map<std::string, std::string> lmp_model_metadata = {

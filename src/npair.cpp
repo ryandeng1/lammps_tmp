@@ -118,43 +118,43 @@ void NPair::copy_neighbor_info()
 void NPair::copy_neighbor_info_stencil_md(Neighbor* neighbor_)
 {
     // general params
-    includegroup = neighbor_->includegroup;
-    exclude = neighbor_->exclude;
-    skin = neighbor_->skin;
-    cutneighsq = neighbor_->cutneighsq;
-    cutneighghostsq = neighbor_->cutneighghostsq;
-    cut_inner_sq = neighbor_->cut_inner_sq;
-    cut_middle_sq = neighbor_->cut_middle_sq;
-    cut_middle_inside_sq = neighbor_->cut_middle_inside_sq;
+    includegroup = neighbor->includegroup;
+    exclude = neighbor->exclude;
+    skin = neighbor->skin;
+    cutneighsq = neighbor->cutneighsq;
+    cutneighghostsq = neighbor->cutneighghostsq;
+    cut_inner_sq = neighbor->cut_inner_sq;
+    cut_middle_sq = neighbor->cut_middle_sq;
+    cut_middle_inside_sq = neighbor->cut_middle_inside_sq;
     bboxlo = neighbor_->bboxlo;
     bboxhi = neighbor_->bboxhi;
 
     // exclusion info
 
-    nex_type = neighbor_->nex_type;
-    ex1_type = neighbor_->ex1_type;
-    ex2_type = neighbor_->ex2_type;
-    ex_type = neighbor_->ex_type;
+    nex_type = neighbor->nex_type;
+    ex1_type = neighbor->ex1_type;
+    ex2_type = neighbor->ex2_type;
+    ex_type = neighbor->ex_type;
 
-    nex_group = neighbor_->nex_group;
-    ex1_group = neighbor_->ex1_group;
-    ex2_group = neighbor_->ex2_group;
-    ex1_bit = neighbor_->ex1_bit;
-    ex2_bit = neighbor_->ex2_bit;
+    nex_group = neighbor->nex_group;
+    ex1_group = neighbor->ex1_group;
+    ex2_group = neighbor->ex2_group;
+    ex1_bit = neighbor->ex1_bit;
+    ex2_bit = neighbor->ex2_bit;
 
-    nex_mol = neighbor_->nex_mol;
-    ex_mol_group = neighbor_->ex_mol_group;
-    ex_mol_bit = neighbor_->ex_mol_bit;
-    ex_mol_intra = neighbor_->ex_mol_intra;
+    nex_mol = neighbor->nex_mol;
+    ex_mol_group = neighbor->ex_mol_group;
+    ex_mol_bit = neighbor->ex_mol_bit;
+    ex_mol_intra = neighbor->ex_mol_intra;
 
     // special info
 
-    special_flag = neighbor_->special_flag;
+    special_flag = neighbor->special_flag;
 
     // multi info
 
-    ncollections = neighbor_->ncollections;
-    cutcollectionsq = neighbor_->cutcollectionsq;
+    ncollections = neighbor->ncollections;
+    cutcollectionsq = neighbor->cutcollectionsq;
 
     // overwrite per-type Neighbor cutoffs with custom value set by requestor
     // only works for style = BIN (checked by Neighbor class)

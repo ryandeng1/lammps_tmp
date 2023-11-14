@@ -905,10 +905,13 @@ void LAMMPS::create()
       }
 
       Comm* comm_;
+      Comm* comm_next_dt;
       if (kokkos) {
           comm_ = new CommKokkos(this);
+          comm_next_dt = new CommKokkos(this);
       } else {
           comm_ = new CommBrick(this);
+          comm_next_dt = new CommBrick(this);
       }
 
       for (int j = 0; j < domain_stencil_md[i].size(); j++) {
@@ -939,11 +942,13 @@ void LAMMPS::create()
       }
 
       comm_stencil_md.push_back(comm_);
+      comm_stencil_md_next_dt.push_back(comm_next_dt);
   }
 
-  read_model();
+  // read_model();
 }
 
+// DEPRECATED: Used for allegro, currently deprecated
 void LAMMPS::read_model() {
     torch::Device device = torch::kCPU;
     if(torch::cuda::is_available()){
@@ -1230,8 +1235,8 @@ void LAMMPS::destroy()
 
   // stencil_md
   delete[] zoid_num_to_idx;
-  delete[] send_to_next_dt;
-  delete[] recv_from_next_dt;
+  // delete[] send_to_next_dt;
+  // delete[] recv_from_next_dt;
 }
 
 /* ----------------------------------------------------------------------

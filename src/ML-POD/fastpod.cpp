@@ -90,6 +90,11 @@ FASTPOD::FASTPOD(LAMMPS *_lmp, const std::string &pod_file, const std::string &c
     ncoeff = read_coeff_file(coeff_file);
     mknewcoeff();
   }
+
+  // init comptime
+  for (int i = 0; i < 20; i++) {
+      comptime[i] = 0.0;
+  }
 }
 
 // destructor
@@ -508,39 +513,33 @@ double FASTPOD::peratomenergyforce(double *fij, double *rij, double *temp,
 
   // orthogonal radial basis functions
 
-  //auto begin = std::chrono::high_resolution_clock::now();
-  //auto end = std::chrono::high_resolution_clock::now();
+  auto begin = std::chrono::high_resolution_clock::now();
+  auto end = std::chrono::high_resolution_clock::now();
 
-  //begin = std::chrono::high_resolution_clock::now();
-
+  begin = std::chrono::high_resolution_clock::now();
   radialbasis(rbft, rbfxt, rbfyt, rbfzt, rij, besselparams, rin, rcut-rin, pdegree[0], pdegree[1], nbesselpars, Nj);
+  end = std::chrono::high_resolution_clock::now();
+  comptime[0] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
 
-  //end = std::chrono::high_resolution_clock::now();
-  //comptime[0] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
-
-  //begin = std::chrono::high_resolution_clock::now();
-
+  begin = std::chrono::high_resolution_clock::now();
   char chn = 'N';
   double alpha = 1.0, beta = 0.0;
   DGEMM(&chn, &chn, &Nj, &nrbfmax, &ns, &alpha, rbft, &Nj, Phi, &ns, &beta, rbf, &Nj);
   DGEMM(&chn, &chn, &Nj, &nrbfmax, &ns, &alpha, rbfxt, &Nj, Phi, &ns, &beta, rbfx, &Nj);
   DGEMM(&chn, &chn, &Nj, &nrbfmax, &ns, &alpha, rbfyt, &Nj, Phi, &ns, &beta, rbfy, &Nj);
   DGEMM(&chn, &chn, &Nj, &nrbfmax, &ns, &alpha, rbfzt, &Nj, Phi, &ns, &beta, rbfz, &Nj);
-
-  //end = std::chrono::high_resolution_clock::now();
-  //comptime[4] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
+  end = std::chrono::high_resolution_clock::now();
+  comptime[1] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
 
   for (int j=0; j<3*Nj; j++) fij[j] = 0.0;
 
   double e1=0, e2=0, e3=0, e4=0, e23=0, e33=0, e34=0, e44=0;
 
-  //begin = std::chrono::high_resolution_clock::now();
-
+  begin = std::chrono::high_resolution_clock::now();
   e1 = coeff1[t0];
   e2 = tallytwobodylocalforce(fij, &coeff2[nl2*t0], rbf, rbfx, rbfy, rbfz, tj, nrbf2, Nj);
-
-  //end = std::chrono::high_resolution_clock::now();
-  //comptime[1] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
+  end = std::chrono::high_resolution_clock::now();
+  comptime[2] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
 
   if (nd3 > 0) {
     double *abf = &temp[4*n1 + n5 + 4*n2]; // Nj*K3
@@ -549,28 +548,19 @@ double FASTPOD::peratomenergyforce(double *fij, double *rij, double *temp,
     double *abfz = &temp[4*n1 + n5 + 4*n2 + 3*n4]; // Nj*K3
     double *tm = &temp[4*n1 + n5 + 4*n2 + 4*n4]; // 4*K3
 
-    //begin = std::chrono::high_resolution_clock::now();
-
+    begin = std::chrono::high_resolution_clock::now();
     angularbasis(abf, abfx, abfy, abfz, rij, tm, pq3, Nj, K3);
-
-    //end = std::chrono::high_resolution_clock::now();
-    //comptime[2] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
-
-    //begin = std::chrono::high_resolution_clock::now();
 
     //radialangularbasis(U, Ux, Uy, Uz, rbf, rbfx, rbfy, rbfz, abf, abfx, abfy, abfz, Nj, K3, nrbf3);
     radialangularbasis(sumU, U, Ux, Uy, Uz, rbf, rbfx, rbfy, rbfz,
             abf, abfx, abfy, abfz, tm, tj, Nj, K3, nrbf3, nelements);
 
-    //end = std::chrono::high_resolution_clock::now();
-    //comptime[3] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
+    end = std::chrono::high_resolution_clock::now();
+    comptime[3] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
 
-//     //begin = std::chrono::high_resolution_clock::now();
 //
 //     sumradialangularfunctions(sumU, U, tj, Nj, K3, nrbf3, nelements);
 //
-//     //end = std::chrono::high_resolution_clock::now();
-//     //comptime[4] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
 
     double *d2 =  &temp[4*n1 + n5 + 4*n2]; // nl2
     double *dd2 = &temp[4*n1 + n5 + 4*n2 + nl2]; // 3*Nj*nl2
@@ -583,51 +573,42 @@ double FASTPOD::peratomenergyforce(double *fij, double *rij, double *temp,
       twobodydescderiv(d2, dd2, rbf, rbfx, rbfy, rbfz, tj, Nj);
     }
 
+    begin = std::chrono::high_resolution_clock::now();
     if ((nd23>0) || (nd33>0) || (nd34>0)) {
-      //begin = std::chrono::high_resolution_clock::now();
-
       threebodydesc(d3, sumU, Nj);
       threebodydescderiv(dd3, sumU, Ux, Uy, Uz, tj, Nj);
-
-      //end = std::chrono::high_resolution_clock::now();
-      //comptime[9] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
     }
+    end = std::chrono::high_resolution_clock::now();
+    comptime[7] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count() / 1e6;
 
-    //begin = std::chrono::high_resolution_clock::now();
-
+    begin = std::chrono::high_resolution_clock::now();
     double *cU = &temp[4*n1 + n5 + 4*n2 + nl2 + 3*Nj*nl2 + nl3 + 3*Nj*nl3 + nl4 + 3*Nj*nl4];
     e3 = threebodycoeff(cU, &coeff3[nl3*t0], sumU, Nj);
 
-    //end = std::chrono::high_resolution_clock::now();
-    //comptime[5] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
+    tallylocalforce(fij, cU, Ux, Uy, Uz, tj, Nj, K3, nrbf3, nelements);\
+    end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count() / 1e6;
+    comptime[4] += duration;
 
-    //begin = std::chrono::high_resolution_clock::now();
-
-    tallylocalforce(fij, cU, Ux, Uy, Uz, tj, Nj, K3, nrbf3, nelements);
-
-    //end = std::chrono::high_resolution_clock::now();
-    //comptime[6] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
-
+    begin = std::chrono::high_resolution_clock::now();
     if (nd23>0) {
       double *d23 = &temp[0];
       fourbodydesc23(d23, d2, d3);
       e23 = dotproduct(&coeff23[nl23*t0], d23, nl23);
       fourbodyfij23(fij, temp, &coeff23[nl23*t0], d2, d3, dd2, dd3, 3*Nj);
     }
+    end = std::chrono::high_resolution_clock::now();
+    comptime[5] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
 
     if (nd33>0) {
-      //begin = std::chrono::high_resolution_clock::now();
-
       double *d33 = &temp[0];
       fivebodydesc33(d33, d3);
       e33 = dotproduct(&coeff33[nl33*t0], d33, nl33);
       fivebodyfij33(fij, temp, &coeff33[nl33*t0], d3, dd3, 3*Nj);
-
-      //end = std::chrono::high_resolution_clock::now();
-      //comptime[10] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
     }
 
     if (nd4 > 0) {
+      begin = std::chrono::high_resolution_clock::now();
       if (K4 < K3) {
         for (int m=0; m<nrbf4; m++)
           for (int k=0; k<K4; k++)
@@ -677,7 +658,10 @@ double FASTPOD::peratomenergyforce(double *fij, double *rij, double *temp,
         sevenbodyfij44(fij, temp, &coeff44[nl44*t0], d4, dd4, 3*Nj);
       }
     }
+    end = std::chrono::high_resolution_clock::now();
+    comptime[6] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
   }
+
 
   return (e1+e2+e3+e4+e23+e33+e34+e44);
 }

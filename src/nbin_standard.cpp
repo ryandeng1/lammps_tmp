@@ -126,6 +126,8 @@ void NBinStandard::setup_bins(int style)
   if (binsize_optimal == 0.0) binsize_optimal = bbox[0];
   double binsizeinv = 1.0/binsize_optimal;
 
+  // std::cout << "regular md binsize: " << binsize_optimal << " cutneigh max: " << cutneighmax << std::endl;
+
   // test for too many global bins in any dimension due to huge global domain
 
   if (bbox[0]*binsizeinv > MAXSMALLINT || bbox[1]*binsizeinv > MAXSMALLINT ||
@@ -226,19 +228,14 @@ void NBinStandard::setup_bins_stencil_md(int style, Atom* atom_, Domain* domain_
     double bbox[3],bsubboxlo[3],bsubboxhi[3];
     // double *cutghost = comm->cutghost;
     double cutghost[3] = {ALLEGRO_SLOPE, ALLEGRO_SLOPE, ALLEGRO_SLOPE};
-    // std::cout << "cutghost: " << cutghost[0] << " " << cutghost[1] << " " << cutghost[2] << std::endl;
 
     if (triclinic == 0) {
-        bsubboxlo[0] = domain_->sublo[0] - 2 * cutghost[0];
-        bsubboxlo[1] = domain_->sublo[1] - 2 * cutghost[1];
-        bsubboxlo[2] = domain_->sublo[2] - 2 * cutghost[2];
-        bsubboxhi[0] = domain_->subhi[0] + 2 * cutghost[0];
-        bsubboxhi[1] = domain_->subhi[1] + 2 * cutghost[1];
-        bsubboxhi[2] = domain_->subhi[2] + 2 * cutghost[2];
-//        for (int dim = 0; dim < 3; dim++) {
-//            std::cout << "domain sublo: " << domain_->sublo[dim] << " subhi: " << domain_->subhi[dim] << std::endl;
-//            std::cout << "setup bins lo: " << bsubboxlo[dim] << " hi: " << bsubboxhi[dim] << std::endl;
-//        }
+        bsubboxlo[0] = domain_->sublo[0] - (NUM_TIMESTEPS_IN_PARALLEL + 1) * cutghost[0];
+        bsubboxlo[1] = domain_->sublo[1] - (NUM_TIMESTEPS_IN_PARALLEL + 1) * cutghost[1];
+        bsubboxlo[2] = domain_->sublo[2] - (NUM_TIMESTEPS_IN_PARALLEL + 1) * cutghost[2];
+        bsubboxhi[0] = domain_->subhi[0] + (NUM_TIMESTEPS_IN_PARALLEL + 1) * cutghost[0];
+        bsubboxhi[1] = domain_->subhi[1] + (NUM_TIMESTEPS_IN_PARALLEL + 1) * cutghost[1];
+        bsubboxhi[2] = domain_->subhi[2] + (NUM_TIMESTEPS_IN_PARALLEL + 1) * cutghost[2];
     } else {
         double lo[3],hi[3];
         lo[0] = domain_->sublo_lamda[0] - cutghost[0];
@@ -265,6 +262,8 @@ void NBinStandard::setup_bins_stencil_md(int style, Atom* atom_, Domain* domain_
     else binsize_optimal = 0.5*cutneighmin;
     if (binsize_optimal == 0.0) binsize_optimal = bbox[0];
     double binsizeinv = 1.0/binsize_optimal;
+
+    // std::cout << "stencil md binsize: " << binsize_optimal << " cutneighmax: " << cutneighmax << std::endl;
 
     // test for too many global bins in any dimension due to huge global domain
 
@@ -472,7 +471,9 @@ void NBinStandard::bin_atoms_stencil_md(Atom* atom_) {
                 std::cout << "third term: " << (ix-mbinxlo) << " mbinzlo: " << mbinxlo << std::endl;
                 std::cout << "bininvx: " << bininvx << " " << bininvy << " " << bininvz << std::endl;
                 int ibin2 =  (iz-mbinzlo)*mbiny*mbinx + (iy-mbinylo)*mbinx + (ix-mbinxlo);
+                assert(false);
             }
+            // std::cout << "me: " << comm->me << "coord: " << x[i][0] << " " << x[i][1] << " " << x[i][2] << " ibin: " << ibin << std::endl;
             atom2bin[i] = ibin;
             bins[i] = binhead[ibin];
             binhead[ibin] = i;

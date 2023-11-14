@@ -44,8 +44,15 @@ class CommBrick : public Comm {
   void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
 
+  void send_data_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void receive_data_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void construct_send_list_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
   int* send_exclude_eval_tags(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void receive_exclude_eval_tags(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
+  int* send_exclude_eval_tags_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void receive_exclude_eval_tags_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
 
   void construct_second_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_second_send_list_stencil_md_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
@@ -127,7 +134,8 @@ class CommBrick : public Comm {
   void grow_recv_sendlist_stencil_md(int, int);
 
   void grow_list_stencil_md(int, int, int);
-  void grow_second_list_stencil_md(int, int, int);
+  void grow_list_stencil_md_next_dt(int, int, int);
+
   void grow_send_stencil_md(int, int, int);
   void grow_recv_stencil_md(int, int);
 
@@ -135,12 +143,16 @@ class CommBrick : public Comm {
   void grow_recv2_stencil_md(int, int);
 
   int ** sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int ** sendlist_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
   int ** second_sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int * max_second_sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
   int * maxsendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int * maxsendlist_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
   int* sendnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
-  int* second_sendnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
-  int* recvnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int* sendnum_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
   int ** buf_sendlist_stencil_md;
   int ** buf_recv_sendlist_stencil_md;
@@ -149,6 +161,11 @@ class CommBrick : public Comm {
 
   bool** send_force_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
   bool** send_pos_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  bool** send_vel_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+  bool** send_force_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  bool** send_pos_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  bool** send_vel_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
   double** buf_send2_stencil_md;
   double** buf_recv2_stencil_md;

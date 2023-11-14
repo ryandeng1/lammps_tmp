@@ -252,8 +252,8 @@ class Fix : protected Pointers {
 
   virtual void setup_stencil_md(double*, Atom*) {assert(false);}
   virtual void init_stencil_md(Atom*) {assert(false);}
-  virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*) {assert(false);}
-  virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*) {assert(false);}
+  virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) {assert(false);}
+  virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) {assert(false);}
 
  protected:
   int instance_me;    // which Fix class instantiation I am

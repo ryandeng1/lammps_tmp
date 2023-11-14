@@ -35,6 +35,9 @@ struct TagFixNH_nh_v_temp_stencil_md{};
 template<int RMASS>
 struct TagFixNH_nve_v_stencil_md{};
 
+template<int RMASS>
+struct TagFixNH_nve_v_stencil_md_initial {};
+
 struct TagFixNH_nve_x_stencil_md{};
 
 template<class DeviceType>
@@ -68,6 +71,10 @@ class FixNHKokkos : public FixNH {
   KOKKOS_INLINE_FUNCTION
   void operator()(TagFixNH_nve_v_stencil_md<RMASS>, const int&) const;
 
+  template<int RMASS>
+  KOKKOS_INLINE_FUNCTION
+  void operator()(TagFixNH_nve_v_stencil_md_initial<RMASS>, const int&) const;
+
   KOKKOS_INLINE_FUNCTION
   void operator()(TagFixNH_nve_x_stencil_md, const int&) const;
 
@@ -77,10 +84,10 @@ class FixNHKokkos : public FixNH {
   void setup_stencil_md(double*, Atom*) override;
 
   void init_stencil_md(Atom*) override;
-  void nve_v_stencil_md(Atom*, Atom*) override;
-  void nve_x_stencil_md(Atom*, Atom*) override;
-  void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*) override;
-  void initial_integrate_stencil_md(int, Atom*, Atom*, int*) override;
+  void nve_v_stencil_md(Atom*, Atom*, bool, bool*) override;
+  void nve_x_stencil_md(Atom*, Atom*, bool*) override;
+  void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;
+  void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
   void nh_v_temp_stencil_md(Atom*, Atom*) override;
 
 protected:
@@ -101,6 +108,9 @@ protected:
   tagint *tag;
   tagint *next_tag;
   int* atom_idx_mapping;
+  bool* atom_can_eval;
+  typename ArrayTypes<DeviceType>::t_f_array_const eval_f_stencil_md;
+  typename ArrayTypes<DeviceType>::t_int_1d actually_eval_mask_stencil_md;
 
   typename ArrayTypes<DeviceType>::t_x_array x;
   typename ArrayTypes<DeviceType>::t_v_array v;

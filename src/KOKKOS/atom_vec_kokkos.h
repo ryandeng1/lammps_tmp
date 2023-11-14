@@ -138,6 +138,8 @@ class AtomVecKokkos : public AtomVec {
   HAT::t_v_array h_v;
   HAT::t_f_array h_f;
 
+  HAT::t_f_array h_eval_f_stencil_md;
+
   class CommKokkos *commKK;
   size_t buffer_size;
   void* buffer;

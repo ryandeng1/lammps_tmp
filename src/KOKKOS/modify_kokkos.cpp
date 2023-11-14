@@ -294,7 +294,7 @@ void ModifyKokkos::initial_integrate(int vflag)
   }
 }
 
-void ModifyKokkos::initial_integrate_stencil_md(int vflag, Atom* atom_, Atom* next, int* atom_idx_mapping) {
+void ModifyKokkos::initial_integrate_stencil_md(int vflag, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
     for (int i = 0; i < n_initial_integrate; i++) {
         atomKK_->sync_stencil_md(fix[list_initial_integrate[i]]->execution_space,
@@ -303,7 +303,7 @@ void ModifyKokkos::initial_integrate_stencil_md(int vflag, Atom* atom_, Atom* ne
         if (!fix[list_initial_integrate[i]]->kokkosable) {
             lmp->kokkos->auto_sync = 1;
         }
-        fix[list_initial_integrate[i]]->initial_integrate_stencil_md(vflag, atom_, next, atom_idx_mapping);
+        fix[list_initial_integrate[i]]->initial_integrate_stencil_md(vflag, atom_, next, atom_idx_mapping, can_eval);
         lmp->kokkos->auto_sync = prev_auto_sync;
         atomKK_->modified_stencil_md(fix[list_initial_integrate[i]]->execution_space,
                          fix[list_initial_integrate[i]]->datamask_modify, atom_);
@@ -454,7 +454,7 @@ void ModifyKokkos::final_integrate()
   }
 }
 
-void ModifyKokkos::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping)
+void ModifyKokkos::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping, bool* can_eval)
 {
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
     for (int i = 0; i < n_final_integrate; i++) {
@@ -462,7 +462,7 @@ void ModifyKokkos::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor*
                      fix[list_final_integrate[i]]->datamask_read, atom_);
         int prev_auto_sync = lmp->kokkos->auto_sync;
         if (!fix[list_final_integrate[i]]->kokkosable) lmp->kokkos->auto_sync = 1;
-        fix[list_final_integrate[i]]->final_integrate_stencil_md(atom_, next, neighbor_, atom_idx_mapping);
+        fix[list_final_integrate[i]]->final_integrate_stencil_md(atom_, next, neighbor_, atom_idx_mapping, can_eval);
         lmp->kokkos->auto_sync = prev_auto_sync;
         atomKK_->modified_stencil_md(fix[list_final_integrate[i]]->execution_space,
                          fix[list_final_integrate[i]]->datamask_modify, atom_);

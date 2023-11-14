@@ -29,7 +29,7 @@ class PairPOD : public Pair {
   PairPOD(class LAMMPS *);
   ~PairPOD() override;
   void compute(int, int) override;
-  void compute_stencil_md(int, int, Atom*, Atom*, int*, queue_info&) override;
+  void compute_stencil_md(int, int, Atom*, Atom*, bool*, queue_info&) override;
 
 
   void settings(int, char **) override;

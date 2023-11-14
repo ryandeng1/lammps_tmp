@@ -33,6 +33,8 @@ using namespace LAMMPS_NS;
 
 #define MAXLINE 1024
 
+constexpr bool DEBUG_PRINT = false;
+
 /* ---------------------------------------------------------------------- */
 
 PairPOD::PairPOD(LAMMPS *lmp) :
@@ -107,7 +109,7 @@ void PairPOD::compute(int eflag, int vflag)
     int nd1234 = podptr->pod.nd1234;
     podptr->podArraySetValue(gd, 0.0, nd1234);
 
-    double rcutsq = podptr->pod.rcut*podptr->pod.rcut;
+    double rcutsq = podptr->pod.rcut * podptr->pod.rcut;
 
     for (int ii = 0; ii < inum; ii++) {
       int i = ilist[ii];
@@ -129,8 +131,8 @@ void PairPOD::compute(int eflag, int vflag)
 
       // compute global POD descriptors for atom i
 
-      podptr->linear_descriptors_ij(gd, tmpmem, rij, &tmpmem[nd1234], numneighsum,
-              typeai, idxi, ti, tj, 1, nij);
+      podptr->linear_descriptors_ij(gd, tmpmem, rij, &tmpmem[nd1234], numneighsum, typeai, idxi, ti,
+                                    tj, 1, nij);
     }
 
     int nd22 = podptr->pod.nd22;
@@ -157,23 +159,21 @@ void PairPOD::compute(int eflag, int vflag)
     for (int ii = 0; ii < inum; ii++) {
       int i = ilist[ii];
 
-
-
       // get neighbor pairs for atom i
 
       lammpsNeighPairs(x, firstneigh, type, map, numneigh, rcutsq, i);
 
       // compute atomic force for atom i
 
-//       podptr->calculate_force(f, forcecoeff, rij, tmpmem, numneighsum, typeai, idxi,
-//               ai, aj, ti, tj, 1, nij);
+      //       podptr->calculate_force(f, forcecoeff, rij, tmpmem, numneighsum, typeai, idxi,
+      //               ai, aj, ti, tj, 1, nij);
 
-      evdwl = podptr->calculate_energyforce(fij, energycoeff, forcecoeff, rij, tmpmem, numneighsum, typeai, idxi,
-              ai, aj, ti, tj, 1, nij);
+      evdwl = podptr->calculate_energyforce(fij, energycoeff, forcecoeff, rij, tmpmem, numneighsum,
+                                            typeai, idxi, ai, aj, ti, tj, 1, nij);
 
       // tally atomic energy to global energy
 
-      ev_tally_full(i,2.0*evdwl,0.0,0.0,0.0,0.0,0.0);
+      ev_tally_full(i, 2.0 * evdwl, 0.0, 0.0, 0.0, 0.0, 0.0);
 
       // tally atomic force to global force
 
@@ -184,41 +184,61 @@ void PairPOD::compute(int eflag, int vflag)
       if (vflag) {
         for (int jj = 0; jj < nij; jj++) {
           int j = aj[jj];
-          ev_tally_xyz(i,j,nlocal,newton_pair,0.0,0.0,
-                     fij[0 + 3*jj],fij[1 + 3*jj],fij[2 + 3*jj],
-                     -rij[0 + 3*jj], -rij[1 + 3*jj], -rij[2 + 3*jj]);
+          ev_tally_xyz(i, j, nlocal, newton_pair, 0.0, 0.0, fij[0 + 3 * jj], fij[1 + 3 * jj],
+                       fij[2 + 3 * jj], -rij[0 + 3 * jj], -rij[1 + 3 * jj], -rij[2 + 3 * jj]);
         }
       }
     }
-  }
-  else if (descriptormethod == 1) {
-      double rcutsq = fastpodptr->rcut*fastpodptr->rcut;
-      double evdwl = 0.0;
+  } else if (descriptormethod == 1) {
+    double rcutsq = fastpodptr->rcut * fastpodptr->rcut;
+    double evdwl = 0.0;
 
-      std::cout << "rcut: " << fastpodptr->rcut << " neigh cut: " << neighbor->cutneighmax << std::endl;
+    std::cout << "rcut: " << fastpodptr->rcut << " neigh cut: " << neighbor->cutneighmax
+              << std::endl;
 
-//     fastpodptr->timing = 1;
-//     if (fastpodptr->timing == 1)
-//       for (int i=0; i<20; i++) fastpodptr->comptime[i] = 0;
+    //     fastpodptr->timing = 1;
+    //     if (fastpodptr->timing == 1)
+    //       for (int i=0; i<20; i++) fastpodptr->comptime[i] = 0;
 
     for (int ii = 0; ii < inum; ii++) {
       int i = ilist[ii];
       int jnum = numneigh[i];
 
-    if (atom->tag[i] == 10265) {
+
+      if (atom->tag[i] == 108023 && DEBUG_PRINT) {
+
         for (int j = 0; j < numneigh[i]; j++) {
-            int neigh = firstneigh[i][j];
-            double delx = x[neigh][0] - x[i][0];    // xj - xi
-            double dely = x[neigh][1] - x[i][1];    // xj - xi
-            double delz = x[neigh][2] - x[i][2];    // xj - xi
-            double rsq = delx * delx + dely * dely + delz * delz;
-            if (rsq < fastpodptr->rcut*fastpodptr->rcut && rsq > 1e-20) {
-                std::cout << "REGULAR MD neigh: " << neigh << " tag: "
-                << atom->tag[neigh] << " pos neigh: " << atom->x[neigh][0] << " " << atom->x[neigh][1] << " " << atom->x[neigh][2]
-                << " pos me: " << atom->x[i][0] << " " << atom->x[i][1] << " " << atom->x[i][2] << std::endl;
+          int neigh = firstneigh[i][j];
+          double delx = x[neigh][0] - x[i][0];    // xj - xi
+          double dely = x[neigh][1] - x[i][1];    // xj - xi
+          double delz = x[neigh][2] - x[i][2];    // xj - xi
+          double rsq = delx * delx + dely * dely + delz * delz;
+          if (rsq < fastpodptr->rcut * fastpodptr->rcut && rsq > 1e-20) {
+            std::cout << "REGULAR MD neigh: " << neigh << " tag: " << atom->tag[neigh]
+                      << " pos neigh: " << atom->x[neigh][0] << " " << atom->x[neigh][1] << " "
+                      << atom->x[neigh][2] << " pos me: " << atom->x[i][0] << " " << atom->x[i][1]
+                      << " " << atom->x[i][2] << " rsq: " << rsq << std::endl;
+            if (neigh < inum) {
+              int actual_neigh = 0;
+              std::set<int> neigh_idxs;
+              for (int k = 0; k < numneigh[neigh]; k++) {
+                int neigh2 = firstneigh[neigh][k];
+                double delx = x[neigh][0] - x[neigh2][0];    // xj - xi
+                double dely = x[neigh][1] - x[neigh2][1];    // xj - xi
+                double delz = x[neigh][2] - x[neigh2][2];    // xj - xi
+                double rsq = delx * delx + dely * dely + delz * delz;
+
+                if (rsq < fastpodptr->rcut * fastpodptr->rcut && rsq > 1e-20) { actual_neigh++;
+                    neigh_idxs.insert(neigh2);
+                }
+              }
+
+              std::cout << "regular md numneigh for tag: " << atom->tag[neigh]
+                        << " is: " << actual_neigh << std::endl;
             }
+          }
         }
-    }
+      }
       // allocate temporary memory
       if (nijmax < jnum) {
         nijmax = MAX(nijmax, jnum);
@@ -237,7 +257,7 @@ void PairPOD::compute(int eflag, int vflag)
 
       // tally atomic energy to global energy
 
-      ev_tally_full(i,2.0*evdwl,0.0,0.0,0.0,0.0,0.0);
+      ev_tally_full(i, 2.0 * evdwl, 0.0, 0.0, 0.0, 0.0, 0.0);
 
       // tally atomic force to global force
 
@@ -247,243 +267,256 @@ void PairPOD::compute(int eflag, int vflag)
       if (vflag) {
         for (int jj = 0; jj < nij; jj++) {
           int j = aj[jj];
-          ev_tally_xyz(i,j,nlocal,newton_pair,0.0,0.0,
-                     fij[0 + 3*jj],fij[1 + 3*jj],fij[2 + 3*jj],
-                     -rij[0 + 3*jj], -rij[1 + 3*jj], -rij[2 + 3*jj]);
+          ev_tally_xyz(i, j, nlocal, newton_pair, 0.0, 0.0, fij[0 + 3 * jj], fij[1 + 3 * jj],
+                       fij[2 + 3 * jj], -rij[0 + 3 * jj], -rij[1 + 3 * jj], -rij[2 + 3 * jj]);
         }
       }
     }
   }
 
-//   if (fastpodptr->timing == 1) {
-//     for (int i=0; i<20; i++) printf("%g  ", fastpodptr->comptime[i]);
-//     printf("\n");
-//   }
+  //   if (fastpodptr->timing == 1) {
+  //     for (int i=0; i<20; i++) printf("%g  ", fastpodptr->comptime[i]);
+  //     printf("\n");
+  //   }
 
-  if (vflag_fdotr && false) {
-      virial_fdotr_compute();
-  }
+  if (vflag_fdotr && false) { virial_fdotr_compute(); }
 
   for (int i = 0; i < atom->nlocal; i++) {
-      if (atom->tag[i] == 10265) {
-          std::cout << "test regular md idx: " << i << " force: " << atom->f[i][0] << " " << atom->f[i][1] << " " << atom->f[i][2] << std::endl;
-      }
+    if (atom->tag[i] == 108023 && DEBUG_PRINT) {
+      std::cout << "test regular md idx: " << i << " force: " << atom->f[i][0] << " "
+                << atom->f[i][1] << " " << atom->f[i][2] << std::endl;
+    }
   }
 }
 
-void PairPOD::compute_stencil_md(int eflag, int vflag, Atom* atom_, Atom* next, int* mapping, queue_info& zoid) {
-    ev_init(eflag, vflag);
+void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
+                                 bool* can_eval_center, queue_info &zoid)
+{
+  ev_init(eflag, vflag);
 
-    // we must enforce using F dot r, since we have no energy or stress tally calls.
-    vflag_fdotr = 1;
+  // we must enforce using F dot r, since we have no energy or stress tally calls.
+  vflag_fdotr = 1;
 
-    if (peratom_warn && (vflag_atom || eflag_atom)) {
-        peratom_warn = false;
-        if (comm->me == 0)
-            error->warning(FLERR, "Pair style pod does not support per-atom energies or stresses");
+  if (peratom_warn && (vflag_atom || eflag_atom)) {
+    peratom_warn = false;
+    if (comm->me == 0)
+      error->warning(FLERR, "Pair style pod does not support per-atom energies or stresses");
+  }
+
+  double **x = atom_->x;
+  // double **f = atom_->f;
+  double **f = atom_->eval_f_stencil_md;
+  int **firstneigh = list->firstneigh;
+  int *numneigh = list->numneigh;
+  int *type = atom_->type;
+  int *ilist = list->ilist;
+  int inum = list->inum;
+  int nlocal = atom_->nlocal;
+  int newton_pair = force->newton_pair;
+
+  int ignum = list->inum + list->gnum;
+
+  assert(list->inum == nlocal);
+
+  // initialize global descriptors to zero
+
+  std::vector<int> out_of_bounds_atoms;
+
+  if (descriptormethod == 0) {
+    assert(false);
+  } else if (descriptormethod == 1) {
+    double rcutsq = fastpodptr->rcut * fastpodptr->rcut;
+    double evdwl = 0.0;
+    assert(ignum == atom_->nlocal + atom_->nghost);
+
+    for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+      if (atom_->tag[i] == 108023 && DEBUG_PRINT) {
+        std::cout << "zoid num: " << zoid.num << " BEFORE test stencil md idx: " << i
+                  << " out of: " << atom_->nlocal << " tag: " << atom_->tag[i]
+                  << " force: " << f[i][0] << " " << f[i][1] << " " << f[i][2]
+                  << std::endl;
+      }
     }
 
-    double **x = atom_->x;
-    double **f = atom_->f;
-    int **firstneigh = list->firstneigh;
-    int *numneigh = list->numneigh;
-    int *type = atom_->type;
-    int *ilist = list->ilist;
-    int inum = list->inum;
-    int nlocal = atom_->nlocal;
-    int newton_pair = force->newton_pair;
+    // for (int ii = 0; ii < out_of_bounds_atoms.size(); ii++) {
+    for (int ii = 0; ii < ignum; ii++) {
+      // int i = ilist[out_of_bounds_atoms[ii]];
+      if (!can_eval_center[ii]) { continue; }
 
-    int ignum = list->inum + list->gnum;
+      int i = ilist[ii];
+      int jnum = numneigh[i];
 
-    assert(list->inum == nlocal);
+      if (atom_->eval_mask_stencil_md[i] == 0) { continue; }
 
-    // initialize global descriptors to zero
+      if (atom_->tag[i] == 108023 && DEBUG_PRINT) {
+        std::cout << "zoid num: " << zoid.num
+                  << " out of bounds eval target center atom: " << atom_->tag[i] << " idx: " << i
+                  << " eval mask: " << atom_->eval_mask_stencil_md[i] << std::endl;
+      }
 
-    std::vector<int> out_of_bounds_atoms;
-    if (next != NULL) {
-        for (int ii = 0; ii < inum; ii++) {
-            const int i = ilist[ii];
-            assert(ii == ilist[ii]);
+      atom_->eval_mask_stencil_md[i] = 0;
 
-            if (mapping[i] >= next->nlocal) {
-                out_of_bounds_atoms.push_back(ii);
-            }
+      // atom_->actually_eval_mask_stencil_md[i] = 1;
+
+      int actual_neigh = 0;
+
+      std::set<int> neigh_idxs;
+      for (int j = 0; j < numneigh[i]; j++) {
+        int neigh = firstneigh[i][j];
+        double delx = x[neigh][0] - x[i][0];    // xj - xi
+        double dely = x[neigh][1] - x[i][1];    // xj - xi
+        double delz = x[neigh][2] - x[i][2];    // xj - xi
+        double rsq = delx * delx + dely * dely + delz * delz;
+        if (rsq < rcutsq && rsq > 1e-20) { actual_neigh++; neigh_idxs.insert(neigh); }
+      }
+
+      for (int j = 0; j < numneigh[i]; j++) {
+        int neigh = firstneigh[i][j];
+        // atom_->actually_eval_mask_stencil_md[neigh] = 1;
+        double delx = x[neigh][0] - x[i][0];    // xj - xi
+        double dely = x[neigh][1] - x[i][1];    // xj - xi
+        double delz = x[neigh][2] - x[i][2];    // xj - xi
+        double rsq = delx * delx + dely * dely + delz * delz;
+        if (rsq < rcutsq && rsq > 1e-20 && (atom_->tag[neigh] == 108023) && DEBUG_PRINT) {
+          std::cout << "out of bounds zoid num: " << zoid.num
+                    << " Eval center atom target atom neigh: " << atom_->tag[i]
+                    << " neighbor tag: " << atom_->tag[neigh]
+                    << " pos me: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2]
+                    << " pos neigh: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " "
+                    << atom_->x[neigh][2] << " mask on target atom? "
+                    << atom_->eval_mask_stencil_md[i] << " numneigh: " << actual_neigh << " numneigh2? " << numneigh[neigh] << std::endl;
         }
+        if (atom_->tag[i] == 108023 && rsq < rcutsq && DEBUG_PRINT) {
+          std::cout << "out of bounds zoid num: " << zoid.num << " atom idx: " << i
+                    << " gottem target atom:  " << atom_->tag[i] << " with neigh idx: " << neigh
+                    << " tag: " << atom_->tag[neigh] << " pos: " << atom_->x[neigh][0] << " "
+                    << atom_->x[neigh][1] << " " << atom_->x[neigh][2]
+                    << " mask on main atom: " << atom_->eval_mask_stencil_md[i] << std::endl;
+        }
+      }
+
+      // allocate temporary memory
+      if (nijmax < jnum) {
+        nijmax = MAX(nijmax, jnum);
+        nablockmax = 1;
+        int nmem = fastpodptr->estimate_memory(nijmax);
+        free_tempmemory_fastpod();
+        allocate_tempmemory_fastpod(nmem);
+      }
+
+      lammpsNeighborList(x, firstneigh, type, map, numneigh, rcutsq, i);
+
+      // compute atomic energy and force for atom i
+
+      evdwl = fastpodptr->peratomenergyforce(fij, rij, tmpmem, ti, tj, nij);
+
+      // tally atomic energy to global energy
+
+      ev_tally_full(i, 2.0 * evdwl, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+      // tally atomic force to global force
+
+      tallyforce(f, fij, ai, aj, nij);
+
+      // tally atomic stress
+
+      if (vflag) {
+        for (int kk = 0; kk < nij; kk++) {
+          int j = aj[kk];
+          ev_tally_xyz(i, j, nlocal, newton_pair, 0.0, 0.0, fij[0 + 3 * kk], fij[1 + 3 * kk],
+                       fij[2 + 3 * kk], -rij[0 + 3 * kk], -rij[1 + 3 * kk], -rij[2 + 3 * kk]);
+        }
+      }
     }
 
-    if (descriptormethod == 0) {
-        assert(false);
-    } else if (descriptormethod == 1) {
-        double rcutsq = fastpodptr->rcut*fastpodptr->rcut;
-        double evdwl = 0.0;
-        assert(ignum == atom_->nlocal + atom_->nghost);
+    std::set<int> found_neighbors;
+    for (int ii = 0; ii < inum; ii++) {
+      int i = ilist[ii];
+      assert(ii == i);
 
-        for (int i = 0; i < atom_->nlocal; i++) {
-            if (atom_->tag[i] == 10265) {
-                std::cout << "zoid num: " << zoid.num << " BEFORE test stencil md idx: " << i << " out of: "
-                << atom_->nlocal << " tag: " << atom_->tag[i] << " force: "
-                << atom_->f[i][0] << " " << atom_->f[i][1] << " " << atom_->f[i][2]
-                << " eval mask? " << atom_->eval_mask_stencil_md[i] << std::endl;
-            }
+      if (atom_->eval_mask_stencil_md[i] == 0) { continue; }
+
+      for (int j = 0; j < numneigh[i]; j++) {
+        int neigh = firstneigh[i][j];
+        double delx = x[neigh][0] - x[i][0];    // xj - xi
+        double dely = x[neigh][1] - x[i][1];    // xj - xi
+        double delz = x[neigh][2] - x[i][2];    // xj - xi
+        double rsq = delx * delx + dely * dely + delz * delz;
+        if (rsq < rcutsq && rsq > 1e-20 && (atom_->tag[neigh] == 108023) && DEBUG_PRINT) {
+          std::cout << "zoid num: " << zoid.num << " Eval center target atom: " << atom_->tag[i]
+                    << " neighbor tag: " << atom_->tag[neigh]
+                    << " pos neigh: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " "
+                    << atom_->x[neigh][2] << " mask on target atom? "
+                    << atom_->eval_mask_stencil_md[i] << std::endl;
+          if (zoid.num == 8) {
+              std::cout << "my pos: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2] << std::endl;
+          }
         }
-
-        for (int ii = 0; ii < out_of_bounds_atoms.size(); ii++) {
-            int i = ilist[out_of_bounds_atoms[ii]];
-            int jnum = numneigh[i];
-
-            for (int jj = 0; jj < jnum; jj++) {
-                int neigh = firstneigh[i][jj];
-                assert(neigh >= 0 && neigh < atom_->nlocal + atom_->nghost);
-                if (atom_->tag[neigh] == 10265) {
-                    std::cout << "zoid_num: " << zoid.num << " neigh tag: " << atom_->tag[neigh] << " can eval: " << atom_->eval_mask_stencil_md[neigh] << std::endl;
-                }
-
-                if (neigh >= atom_->nlocal && atom_->eval_mask_stencil_md[neigh] != 0) {
-                    // notify future zoids I will not be evaluating it
-                    atom_->eval_mask_stencil_md[neigh] = 0;
-
-                    atom_->fully_eval_ghost_tags.insert(atom_->tag[neigh]);
-
-                    int knum = numneigh[neigh];
-                    // allocate temporary memory
-                    if (nijmax < knum) {
-                        nijmax = MAX(nijmax, knum);
-                        nablockmax = 1;
-                        int nmem = fastpodptr->estimate_memory(nijmax);
-                        free_tempmemory_fastpod();
-                        allocate_tempmemory_fastpod(nmem);
-                    }
-
-                    lammpsNeighborList(x, firstneigh, type, map, numneigh, rcutsq, neigh);
-
-                    // compute atomic energy and force for atom i
-
-                    evdwl = fastpodptr->peratomenergyforce(fij, rij, tmpmem, ti, tj, nij);
-
-                    // tally atomic energy to global energy
-
-                    ev_tally_full(neigh, 2.0 * evdwl, 0.0, 0.0, 0.0, 0.0, 0.0);
-
-                    // tally atomic force to global force
-
-                    tallyforce(f, fij, ai, aj, nij);
-
-                    // tally atomic stress
-
-                    if (vflag) {
-                        /*
-                        for (int jj = 0; jj < nij; jj++) {
-                            int j = aj[jj];
-                            ev_tally_xyz(i,j,nlocal,newton_pair,0.0,0.0,
-                                         fij[0 + 3*jj],fij[1 + 3*jj],fij[2 + 3*jj],
-                                         -rij[0 + 3*jj], -rij[1 + 3*jj], -rij[2 + 3*jj]);
-                        }
-                        */
-                        for (int kk = 0; kk < nij; kk++) {
-                            int j = aj[kk];
-                            ev_tally_xyz(neigh, j, nlocal, newton_pair, 0.0, 0.0,
-                                         fij[0 + 3 * kk], fij[1 + 3 * kk], fij[2 + 3 * kk],
-                                         -rij[0 + 3 * kk], -rij[1 + 3 * kk], -rij[2 + 3 * kk]);
-                        }
-                    }
-
-                    if (atom_->tag[neigh] == 10265) {
-                        std::cout << "zoid: " << zoid.num << " got to it first. WHERE IS IT THEN. " << std::endl;
-                    }
-
-                    for (int k = 0; k < numneigh[neigh]; k++) {
-                        int neigh_neigh = firstneigh[neigh][k];
-                        if (atom_->tag[neigh_neigh] == 10265) {
-                            std::cout << "out of bounds eval center atom: " << atom_->tag[neigh] << " with edge to: " << atom_->tag[neigh_neigh] << std::endl;
-                            // std::cout << "me: " << comm->me << " atom tag: " << atom_->tag[neigh_neigh] << " appears for center atom: " << atom_->tag[neigh] << " while eval partial " << " original atom: " << atom_->tag[i] << " zoid: " << zoid.num << std::endl;
-                            // std::cout << "center atom pos: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " " << atom_->x[neigh][2] << std::endl;
-                        }
-                        if (atom_->tag[neigh] == 10265) {
-                            std::cout << "zoid: " << zoid.num << " eval ghost target atom: "
-                            << atom_->tag[neigh] << " neighbor tag: " << atom_->tag[neigh_neigh]
-                            << "neighbor pos: " << atom_->x[neigh_neigh][0] << " " << atom_->x[neigh_neigh][1] << " " << atom_->x[neigh_neigh][2] << std::endl;
-                        }
-                    }
-                }
-            }
+        if (atom_->tag[i] == 108023 && rsq < rcutsq && DEBUG_PRINT) {
+          std::cout << "zoid num: " << zoid.num << " gottem target atom:  " << atom_->tag[i]
+                    << " with neigh idx: " << neigh << " tag: " << atom_->tag[neigh]
+                    << " pos: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " "
+                    << atom_->x[neigh][2]
+                    << " mask on main atom: " << atom_->eval_mask_stencil_md[i] << std::endl;
         }
+      }
 
-        std::set<int> found_neighbors;
-        for (int ii = 0; ii < inum; ii++) {
-            int i = ilist[ii];
-            assert(ii == i);
+      int jnum = numneigh[i];
 
-            if (atom_->eval_mask_stencil_md[i] == 0) {
-                if (atom_->tag[i] == 10265) {
-                    std::cout << "what the fuck? not evaling tag: " << atom_->tag[i] << " inside zoid: " << zoid.num << std::endl;
-                }
-                continue;
-            }
+      // allocate temporary memory
+      if (nijmax < jnum) {
+        nijmax = MAX(nijmax, jnum);
+        nablockmax = 1;
+        int nmem = fastpodptr->estimate_memory(nijmax);
+        free_tempmemory_fastpod();
+        allocate_tempmemory_fastpod(nmem);
+      }
 
-            for (int j = 0; j < numneigh[i]; j++) {
-                int neigh = firstneigh[i][j];
-                double delx = x[neigh][0] - x[i][0];    // xj - xi
-                double dely = x[neigh][1] - x[i][1];    // xj - xi
-                double delz = x[neigh][2] - x[i][2];    // xj - xi
-                double rsq = delx * delx + dely * dely + delz * delz;
-                if (rsq < rcutsq && rsq > 1e-20 && (atom_->tag[neigh] == 10265)) {
-                    std::cout << "zoid num: " << zoid.num << " Eval center target atom: " << atom_->tag[i] << " neighbor tag: " << atom_->tag[neigh] << " pos neigh: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " " << atom_->x[neigh][2] << std::endl;
-                }
-                if (atom_->tag[i] == 10265) {
-                    std::cout << "zoid num: " << zoid.num << " gottem target atom:  " << atom_->tag[i] << " with neigh idx: " << neigh << " tag: " << atom_->tag[neigh] << " pos: " << atom_->x[neigh][0] << " " << atom_->x[neigh][1] << " " << atom_->x[neigh][2] << std::endl;
-                }
-            }
+      lammpsNeighborList(x, firstneigh, type, map, numneigh, rcutsq, i);
 
-            int jnum = numneigh[i];
+      // compute atomic energy and force for atom i
 
-            // allocate temporary memory
-            if (nijmax < jnum) {
-                nijmax = MAX(nijmax, jnum);
-                nablockmax = 1;
-                int nmem = fastpodptr->estimate_memory(nijmax);
-                free_tempmemory_fastpod();
-                allocate_tempmemory_fastpod(nmem);
-            }
+      evdwl = fastpodptr->peratomenergyforce(fij, rij, tmpmem, ti, tj, nij);
 
-            lammpsNeighborList(x, firstneigh, type, map, numneigh, rcutsq, i);
+      // tally atomic energy to global energy
 
-            // compute atomic energy and force for atom i
+      ev_tally_full(i, 2.0 * evdwl, 0.0, 0.0, 0.0, 0.0, 0.0);
 
-            evdwl = fastpodptr->peratomenergyforce(fij, rij, tmpmem, ti, tj, nij);
+      // tally atomic force to global force
 
-            // tally atomic energy to global energy
+      tallyforce(f, fij, ai, aj, nij);
 
-            ev_tally_full(i,2.0*evdwl,0.0,0.0,0.0,0.0,0.0);
+      // tally atomic stress
 
-            // tally atomic force to global force
-
-            tallyforce(f, fij, ai, aj, nij);
-
-            // tally atomic stress
-
-            if (vflag) {
-                for (int jj = 0; jj < nij; jj++) {
-                    int j = aj[jj];
-                    ev_tally_xyz(i,j,nlocal,newton_pair,0.0,0.0,
-                                 fij[0 + 3*jj],fij[1 + 3*jj],fij[2 + 3*jj],
-                                 -rij[0 + 3*jj], -rij[1 + 3*jj], -rij[2 + 3*jj]);
-                }
-            }
+      if (vflag) {
+        for (int jj = 0; jj < nij; jj++) {
+          int j = aj[jj];
+          ev_tally_xyz(i, j, nlocal, newton_pair, 0.0, 0.0, fij[0 + 3 * jj], fij[1 + 3 * jj],
+                       fij[2 + 3 * jj], -rij[0 + 3 * jj], -rij[1 + 3 * jj], -rij[2 + 3 * jj]);
         }
+      }
     }
+  }
 
-    if (vflag_fdotr && false) {
-        virial_fdotr_compute();
-    }
+  if (vflag_fdotr && false) { virial_fdotr_compute(); }
 
-    for (int i = 0; i < atom_->nlocal; i++) {
-        if (atom_->tag[i] == 10265) {
-            std::cout << "zoid num: " << zoid.num << " AFTER test stencil md idx: " << i << " out of: " << atom_->nlocal << " tag: " << atom_->tag[i] << " force: " << atom_->f[i][0] << " " << atom_->f[i][1] << " " << atom_->f[i][2] << std::endl;
-        }
+  for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+    if (atom_->tag[i] == 108023 && DEBUG_PRINT) {
+      std::cout << "zoid num: " << zoid.num << " AFTER test stencil md idx: " << i
+                << " out of: " << atom_->nlocal << " tag: " << atom_->tag[i]
+                << " force: " << f[i][0] << " " << f[i][1] << " " << f[i][2]
+                << std::endl;
     }
-    return;
+  }
+
+  for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+      if (atom_->tag[i] == 108023 && DEBUG_PRINT) {
+          std::cout << "zoid: " << zoid.num << " stencil md preliminary force idx: " << i << " for tag: " << atom_->tag[i] << " is: " << f[i][0] << " " << f[i][1] << " "
+          << f[i][2] << std::endl;
+      }
+  }
+  return;
 }
-
 
 /* ----------------------------------------------------------------------
    global settings
@@ -540,8 +573,7 @@ void PairPOD::coeff(int narg, char **arg)
 
     for (int ii = 0; ii < np1; ii++)
       for (int jj = 0; jj < np1; jj++) cutsq[ii][jj] = podptr->pod.rcut * podptr->pod.rcut;
-  }
-  else if (descriptormethod == 1) {
+  } else if (descriptormethod == 1) {
     delete fastpodptr;
     fastpodptr = new FASTPOD(lmp, pod_file, coeff_file);
 
@@ -569,15 +601,16 @@ void PairPOD::init_style()
   peratom_warn = true;
 }
 
-void PairPOD::init_style_stencil_md(Neighbor* neighbor_) {
-    if (force->newton_pair == 0) error->all(FLERR, "Pair style pod requires newton pair on");
+void PairPOD::init_style_stencil_md(Neighbor *neighbor_)
+{
+  if (force->newton_pair == 0) error->all(FLERR, "Pair style pod requires newton pair on");
 
-    // need a full neighbor list
+  // need a full neighbor list
 
-    neighbor_->add_request(this, NeighConst::REQ_FULL|NeighConst::REQ_GHOST);
+  neighbor_->add_request(this, NeighConst::REQ_FULL | NeighConst::REQ_GHOST);
 
-    // reset flag to print warning about per-atom energies or stresses
-    peratom_warn = true;
+  // reset flag to print warning about per-atom energies or stresses
+  peratom_warn = true;
 }
 
 /* ----------------------------------------------------------------------
@@ -589,8 +622,10 @@ double PairPOD::init_one(int i, int j)
   if (setflag[i][j] == 0) error->all(FLERR, "All pair coeffs are not set");
 
   double rcut = 0.0;
-  if (descriptormethod == 0) rcut = podptr->pod.rcut;
-  else if (descriptormethod == 1) rcut = fastpodptr->rcut;
+  if (descriptormethod == 0)
+    rcut = podptr->pod.rcut;
+  else if (descriptormethod == 1)
+    rcut = fastpodptr->rcut;
 
   return rcut;
 }
@@ -711,7 +746,7 @@ void PairPOD::lammpsNeighPairs(double **x, int **firstneigh, int *atomtypes, int
 }
 
 void PairPOD::lammpsNeighborList(double **x, int **firstneigh, int *atomtypes, int *map,
-                               int *numneigh, double rcutsq, int gi)
+                                 int *numneigh, double rcutsq, int gi)
 {
   nij = 0;
   int itype = map[atomtypes[gi]] + 1;
@@ -735,12 +770,12 @@ void PairPOD::lammpsNeighborList(double **x, int **firstneigh, int *atomtypes, i
   }
 }
 
-void PairPOD::tallyforce(double **force, double *fij,  int *ai, int *aj, int N)
+void PairPOD::tallyforce(double **force, double *fij, int *ai, int *aj, int N)
 {
-  for (int n=0; n<N; n++) {
-    int im =  ai[n];
-    int jm =  aj[n];
-    int nm = 3*n;
+  for (int n = 0; n < N; n++) {
+    int im = ai[n];
+    int jm = aj[n];
+    int nm = 3 * n;
     force[im][0] += fij[0 + nm];
     force[im][1] += fij[1 + nm];
     force[im][2] += fij[2 + nm];
@@ -758,35 +793,34 @@ int PairPOD::query_pod(std::string pod_file)
   FILE *fppod;
   if (comm->me == 0) {
 
-    fppod = utils::open_potential(podfilename,lmp,nullptr);
+    fppod = utils::open_potential(podfilename, lmp, nullptr);
     if (fppod == nullptr)
-      error->one(FLERR,"Cannot open POD coefficient file {}: ",
-                                   podfilename, utils::getsyserror());
+      error->one(FLERR, "Cannot open POD coefficient file {}: ", podfilename, utils::getsyserror());
   }
 
   // loop through lines of POD file and parse keywords
 
-  char line[MAXLINE],*ptr;
+  char line[MAXLINE], *ptr;
   int eof = 0;
 
   while (true) {
     if (comm->me == 0) {
-      ptr = fgets(line,MAXLINE,fppod);
+      ptr = fgets(line, MAXLINE, fppod);
       if (ptr == nullptr) {
         eof = 1;
         fclose(fppod);
       }
     }
-    MPI_Bcast(&eof,1,MPI_INT,0,world);
+    MPI_Bcast(&eof, 1, MPI_INT, 0, world);
     if (eof) break;
-    MPI_Bcast(line,MAXLINE,MPI_CHAR,0,world);
+    MPI_Bcast(line, MAXLINE, MPI_CHAR, 0, world);
 
     // words = ptrs to all words in line
     // strip single and double quotes from words
 
     std::vector<std::string> words;
     try {
-      words = Tokenizer(utils::trim_comment(line),"\"' \t\n\r\f").as_vector();
+      words = Tokenizer(utils::trim_comment(line), "\"' \t\n\r\f").as_vector();
     } catch (TokenizerException &) {
       // ignore
     }
@@ -797,8 +831,7 @@ int PairPOD::query_pod(std::string pod_file)
 
     if ((keywd != "#") && (keywd != "species") && (keywd != "pbc")) {
 
-      if (words.size() != 2)
-        error->one(FLERR,"Improper POD file.", utils::getsyserror());
+      if (words.size() != 2) error->one(FLERR, "Improper POD file.", utils::getsyserror());
 
       if (keywd == "threebody_angular_degree") fastpod = 1;
       if (keywd == "fourbody_angular_degree") fastpod = 1;

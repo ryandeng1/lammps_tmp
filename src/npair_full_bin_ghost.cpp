@@ -239,7 +239,6 @@ void NPairFullBinGhost::build_stencil_md(NeighList *list, Atom* atom_) {
                     }
                 }
             }
-
         } else {
             ibin = coord2bin(x[i],xbin,ybin,zbin);
             for (k = 0; k < nstencil; k++) {

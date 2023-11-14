@@ -70,8 +70,8 @@ class ModifyKokkos : public Modify {
   int min_reset_ref() override;
 
   void setup_stencil_md(double*, Atom*) override;
-  void initial_integrate_stencil_md(int, Atom*, Atom*, int*) override;
-  void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*) override;
+  void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
+  void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;
 
  protected:
 

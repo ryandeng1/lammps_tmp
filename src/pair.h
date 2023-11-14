@@ -217,7 +217,7 @@ class Pair : protected Pointers {
 
   // management of callbacks to be run from ev_tally()
 
-  virtual void compute_stencil_md(int, int, Atom*, Atom*, int* mapping, queue_info&) {std::cout << "HUH WRONG" << std::endl; assert(false);}
+  virtual void compute_stencil_md(int, int, Atom*, Atom*, bool* mapping, queue_info&) {std::cout << "HUH WRONG" << std::endl; assert(false);}
   virtual void init_style_stencil_md(Neighbor*);
   virtual void init_stencil_md(Neighbor*);
 

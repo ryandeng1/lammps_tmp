@@ -31,6 +31,7 @@
 #include "timer.h"
 #include "memory_kokkos.h"
 #include "kokkos.h"
+#include <chrono>
 
 using namespace LAMMPS_NS;
 
@@ -129,7 +130,15 @@ void VerletKokkos::setup(int flag)
   if (pair_compute_flag) {
     atomKK->sync(force->pair->execution_space,force->pair->datamask_read);
     std::cout << "REGULAR MD START force compute Me: " << comm->me << std::endl;
+
+    auto begin = std::chrono::high_resolution_clock::now();
     force->pair->compute(eflag,vflag);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-begin).count();
+    if (comm->me == 0) {
+        std::cout << "TOTAL FORCE DURATION: " << duration << std::endl;
+    }
+
     std::cout << "REGULAR MD END force compute. Me: " << comm->me << std::endl;
     atomKK->modified(force->pair->execution_space,force->pair->datamask_modify);
   }
@@ -172,17 +181,7 @@ void VerletKokkos::setup(int flag)
 
   modify->setup_pre_reverse(eflag,vflag);
   if (force->newton) {
-      for (int k = 0; k < atom->nlocal; k++) {
-          if (atom->tag[k] == 95960) {
-              std::cout << "BEFORE FORCE: " << atom->f[k][0] << " " << atom->f[k][1] << " " << atom->f[k][2] << std::endl;
-          }
-      }
       comm->reverse_comm();
-      for (int k = 0; k < atom->nlocal; k++) {
-          if (atom->tag[k] == 95960) {
-              std::cout << "AFTER FORCE: " << atom->f[k][0] << " " << atom->f[k][1] << " " << atom->f[k][2] << std::endl;
-          }
-      }
   }
 
   double neigh_cutoff = force->pair->cutforce  + neighbor->skin;
@@ -312,6 +311,9 @@ void VerletKokkos::setup_minimal(int flag)
 ------------------------------------------------------------------------- */
 
 void VerletKokkos::run(int n) {
+    std::cout << "atom nlocal: " << atom->nlocal << " nghost: " << atom->nghost << std::endl;
+    constexpr auto max_precision{std::numeric_limits<long double>::digits10 + 1};
+    std::cout << std::setprecision(max_precision);
     bigint ntimestep;
     int nflag, sortflag;
 
@@ -340,18 +342,31 @@ void VerletKokkos::run(int n) {
 
     bool test_correctness = true;
 
-    double* test_f[NUM_TIMESTEPS_IN_PARALLEL + 1];
+    int test_num_timesteps = NUM_TIMESTEPS_IN_PARALLEL + 1;
+    double* test_f[test_num_timesteps];
+    double* test_x[test_num_timesteps];
 
-    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
+    for (int i = 0; i < test_num_timesteps; i++) {
         test_f[i] = new double[3 * (atom->natoms + 1)];
-        memset(test_f[i], 0, sizeof(test_f[i]));
+        test_x[i] = new double[3 * (atom->natoms + 1)];
+        for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+          test_f[i][j] = 0.0;
+          test_x[i][j] = 0.0;
+        }
     }
 
     double* send_f = new double[3 * (atom->natoms + 1)];
-    memset(send_f, 0, sizeof(send_f));
+    for (int i = 0; i < 3 * (atom->natoms + 1); i++) {
+      send_f[i] = 0;
+    }
+
+    double* send_x = new double[3 * (atom->natoms + 1)];
+    for (int i = 0; i < 3 * (atom->natoms + 1); i++) {
+        send_x[i] = 0;
+    }
 
     timer->init_timeout();
-    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL; i++) {
+    for (int i = 0; i < test_num_timesteps; i++) {
         if (timer->check_timeout(i)) {
             update->nsteps = i;
             break;
@@ -362,9 +377,14 @@ void VerletKokkos::run(int n) {
 
         // initial time integration
         timer->stamp();
-        std::cout << "REGULAR MD INITIAL INTEGRATE" << std::endl;
         if (test_correctness) {
-            memset(send_f, 0, sizeof(send_f));
+            // memset(send_f, 0, sizeof(send_f));
+            for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+              send_f[j] = 0;
+            }
+            for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+                send_x[j] = 0;
+            }
 
             for (int j = 0; j < atom->nlocal; j++) {
                 int tag = atom->tag[j];
@@ -372,6 +392,10 @@ void VerletKokkos::run(int n) {
                 send_f[tag * 3 + 0] = atom->f[j][0];
                 send_f[tag * 3 + 1] = atom->f[j][1];
                 send_f[tag * 3 + 2] = atom->f[j][2];
+
+                send_x[tag * 3 + 0] = atom->x[j][0];
+                send_x[tag * 3 + 1] = atom->x[j][1];
+                send_x[tag * 3 + 2] = atom->x[j][2];
             }
 
             MPI_Allreduce(
@@ -381,8 +405,19 @@ void VerletKokkos::run(int n) {
                     MPI_DOUBLE,
                     MPI_SUM,
                     world);
+
+            MPI_Allreduce(
+                    send_x,
+                    test_x[i],
+                    (atom->natoms + 1) * 3,
+                    MPI_DOUBLE,
+                    MPI_SUM,
+                    world);
         }
 
+        if (comm->me == 0) {
+            std::cout << BLUE << "REGULAR MD INITIAL INTEGRATE" << " for time: " << i << RESET_COLOR << std::endl;
+        }
         modify->initial_integrate(vflag);
         if (n_post_integrate) modify->post_integrate();
         timer->stamp(Timer::MODIFY);
@@ -395,6 +430,7 @@ void VerletKokkos::run(int n) {
             comm->forward_comm();
             timer->stamp(Timer::COMM);
         } else {
+            assert(false);
             // added debug
             //atomKK->sync(Host,ALL_MASK);
             //atomKK->modified(Host,ALL_MASK);
@@ -583,9 +619,12 @@ void VerletKokkos::run(int n) {
         // force modifications, final time integration, diagnostics
 
         if (n_post_force) modify->post_force(vflag);
-        // if (comm->me == 0) std::cout << "REGULAR MD start final integrate for time: " << i << std::endl;
+
+        if (comm->me == 0) {
+            std::cout << BLUE << "REGULAR MD FINAL INTEGRATE for time: " << i << RESET_COLOR << std::endl;
+        }
+
         modify->final_integrate();
-        // if (comm->me == 0) std::cout << "REGULAR MD end final integrate for time: " << i << std::endl;
 
         if (n_end_of_step) modify->end_of_step();
         timer->stamp(Timer::MODIFY);
@@ -602,12 +641,26 @@ void VerletKokkos::run(int n) {
     }
 
     delete[] send_f;
+    delete[] send_x;
 
     atomKK->sync(Host, ALL_MASK);
     lmp->kokkos->auto_sync = 1;
 
     MPI_Barrier(world);
-    std::cout << "---------------Start stencil md test run----------------" << std::endl;
+    std::cout << "---------------Start STENCIL MD test run----------------" << std::endl;
+
+    /*
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            if (i % comm->nprocs == comm->me) {
+                Atom* atom_ = lmp->atom_stencil_md[i][t];
+                for (int j = 0; j < atom_->nlocal + atom_->nghost; j++) {
+                    atom_->actually_eval_mask_stencil_md[j] = 0;
+                }
+            }
+        }
+    }
+    */
 
     std::vector<int*> send_bufs;
 
@@ -620,10 +673,11 @@ void VerletKokkos::run(int n) {
             }
 
             if (dep > 0) {
+                // ignore t = 0 forces, need to fix
                 auto &atom_arr = lmp->atom_stencil_md[zoid_num];
                 Atom* start = atom_arr[0];
-                double* f_ = new double[start->nlocal * 3];
-                for (int k = 0; k < start->nlocal; k++) {
+                double* f_ = new double[(start->nlocal + start->nghost) * 3];
+                for (int k = 0; k < start->nlocal + start->nghost; k++) {
                     for (int dim = 0; dim < 3; dim++) {
                         f_[k * 3 + dim] = start->f[k][dim];
                     }
@@ -633,7 +687,7 @@ void VerletKokkos::run(int n) {
                 comm_->receive_data_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
                 comm_->receive_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
 
-                for (int k = 0; k < atom_arr[0]->nlocal; k++) {
+                for (int k = 0; k < start->nlocal + start->nghost; k++) {
                     for (int dim = 0; dim < 3; dim++) {
                         start->f[k][dim] = f_[k * 3 + dim];
                     }
@@ -652,25 +706,146 @@ void VerletKokkos::run(int n) {
                 Force *force_ = lmp->force_stencil_md[zoid_num][t];
                 Modify *modify_ = lmp->modify_stencil_md[zoid_num];
 
-                for (int k = 0; k < atom_->nlocal; k++) {
+                for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
                     int tag = atom_->tag[k];
-                    double* f_ = atom_->f[k];
+                    double* x_ = atom_->x[k];
                     for (int dim = 0; dim < 3; dim++) {
-                        if (fabs(f_[dim] - test_f[t][tag * 3 + dim]) > 3e-3) {
+                        double val = x_[dim];
+                        if (val < 0) {
+                            val += domain->prd[dim];
+                        } else if (val >= domain->prd[dim]) {
+                            val -= domain->prd[dim];
+                        }
+
+                        double test_val = test_x[t][tag * 3 + dim];
+                        if (test_val < 0) {
+                            test_val += domain->prd[dim];
+                        } else if (test_val >= domain->prd[dim]) {
+                            test_val -= domain->prd[dim];
+                        }
+
+                        if (fabs(val - test_val) > 1e-6) {
+                            std::cout << "-------POS DIFF--------" << std::endl;
                             std::cout << "idx: " << k << " out of: " << atom_->nlocal << std::endl;
                             std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t << " tag: " << tag << " different. " << std::endl;
-                            std::cout << "What I have: " << f_[0] << " " << f_[1] << " " << f_[2] << std::endl;
-                            std::cout << "What does LAMMPS have? " << test_f[t][tag * 3 + 0] << " " << test_f[t][tag * 3 + 1] << " " << test_f[t][tag * 3 + 2] << std::endl;
-                            std::cout << "Diff: " << fabs(f_[dim] - test_f[t][tag * 3 + dim]) << std::endl;
+                            std::cout << "What I have: " << x_[0] << " " << x_[1] << " " << x_[2] << std::endl;
+                            std::cout << "What does LAMMPS have? " << test_x[t][tag * 3 + 0] << " " << test_x[t][tag * 3 + 1] << " " << test_x[t][tag * 3 + 2] << std::endl;
+                            std::cout << "Diff: " << fabs(x_[dim] - test_x[t][tag * 3 + dim]) << std::endl;
                             std::cout << "pos: " << atom_->x[k][0] << " " << atom_->x[k][1] << " " << atom_->x[k][2] << std::endl;
+
+                            for (int tmp = 0; tmp < 3; tmp++) {
+                                std::cout << "lo: " << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * t << std::endl;
+                                std::cout << "hi: " << zoid.zoid.cuts[tmp].upper + zoid.zoid.cuts[tmp].slope_upper * t << std::endl;
+                            }
+                            assert(false);
+                        } else {
+                            /*
+                            if (x_[dim] < 0) {
+                                x_[dim] = test_val - domain->prd[dim];
+                            } else if (x_[dim] >= domain->prd[dim]) {
+                                x_[dim] = test_val + domain->prd[dim];
+                            } else {
+                                x_[dim] = test_val;
+                            }
+                            */
+                        }
+                    }
+                }
+
+                for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
+                    // compare forces only on evaluatable atoms
+                    int tag = atom_->tag[k];
+                    if (tag == 57073) {
+                        for (int dim = 0; dim < 3; dim++) {
+                            double my_force = atom_->f[k][dim] + atom_->eval_f_stencil_md[k][dim];
+                            std::cout << "\033[31m" << "Me: " << comm->me << " Timestep: " << t << " zoid: " << zoid.num << " what I have: "
+                            << my_force << " what lammps has: " << test_f[t][tag * 3 + dim]
+                            << " diff? " << fabs(my_force - test_f[t][tag * 3 + dim]) << " idx: " << k << " out of: " << atom_->nlocal <<
+                            " can eval? " << zoid.can_eval_pos[t][k] << " pos: " << atom_->x[k][dim] << "\033[0m" << std::endl;
+                        }
+                    }
+                    if (!zoid.can_eval_pos[t][k]) {
+                        continue;
+                    }
+                    // double* f_ = atom_->f[k] + atom_->eval_f_stencil_md[k];
+                    for (int dim = 0; dim < 3; dim++) {
+                        double my_force = atom_->f[k][dim] + atom_->eval_f_stencil_md[k][dim];
+                        if (fabs(my_force - test_f[t][tag * 3 + dim]) > 1e-6) {
+                            std::cout << "------FORCE DIFF--------" << std::endl;
+                            std::cout << "idx: " << k << " out of: " << atom_->nlocal << std::endl;
+                            std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t << " tag: " << tag << " different. " << std::endl;
+                            std::cout << "what I have f: " << atom_->f[k][0] << " " << atom_->f[k][1] << " " << atom_->f[k][2] << std::endl;
+                            std::cout << "what I have eval " << atom_->eval_f_stencil_md[k][0] << " " << atom_->eval_f_stencil_md[k][1] << " " << atom_->eval_f_stencil_md[k][2] << std::endl;
+                            // std::cout << "What I have: " << [0] << " " << f_[1] << " " << f_[2] << std::endl;
+                            std::cout << "what I have: " << atom_->f[k][0] + atom_->eval_f_stencil_md[k][0] << " " <<
+                                atom_->f[k][1] + atom_->eval_f_stencil_md[k][1] << " " << atom_->f[k][2] + atom_->eval_f_stencil_md[k][2] << std::endl;
+                            std::cout << "What does LAMMPS have? " << test_f[t][tag * 3 + 0] << " " << test_f[t][tag * 3 + 1] << " " << test_f[t][tag * 3 + 2] << std::endl;
+                            std::cout << "Diff: " << fabs(my_force - test_f[t][tag * 3 + dim]) << std::endl;
+                            std::cout << "pos: " << atom_->x[k][0] << " " << atom_->x[k][1] << " " << atom_->x[k][2] << std::endl;
+                            
+                            for (int tmp = 0; tmp < 3; tmp++) { 
+                              std::cout << "lo: " << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * t << std::endl;
+                              std::cout << "hi: " << zoid.zoid.cuts[tmp].upper + zoid.zoid.cuts[tmp].slope_upper * t << std::endl;
+                            }
+                          
                             assert(false);
                         }
                     }
                 }
 
-                // std::cout << "STENCIL MD INITIAL INTEGRATE FOR ZOID: " << zoid_num << " for t: " << t << std::endl;
                 // updates positions in atom_next_timestep
-                modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t]);
+                std::cout << "-------- ZOID NUM: " << zoid.num << " INITIAL INTEGRATE WRITING INTO: ---------" << t + 1 << std::endl;
+                modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], zoid.can_eval_pos[t]);
+
+                for (int k = 0; k < atom_next_timestep->nlocal + atom_next_timestep->nghost; k++) {
+                    if (t + 1 == NUM_TIMESTEPS_IN_PARALLEL && k >= atom_next_timestep->nlocal) {
+                        continue;
+                    }
+                    int tag = atom_next_timestep->tag[k];
+                    double* x_ = atom_next_timestep->x[k];
+                    for (int dim = 0; dim < 3; dim++) {
+                        double val = x_[dim];
+                        if (val < 0) {
+                            val += domain->prd[dim];
+                        } else if (val >= domain->prd[dim]) {
+                            val -= domain->prd[dim];
+                        }
+
+                        double test_val = test_x[t + 1][tag * 3 + dim];
+                        if (test_val < 0) {
+                            test_val += domain->prd[dim];
+                        } else if (test_val >= domain->prd[dim]) {
+                            test_val -= domain->prd[dim];
+                        }
+
+                        if (fabs(val - test_val) > 1e-6) {
+                            std::cout << "-------POS DIFF NEXT--------" << std::endl;
+                            std::cout << "idx: " << k << " out of: " << atom_next_timestep->nlocal << std::endl;
+                            std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t + 1 << " tag: " << tag << " different. " << std::endl;
+                            std::cout << "What I have: " << x_[0] << " " << x_[1] << " " << x_[2] << std::endl;
+                            std::cout << "What does LAMMPS have? " << test_x[t + 1][tag * 3 + 0] << " " << test_x[t + 1][tag * 3 + 1] << " " << test_x[t + 1][tag * 3 + 2] << std::endl;
+                            std::cout << "Diff: " << fabs(val - test_val) << std::endl;
+                            std::cout << "me val: " << val << " test_val: " << test_val << std::endl;
+                            std::cout << "pos: " << atom_next_timestep->x[k][0] << " " << atom_next_timestep->x[k][1] << " " << atom_next_timestep->x[k][2] << std::endl;
+
+                            for (int tmp = 0; tmp < 3; tmp++) {
+                                std::cout << "lo: " << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * (t + 1) << std::endl;
+                                std::cout << "hi: " << zoid.zoid.cuts[tmp].upper + zoid.zoid.cuts[tmp].slope_upper * (t + 1) << std::endl;
+                            }
+                            assert(false);
+                        } else {
+                            /*
+                            if (x_[dim] < 0) {
+                                x_[dim] = test_val - domain->prd[dim];
+                            } else if (x_[dim] >= domain->prd[dim]) {
+                                x_[dim] = test_val + domain->prd[dim];
+                            } else {
+                                x_[dim] = test_val;
+                            }
+                            */
+                        }
+                    }
+                }
 
                 if (n_pre_force) {
                     assert(false);
@@ -736,7 +911,8 @@ void VerletKokkos::run(int n) {
                     Force* next_force = lmp->force_stencil_md[zoid_num][t + 1];
                     int * atom_idx_mapping_ = lmp->queues[dep][j].atom_idx_mapping[t + 1];
                     // force_clear_stencil_md(atom_next_timestep, next_force, neighbor_);
-                    next_force->pair->compute_stencil_md(eflag, vflag, atom_next_timestep, next_next_timestep, atom_idx_mapping_, lmp->zoid_num_to_zoid[zoid_num]);
+                    next_force->pair->compute_stencil_md(eflag, vflag, atom_next_timestep, next_next_timestep,
+                                                         zoid.can_eval_center[t + 1], lmp->zoid_num_to_zoid[zoid_num]);
                     atomKK_->modified_stencil_md(force->pair->execution_space, force->pair->datamask_modify, atom_);
                     atomKK_->modified_stencil_md(force->pair->execution_space,
                                                  ~(~force->pair->datamask_modify | datamask_exclude), atom_);
@@ -775,7 +951,9 @@ void VerletKokkos::run(int n) {
 //                              << std::endl;
                 }
 
-                modify_->final_integrate_stencil_md(atom_, atom_next_timestep, neighbor_, atom_idx_mapping[t]);
+                std::cout << "-------- ZOID NUM: " << zoid.num << " FINAL INTEGRATE WRITING INTO: ---------" << t + 1 << std::endl;
+
+                modify_->final_integrate_stencil_md(atom_, atom_next_timestep, neighbor_, atom_idx_mapping[t], zoid.can_eval_pos[t + 1]);
 
                 if (n_end_of_step) {
                     assert(false);
@@ -806,10 +984,358 @@ void VerletKokkos::run(int n) {
         }
     }
 
+    std::cout << GREEN << "--------------- STENCIL MD INITIAL DT PASSED -------------------" << RESET_COLOR << std::endl;
+
+    // clear eval_mask_stencil_md, need to improve
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int t = 0; t < lmp->atom_stencil_md[i].size(); t++) {
+                Atom* atom_ = lmp->atom_stencil_md[i][t];
+                for (int j = 0; j < atom_->nlocal + atom_->nghost; j++) {
+                    atom_->eval_mask_stencil_md[j] = 1;
+                }
+            }
+        }
+    }
+
+    // clear force on everything except last timestep of initial,
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int t = 0; t < lmp->atom_stencil_md[i].size() - 1; t++) {
+                Atom* atom_ = lmp->atom_stencil_md[i][t];
+                for (int j = 0; j < atom_->nlocal + atom_->nghost; j++) {
+                    for (int dim = 0; dim < 3; dim++) {
+                        atom_->f[j][dim] = 0;
+                        atom_->eval_f_stencil_md[j][dim] = 0;
+                    }
+                }
+            }
+        }
+    }
+
+
+    assert(false);
+
+    std::cout << BLUE << "--------- START STENCIL MD NEXT DT -------------- " << RESET_COLOR << std::endl;
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            queue_info& zoid = lmp->queues_next_dt[dep][j];
+            int zoid_num = lmp->queues_next_dt[dep][j].num;
+            if (zoid_num % comm->nprocs != comm->me) {
+                continue;
+            }
+
+            std::cout << BLUE << "next dt processing zoid num: " << zoid_num << " dep: " << dep << " j: " << j << RESET_COLOR << std::endl;
+
+            if (dep > 0) {
+                auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+                Comm *comm_ = lmp->comm_stencil_md[zoid_num];
+                comm_->receive_data_stencil_md_next_dt(atom_arr, lmp->zoid_num_to_zoid_next_dt[zoid_num]);
+                comm_->receive_exclude_eval_tags_next_dt(atom_arr, lmp->zoid_num_to_zoid_next_dt[zoid_num]);
+            }
+
+            int **atom_idx_mapping = lmp->queues_next_dt[dep][j].atom_idx_mapping;
+            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
+                int idx_obj_timestep = NUM_TIMESTEPS_IN_PARALLEL - t;
+                int idx_obj_timestep_next = NUM_TIMESTEPS_IN_PARALLEL - t - 1;
+
+                // Atom *atom_ = lmp->atom_stencil_md[zoid_num][t];
+                // Atom *atom_next_timestep = lmp->atom_stencil_md[zoid_num][t - 1];
+                Atom *atom_ = lmp->atom_stencil_md[zoid_num][idx_obj_timestep];
+                Atom *atom_next_timestep = lmp->atom_stencil_md[zoid_num][idx_obj_timestep_next];
+
+                AtomKokkos *atomKK_ = (AtomKokkos *) atom_;
+                // Neighbor *neighbor_ = lmp->neighbor_stencil_md[zoid_num][t];
+                // Force *force_ = lmp->force_stencil_md[zoid_num][t];
+                Neighbor *neighbor_ = lmp->neighbor_stencil_md[zoid_num][idx_obj_timestep];
+                Force *force_ = lmp->force_stencil_md[zoid_num][idx_obj_timestep];
+                Modify *modify_ = lmp->modify_stencil_md[zoid_num];
+
+                for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
+                    int tag = atom_->tag[k];
+                    double* x_ = atom_->x[k];
+                    for (int dim = 0; dim < 3; dim++) {
+                        double val = x_[dim];
+                        if (val < 0) {
+                            val += domain->prd[dim];
+                        } else if (val >= domain->prd[dim]) {
+                            val -= domain->prd[dim];
+                        }
+
+                        int timestep_to_compare = NUM_TIMESTEPS_IN_PARALLEL + t;
+
+                        double test_val = test_x[timestep_to_compare][tag * 3 + dim];
+                        if (test_val < 0) {
+                            test_val += domain->prd[dim];
+                        } else if (test_val >= domain->prd[dim]) {
+                            test_val -= domain->prd[dim];
+                        }
+
+                        if (fabs(val - test_val) > 1e-6) {
+                            std::cout << "-------POS DIFF--------" << std::endl;
+                            std::cout << "idx: " << k << " out of: " << atom_->nlocal << std::endl;
+                            std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t << " tag: " << tag << " different. " << std::endl;
+                            std::cout << "What I have: " << x_[0] << " " << x_[1] << " " << x_[2] << std::endl;
+                            std::cout << "What does LAMMPS have? " << test_x[timestep_to_compare][tag * 3 + 0] << " "
+                                << test_x[timestep_to_compare][tag * 3 + 1] << " " << test_x[timestep_to_compare][tag * 3 + 2] << std::endl;
+                            std::cout << "Diff: " << fabs(x_[dim] - test_x[timestep_to_compare][tag * 3 + dim]) << std::endl;
+                            std::cout << "pos: " << atom_->x[k][0] << " " << atom_->x[k][1] << " " << atom_->x[k][2] << std::endl;
+
+                            for (int tmp = 0; tmp < 3; tmp++) {
+                                std::cout << "lo: " << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * t << std::endl;
+                                std::cout << "hi: " << zoid.zoid.cuts[tmp].upper + zoid.zoid.cuts[tmp].slope_upper * t << std::endl;
+                                std::cout << "slope lower: " << zoid.zoid.cuts[tmp].slope_lower << " slope upper: " << zoid.zoid.cuts[tmp].slope_upper << std::endl;
+                            }
+                            assert(false);
+                        } else {
+                            /*
+                            if (x_[dim] < 0) {
+                                x_[dim] = test_val - domain->prd[dim];
+                            } else if (x_[dim] >= domain->prd[dim]) {
+                                x_[dim] = test_val + domain->prd[dim];
+                            } else {
+                                x_[dim] = test_val;
+                            }
+                            */
+                        }
+                    }
+                }
+
+                for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
+                    // compare forces only on evaluatable atoms
+                    int tag = atom_->tag[k];
+                    if (!zoid.can_eval_pos[t][k]) {
+                        continue;
+                    }
+                    for (int dim = 0; dim < 3; dim++) {
+                        double my_force = atom_->f[k][dim] + atom_->eval_f_stencil_md[k][dim];
+                        int timestep_to_compare = NUM_TIMESTEPS_IN_PARALLEL + t;
+                        if (fabs(my_force - test_f[timestep_to_compare][tag * 3 + dim]) > 1e-6) {
+                            std::cout << "my idx: " << idx_obj_timestep << std::endl;
+                            std::cout << "------FORCE DIFF--------" << std::endl;
+                            std::cout << "idx: " << k << " out of: " << atom_->nlocal << std::endl;
+                            std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t << " tag: " << tag << " different. " << std::endl;
+                            std::cout << "what I have f: " << atom_->f[k][0] << " " << atom_->f[k][1] << " " << atom_->f[k][2] << std::endl;
+                            std::cout << "what I have eval " << atom_->eval_f_stencil_md[k][0] << " " << atom_->eval_f_stencil_md[k][1] << " " << atom_->eval_f_stencil_md[k][2] << std::endl;
+                            // std::cout << "What I have: " << [0] << " " << f_[1] << " " << f_[2] << std::endl;
+                            std::cout << "what I have: " << atom_->f[k][0] + atom_->eval_f_stencil_md[k][0] << " " <<
+                                      atom_->f[k][1] + atom_->eval_f_stencil_md[k][1] << " " << atom_->f[k][2] + atom_->eval_f_stencil_md[k][2] << std::endl;
+                            std::cout << "What does LAMMPS have? "
+                                << test_f[timestep_to_compare][tag * 3 + 0] << " " << test_f[timestep_to_compare][tag * 3 + 1] << " "
+                                << test_f[timestep_to_compare][tag * 3 + 2] << std::endl;
+                            std::cout << "Diff: " << fabs(my_force - test_f[timestep_to_compare][tag * 3 + dim]) << std::endl;
+                            std::cout << "pos: " << atom_->x[k][0] << " " << atom_->x[k][1] << " " << atom_->x[k][2] << std::endl;
+
+                            for (int tmp = 0; tmp < 3; tmp++) {
+                                std::cout << "lo: " << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * t << std::endl;
+                                std::cout << "hi: " << zoid.zoid.cuts[tmp].upper + zoid.zoid.cuts[tmp].slope_upper * t << std::endl;
+                                std::cout << "slope lower: " << zoid.zoid.cuts[tmp].slope_lower << " slope upper: " << zoid.zoid.cuts[tmp].slope_upper << std::endl;
+                            }
+
+                            assert(false);
+                        }
+                    }
+                }
+
+                // updates positions in atom_next_timestep
+                std::cout << "-------- ZOID NUM: " << zoid.num << " NEXT DT INITIAL INTEGRATE WRITING INTO: ---------" << t + 1 << std::endl;
+                modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], zoid.can_eval_pos[t]);
+
+                for (int k = 0; k < atom_next_timestep->nlocal + atom_next_timestep->nghost; k++) {
+                    if (t + 1 == NUM_TIMESTEPS_IN_PARALLEL && k >= atom_next_timestep->nlocal) {
+                        continue;
+                    }
+                    int tag = atom_next_timestep->tag[k];
+                    double* x_ = atom_next_timestep->x[k];
+                    for (int dim = 0; dim < 3; dim++) {
+                        double val = x_[dim];
+                        if (val < 0) {
+                            val += domain->prd[dim];
+                        } else if (val >= domain->prd[dim]) {
+                            val -= domain->prd[dim];
+                        }
+
+                        int timestep_to_compare = NUM_TIMESTEPS_IN_PARALLEL + t + 1;
+                        double test_val = test_x[timestep_to_compare][tag * 3 + dim];
+                        if (test_val < 0) {
+                            test_val += domain->prd[dim];
+                        } else if (test_val >= domain->prd[dim]) {
+                            test_val -= domain->prd[dim];
+                        }
+
+                        if (fabs(val - test_val) > 1e-6) {
+                            std::cout << "-------POS DIFF NEXT--------" << std::endl;
+                            std::cout << "idx: " << k << " out of: " << atom_next_timestep->nlocal << std::endl;
+                            std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t + 1 << " tag: " << tag << " different. " << std::endl;
+                            std::cout << "What I have: " << x_[0] << " " << x_[1] << " " << x_[2] << std::endl;
+                            std::cout << "What does LAMMPS have? "
+                                << test_x[timestep_to_compare][tag * 3 + 0] << " " << test_x[timestep_to_compare][tag * 3 + 1] << " "
+                                << test_x[timestep_to_compare][tag * 3 + 2] << std::endl;
+                            std::cout << "Diff: " << fabs(val - test_val) << std::endl;
+                            std::cout << "me val: " << val << " test_val: " << test_val << std::endl;
+                            std::cout << "pos: " << atom_next_timestep->x[k][0] << " " << atom_next_timestep->x[k][1] << " " << atom_next_timestep->x[k][2] << std::endl;
+
+                            for (int tmp = 0; tmp < 3; tmp++) {
+                                std::cout << "lo: " << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * (t + 1) << std::endl;
+                                std::cout << "hi: " << zoid.zoid.cuts[tmp].upper + zoid.zoid.cuts[tmp].slope_upper * (t + 1) << std::endl;
+                            }
+                            assert(false);
+                        } else {
+                            /*
+                            if (x_[dim] < 0) {
+                                x_[dim] = test_val - domain->prd[dim];
+                            } else if (x_[dim] >= domain->prd[dim]) {
+                                x_[dim] = test_val + domain->prd[dim];
+                            } else {
+                                x_[dim] = test_val;
+                            }
+                            */
+                        }
+                    }
+                }
+
+                if (n_pre_force) {
+                    assert(false);
+                    modify->pre_force(vflag);
+                    timer->stamp(Timer::MODIFY);
+                }
+
+                bool execute_on_host = false;
+                unsigned int datamask_read_host = 0;
+                unsigned int datamask_exclude = 0;
+                int allow_overlap = lmp->kokkos->allow_overlap;
+
+                if (allow_overlap && atomKK_->k_f.h_view.data() != atomKK_->k_f.d_view.data()) {
+
+                    datamask_exclude = (F_MASK | ENERGY_MASK | VIRIAL_MASK);
+
+                    if (pair_compute_flag) {
+                        if (force->pair->execution_space == Host) {
+                            execute_on_host = true;
+                            datamask_read_host |= force->pair->datamask_read;
+                        }
+                    }
+                    if (atomKK->molecular && force->bond) {
+                        if (force->bond->execution_space == Host) {
+                            execute_on_host = true;
+                            datamask_read_host |= force->bond->datamask_read;
+                        }
+                    }
+                    if (atomKK->molecular && force->angle) {
+                        if (force->angle->execution_space == Host) {
+                            execute_on_host = true;
+                            datamask_read_host |= force->angle->datamask_read;
+                        }
+                    }
+                    if (atomKK->molecular && force->dihedral) {
+                        if (force->dihedral->execution_space == Host) {
+                            execute_on_host = true;
+                            datamask_read_host |= force->dihedral->datamask_read;
+                        }
+                    }
+                    if (atomKK->molecular && force->improper) {
+                        if (force->improper->execution_space == Host) {
+                            execute_on_host = true;
+                            datamask_read_host |= force->improper->datamask_read;
+                        }
+                    }
+                    if (kspace_compute_flag) {
+                        if (force->kspace->execution_space == Host) {
+                            execute_on_host = true;
+                            datamask_read_host |= force->kspace->datamask_read;
+                        }
+                    }
+                }
+
+                if (pair_compute_flag) {
+                    atomKK_->sync_stencil_md(force->pair->execution_space, force->pair->datamask_read, atom_);
+                    atomKK_->sync_stencil_md(force->pair->execution_space,
+                                             ~(~force->pair->datamask_read | datamask_exclude), atom_);
+                    Atom* next_next_timestep = NULL;
+                    Force* next_force = lmp->force_stencil_md[zoid_num][idx_obj_timestep_next];
+                    int * atom_idx_mapping_ = lmp->queues_next_dt[dep][j].atom_idx_mapping[t + 1];
+                    // force_clear_stencil_md(atom_next_timestep, next_force, neighbor_);
+                    next_force->pair->compute_stencil_md(eflag, vflag, atom_next_timestep, next_next_timestep,
+                                                         zoid.can_eval_center[t + 1], lmp->zoid_num_to_zoid_next_dt[zoid_num]);
+                    atomKK_->modified_stencil_md(force->pair->execution_space, force->pair->datamask_modify, atom_);
+                    atomKK_->modified_stencil_md(force->pair->execution_space,
+                                                 ~(~force->pair->datamask_modify | datamask_exclude), atom_);
+                    timer->stamp(Timer::PAIR);
+                }
+
+                if (execute_on_host) {
+                    assert(false);
+                    std::cout << "Execute on host" << std::endl;
+                    if (pair_compute_flag && force->pair->datamask_modify != datamask_exclude)
+                        Kokkos::fence();
+                    atomKK_->sync_overlapping_device(Host, ~(~datamask_read_host | datamask_exclude));
+                    if (pair_compute_flag && force->pair->execution_space != Host) {
+                        Kokkos::deep_copy(LMPHostType(), atomKK->k_f.h_view, 0.0);
+                    }
+                }
+
+                // reverse communication of forces
+                if (force->newton) {
+                    /*
+                    std::cout << "Force newton on" << std::endl;
+                    Kokkos::fence();
+                    comm->reverse_comm();
+                    timer->stamp(Timer::COMM);
+                    */
+                }
+
+                // force modifications, final time integration, diagnostics
+
+                if (n_post_force) {
+                    modify->post_force(vflag);
+                }
+
+                std::cout << "-------- ZOID NUM: " << zoid.num << " FINAL INTEGRATE WRITING INTO: ---------" << t + 1 << std::endl;
+
+                modify_->final_integrate_stencil_md(atom_, atom_next_timestep, neighbor_, atom_idx_mapping[t], zoid.can_eval_pos[t + 1]);
+
+                if (n_end_of_step) {
+                    assert(false);
+                    modify->end_of_step();
+                }
+                timer->stamp(Timer::MODIFY);
+
+                // all output
+
+                if (ntimestep == output->next) {
+                    assert(false);
+                    atomKK_->sync(Host, ALL_MASK);
+                    timer->stamp();
+                    output->write(ntimestep);
+                    timer->stamp(Timer::OUTPUT);
+                }
+            }
+
+            // send data
+            if (dep < NUM_DEPS - 1) {
+                queue_info& zoid = lmp->zoid_num_to_zoid_next_dt[zoid_num];
+                auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+                Comm *comm_ = lmp->comm_stencil_md[zoid_num];
+
+                comm_->send_data_stencil_md_next_dt(atom_arr, zoid);
+                int* buf = comm_->send_exclude_eval_tags_next_dt(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
+                send_bufs.push_back(buf);
+            }
+        }
+    }
+
+    std::cout << GREEN << " ------------- STENCIL MD NEXT DT PASSED ----------------- " << RESET_COLOR << std::endl;
+
+    for (int i = 0; i < send_bufs.size(); i++) {
+        delete[] send_bufs[i];
+    }
+
     std::cout << "----------PASSED--------" << std::endl;
 
     for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
         delete[] test_f[i];
+        delete[] test_x[i];
     }
 }
 

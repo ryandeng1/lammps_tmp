@@ -172,15 +172,16 @@ void NStencil::copy_neighbor_info()
 }
 
 void NStencil::copy_neighbor_info_stencil_md(Neighbor* neighbor_) {
-    neighstyle = neighbor_->style;
-    cutneighmax = neighbor_->cutneighmax;
-    cutneighmaxsq = neighbor_->cutneighmaxsq;
-    cuttypesq = neighbor_->cuttypesq;
-    cutneighsq = neighbor_->cutneighsq;
+    // honestly just copy from neighbor class, it has all the right settings
+    neighstyle = neighbor->style;
+    cutneighmax = neighbor->cutneighmax;
+    cutneighmaxsq = neighbor->cutneighmaxsq;
+    cuttypesq = neighbor->cuttypesq;
+    cutneighsq = neighbor->cutneighsq;
 
-    ncollections = neighbor_->ncollections;
-    collection = neighbor_->collection;
-    cutcollectionsq = neighbor_->cutcollectionsq;
+    ncollections = neighbor->ncollections;
+    collection = neighbor->collection;
+    cutcollectionsq = neighbor->cutcollectionsq;
 
     // overwrite Neighbor cutoff with custom value set by requestor
     // only works for style = BIN (checked by Neighbor class)

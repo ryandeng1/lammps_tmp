@@ -70,6 +70,8 @@ class Atom : protected Pointers {
   double **x, **v, **f;
 
   int* eval_mask_stencil_md;
+  int* actually_eval_mask_stencil_md;
+  double ** eval_f_stencil_md;
 
   // charged and dipolar particles
 

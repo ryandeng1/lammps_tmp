@@ -313,8 +313,6 @@ void Neighbor::init()
   // settings
 
   // bbox lo/hi ptrs = bounding box of entire domain, stored by Domain
-
-  // TODO: might need to modify this?
   if (triclinic == 0) {
     bboxlo = domain->boxlo;
     bboxhi = domain->boxhi;
@@ -687,6 +685,7 @@ void Neighbor::init_stencil_md(Domain* domain_) {
     triclinic = domain->triclinic;
     newton_pair = force->newton_pair;
 
+    skin = neighbor->skin;
     // error check
 
     if (delay > 0 && (delay % every) != 0)
@@ -699,25 +698,23 @@ void Neighbor::init_stencil_md(Domain* domain_) {
     // settings
 
     // bbox lo/hi ptrs = bounding box of entire domain, stored by Domain
-
-    // TODO: might need to modify this? delete the pointers?
     if (triclinic == 0) {
+        /*
         bboxlo = new double[3];
         bboxhi = new double[3];
 
         for (int dim = 0; dim < 3; dim++) {
-            bboxlo[dim] = domain->boxlo[dim] - ALLEGRO_SLOPE;
-            bboxhi[dim] = domain->boxhi[dim] + ALLEGRO_SLOPE;
-        }
-        // bboxlo = domain->boxlo;
-        // bboxhi = domain->boxhi;
-
-        /*
-        for (int dim = 0; dim < 3; dim++) {
-            bboxlo[dim] -= ALLEGRO_SLOPE;
-            bboxhi[dim] += ALLEGRO_SLOPE;
+            // bboxlo[dim] = domain_->boxlo[dim] - (NUM_TIMESTEPS_IN_PARALLEL + 1) * ALLEGRO_SLOPE;
+            // bboxhi[dim] = domain_->boxhi[dim] + (NUM_TIMESTEPS_IN_PARALLEL + 1) * ALLEGRO_SLOPE;
+            // std::cout << "lo: " << bboxlo[dim] << " hi: " << bboxhi[dim] << std::endl;
+            bboxlo[dim] = domain->boxlo[dim];
+            bboxhi[dim] = domain->boxhi[dim];
         }
         */
+        bboxlo = domain->boxlo;
+        bboxhi = domain->boxhi;
+        // std::cout << "boxlo: " << domain->boxlo[0] << " " << domain->boxlo[1] << " " << domain->boxlo[2] << std::endl;
+        // std::cout << "boxho: " << domain->boxhi[0] << " " << domain->boxhi[1] << " " << domain->boxhi[2] << std::endl;
     } else {
         assert(false);
         bboxlo = domain->boxlo_bound;
@@ -755,7 +752,9 @@ void Neighbor::init_stencil_md(Domain* domain_) {
         for (j = 1; j <= n; j++) {
             if (force->pair) cutoff = sqrt(force->pair->cutsq[i][j]);
             else cutoff = 0.0;
-            if (cutoff > 0.0) delta = skin;
+            if (cutoff > 0.0) {
+                delta = skin;
+            }
             else delta = 0.0;
             cut = cutoff + delta;
 
