@@ -535,8 +535,8 @@ void DomainKokkos::remap_all_stencil_md(Atom* atom_) {
     }
 
     copymode = 1;
-    int nlocal = atom_->nlocal;
-    Kokkos::parallel_for(Kokkos::RangePolicy<LMPDeviceType, TagDomain_remap_all>(0,nlocal),*this);
+    int num_to_remap = atom_->nlocal + atom_->nghost;
+    Kokkos::parallel_for(Kokkos::RangePolicy<LMPDeviceType, TagDomain_remap_all>(0,num_to_remap),*this);
     copymode = 0;
 
     atomKK_->modified_stencil_md(Device,X_MASK | IMAGE_MASK, atom_);

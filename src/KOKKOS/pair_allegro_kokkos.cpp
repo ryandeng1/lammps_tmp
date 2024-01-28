@@ -493,7 +493,7 @@ void PairAllegroKokkos<precision>::compute(int eflag_in, int vflag_in)
 }
 
 template<Precision precision>
-void PairAllegroKokkos<precision>::compute_stencil_md(int eflag_in, int vflag_in, Atom* atom_, Atom* next, bool* mapping, queue_info& zoid) {
+void PairAllegroKokkos<precision>::compute_stencil_md(int eflag_in, int vflag_in, Atom* atom_, Atom* next, bool* mapping, queue_info& zoid, int timestep) {
     for (int i = 0; i < atom_->nlocal; i++) {
         assert(atom_->tag[i] == next->tag[mapping[i]]);
     }

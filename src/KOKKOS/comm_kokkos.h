@@ -63,15 +63,17 @@ class CommKokkos : public CommBrick {
   template<class DeviceType> void borders_device();
 
   void borders_stencil_md_initial_send(Atom*, Domain*, queue_info&, int) override;
-  void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;
-  // void borders_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
+  void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&, int) override;
+
+  void borders_stencil_md_initial_send_to_zoid(Atom*, Domain*, queue_info&, int, int) override;
+  void borders_stencil_md_initial_receive_from_zoid(Atom*, Domain*, queue_info&, int, int) override;
+
+  void exchange_stencil_md_initial_send_to_zoid(Atom*, queue_info&, queue_info&, int timestep) override;
+  void exchange_stencil_md_initial_receive_from_zoid(Atom*, queue_info&, queue_info&, int timestep) override;
 
   void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;
-  // void exchange_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
-  // template<class DeviceType> void send_data_stencil_md(Atom* atom_, Domain* domain_, queue_info& zoid);
-  void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
-  void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
-
+  void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
+  void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
 
 protected:
   DAT::tdual_int_2d k_sendlist;

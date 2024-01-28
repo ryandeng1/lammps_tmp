@@ -33,16 +33,33 @@ class CommBrick : public Comm {
   void exchange() override;                     // move atoms to new procs
   void borders() override;                      // setup list of atoms to comm
 
+  void exchange_stencil_md_initial_send_to_dep0() override;                     // move atoms to new procs, stencil_md version
   void exchange_stencil_md_initial_send() override;                     // move atoms to new procs, stencil_md version
-  // void exchange_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
   void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;                     // move atoms to new procs, stencil_md version
+  void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
+
+  void exchange_stencil_md_initial_send_to_zoid(Atom*, queue_info&, queue_info&, int timestep) override;                     // move atoms to new procs, stencil_md version
+  void exchange_stencil_md_initial_receive_from_zoid(Atom*, queue_info&, queue_info&, int timestep) override;                     // move atoms to new procs, stencil_md version
+
   void borders_stencil_md_initial_send(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
-  void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;                     // move atoms to new procs, stencil_md version
+  void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
+
+  void borders_stencil_md_initial_send_to_zoid(Atom*, Domain*, queue_info&, int, int) override;                     // move atoms to new procs, stencil_md version
+  void borders_stencil_md_initial_receive_from_zoid(Atom*, Domain*, queue_info&, int, int) override;                     // move atoms to new procs, stencil_md version
 
   // void borders_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
-  void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
-  void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
+  void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
+
+  void unpack_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
+
   void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void construct_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
+  void construct_second_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
+  void construct_send_list_stencil_md_next_dt_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void construct_second_send_list_stencil_md_next_dt_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
 
   void send_data_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void receive_data_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
@@ -54,8 +71,8 @@ class CommBrick : public Comm {
   int* send_exclude_eval_tags_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void receive_exclude_eval_tags_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
 
-  void construct_second_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
-  void construct_second_send_list_stencil_md_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void construct_second_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+  void construct_second_send_list_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
 
   void construct_shared_ghost_send_list_stencil_md(Atom*, queue_info& zoid, std::vector<int>&) override;
 
@@ -111,6 +128,10 @@ class CommBrick : public Comm {
   int* maxsend_stencil_md;
   int* maxrecv_stencil_md;
 
+  int send_list_sendnum_stencil_md[26][2 * (NUM_TIMESTEPS_IN_PARALLEL + 1)];
+
+  int stencil_md_initial_exchange_nsend;
+
   int maxsend, maxrecv;    // current size of send/recv buffer
   int smax, rmax;          // max size in atoms of single borders send/recv
 
@@ -133,6 +154,8 @@ class CommBrick : public Comm {
   void grow_send_sendlist_stencil_md(int, int, int);
   void grow_recv_sendlist_stencil_md(int, int);
 
+  void grow_second_sendlist_stencil_md(int, int, int);
+  void grow_second_sendlist_stencil_md_next_dt(int, int, int);
   void grow_list_stencil_md(int, int, int);
   void grow_list_stencil_md_next_dt(int, int, int);
 
@@ -153,6 +176,12 @@ class CommBrick : public Comm {
 
   int* sendnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int* sendnum_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+  int* second_sendnum_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int* second_sendnum_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+  int ** second_sendlist_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int * max_second_sendlist_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
   int ** buf_sendlist_stencil_md;
   int ** buf_recv_sendlist_stencil_md;

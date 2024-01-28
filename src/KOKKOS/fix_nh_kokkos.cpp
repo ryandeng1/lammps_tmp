@@ -832,17 +832,26 @@ void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_
     if (is_initial_integrate) {
         f = atomKK_->k_f.view<DeviceType>();
         eval_f_stencil_md = atomKK_->k_eval_f_stencil_md.view<DeviceType>();
-        total = atom_->nlocal + atom_->nghost;
+        // total = atom_->nlocal + atom_->nghost;
+        total = atom_->nlocal;
         tag = atom_->tag;
         type = atomKK_->k_type.view<DeviceType>();
         rmass = atomKK_->k_rmass.view<DeviceType>();
         mass = atomKK_->k_mass.view<DeviceType>();
         mask = atomKK_->k_mask.view<DeviceType>();
         actually_eval_mask_stencil_md = atomKK_->k_actually_eval_mask_stencil_md.view<DeviceType>();
+        /*
+        for (int i = 0; i < atom_->nlocal; i++) {
+            if (PRINT && atom_->tag[i] == 70974) {
+                std::cout << "initial integrate idx: " << i << " out of: " << atom_->nlocal << " copying over vel. curr vel: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2) << std::endl;
+            }
+        }
+        */
     } else {
         f = atomKK_next->k_f.view<DeviceType>();
         eval_f_stencil_md = atomKK_next->k_eval_f_stencil_md.view<DeviceType>();
-        total = next->nlocal + next->nghost;
+        // total = next->nlocal + next->nghost;
+        total = next->nlocal;
         tag = next->tag;
         type = atomKK_next->k_type.view<DeviceType>();
         rmass = atomKK_next->k_rmass.view<DeviceType>();
@@ -851,14 +860,30 @@ void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_
         actually_eval_mask_stencil_md = atomKK_next->k_actually_eval_mask_stencil_md.view<DeviceType>();
 
         // update next_v based on curr_v
-        for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+        for (int i = 0; i < atom_->nlocal; i++) {
             int next_idx = atom_idx_mapping[i];
-            if (next_idx != -1 && !actually_eval_mask_stencil_md[next_idx]) {
-                next_v(next_idx, 0) = v(i, 0);
-                next_v(next_idx, 1) = v(i, 1);
-                next_v(next_idx, 2) = v(i, 2);
+            assert(next_idx != -1);
+            /*
+            if (atom_->tag[i] == 70974 && PRINT) {
+                std::cout << "final integrate idx: " << i << " out of: " << atom_->nlocal << " copying over vel. curr vel: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2)
+                << " next v that I am replacing: " << next_v(next_idx, 0) << " " << next_v(next_idx, 1) << " " << next_v(next_idx, 2)
+                << " next idx? " << next_idx << std::endl;
+            }
+            */
+
+            next_v(next_idx, 0) = v(i, 0);
+            next_v(next_idx, 1) = v(i, 1);
+            next_v(next_idx, 2) = v(i, 2);
+        }
+
+        /*
+        for (int i = 0; i < next->nlocal; i++) {
+            if (next->tag[i] == 70974 && PRINT) {
+                std::cout << "next atom, final integrate idx: " << i << " out of: " << atom_->nlocal <<
+                    " copying over vel. curr vel: " << next_v(i, 0) << " " << next_v(i, 1) << " " << next_v(i, 2) << std::endl;
             }
         }
+        */
     }
 
     atom_can_eval = can_eval;
@@ -908,13 +933,13 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v<RMASS>, const int &i) co
       v(i,0) += dtfm*f(i,0);
       v(i,1) += dtfm*f(i,1);
       v(i,2) += dtfm*f(i,2);
-      if (atom->tag[i] == 115203 && PRINT) {
+      /*
+      if (atom->tag[i] == 70974 && PRINT) {
           std::cout << "REGULAR MD INTEGRATE FORCE: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2) << std::endl;
           std::cout << "REGULAR MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
           std::cout << "REGULAR MD NEW VEL: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2) << std::endl;
-          std::cout << "DTF: " << dtf << " dtfm: " << dtfm << " update dt? " << update->dt << std::endl;
-          std::cout << "dtfm: " << dtfm << " dtf: " << dtf << " type: " << type[i] << " mass: " << mass[type[i]] << std::endl;
       }
+      */
     }
   }
 }
@@ -935,45 +960,26 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v_stencil_md<RMASS>, const
         if (mask[i] & groupbit) {
             const F_FLOAT dtfm = dtf / atom->mass[type[i]];
             // if (atom_idx_mapping[i] != -1) {
-            if (atom_can_eval[i] && !actually_eval_mask_stencil_md[i]) {
-                double v0 = next_v(i, 0);
-                double v1 = next_v(i, 1);
-                double v2 = next_v(i, 2);
-                // assert(atom_idx_mapping[i] != -1);
-                // int next_idx = atom_idx_mapping[i];
-                // next_v(next_idx, 0) += dtfm*f(next_idx, 0);
-                // next_v(next_idx, 1) += dtfm*f(next_idx, 1);
-                // next_v(next_idx, 2) += dtfm*f(next_idx, 2);
-                // next_v(next_idx, 0) += dtfm*(f(next_idx, 0) + eval_f_stencil_md(next_idx, 0));
-                // next_v(next_idx, 1) += dtfm*(f(next_idx, 1) + eval_f_stencil_md(next_idx, 1));
-                // next_v(next_idx, 2) += dtfm*(f(next_idx, 2) + eval_f_stencil_md(next_idx, 2));
-                next_v(i, 0) += dtfm*(f(i, 0) + eval_f_stencil_md(i, 0));
-                next_v(i, 1) += dtfm*(f(i, 1) + eval_f_stencil_md(i, 1));
-                next_v(i, 2) += dtfm*(f(i, 2) + eval_f_stencil_md(i, 2));
-                // assert(tag[i] == next_tag[next_idx]);
-                if (tag[i] == 115203 && PRINT) {
-                    /*
-                    std::cout << BLUE << "me: " << comm->me << "STENCIL MD INTEGRATE FORCE FINAL: " << f(next_idx, 0) << " " << f(next_idx, 1) << " " << f(next_idx, 2) <<
-                        " eval f: " << eval_f_stencil_md(next_idx, 0) << " " << eval_f_stencil_md(next_idx, 1) << " " << eval_f_stencil_md(next_idx, 2) << std::endl;
-                    std::cout << "stencil md integrate force final: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2)
-                        << " eval f: " << eval_f_stencil_md(i, 0) << " " << eval_f_stencil_md(i, 1) << " " << eval_f_stencil_md(i, 2) << std::endl;
-                    // std::cout << "STENCIL MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
-                    std::cout << "STENCIL MD NEW VEL: " << next_v(next_idx, 0) << " " << next_v(next_idx, 1) << " " << next_v(next_idx, 2) << std::endl;
-                    std::cout << "idx: " << i << " next_idx: " << next_idx << RESET_COLOR << std::endl;
-                    */
-                    std::cout << BLUE << "me: " << comm->me << "STENCIL MD INTEGRATE FORCE FINAL: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2) <<
-                              " eval f: " << eval_f_stencil_md(i, 0) << " " << eval_f_stencil_md(i, 1) << " " << eval_f_stencil_md(i, 2) << std::endl;
-                    std::cout << "stencil md integrate force final: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2)
-                              << " eval f: " << eval_f_stencil_md(i, 0) << " " << eval_f_stencil_md(i, 1) << " " << eval_f_stencil_md(i, 2) << std::endl;
-                    // std::cout << "STENCIL MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
-                    std::cout << "STENCIL MD NEW VEL: " << next_v(i, 0) << " " << next_v(i, 1) << " " << next_v(i, 2) << std::endl;
-                    std::cout << "STENCIL MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
-                    std::cout << "dtfm: " << dtfm << " dtf: " << dtf << " type: " << type[i] << " mass: " << atom->mass[type[i]] << std::endl;
-                    std::cout << "idx: " << i << " next_idx: " << -1 << RESET_COLOR << std::endl;
-                }
-            } else if (tag[i] == 115203 && actually_eval_mask_stencil_md[i]) {
-                std::cout << RED << " STENCIL MD INTEGRATE FORCE FINAL BUT DIDN'T UPDATE. Vel: " << next_v(i, 0) << " " << next_v(i, 1) << " " << next_v(i, 2) << RESET_COLOR << std::endl;
+            // if (atom_can_eval[i] && !actually_eval_mask_stencil_md[i]) {
+            double v0 = next_v(i, 0);
+            double v1 = next_v(i, 1);
+            double v2 = next_v(i, 2);
+            next_v(i, 0) += dtfm*(f(i, 0) + eval_f_stencil_md(i, 0));
+            next_v(i, 1) += dtfm*(f(i, 1) + eval_f_stencil_md(i, 1));
+            next_v(i, 2) += dtfm*(f(i, 2) + eval_f_stencil_md(i, 2));
+            // assert(tag[i] == next_tag[next_idx]);
+            /*
+            if (tag[i] == 70974 && PRINT) {
+                std::cout << BLUE << "me: " << comm->me << " STENCIL MD INTEGRATE FORCE FINAL: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2) <<
+                          " eval f: " << eval_f_stencil_md(i, 0) << " " << eval_f_stencil_md(i, 1) << " " << eval_f_stencil_md(i, 2) << std::endl;
+                std::cout << "stencil md integrate force final: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2)
+                          << " eval f: " << eval_f_stencil_md(i, 0) << " " << eval_f_stencil_md(i, 1) << " " << eval_f_stencil_md(i, 2) << std::endl;
+                std::cout << "STENCIL MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
+                std::cout << "STENCIL MD NEW VEL: " << next_v(i, 0) << " " << next_v(i, 1) << " " << next_v(i, 2) << std::endl;
+                // std::cout << "dtfm: " << dtfm << " dtf: " << dtf << " type: " << type[i] << " mass: " << atom->mass[type[i]] << std::endl;
+                std::cout << "idx: " << i << RESET_COLOR << std::endl;
             }
+            */
         }
     }
 }
@@ -993,32 +999,24 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_v_stencil_md_initial<RMASS
     } else {
         if (mask[i] & groupbit) {
             const F_FLOAT dtfm = dtf / atom->mass[type[i]];
-            // if (atom_idx_mapping[i] != -1) {
-            if (atom_can_eval[i] && !actually_eval_mask_stencil_md[i]) {
-                assert(atom_idx_mapping[i] != -1);
-                int next_idx = atom_idx_mapping[i];
-                // double v0 = next_v(next_idx, 0);
-                // double v1 = next_v(next_idx, 1);
-                // double v2 = next_v(next_idx, 2);
-                double v0 = v(i, 0);
-                double v1 = v(i, 1);
-                double v2 = v(i, 2);
-                // next_v(next_idx, 0) = v0 + dtfm*(f(i, 0) + eval_f_stencil_md(i, 0));
-                // next_v(next_idx, 1) = v1 + dtfm*(f(i, 1) + eval_f_stencil_md(i, 1));
-                // next_v(next_idx, 2) = v2 + dtfm*(f(i, 2) + eval_f_stencil_md(i, 2));
-                v(i, 0) = v0 + dtfm*(f(i, 0) + eval_f_stencil_md(i, 0));
-                v(i, 1) = v1 + dtfm*(f(i, 1) + eval_f_stencil_md(i, 1));
-                v(i, 2) = v2 + dtfm*(f(i, 2) + eval_f_stencil_md(i, 2));
-                assert(tag[i] == next_tag[next_idx]);
-                if (tag[i] == 115203 && PRINT) {
-                    std::cout << BLUE << "me: " << comm->me << " STENCIL MD INTEGRATE FORCE INITIAL: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2) <<
-                        " eval f: " << eval_f_stencil_md(i, 0) << " " << eval_f_stencil_md(i, 1) << " " << eval_f_stencil_md(i, 2) << std::endl;
-                    std::cout << "STENCIL MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
-                    std::cout << "STENCIL MD NEW VEL: " << next_v(next_idx, 0) << " " << next_v(next_idx, 1) << " " << next_v(next_idx, 2) << std::endl;
-                    std::cout << "next vel next_idx: " << next_idx << std::endl;
-                    std::cout << "dtfm: " << dtfm << " dtf: " << dtf << " type: " << type[i] << " mass: " << atom->mass[type[i]] << RESET_COLOR << std::endl;
-                }
+            int next_idx = atom_idx_mapping[i];
+            assert(next_idx != -1);
+            assert(tag[i] == next_tag[next_idx]);
+            double v0 = v(i, 0);
+            double v1 = v(i, 1);
+            double v2 = v(i, 2);
+            v(i, 0) = v0 + dtfm*(f(i, 0) + eval_f_stencil_md(i, 0));
+            v(i, 1) = v1 + dtfm*(f(i, 1) + eval_f_stencil_md(i, 1));
+            v(i, 2) = v2 + dtfm*(f(i, 2) + eval_f_stencil_md(i, 2));
+            /*
+            if (tag[i] == 70974 && PRINT) {
+                std::cout << BLUE << "me: " << comm->me << " STENCIL MD INITIAL INTEGRATE FORCE IS: " << f(i, 0) << " " << f(i, 1) << " " << f(i, 2) <<
+                    " eval f: " << eval_f_stencil_md(i, 0) << " " << eval_f_stencil_md(i, 1) << " " << eval_f_stencil_md(i, 2) << std::endl;
+                std::cout << "STENCIL MD PREV VEL: " << v0 << " " << v1 << " " << v2 << std::endl;
+                std::cout << "STENCIL MD NEW VEL: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2) << std::endl;
+                std::cout << "NVE_V_STENCIL_MD INITIAL IDX: " << i << std::endl;
             }
+            */
         }
     }
 }
@@ -1073,8 +1071,8 @@ void FixNHKokkos<DeviceType>::nve_x_stencil_md(Atom* atom_, Atom* next, bool* ca
 
     // x update by full step only for atoms in group
     copymode = 1;
-    // Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x_stencil_md>(0,nlocal),*this);
-    Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x_stencil_md>(0,total),*this);
+    Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x_stencil_md>(0,nlocal),*this);
+    // Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x_stencil_md>(0,total),*this);
     copymode = 0;
 }
 
@@ -1088,10 +1086,12 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x, const int &i) const {
     x(i,0) += dtv * v(i,0);
     x(i,1) += dtv * v(i,1);
     x(i,2) += dtv * v(i,2);
-    if (atom->tag[i] == 115203 && PRINT) {
+    /*
+    if (PRINT && atom->tag[i] == 70974) {
         std::cout << "REGULAR MD NVE X VEL: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2) << " dtv: " << dtv << std::endl;
         std::cout << "REGULAR MD NVE X OLD X: " << old_x << " " << old_y << " " << old_z << " new: " << x(i, 0) << " " << x(i, 1) << " " << x(i, 2) << std::endl;
     }
+    */
   }
 }
 
@@ -1100,28 +1100,24 @@ KOKKOS_INLINE_FUNCTION
 void FixNHKokkos<DeviceType>::operator()(TagFixNH_nve_x_stencil_md, const int &i) const {
     if (mask[i] & groupbit) {
         // if (atom_idx_mapping[i] != -1) {
-        if (atom_can_eval[i] && !actually_eval_mask_stencil_md[i]) {
-            int next_idx = atom_idx_mapping[i];
-            // next_x(next_idx, 0) = x(i, 0) + dtv * next_v(next_idx, 0);
-            // next_x(next_idx, 1) = x(i, 1) + dtv * next_v(next_idx, 1);
-            // next_x(next_idx, 2) = x(i, 2) + dtv * next_v(next_idx, 2);
-            next_x(next_idx, 0) = x(i, 0) + dtv * v(i, 0);
-            next_x(next_idx, 1) = x(i, 1) + dtv * v(i, 1);
-            next_x(next_idx, 2) = x(i, 2) + dtv * v(i, 2);
-            // assert(fabs(v(i, 0) - next_v(next_idx, 0)) <= 1e-6);
-            // assert(fabs(v(i, 1) - next_v(next_idx, 1)) <= 1e-6);
-            // assert(fabs(v(i, 2) - next_v(next_idx, 2)) <= 1e-6);
-            assert(tag[i] == next_tag[next_idx]);
-            if (tag[i] == 115203 && PRINT) {
-                std::cout << GREEN << "STENCIL MD NVE X " << " i: " << i << " next idx: " << next_idx << " STENCIL MD VEL: " << next_v(next_idx, 0) << " " << next_v(next_idx, 1) << " " << next_v(next_idx, 2) << " other one: "
+        // if (atom_can_eval[i] && !actually_eval_mask_stencil_md[i]) {
+        int next_idx = atom_idx_mapping[i];
+        // next_x(next_idx, 0) = x(i, 0) + dtv * next_v(next_idx, 0);
+        // next_x(next_idx, 1) = x(i, 1) + dtv * next_v(next_idx, 1);
+        // next_x(next_idx, 2) = x(i, 2) + dtv * next_v(next_idx, 2);
+        next_x(next_idx, 0) = x(i, 0) + dtv * v(i, 0);
+        next_x(next_idx, 1) = x(i, 1) + dtv * v(i, 1);
+        next_x(next_idx, 2) = x(i, 2) + dtv * v(i, 2);
+        assert(tag[i] == next_tag[next_idx]);
+        /*
+        if (PRINT && tag[i] == 70974) {
+            std::cout << GREEN << "STENCIL MD NVE X " << " i: " << i << " next idx: " << next_idx
+                << " STENCIL MD VEL: " << next_v(next_idx, 0) << " " << next_v(next_idx, 1) << " " << next_v(next_idx, 2) << " other one: "
                 << v(i, 0) << " " << v(i, 1) << " " << v(i, 2) << std::endl;
-                std::cout << "STENCIL MD NVE X OLD X: " << x(i, 0) << " " << x(i, 1) << " " << x(i, 2) << " new: "
-                    << next_x(next_idx, 0) << " " << next_x(next_idx, 1) << " " << next_x(next_idx, 2) << RESET_COLOR << std::endl;
-            }
-        } else {
-            // now we include ghost atoms so it's possible, we just won't send this shit
-            // assert(false);
+            std::cout << "STENCIL MD NVE X OLD X: " << x(i, 0) << " " << x(i, 1) << " " << x(i, 2) << " new: "
+                << next_x(next_idx, 0) << " " << next_x(next_idx, 1) << " " << next_x(next_idx, 2) << RESET_COLOR << std::endl;
         }
+        */
     }
 }
 

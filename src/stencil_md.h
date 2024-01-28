@@ -6,6 +6,7 @@
 #define LAMMPS_STENCIL_MD_H
 
 #include <mpi.h>
+#include <map>
 
 #include <deque>
 #include <iostream>
@@ -29,10 +30,16 @@
 #define BOLDCYAN    "\033[1m\033[36m"      /* Bold Cyan */
 #define BOLDWHITE   "\033[1m\033[37m"      /* Bold White */
 
+constexpr int LAMMPS_SEND_LOCAL = -1;
+constexpr int LAMMPS_SEND_GHOST = -2;
+
 constexpr int LEFT = -1;
 constexpr int RIGHT = -2;
 constexpr int MIDDLE = -3;
 constexpr int PBC = -4;
+
+constexpr int LOCAL_SEGMENT_TYPE = 0;
+constexpr int GHOST_SEGMENT_TYPE = -1;
 
 constexpr int NUM_DEPS = 4;
 
@@ -47,6 +54,34 @@ constexpr double ALLEGRO_SLOPE = 2 * ALLEGRO_CUTOFF_RADIUS + ADDITIONAL_CUTOFF;
 
 // constexpr double MIDDLE_ZOID_WIDTH_RATIO = 6.2 / 2;
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
+
+constexpr bool DEBUG_SEND_RECV_DATA = true;
+
+/*
+std::map<std::tuple<int, int, int>, int> zoid_to_num_map {
+        {std::make_tuple(LEFT, LEFT, LEFT), 0},
+        {std::make_tuple(LEFT, LEFT, RIGHT), 0},
+        {std::make_tuple(LEFT, RIGHT, LEFT), 0},
+        {std::make_tuple(RIGHT, LEFT, LEFT), 0},
+        {std::make_tuple(RIGHT, RIGHT, RIGHT), 0},
+        {std::make_tuple(RIGHT, RIGHT, LEFT), 0},
+        {std::make_tuple(RIGHT, LEFT, RIGHT), 0},
+        {std::make_tuple(LEFT, RIGHT, RIGHT), 0},
+
+
+
+        {std::make_tuple(MIDDLE, MIDDLE, MIDDLE), 0},
+        {std::make_tuple(MIDDLE, MIDDLE, PBC), 0},
+        {std::make_tuple(MIDDLE, PBC, MIDDLE), 0},
+        {std::make_tuple(PBC, MIDDLE, MIDDLE), 0},
+        {std::make_tuple(RIGHT, LEFT, LEFT), 0},
+        {std::make_tuple(RIGHT, RIGHT, RIGHT), 0},
+        {std::make_tuple(RIGHT, RIGHT, LEFT), 0},
+        {std::make_tuple(RIGHT, LEFT, RIGHT), 0},
+        {std::make_tuple(LEFT, RIGHT, RIGHT), 0},
+
+};
+*/
 
 struct cut_info {
   double lower;
@@ -70,14 +105,52 @@ struct queue_info {
   int num;
   int where[3];
   int **atom_idx_mapping;
-  int *first_recv_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
-  bool init_first_recv = false;
 
-  bool *can_eval_center[NUM_TIMESTEPS_IN_PARALLEL + 1];
-  bool *can_eval_pos[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  // use pointers since any copies, the pointers will be copied over rather than arrays it seems
+  bool **can_eval_center;
+  bool **can_eval_pos;
 
-  int **first_recv_stencil_md2[NUM_TIMESTEPS_IN_PARALLEL + 1];
-  int *first_recv_sz_stencil_md2[NUM_TIMESTEPS_IN_PARALLEL + 1];
+  int*** recv_list_local;
+  int** recv_list_local_size;
+
+  // for send list
+  int*** send_force_idxs;
+  int*** send_force_sizes;
+  int** send_force_num_segments;
+
+  int*** send_pos_idxs;
+  int*** send_pos_sizes;
+  int** send_pos_num_segments;
+
+  int*** recv_list_local_force_only;
+  int** recv_list_local_num_force_pos;
+
+  int*** recv_list_local_force_pos;
+  int** recv_list_local_num_force_only;
+
+  // for second sendlist
+  int*** send_local_list;
+  int*** send_segment_sizes;
+  int*** send_segment_types;
+  int*** send_segment_idxs;
+  int** send_num_segments;
+
+  /*
+  int*** send_local_sizes;
+  int*** send_local_ghost_segments_mapping;
+  int** send_local_num_segments;
+
+  int*** send_ghost_idxs;
+  int*** send_ghost_sizes;
+  int** send_ghost_num_segments;
+  */
+
+  int*** recv_ghost_idxs;
+  int*** recv_ghost_sizes;
+  int** recv_ghost_num_segments;
+
+  int** num_elems_send;
+  int** num_elems_recv;
 };
 
 int get_zoid_dep(int);
@@ -95,5 +168,7 @@ bool is_dep_inverted(int *, int *);
 void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *queues);
 
 void print_cuts(const cuts_t &);
+
+int get_segments(const std::vector<int>&, std::vector<int>&, std::vector<int>&, bool print=false);
 
 #endif    //LAMMPS_STENCIL_MD_H

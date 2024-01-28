@@ -3,9 +3,11 @@
 //
 
 #include <mpi.h>
-
+#include <cmath>
+#include <cstring>
 #include <deque>
 #include <iostream>
+#include <vector>
 
 #include "stencil_md.h"
 
@@ -125,6 +127,38 @@ bool is_dep_inverted(int *pos1, int *pos2)
     }
   }
   return true;
+}
+
+int get_segments(const std::vector<int>& idxs, std::vector<int>& segment_idxs, std::vector<int>& segment_lengths, bool print) {
+    if (idxs.size() == 0) {
+        return 0;
+    }
+
+    assert(segment_idxs.size() == 0);
+    assert(segment_lengths.size() == 0);
+
+    int start = 0;
+
+    for (int j = 1; j < idxs.size(); j++) {
+        if (idxs[j] - idxs[j - 1] > 1) {
+            segment_idxs.push_back(idxs[start]);
+            int segment_length = (j - 1 - start + 1);
+            segment_lengths.push_back(segment_length);
+            start = j;
+        }
+    }
+
+    int last_segment_length = idxs.size() - 1 - start + 1;
+    segment_idxs.push_back(idxs[start]);
+    segment_lengths.push_back(last_segment_length);
+
+    if (print) {
+        for (int i = 0; i < segment_idxs.size(); i++) {
+            std::cout << RED << "segment: " << i << " segment idx: " << segment_idxs[i] << " size: " << segment_lengths[i] << RESET_COLOR << std::endl;
+        }
+    }
+
+    return segment_lengths.size();
 }
 
 void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *queues)

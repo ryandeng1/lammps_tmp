@@ -400,6 +400,7 @@ class Atom : protected Pointers {
   virtual void sort_stencil_md();
 
   std::map<int, int> tag_to_idx;
+  std::map<int, std::vector<int>> recv_zoid_to_ghost_idxs;
 
 protected:
   // global to local ID mapping

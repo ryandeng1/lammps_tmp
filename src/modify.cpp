@@ -1007,14 +1007,15 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix, bool use_stencil_md)
   fix[ifix] = nullptr;
 
   if (use_stencil_md) {
-      std::cout << "HERE: " << trysuffix << " " << lmp->suffix_enable << std::endl;
+      // TODO: ryan this will be a nightmare to fix but
+      // std::cout << "HERE: " << trysuffix << " " << lmp->suffix_enable << std::endl;
   }
 
   if (trysuffix && lmp->suffix_enable) {
     if (lmp->suffix) {
       std::string estyle = arg[2] + std::string("/") + lmp->suffix;
       if (use_stencil_md) {
-          std::cout << "estyle: " << estyle << std::endl;
+          // std::cout << "estyle: " << estyle << std::endl;
       }
       if (fix_map->find(estyle) != fix_map->end()) {
         if (use_stencil_md) {

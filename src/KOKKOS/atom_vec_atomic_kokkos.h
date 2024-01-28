@@ -69,14 +69,32 @@ class AtomVecAtomicKokkos : public AtomVecKokkos {
   void modified(ExecutionSpace space, unsigned int mask) override;
   void sync_overlapping_device(ExecutionSpace space, unsigned int mask) override;
 
-  int unpack_exchange_stencil_md(double*, Atom*, Domain*, std::set<int>&) override;
+  int pack_exchange_stencil_md(int, double*, int*) override;
+  int unpack_exchange_stencil_md(double*, Atom*, Domain*, int) override;
   void grow_stencil_md(int, Atom*) override;
   void grow_pointers_stencil_md(Atom*) override;
   int unpack_border_stencil_md(int, int, double *, Atom* atom_, int) override;
   int pack_border_stencil_md(int, int*, double*, int*, int**) override;
 
-  int pack_data_stencil_md(int, int*, double*, int*, bool*, bool*, bool*, int*) override;
-  void unpack_data_stencil_md(Atom*, int, int, double*, int*, int, bool=false) override;
+  int pack_data_stencil_md(int num_send_force, int num_send_pos,
+                           int* force_idx_list, int* force_size_list,
+                           int* pos_idx_list, int* pos_size_list,
+                           int* local_to_ghost_list,
+                           int num_segments, int* segment_types, int* segment_idxs, int* segment_sizes,
+                           double* buf, int* pbc_flags, bool debug=false) override;
+  /*
+  int pack_data_stencil_md(int num_send_force, int num_send_pos,
+                           int* force_idx_list, int* force_size_list,
+                           int* pos_idx_list, int* pos_size_list,
+                           int num_local_to_ghost, int* local_to_ghost_mapping, int* local_to_ghost_sizes, int* local_to_ghost_list,
+                           int num_ghost_to_ghost, int* ghost_to_ghost_idx_list, int* ghost_to_ghost_size_list,
+                           double* buf, int* pbc_flags, bool debug) override;
+  */
+
+  void unpack_data_stencil_md(int num_recv_force, int num_recv_pos,
+                              int* recv_force_list, int* recv_pos_list,
+                              int num_recv_ghost, int* recv_ghost_idx_list, int* recv_ghost_size_list,
+                              double* buf) override;
 
   void sync_stencil_md(ExecutionSpace space, unsigned int mask, Atom*) override;
   void modified_stencil_md(ExecutionSpace space, unsigned int mask, Atom*) override;

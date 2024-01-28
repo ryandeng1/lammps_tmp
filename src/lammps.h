@@ -84,13 +84,9 @@ class LAMMPS {
   std::vector<int>* send_to_neighbors_next_dt;
   std::vector<int>* recv_from_neighbors_next_dt;
 
-  // std::vector<int>* send_to_next_dt;
-  // std::vector<int>* recv_from_next_dt;
-
   int* zoid_num_to_idx;
   queue_info* zoid_num_to_zoid;
   queue_info* zoid_num_to_zoid_next_dt;
-  // int* zoid_num_to_idx_next_dt;
 
   torch::jit::Module lmp_model;
   std::unordered_map<std::string, std::string> lmp_model_metadata = {

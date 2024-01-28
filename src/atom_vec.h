@@ -106,15 +106,30 @@ class AtomVec : protected Pointers {
   virtual int pack_exchange(int, double *);
   virtual int unpack_exchange(double *);
 
-  virtual int unpack_exchange_stencil_md(double*, Atom*, Domain*, std::set<int>&);
+  virtual int pack_exchange_stencil_md(int, double*, int*) { assert(false); }
+  virtual int unpack_exchange_stencil_md(double*, Atom*, Domain*, int) { assert(false); }
   virtual void grow_stencil_md(int, Atom*);
 
   // virtual int pack_border_stencil_md(int, int*, double*, int, int*, Atom*) {return 0;}
-  virtual int pack_border_stencil_md(int, int*, double*, int*, int**) {assert(false); return 0;}
+  virtual int pack_border_stencil_md(int, int*, double*, int*, int**) {assert(false); }
   virtual int unpack_border_stencil_md(int, int, double*, Atom*, int) {assert(false); }
 
-  virtual int pack_data_stencil_md(int, int*, double*, int*, bool*, bool*, bool*, int*) {assert(false); return 0; }
-  virtual void unpack_data_stencil_md(Atom*, int, int, double*, int*, int, bool=false) {assert(false); }
+  virtual int pack_data_stencil_md(int num_send_force, int num_send_pos,
+                                   int* force_idx_list, int* force_size_list,
+                                   int* pos_idx_list, int* pos_size_list,
+                                   int* local_to_ghost_list,
+                                   int num_segments, int* segment_types, int* segment_idxs, int* segment_sizes,
+                                   double* buf, int* pbc_flags, bool debug=false) { assert(false); }
+                                   /*
+                                   int num_local_to_ghost, int* local_to_ghost_mapping, int* local_to_ghost_sizes, int* local_to_ghost_list,
+                                   int num_ghost_to_ghost, int* ghost_to_ghost_idx_list, int* ghost_to_ghost_size_list,
+                                   double* buf, int* pbc_flags, bool debug=false) { assert(false); }
+                                   */
+
+  virtual void unpack_data_stencil_md(int num_recv_force, int num_recv_pos,
+                                      int* recv_force_list, int* recv_pos_list,
+                                      int num_recv_ghost, int* recv_ghost_idx_list, int* recv_ghost_size_list,
+                                      double* buf) { assert(false); }
 
   int pack_shared_ghost_stencil_md(Atom*, std::set<int>&, double* buf, bool debug=false);
   void unpack_shared_ghost_stencil_md(Atom*, int, double* buf);

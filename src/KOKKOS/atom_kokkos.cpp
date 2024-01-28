@@ -211,6 +211,9 @@ void AtomKokkos::sort()
     ibin = iz * nbiny * nbinx + iy * nbinx + ix;
     next[i] = binhead[ibin];
     binhead[ibin] = i;
+    if (tag[i] == 70982 || tag[i] == 70934) {
+        std::cout << "bin for tag: " << tag[i] << " is: " << ibin << std::endl;
+    }
   }
 
   // permute = desired permutation of atoms
@@ -333,10 +336,6 @@ void AtomKokkos::sort_stencil_md() {
         ibin = iz * nbiny * nbinx + iy * nbinx + ix;
         next[i] = binhead[ibin];
         binhead[ibin] = i;
-
-        if (tag[i] == 9163) {
-            std::cout << "ix: " << ix << " iy: " << iy << " iz: " << iz << " bin: " << ibin << std::endl;
-        }
     }
 
     // permute = desired permutation of atoms
@@ -345,26 +344,10 @@ void AtomKokkos::sort_stencil_md() {
     n = 0;
     for (m = 0; m < nbins; m++) {
         i = binhead[m];
-        bool found = false;
         while (i >= 0) {
-            if (tag[i] == 17413) {
-                found = true;
-            }
-            i = next[i];
-        }
-
-        i = binhead[m];
-        while (i >= 0) {
-            if (found) {
-                std::cout << "IN BIN IDX: " << i << " TAGS: " << tag[i] << std::endl;
-            }
             permute[n++] = i;
             i = next[i];
         }
-//        while (i >= 0) {
-//            permute[n++] = i;
-//            i = next[i];
-//        }
     }
 
     // current = current permutation, just reuse next vector

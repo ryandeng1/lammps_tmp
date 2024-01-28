@@ -185,6 +185,7 @@ void AtomVecAtomicKokkos::grow_pointers_stencil_md(Atom *atom_)
   d_f = atomKK_->k_f.d_view;
   h_f = atomKK_->k_f.h_view;
 
+  eval_f_stencil_md = atomKK_->eval_f_stencil_md;
   h_eval_f_stencil_md = atomKK_->k_eval_f_stencil_md.h_view;
   d_eval_f_stencil_md = atomKK_->k_eval_f_stencil_md.d_view;
 
@@ -362,192 +363,322 @@ int AtomVecAtomicKokkos::pack_border(int n, int *list, double *buf, int pbc_flag
   return m;
 }
 
-int AtomVecAtomicKokkos::pack_data_stencil_md(int n, int *list, double *buf, int *pbc,
-                                              bool *send_force, bool *send_pos, bool* send_vel,
-                                              int* actually_can_eval_stencil_md)
-{
-  int m = 0;
-  for (int i = 0; i < n; i++) {
-    int j = list[i];
-    double x_ = h_x(j, 0);
-    double y_ = h_x(j, 1);
-    double z_ = h_x(j, 2);
-    x_ += pbc[0] * domain->xprd;
-    y_ += pbc[1] * domain->yprd;
-    z_ += pbc[2] * domain->zprd;
+/*
+int AtomVecAtomicKokkos::pack_data_stencil_md(int num_send_force, int num_send_pos,
+                         int* force_idx_list, int* force_size_list,
+                         int* pos_idx_list, int* pos_size_list,
+                         int num_local_to_ghost, int* local_to_ghost_mapping, int* local_to_ghost_sizes, int* local_to_ghost_list,
+                         int num_ghost_to_ghost, int* ghost_to_ghost_idx_list, int* ghost_to_ghost_size_list,
+                         double* buf, int* pbc_flags, bool debug) {
+*/
 
-    if (send_pos[i]) {
-      buf[m++] = x_;
-      buf[m++] = y_;
-      buf[m++] = z_;
-      // buf[m++] = h_v(j, 0);
-      // buf[m++] = h_v(j, 1);
-      // buf[m++] = h_v(j, 2);
-    } else {
-      buf[m++] = std::numeric_limits<double>::infinity();
-      buf[m++] = std::numeric_limits<double>::infinity();
-      buf[m++] = std::numeric_limits<double>::infinity();
-      // buf[m++] = std::numeric_limits<double>::infinity();
-      // buf[m++] = std::numeric_limits<double>::infinity();
-      // buf[m++] = std::numeric_limits<double>::infinity();
-    }
+int AtomVecAtomicKokkos::pack_data_stencil_md(int num_send_force, int num_send_pos,
+                             int* force_idx_list, int* force_size_list,
+                             int* pos_idx_list, int* pos_size_list,
+                             int* local_to_ghost_list,
+                             int num_segments, int* segment_types, int* segment_idxs, int* segment_sizes,
+                             double* buf, int* pbc_flags, bool debug) {
+  /*
+   * Send data.
+   * 1. Send send_list data, composed of 2 parts
+   *    - forces, stored in send_force
+   *    - positions, stored in send_pos
+   * 2. Send second_send_list data
+   *    - local atoms, stored in second_send_list
+   *    - ghost atoms, stored in send_ghost_idxs
+   *
+   *
+   */
 
-    if (send_vel[i]) {
-      buf[m++] = h_v(j, 0);
-      buf[m++] = h_v(j, 1);
-      buf[m++] = h_v(j, 2);
-    } else {
-      buf[m++] = std::numeric_limits<double>::infinity();
-      buf[m++] = std::numeric_limits<double>::infinity();
-      buf[m++] = std::numeric_limits<double>::infinity();
-    }
+  if (DEBUG_SEND_RECV_DATA) {
+      int m = 0;
 
+      assert(num_send_force >= 0 && num_send_force <= 100000);
+      assert(num_send_pos >= 0 && num_send_pos <= 100000);
 
-    buf[m++] = ubuf(h_tag(j)).d;
-    buf[m++] = ubuf(h_type(j)).d;
-    buf[m++] = ubuf(h_mask(j)).d;
-    if (send_force[i]) {
-      // buf[m++] = h_f(j, 0);
-      // buf[m++] = h_f(j, 1);
-      // buf[m++] = h_f(j, 2);
-      buf[m++] = h_eval_f_stencil_md(j, 0);
-      buf[m++] = h_eval_f_stencil_md(j, 1);
-      buf[m++] = h_eval_f_stencil_md(j, 2);
-    } else {
-      buf[m++] = 0.0;
-      buf[m++] = 0.0;
-      buf[m++] = 0.0;
-    }
+      for (int i = 0; i < num_send_force; i++) {
+          int force_idx = force_idx_list[i];
+          int force_size = force_size_list[i];
+
+          for (int j = 0; j < force_size; j++) {
+              int idx = force_idx + j;
+              tagint tag_ = tag[idx];
+              // TODO: Kokkos-ify
+              buf[m++] = ubuf(tag_).d;
+              buf[m++] = eval_f_stencil_md[idx][0];
+              buf[m++] = eval_f_stencil_md[idx][1];
+              buf[m++] = eval_f_stencil_md[idx][2];
+          }
+      }
+
+      int send_force = m;
+
+      /*
+      for (int i = 0; i < num_send_pos; i++) {
+          int pos_idx = pos_idx_list[i];
+          int pos_size = pos_size_list[i];
+          // std::cout << "num send pos? " << num_send_pos << " pos size: " << pos_size << std::endl;
+          for (int j = 0; j < pos_size; j++) {
+              int idx = pos_idx + j;
+              tagint tag_ = tag[idx];
+              // TODO: Kokkos-ify
+              // TODO: should this even be here?
+              buf[m++] = ubuf(h_tag(idx)).d;
+              buf[m++] = eval_f_stencil_md[idx][0];
+              buf[m++] = eval_f_stencil_md[idx][1];
+              buf[m++] = eval_f_stencil_md[idx][2];
+          }
+      }
+      */
+
+      for (int i = 0; i < num_send_pos; i++) {
+          int pos_idx = pos_idx_list[i];
+          int pos_size = pos_size_list[i];
+          // std::cout << "num send pos? " << num_send_pos << " pos size: " << pos_size << std::endl;
+          for (int j = 0; j < pos_size; j++) {
+              int idx = pos_idx + j;
+              tagint tag_ = tag[idx];
+              // TODO: Kokkos-ify
+              buf[m++] = ubuf(h_tag(idx)).d;
+              buf[m++] = x[idx][0] + pbc_flags[0] * domain->prd[0];
+              buf[m++] = x[idx][1] + pbc_flags[1] * domain->prd[1];
+              buf[m++] = x[idx][2] + pbc_flags[2] * domain->prd[2];
+          }
+      }
+
+      for (int i = 0; i < num_send_pos; i++) {
+          int pos_idx = pos_idx_list[i];
+          int pos_size = pos_size_list[i];
+          for (int j = 0; j < pos_size; j++) {
+              int idx = pos_idx + j;
+              tagint tag_ = tag[idx];
+              // TODO: Kokkos-ify
+              buf[m++] = ubuf(h_tag(idx)).d;
+              buf[m++] = v[idx][0];
+              buf[m++] = v[idx][1];
+              buf[m++] = v[idx][2];
+          }
+      }
+
+      int send_pos = m - send_force;
+
+      int local_list_idx = 0;
+      int ghost_segment_idx = 0;
+
+      for (int i = 0; i < num_segments; i++) {
+          int segment_type = segment_types[i];
+          int segment_size = segment_sizes[i];
+          if (segment_type == LOCAL_SEGMENT_TYPE) {
+              for (int j = 0; j < segment_size; j++) {
+                  int idx = local_to_ghost_list[local_list_idx++];
+                  tagint tag_ = tag[idx];
+                  // TODO: Kokkos-ify
+                  buf[m++] = ubuf(tag_).d;
+                  buf[m++] = x[idx][0] + pbc_flags[0] * domain->prd[0];
+                  buf[m++] = x[idx][1] + pbc_flags[1] * domain->prd[1];
+                  buf[m++] = x[idx][2] + pbc_flags[2] * domain->prd[2];
+              }
+          } else {
+              assert(segment_type == GHOST_SEGMENT_TYPE);
+              int segment_idx = segment_idxs[i];
+              for (int j = 0; j < segment_size; j++) {
+                  int idx = segment_idx + j;
+                  tagint tag_ = tag[idx];
+                  // TODO: Kokkos-ify
+                  buf[m++] = ubuf(tag_).d;
+                  buf[m++] = x[idx][0] + pbc_flags[0] * domain->prd[0];
+                  buf[m++] = x[idx][1] + pbc_flags[1] * domain->prd[1];
+                  buf[m++] = x[idx][2] + pbc_flags[2] * domain->prd[2];
+              }
+          }
+      }
+
+      /*
+      local_list_idx = 0;
+      for (int i = 0; i < num_segments; i++) {
+          int segment_type = segment_types[i];
+          int segment_size = segment_sizes[i];
+          if (segment_type == LOCAL_SEGMENT_TYPE) {
+              for (int j = 0; j < segment_size; j++) {
+                  int idx = local_to_ghost_list[local_list_idx++];
+                  tagint tag_ = tag[idx];
+                  // TODO: Kokkos-ify
+                  buf[m++] = ubuf(tag_).d;
+                  buf[m++] = v[idx][0];
+                  buf[m++] = v[idx][1];
+                  buf[m++] = v[idx][2];
+              }
+          } else {
+              assert(segment_type == GHOST_SEGMENT_TYPE);
+              int segment_idx = segment_idxs[i];
+              for (int j = 0; j < segment_size; j++) {
+                  int idx = segment_idx + j;
+                  tagint tag_ = tag[idx];
+                  // TODO: Kokkos-ify
+                  buf[m++] = ubuf(tag_).d;
+                  buf[m++] = v[idx][0];
+                  buf[m++] = v[idx][1];
+                  buf[m++] = v[idx][2];
+              }
+          }
+      }
+      */
+
+      // TODO: maybe add this method in Kokkos
+      // modified_stencil_md(Host, X_MASK | TAG_MASK | TYPE_MASK | MASK_MASK, this);
+
+      return m;
   }
-  return m;
 }
 
-void AtomVecAtomicKokkos::unpack_data_stencil_md(Atom *atom_, int n, int first, double *buf,
-                                                 int *idxs, int num_idxs, bool debug)
-{
-  AtomKokkos *atomKK_ = (AtomKokkos *) atom_;
-  int i, m, last;
+void AtomVecAtomicKokkos::unpack_data_stencil_md(int num_recv_force, int num_recv_pos,
+                                                 int* recv_force_list, int* recv_pos_list,
+                                                 int num_recv_ghost, int* recv_ghost_idx_list, int* recv_ghost_size_list,
+                                                 double* buf) {
+  if (DEBUG_SEND_RECV_DATA) {
+      int m = 0;
+      for (int i = 0; i < num_recv_force; i++) {
+          double d = buf[m];
+          tagint target_tag = (tagint) ubuf(buf[m++]).i;
+          double f_x = buf[m++];
+          double f_y = buf[m++];
+          double f_z = buf[m++];
 
-  m = 0;
-  last = first + n;
-  // TODO: don't need to grow when unpacking data, never adding new data
-  // while (last > nmax) { grow_stencil_md(0, atom_); }
+          int idx = recv_force_list[i];
+          if (target_tag != tag[idx]) {
+              std::cout << RED << " recv local force. Received tag: " << target_tag << " but I want tag: " << tag[idx] << " at idx: " << idx << " i: " << i << " received double: " << d << RESET_COLOR << std::endl;
+          }
+          assert(tag[idx] == target_tag);
 
-  std::vector<int> tags_curr;
-  std::vector<int> tags_received;
-
-  if (n != num_idxs) {
-    // std::cout << "n: " << n << " num idxs: " << num_idxs << std::endl;
-  }
-  // assert(n == num_idxs);
-
-  // for (i = first; i < last; i++) {
-  // for (int j = 0; j < num_idxs; j++) {
-  for (int j = 0; j < n; j++) {
-    // int idx = idxs[j];
-    int idx;
-
-    /*
-        double x_ = h_x(idx, 0);
-        double y_ = h_x(idx, 1);
-        double z_ = h_x(idx, 2);
-        double f_x = h_f(idx, 0);
-        double f_y = h_f(idx, 1);
-        double f_z = h_f(idx, 2);
-        tagint t_ = h_tag(idx);
-        int type_ = h_type(idx);
-        */
-
-    double tmp_x = buf[m++];
-    double tmp_y = buf[m++];
-    double tmp_z = buf[m++];
-    double tmp_v_x = buf[m++];
-    double tmp_v_y = buf[m++];
-    double tmp_v_z = buf[m++];
-
-    tagint target_tag = (tagint) ubuf(buf[m]).i;
-
-    if (!atom_->tag_to_idx.count(target_tag)) {
-      std::cout << "me: " << comm->me << " zoid doesn't have tag: " << target_tag
-                << " pos: " << tmp_x << " " << tmp_y << " " << tmp_z << " " << std::endl;
-      assert(false);
-    }
-
-    idx = atom_->tag_to_idx[target_tag];
-
-    if (h_tag(idx) != target_tag) {
-      int r;
-      MPI_Comm_rank(MPI_COMM_WORLD, &r);
-
-      tagint target = (tagint) ubuf(buf[m]).i;
-      bool found = false;
-      for (int h = 0; h < atom_->nlocal + atom_->nghost; h++) {
-        if (atom_->tag[h] == target) {
-          std::cout << "ACTUAL IDX: " << h << " out of nlocal: " << atom_->nlocal << std::endl;
-          std::cout << "Pos: " << atom_->x[h][0] << " " << atom_->x[h][1] << " " << atom_->x[h][2]
-                    << std::endl;
-          found = true;
-        }
+          f[idx][0] += f_x;
+          f[idx][1] += f_y;
+          f[idx][2] += f_z;
       }
-      std::cout << "FOUND? " << found << std::endl;
-      std::cout << "FIRST: " << first << " num to unpack: " << n << std::endl;
-      std::cout << "IDX: " << idx << " NLOCAL: " << atom_->nlocal << " real idx: " << idx
-                << " other real idx: " << j << std::endl;
-      std::cout << "ERROR idx: " << idx << " My tag: " << h_tag(idx)
-                << " tag received: " << (tagint) ubuf(buf[m]).i << std::endl;
-      std::cout << "my pos: " << tmp_x << " " << tmp_y << " " << tmp_z << std::endl;
-      std::cout << "other pos: " << h_x(idx, 0) << " " << h_x(idx, 1) << " " << h_x(idx, 2)
-                << std::endl;
-      assert(false);
-    }
 
-    double old_type = h_type(idx);
+      /*
+      for (int i = 0; i < num_recv_pos; i++) {
+          tagint target_tag = (tagint) ubuf(buf[m++]).i;
+          double f_x = buf[m++];
+          double f_y = buf[m++];
+          double f_z = buf[m++];
 
-    h_tag(idx) = (tagint) ubuf(buf[m++]).i;
-    h_type(idx) = (int) ubuf(buf[m++]).i;
-    h_mask(idx) = (int) ubuf(buf[m++]).i;
+          int idx = recv_pos_list[i];
+          if (target_tag != tag[idx]) {
+              std::cout << RED << " recv local pos. Received tag: " << target_tag << " but I want tag: " << tag[idx] << " at idx: " << idx << RESET_COLOR << std::endl;
+          }
 
-    double f_x = buf[m++];
-    double f_y = buf[m++];
-    double f_z = buf[m++];
+          if (target_tag == 31165) {
+              std::cout << YELLOW << "GOT FORCE FOR TAG IN POS: " << f_x << " " << f_y << " " << f_z << std::endl;
+          }
 
-    h_f(idx, 0) += f_x;
-    h_f(idx, 1) += f_y;
-    h_f(idx, 2) += f_z;
+          assert(tag[idx] == target_tag);
 
-    if (!std::isinf(tmp_x)) {
-      h_x(idx, 0) = tmp_x;
-      assert(!std::isinf(tmp_y));
-      assert(!std::isinf(tmp_z));
-      h_x(idx, 1) = tmp_y;
-      h_x(idx, 2) = tmp_z;
-    } else {
-      assert(std::isinf(tmp_y));
-      assert(std::isinf(tmp_z));
-    }
+          f[idx][0] += f_x;
+          f[idx][1] += f_y;
+          f[idx][2] += f_z;
+      }
+      */
 
-    if (!std::isinf(tmp_v_x)) {
-        h_v(idx, 0) = tmp_v_x;
-        h_v(idx, 1) = tmp_v_y;
-        h_v(idx, 2) = tmp_v_z;
-        atom_->actually_eval_mask_stencil_md[idx] = 1;
-    }
+      for (int i = 0; i < num_recv_pos; i++) {
+          tagint target_tag = (tagint) ubuf(buf[m++]).i;
+          double x_x = buf[m++];
+          double x_y = buf[m++];
+          double x_z = buf[m++];
 
-    assert(h_type(idx) == old_type);
-  }
+          int idx = recv_pos_list[i];
+          if (target_tag != tag[idx]) {
+              std::cout << RED << " recv local pos. Received tag: " << target_tag << " but I want tag: " << tag[idx] << " at idx: " << idx << RESET_COLOR << std::endl;
+          }
+          assert(tag[idx] == target_tag);
 
-  atomKK_->modified_stencil_md(Host, X_MASK | TAG_MASK | TYPE_MASK | MASK_MASK, atom_);
+          x[idx][0] = x_x;
+          x[idx][1] = x_y;
+          x[idx][2] = x_z;
+      }
 
-  if (atom->nextra_border) {
-    assert(false);
-    for (int iextra = 0; iextra < atom->nextra_border; iextra++)
-      m += modify->fix[atom->extra_border[iextra]]->unpack_border(n, first, &buf[m]);
+      for (int i = 0; i < num_recv_pos; i++) {
+          tagint target_tag = (tagint) ubuf(buf[m++]).i;
+          double v_x = buf[m++];
+          double v_y = buf[m++];
+          double v_z = buf[m++];
+
+          int idx = recv_pos_list[i];
+          if (target_tag != tag[idx]) {
+              std::cout << RED << " recv local vel. Received tag: " << target_tag << " but I want tag: " << tag[idx] << " at idx: " << idx << RESET_COLOR << std::endl;
+          }
+          assert(tag[idx] == target_tag);
+
+          v[idx][0] = v_x;
+          v[idx][1] = v_y;
+          v[idx][2] = v_z;
+      }
+
+      for (int i = 0; i < num_recv_ghost; i++) {
+          int ghost_idx = recv_ghost_idx_list[i];
+          int ghost_size = recv_ghost_size_list[i];
+          for (int j = 0; j < ghost_size; j++) {
+              int idx = ghost_idx + j;
+              int buf_idx = m;
+              tagint target_tag = (tagint) ubuf(buf[m++]).i;
+              double x_x = buf[m++];
+              double x_y = buf[m++];
+              double x_z = buf[m++];
+
+              if (target_tag != tag[idx]) {
+                  int total = 0;
+                  for (int k = 0; k < num_recv_ghost; k++) {
+                      total += recv_ghost_size_list[k];
+                  }
+                  std::cout << RED << " receive ghost pos. Received tag: " << target_tag << " but I want tag: " << tag[idx] << " at idx: " << idx << " buf idx: " << buf_idx
+                    << " total ghost: " << total << " segment num: " << i << " within segment idx: " << j << " pos: " << x_x << " " << x_y << " " << x_z << RESET_COLOR << std::endl;
+              }
+              assert(tag[idx] == target_tag);
+
+              x[idx][0] = x_x;
+              x[idx][1] = x_y;
+              x[idx][2] = x_z;
+          }
+      }
+
+      /*
+      for (int i = 0; i < num_recv_ghost; i++) {
+          int ghost_idx = recv_ghost_idx_list[i];
+          int ghost_size = recv_ghost_size_list[i];
+          for (int j = 0; j < ghost_size; j++) {
+              int idx = ghost_idx + j;
+              tagint target_tag = (tagint) ubuf(buf[m++]).i;
+              double v_x = buf[m++];
+              double v_y = buf[m++];
+              double v_z = buf[m++];
+
+              if (target_tag != tag[idx]) {
+                  std::cout << RED << " receive ghost vel. Received tag: " << target_tag << " but I want tag: " << tag[idx] << " at idx: " << idx << RESET_COLOR << std::endl;
+              }
+              assert(tag[idx] == target_tag);
+
+              v[idx][0] = v_x;
+              v[idx][1] = v_y;
+              v[idx][2] = v_z;
+          }
+      }
+      */
+
+      /*
+      atomKK_->modified_stencil_md(Host, X_MASK | TAG_MASK | TYPE_MASK | MASK_MASK, atom_);
+
+      if (atom->nextra_border) {
+          assert(false);
+          for (int iextra = 0; iextra < atom->nextra_border; iextra++)
+              m += modify->fix[atom->extra_border[iextra]]->unpack_border(n, first, &buf[m]);
+      }
+
+      return;
+      */
   }
 }
 
 int AtomVecAtomicKokkos::pack_border_stencil_md(int n, int *list, double *buf, int *pbc_flag,
-                                                int **pbc)
-{
+                                                int **pbc) {
   assert(false);
   return 0;
 }
@@ -710,8 +841,7 @@ void AtomVecAtomicKokkos::unpack_border(int n, int first, double *buf)
 }
 
 int AtomVecAtomicKokkos::unpack_border_stencil_md(int n, int first, double *buf, Atom *atom_,
-                                                  int zoid_num)
-{
+                                                  int zoid_num) {
   AtomKokkos *atomKK_ = (AtomKokkos *) atom_;
   int i, m, last;
 
@@ -721,43 +851,43 @@ int AtomVecAtomicKokkos::unpack_border_stencil_md(int n, int first, double *buf,
   while (last > nmax) { grow_stencil_md(0, atom_); }
 
   std::set<int> tags;
-  for (int idx = 0; idx < atom_->nlocal + atom_->nghost; idx++) { tags.insert(atom_->tag[idx]); }
+  for (int idx = 0; idx < atom_->nlocal + atom_->nghost; idx++) {
+      if (tags.find(atom_->tag[idx]) != tags.end()) {
+          std::cout << RED << "tag: " << atom_->tag[idx] << " at idx: " << idx << " is a duplicate. out of: " << atom_->nlocal + atom_->nghost << RESET_COLOR << std::endl;
+      }
+      tags.insert(atom_->tag[idx]);
+  }
 
+  if (tags.size() != atom_->nlocal + atom_->nghost) {
+      std::cout << RED << "tags size: " << tags.size() << " num atoms: " << atom_->nlocal + atom_->nghost << RESET_COLOR << std::endl;
+  }
   assert(tags.size() == atom_->nlocal + atom_->nghost);
 
   int insert_idx = first;
   std::set<int> inserted_tags;
   for (int j = 0; j < n; j++) {
-    /*
-        h_x(i,0) = buf[m++];
-        h_x(i,1) = buf[m++];
-        h_x(i,2) = buf[m++];
-        h_tag(i) =  (tagint)  ubuf(buf[m++]).i;
-        h_type(i) = (int) ubuf(buf[m++]).i;
-        h_mask(i) = (int) ubuf(buf[m++]).i;
-        */
     double x0 = buf[m++];
     double x1 = buf[m++];
     double x2 = buf[m++];
     tagint tag_ = (tagint) ubuf(buf[m++]).i;
     int type_ = (int) ubuf(buf[m++]).i;
     int mask_ = ubuf(buf[m++]).i;
+    double v0 = buf[m++];
+    double v1 = buf[m++];
+    double v2 = buf[m++];
+
+    if (tag_ < 0 || tag_ > atom->natoms) {
+        std::cout << RED << "zoid num recv: " << zoid_num << " tag: " << tag_ << RESET_COLOR << std::endl;
+    }
+    assert(tag_ >= 0 && tag_ <= atom->natoms);
 
     if (tags.find(tag_) == tags.end()) {
       if (inserted_tags.find(tag_) != inserted_tags.end()) {
         std::cout << "Tag: " << tag_ << " is repeated. What index? " << insert_idx
-                  << " nlocal: " << atom_->nlocal << std::endl;
+                  << " nlocal: " << atom_->nlocal << " nghost? " << atom_->nlocal + atom_->nghost << std::endl;
         assert(false);
       }
       assert(inserted_tags.find(tag_) == inserted_tags.end());
-      /*
-            h_x(i,0) = x0;
-            h_x(i,1) = x1;
-            h_x(i,2) = x2;
-            h_tag(i) =  tag;
-            h_type(i) = type;
-            h_mask(i) = mask;
-            */
 
       h_x(insert_idx, 0) = x0;
       h_x(insert_idx, 1) = x1;
@@ -766,19 +896,12 @@ int AtomVecAtomicKokkos::unpack_border_stencil_md(int n, int first, double *buf,
       h_type(insert_idx) = type_;
       h_mask(insert_idx) = mask_;
 
-      double v0 = buf[m++];
-      double v1 = buf[m++];
-      double v2 = buf[m++];
-
       h_v(insert_idx, 0) = v0;
       h_v(insert_idx, 1) = v1;
       h_v(insert_idx, 2) = v2;
 
       inserted_tags.insert(tag_);
       insert_idx++;
-    } else if (zoid_num == 8 && tag_ == 10810) {
-      std::cout << "BRIAN ALREADY HAVE THE TAG? " << std::endl;
-      assert(false);
     }
   }
   atomKK_->modified_stencil_md(Host, X_MASK | TAG_MASK | TYPE_MASK | MASK_MASK, atom_);
@@ -1057,9 +1180,112 @@ int AtomVecAtomicKokkos::unpack_exchange(double *buf)
   return m;
 }
 
+int AtomVecAtomicKokkos::pack_exchange_stencil_md(int i, double *buf, int* pbc) {
+    int m = 1;
+    double dx = pbc[0] * domain->prd[0];
+    double dy = pbc[1] * domain->prd[1];
+    double dz = pbc[2] * domain->prd[2];
+    buf[m++] = h_x(i, 0) + dx;
+    buf[m++] = h_x(i, 1) + dy;
+    buf[m++] = h_x(i, 2) + dz;
+
+    buf[m++] = h_v(i, 0);
+    buf[m++] = h_v(i, 1);
+    buf[m++] = h_v(i, 2);
+
+    buf[m++] = ubuf(h_tag(i)).d;
+    buf[m++] = ubuf(h_type(i)).d;
+    buf[m++] = ubuf(h_mask(i)).d;
+    buf[m++] = ubuf(h_image(i)).d;
+
+    /*
+    buf[m++] = atom_->x[i][0] + dx;
+    buf[m++] = atom_->x[i][1] + dy;
+    buf[m++] = atom_->x[i][2] + dz;
+
+    buf[m++] = atom_->v[i][0];
+    buf[m++] = atom_->v[i][1];
+    buf[m++] = atom_->v[i][1];
+
+    buf[m++] = ubuf(atom_->tag[i]).d;
+    buf[m++] = ubuf(atom_->type[i]).d;
+    buf[m++] = ubuf(atom_->mask[i]).d;
+    buf[m++] = ubuf(atom_->image[i]).d;
+    */
+
+    buf[0] = m;
+    return m;
+}
+
 int AtomVecAtomicKokkos::unpack_exchange_stencil_md(double *buf, Atom *atom_, Domain *domain_,
-                                                    std::set<int> &s)
-{
+                                                    int flag) {
+  int last_idx;
+  if (flag == LAMMPS_SEND_LOCAL) {
+      last_idx = atom_->nlocal;
+  } else if (flag == LAMMPS_SEND_GHOST) {
+      last_idx = atom_->nlocal + atom_->nghost;
+  } else {
+      assert(false);
+  }
+
+  if (last_idx == nmax) {
+      grow_stencil_md(0, atom_);
+  }
+
+  AtomKokkos *atomKK_ = (AtomKokkos *) atom_;
+  atomKK_->modified_stencil_md(Host, X_MASK | V_MASK | TAG_MASK | TYPE_MASK | MASK_MASK | IMAGE_MASK, atom_);
+
+  int m = 1;
+  double x0 = buf[m++];
+  double x1 = buf[m++];
+  double x2 = buf[m++];
+
+  double v0 = buf[m++];
+  double v1 = buf[m++];
+  double v2 = buf[m++];
+
+  tagint tag_ = (tagint) ubuf(buf[m++]).i;
+  int type_ = (int) ubuf(buf[m++]).i;
+  int mask_ = (int) ubuf(buf[m++]).i;
+  int image_ = (imageint) ubuf(buf[m++]).i;
+
+  bool found_tag = false;
+  for (int i = 0; i < last_idx; i++) {
+      if (atom_->tag[i] == tag_) {
+          found_tag = true;
+          break;
+      }
+  }
+
+  if (!found_tag) {
+      h_x(last_idx, 0) = x0;
+      h_x(last_idx, 1) = x1;
+      h_x(last_idx, 2) = x2;
+
+      h_v(last_idx, 0) = v0;
+      h_v(last_idx, 1) = v1;
+      h_v(last_idx, 2) = v2;
+
+      h_tag(last_idx) = tag_;
+      h_type(last_idx) = type_;
+      h_mask(last_idx) = mask_;
+      h_image(last_idx) = image_;
+
+      if (atom_->nextra_grow) {
+          assert(false);
+          for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+              m += modify->fix[atom->extra_grow[iextra]]->unpack_exchange(last_idx, &buf[m]);
+      }
+
+      if (flag == LAMMPS_SEND_LOCAL) {
+          atom_->nlocal++;
+      } else if (flag == LAMMPS_SEND_GHOST) {
+          atom_->nghost++;
+      }
+  }
+
+  return m;
+  /*
   int nlocal = atom_->nlocal;
   if (nlocal == nmax) { grow_stencil_md(0, atom_); }
 
@@ -1071,9 +1297,11 @@ int AtomVecAtomicKokkos::unpack_exchange_stencil_md(double *buf, Atom *atom_, Do
   h_x(nlocal, 0) = buf[m++];
   h_x(nlocal, 1) = buf[m++];
   h_x(nlocal, 2) = buf[m++];
+
   h_v(nlocal, 0) = buf[m++];
   h_v(nlocal, 1) = buf[m++];
   h_v(nlocal, 2) = buf[m++];
+
   h_tag(nlocal) = (tagint) ubuf(buf[m++]).i;
   h_type(nlocal) = (int) ubuf(buf[m++]).i;
   h_mask(nlocal) = (int) ubuf(buf[m++]).i;
@@ -1085,9 +1313,11 @@ int AtomVecAtomicKokkos::unpack_exchange_stencil_md(double *buf, Atom *atom_, Do
       m += modify->fix[atom->extra_grow[iextra]]->unpack_exchange(nlocal, &buf[m]);
   }
 
-  s.insert(h_tag(nlocal));
+  if ()
+
   atom_->nlocal++;
   return m;
+  */
 }
 
 void AtomVecAtomicKokkos::add_local_atom_stencil_md(Atom *atom_, Domain *domain_, double *coord,

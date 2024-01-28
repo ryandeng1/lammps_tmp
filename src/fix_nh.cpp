@@ -1808,7 +1808,7 @@ void FixNH::nhc_temp_integrate()
     // TODO: revert
     // factor_eta = exp(-ncfac*dthalf*eta_dot[0]);
     factor_eta = 1.0;
-    std::cout << "factor_eta: " << exp(-ncfac*dthalf*eta_dot[0]) << std::endl;
+    // std::cout << "factor_eta: " << exp(-ncfac*dthalf*eta_dot[0]) << std::endl;
     nh_v_temp();
 
     // rescale temperature due to velocity scaling

@@ -2261,18 +2261,7 @@ void Atom::sort_stencil_md() {
     n = 0;
     for (m = 0; m < nbins; m++) {
         i = binhead[m];
-        bool found = false;
         while (i >= 0) {
-            if (tag[i] == 17413) {
-                found = true;
-            }
-            i = next[i];
-        }
-
-        while (i >= 0) {
-            if (found) {
-                std::cout << "IN BIN IDX: " << i << " TAGS: " << tag[i] << std::endl;
-            }
             permute[n++] = i;
             i = next[i];
         }

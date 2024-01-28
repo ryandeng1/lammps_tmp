@@ -64,7 +64,7 @@ class PairAllegroKokkos : public PairAllegro<precision> {
   typename AT::t_efloat_1d d_eatom;
   typename AT::t_virial_array d_vatom;
 
-  virtual void compute_stencil_md(int, int, Atom*, Atom*, bool*, queue_info&) override;
+  virtual void compute_stencil_md(int, int, Atom*, Atom*, bool*, queue_info&, int) override;
   virtual void init_style_stencil_md(Neighbor*) override;
 protected:
   typedef Kokkos::DualView<int***,DeviceType> tdual_int_3d;
