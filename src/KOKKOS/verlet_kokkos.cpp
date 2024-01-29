@@ -667,6 +667,8 @@ void VerletKokkos::run(int n) {
     */
 
     std::vector<MPI_Request> receive_requests[NUM_ZOIDS];
+    std::array<std::thread, NUM_ZOIDS> receive_request_threads;
+
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             if (lmp->recv_from_neighbors[zoid_num].size() > 0) {
@@ -676,7 +678,7 @@ void VerletKokkos::run(int n) {
     }
 
     // pre-start all the MPI_Recvs
-    for (int dep = 1; dep < NUM_DEPS; dep++) {
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             int zoid_num = lmp->queues[dep][j].num;
             if (zoid_num % comm->nprocs == comm->me) {
@@ -684,7 +686,41 @@ void VerletKokkos::run(int n) {
                 auto &atom_arr = lmp->atom_stencil_md[zoid_num];
                 Comm *comm_ = lmp->comm_stencil_md[zoid_num];
                 comm_->receive_data_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], receive_requests[zoid_num]);
+                receive_request_threads[zoid_num] =
+                        std::move(std::thread([&](int zoid_num_) {
+                            /*
+                            auto begin = std::chrono::high_resolution_clock::now();
+                            int wait_status = MPI_Waitall(receive_requests[zoid_num].size(),
+                                                          receive_requests[zoid_num].data(), MPI_STATUSES_IGNORE);
+                            assert(wait_status == MPI_SUCCESS);
+                            auto end = std::chrono::high_resolution_clock::now();
+                            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                            std::cout << MAGENTA << "zoid: " << zoid_num << " receive wait duration: " << duration << RESET_COLOR << std::endl;
+                            */
+                            if (receive_requests[zoid_num_].size() > 0) {
+                                auto begin = std::chrono::high_resolution_clock::now();
+                                std::cout << MAGENTA << "zoid: " << zoid_num_ << " start wait? " << std::endl;
+                                int wait_status = MPI_Waitall(receive_requests[zoid_num_].size(),
+                                                              receive_requests[zoid_num_].data(), MPI_STATUSES_IGNORE);
+                                assert(wait_status == MPI_SUCCESS);
+                                auto end = std::chrono::high_resolution_clock::now();
+                                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                                std::cout << MAGENTA << "zoid: " << zoid_num_ << " receive wait duration: " << duration << RESET_COLOR << std::endl;
+                            }
+                        }, zoid_num));
                 // comm_->receive_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
+            }
+        }
+    }
+
+    double** f_arr = new double*[NUM_ZOIDS];
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+        Atom* start = atom_arr[0];
+        f_arr[zoid_num] = new double[(start->nlocal + start->nghost) * 3];
+        for (int k = 0; k < start->nlocal + start->nghost; k++) {
+            for (int dim = 0; dim < 3; dim++) {
+                f_arr[zoid_num][k * 3 + dim] = start->f[k][dim];
             }
         }
     }
@@ -702,18 +738,10 @@ void VerletKokkos::run(int n) {
             }
 
             if (dep > 0) {
-                // ignore t = 0 forces, need to fix
-                auto &atom_arr = lmp->atom_stencil_md[zoid_num];
-                Atom* start = atom_arr[0];
-                double* f_ = new double[(start->nlocal + start->nghost) * 3];
-                for (int k = 0; k < start->nlocal + start->nghost; k++) {
-                    for (int dim = 0; dim < 3; dim++) {
-                        f_[k * 3 + dim] = start->f[k][dim];
-                    }
-                }
-
+                auto& atom_arr = lmp->atom_stencil_md[zoid_num];
                 Comm *comm_ = lmp->comm_stencil_md[zoid_num];
                 auto begin = std::chrono::high_resolution_clock::now();
+                receive_request_threads[zoid_num].join();
                 comm_->unpack_data_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], receive_requests[zoid_num]);
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
@@ -721,13 +749,12 @@ void VerletKokkos::run(int n) {
 
                 // comm_->receive_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
 
+                Atom* start = atom_arr[0];
                 for (int k = 0; k < start->nlocal + start->nghost; k++) {
                     for (int dim = 0; dim < 3; dim++) {
-                        start->f[k][dim] = f_[k * 3 + dim];
+                        start->f[k][dim] = f_arr[zoid_num][k * 3 + dim];
                     }
                 }
-
-                delete[] f_;
             }
 
             /*
@@ -1037,16 +1064,18 @@ void VerletKokkos::run(int n) {
                 const std::time_t t_c = std::chrono::system_clock::to_time_t(now);
                 // std::cout << BLUE << " stencil md me: " << comm->me << " zoid: " << zoid_num << " send data time: " << duration << " microseconds" << " curr time? " << std::put_time(std::localtime(&t_c), "%F %T.\n") << RESET_COLOR << std::endl;
                 // int* buf = comm_->send_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
-                send_request_threads.push_back(
-                        std::thread([&]{
-                            auto begin = std::chrono::high_resolution_clock::now();
-                            int wait_status = MPI_Waitall(send_requests[zoid_num].size(), send_requests[zoid_num].data(), MPI_STATUSES_IGNORE);
-                            assert(wait_status == MPI_SUCCESS);
-                            auto end = std::chrono::high_resolution_clock::now();
-                            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                            std::cout << MAGENTA << "zoid: " << zoid_num << " wait duration: " << duration << RESET_COLOR << std::endl;
-                        })
-                );
+                if (send_requests[zoid_num].size() > 0) {
+                    send_request_threads.push_back(
+                            std::thread([&]{
+                                auto begin = std::chrono::high_resolution_clock::now();
+                                int wait_status = MPI_Waitall(send_requests[zoid_num].size(), send_requests[zoid_num].data(), MPI_STATUSES_IGNORE);
+                                assert(wait_status == MPI_SUCCESS);
+                                auto end = std::chrono::high_resolution_clock::now();
+                                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                                std::cout << MAGENTA << "zoid: " << zoid_num << " wait duration: " << duration << RESET_COLOR << std::endl;
+                            })
+                    );
+                }
             }
         }
     }
@@ -1060,6 +1089,13 @@ void VerletKokkos::run(int n) {
     std::cout << GREEN << "--------------- STENCIL MD INITIAL DT PASSED -------------------" << RESET_COLOR << std::endl;
 
     MPI_Barrier(world);
+
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            delete[] f_arr[zoid_num];
+        }
+    }
+    delete[] f_arr;
     assert(false);
 
     // clear eval_mask_stencil_md, need to improve

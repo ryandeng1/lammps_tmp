@@ -3418,7 +3418,7 @@ void CommBrick::send_data_stencil_md(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLE
       assert(n == zoid.num_elems_send[t][i]);
     }
 
-    if (neighbor_process != comm->me || true) {
+    if (neighbor_process != comm->me) {
       MPI_Request r2;
       // dst << 16 | src
       int mpi_tag = (send_zoid_num << 16 | zoid_num);
@@ -3430,7 +3430,25 @@ void CommBrick::send_data_stencil_md(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLE
                   &r2);
       send_requests.push_back(r2);
     } else {
-        // TODO: Avoid MPI_Send for my own zoids
+        auto& send_atom_arr = lmp->atom_stencil_md[send_zoid_num];
+        int send_zoid_idx = -1;
+        for (int k = 0; k < lmp->recv_from_neighbors[send_zoid_num].size(); k++) {
+            if (lmp->recv_from_neighbors[send_zoid_num][k] == zoid_num) {
+                send_zoid_idx = k;
+                break;
+            }
+        }
+        assert(send_zoid_idx != -1);
+        int buf_send_idx = 0;
+        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            Atom* atom_ = send_atom_arr[t];
+            atom_->avec->unpack_data_stencil_md(
+                    send_zoid.recv_list_local_num_force_only[t][send_zoid_idx], send_zoid.recv_list_local_num_force_pos[t][send_zoid_idx],
+                    send_zoid.recv_list_local_force_only[t][send_zoid_idx], send_zoid.recv_list_local_force_pos[t][send_zoid_idx],
+                    send_zoid.recv_ghost_num_segments[t][send_zoid_idx], send_zoid.recv_ghost_idxs[t][send_zoid_idx], send_zoid.recv_ghost_sizes[t][send_zoid_idx],
+                    &buf_send_stencil_md[i][buf_send_idx]);
+            buf_send_idx += send_zoid.num_elems_recv[t][send_zoid_idx];
+        }
     }
   }
 }
@@ -3520,7 +3538,6 @@ void CommBrick::send_data_stencil_md_next_dt(std::array<Atom *, NUM_TIMESTEPS_IN
         int buf_idx = 0;
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             Atom *atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
-
             bool debug = false;
             int n = atom_->avec->pack_data_stencil_md(
                     zoid.send_force_num_segments[t][i], zoid.send_pos_num_segments[t][i],
@@ -3562,11 +3579,12 @@ void CommBrick::unpack_data_stencil_md(std::array<Atom *, NUM_TIMESTEPS_IN_PARAL
                                         queue_info &zoid, std::vector<MPI_Request>& receive_requests) {
     int zoid_num = zoid.num;
 
+    int receive_request_idx = 0;
     for (int i = 0; i < lmp->recv_from_neighbors[zoid_num].size(); i++) {
         int recv_zoid_num = lmp->recv_from_neighbors[zoid_num][i];
         int neighbor_process = recv_zoid_num % comm->nprocs;
         if (neighbor_process == comm->me) {
-            // continue;
+            continue;
         }
 
         auto begin = std::chrono::high_resolution_clock::now();
@@ -3574,8 +3592,8 @@ void CommBrick::unpack_data_stencil_md(std::array<Atom *, NUM_TIMESTEPS_IN_PARAL
         auto start_wait = std::chrono::system_clock::now();
         const std::time_t start_wait_tc = std::chrono::system_clock::to_time_t(start_wait);
 
-        MPI_Status status;
-        MPI_Wait(&receive_requests[i], &status);
+        // MPI_Status status;
+        // MPI_Wait(&receive_requests[receive_request_idx++], &status);
 
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
@@ -3585,7 +3603,7 @@ void CommBrick::unpack_data_stencil_md(std::array<Atom *, NUM_TIMESTEPS_IN_PARAL
             const std::time_t t_c = std::chrono::system_clock::to_time_t(now);
             std::cout << YELLOW << "me: " << comm->me << " curr dt zoid: " << zoid_num << " recv from: " << recv_zoid_num << " mpi wait duration: "
                 << duration << " idx: " << i << " now: " << std::put_time(std::localtime(&t_c), "%F %T.\n")
-                << " start wait: " << std::put_time(std::localtime(&start_wait_tc), "%F %T.\n") << " status: " << status.MPI_TAG << RESET_COLOR << std::endl;
+                << " start wait: " << std::put_time(std::localtime(&start_wait_tc), "%F %T.\n") << RESET_COLOR << std::endl;
         }
 
         int buf_recv_idx = 0;
@@ -3612,7 +3630,7 @@ void CommBrick::receive_data_stencil_md(std::array<Atom *, NUM_TIMESTEPS_IN_PARA
     int recv_zoid_num = lmp->recv_from_neighbors[zoid_num][i];
     int neighbor_process = recv_zoid_num % comm->nprocs;
     if (neighbor_process == comm->me) {
-      // continue;
+        continue;
     }
 
     auto begin_for_zoid = std::chrono::high_resolution_clock::now();
@@ -3717,7 +3735,7 @@ void CommBrick::receive_data_stencil_md_next_dt(std::array<Atom *, NUM_TIMESTEPS
         int recv_zoid_num = lmp->recv_from_neighbors_next_dt[zoid_num][i];
         int neighbor_process = recv_zoid_num % comm->nprocs;
         if (neighbor_process == comm->me) {
-            // continue;
+            continue;
         }
 
         int mpi_tag = (zoid_num << 16 | recv_zoid_num);

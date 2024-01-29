@@ -3400,6 +3400,8 @@ void Verlet::setup_stencil_md() {
     // compute force but only for the first timestep
 
     std::vector<MPI_Request> receive_requests[NUM_ZOIDS];
+    std::thread receive_request_threads[NUM_ZOIDS];
+
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             receive_requests[zoid_num].reserve(lmp->recv_from_neighbors[zoid_num].size());
@@ -3417,10 +3419,34 @@ void Verlet::setup_stencil_md() {
                     auto &atom_arr = lmp->atom_stencil_md[zoid_num];
                     Comm *comm_ = lmp->comm_stencil_md[zoid_num];
                     comm_->receive_data_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], receive_requests[zoid_num]);
+                    receive_request_threads[zoid_num] =
+                            std::move(std::thread([&](int zoid_num_) {
+                                /*
+                                auto begin = std::chrono::high_resolution_clock::now();
+                                int wait_status = MPI_Waitall(receive_requests[zoid_num].size(),
+                                                              receive_requests[zoid_num].data(), MPI_STATUSES_IGNORE);
+                                assert(wait_status == MPI_SUCCESS);
+                                auto end = std::chrono::high_resolution_clock::now();
+                                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                                std::cout << MAGENTA << "zoid: " << zoid_num << " receive wait duration: " << duration << RESET_COLOR << std::endl;
+                                */
+                                if (receive_requests[zoid_num_].size() > 0) {
+                                    auto begin = std::chrono::high_resolution_clock::now();
+                                    std::cout << MAGENTA << "zoid: " << zoid_num_ << " start wait? " << std::endl;
+                                    int wait_status = MPI_Waitall(receive_requests[zoid_num_].size(),
+                                                                  receive_requests[zoid_num_].data(), MPI_STATUSES_IGNORE);
+                                    assert(wait_status == MPI_SUCCESS);
+                                    auto end = std::chrono::high_resolution_clock::now();
+                                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                                    std::cout << MAGENTA << "zoid: " << zoid_num_ << " receive wait duration: " << duration << RESET_COLOR << std::endl;
+                                }
+                            }, zoid_num));
                 }
             }
         }
     }
+
+    std::cout << "ok after this shit" << std::endl;
 
     std::vector<MPI_Request> send_requests[NUM_ZOIDS];
     std::vector<std::thread> send_request_threads;
@@ -3441,6 +3467,9 @@ void Verlet::setup_stencil_md() {
                 if (dep > 0) {
                     auto &atom_arr = lmp->atom_stencil_md[zoid_num];
                     Comm *comm_ = lmp->comm_stencil_md[zoid_num];
+                    std::cout << "zoid: " << zoid_num << " thread start joining " << std::endl;
+                    receive_request_threads[zoid_num].join();
+                    std::cout << "zoid: " << zoid_num << " thread joined" << std::endl;
                     comm_->unpack_data_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], receive_requests[zoid_num]);
                 }
 
@@ -3457,16 +3486,18 @@ void Verlet::setup_stencil_md() {
                     // int* buf = comm_->send_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
                     // send_bufs.push_back(buf);
 
-                    send_request_threads.push_back(
-                        std::thread([&]{
-                            auto begin = std::chrono::high_resolution_clock::now();
-                            int wait_status = MPI_Waitall(send_requests[zoid_num].size(), send_requests[zoid_num].data(), MPI_STATUSES_IGNORE);
-                            assert(wait_status == MPI_SUCCESS);
-                            auto end = std::chrono::high_resolution_clock::now();
-                            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                            std::cout << MAGENTA << "zoid: " << zoid_num << " wait duration: " << duration << RESET_COLOR << std::endl;
-                        })
-                    );
+                    if (send_requests[zoid_num].size() > 0) {
+                        send_request_threads.push_back(
+                                std::thread([&]{
+                                    auto begin = std::chrono::high_resolution_clock::now();
+                                    int wait_status = MPI_Waitall(send_requests[zoid_num].size(), send_requests[zoid_num].data(), MPI_STATUSES_IGNORE);
+                                    assert(wait_status == MPI_SUCCESS);
+                                    auto end = std::chrono::high_resolution_clock::now();
+                                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                                    std::cout << MAGENTA << "zoid: " << zoid_num << " wait duration: " << duration << RESET_COLOR << std::endl;
+                                })
+                        );
+                    }
                 }
             }
         }
@@ -3478,7 +3509,7 @@ void Verlet::setup_stencil_md() {
     }
     auto join_end = std::chrono::high_resolution_clock::now();
     auto duration_join = std::chrono::duration_cast<std::chrono::microseconds>(join_end - join_start).count();
-    std::cout << CYAN << "duration join: " << duration_join << RESET_COLOR << std::endl;
+    std::cout << CYAN << "me: " << comm->me << " duration join: " << duration_join << RESET_COLOR << std::endl;
 
     MPI_Barrier(world);
 
