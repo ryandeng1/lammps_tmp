@@ -362,6 +362,8 @@ void VerletKokkos::run(int n) {
         send_x[i] = 0;
     }
 
+    int64_t lammps_compute_duration = 0;
+
     timer->init_timeout();
     for (int i = 0; i < test_num_timesteps; i++) {
         if (timer->check_timeout(i)) {
@@ -544,7 +546,11 @@ void VerletKokkos::run(int n) {
         if (pair_compute_flag) {
             atomKK->sync(force->pair->execution_space, force->pair->datamask_read);
             atomKK->sync(force->pair->execution_space, ~(~force->pair->datamask_read | datamask_exclude));
+            auto begin = std::chrono::high_resolution_clock::now();
             force->pair->compute(eflag, vflag);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
+            lammps_compute_duration += duration;
             atomKK->modified(force->pair->execution_space, force->pair->datamask_modify);
             atomKK->modified(force->pair->execution_space, ~(~force->pair->datamask_modify | datamask_exclude));
             timer->stamp(Timer::PAIR);
@@ -699,13 +705,12 @@ void VerletKokkos::run(int n) {
                             */
                             if (receive_requests[zoid_num_].size() > 0) {
                                 auto begin = std::chrono::high_resolution_clock::now();
-                                std::cout << MAGENTA << "zoid: " << zoid_num_ << " start wait? " << std::endl;
                                 int wait_status = MPI_Waitall(receive_requests[zoid_num_].size(),
                                                               receive_requests[zoid_num_].data(), MPI_STATUSES_IGNORE);
                                 assert(wait_status == MPI_SUCCESS);
                                 auto end = std::chrono::high_resolution_clock::now();
                                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                                std::cout << MAGENTA << "zoid: " << zoid_num_ << " receive wait duration: " << duration << RESET_COLOR << std::endl;
+                                // std::cout << MAGENTA << "zoid: " << zoid_num_ << " receive wait duration: " << duration << RESET_COLOR << std::endl;
                             }
                         }, zoid_num));
                 // comm_->receive_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
@@ -730,6 +735,10 @@ void VerletKokkos::run(int n) {
     std::vector<MPI_Request> send_requests[NUM_ZOIDS];
     std::vector<std::thread> send_request_threads;
 
+    int64_t send_comm_duration = 0;
+    int64_t recv_comm_duration = 0;
+    int64_t stencil_md_compute_duration = 0;
+
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             int zoid_num = lmp->queues[dep][j].num;
@@ -745,7 +754,8 @@ void VerletKokkos::run(int n) {
                 comm_->unpack_data_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], receive_requests[zoid_num]);
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
-                // std::cout << BLUE << " zoid: " << zoid_num << " unpack+receive data duration: " << duration << " microseconds " << RESET_COLOR << std::endl;
+                recv_comm_duration += duration;
+                std::cout << BLUE << " zoid: " << zoid_num << " unpack+receive data duration: " << duration << " microseconds " << RESET_COLOR << std::endl;
 
                 // comm_->receive_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
 
@@ -989,8 +999,12 @@ void VerletKokkos::run(int n) {
                     Force* next_force = lmp->force_stencil_md[zoid_num][t + 1];
                     int * atom_idx_mapping_ = lmp->queues[dep][j].atom_idx_mapping[t + 1];
                     // force_clear_stencil_md(atom_next_timestep, next_force, neighbor_);
+                    auto begin = std::chrono::high_resolution_clock::now();
                     next_force->pair->compute_stencil_md(eflag, vflag, atom_next_timestep, next_next_timestep,
                                                          zoid.can_eval_center[t + 1], lmp->zoid_num_to_zoid[zoid_num], t + 1);
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
+                    stencil_md_compute_duration += duration;
                     atomKK_->modified_stencil_md(force->pair->execution_space, force->pair->datamask_modify, atom_);
                     atomKK_->modified_stencil_md(force->pair->execution_space,
                                                  ~(~force->pair->datamask_modify | datamask_exclude), atom_);
@@ -1059,21 +1073,16 @@ void VerletKokkos::run(int n) {
                 comm_->send_data_stencil_md(atom_arr, zoid, send_requests[zoid_num]);
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
+                send_comm_duration += duration;
 
-                auto now = std::chrono::system_clock::now();
-                const std::time_t t_c = std::chrono::system_clock::to_time_t(now);
-                // std::cout << BLUE << " stencil md me: " << comm->me << " zoid: " << zoid_num << " send data time: " << duration << " microseconds" << " curr time? " << std::put_time(std::localtime(&t_c), "%F %T.\n") << RESET_COLOR << std::endl;
                 // int* buf = comm_->send_exclude_eval_tags(atom_arr, lmp->zoid_num_to_zoid[zoid_num]);
                 if (send_requests[zoid_num].size() > 0) {
                     send_request_threads.push_back(
-                            std::thread([&]{
-                                auto begin = std::chrono::high_resolution_clock::now();
-                                int wait_status = MPI_Waitall(send_requests[zoid_num].size(), send_requests[zoid_num].data(), MPI_STATUSES_IGNORE);
+                            std::thread([&](int zoid_num_) {
+                                int wait_status = MPI_Waitall(send_requests[zoid_num_].size(),
+                                                              send_requests[zoid_num_].data(), MPI_STATUSES_IGNORE);
                                 assert(wait_status == MPI_SUCCESS);
-                                auto end = std::chrono::high_resolution_clock::now();
-                                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                                std::cout << MAGENTA << "zoid: " << zoid_num << " wait duration: " << duration << RESET_COLOR << std::endl;
-                            })
+                            }, zoid_num)
                     );
                 }
             }
@@ -1087,6 +1096,8 @@ void VerletKokkos::run(int n) {
     // int wait_all_status = MPI_Waitall(send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE);
     // assert(wait_all_status == MPI_SUCCESS);
     std::cout << GREEN << "--------------- STENCIL MD INITIAL DT PASSED -------------------" << RESET_COLOR << std::endl;
+    std::cout << BLUE << "recv comm total duration: " << recv_comm_duration << " microseconds. send comm duration: " << send_comm_duration << " microseconds " << RESET_COLOR << std::endl;
+    std::cout << YELLOW << "lammps compute duration: " << lammps_compute_duration << " microseconds. " << " stencil md compute duration: " << stencil_md_compute_duration << " microseconds. " << RESET_COLOR << std::endl;
 
     MPI_Barrier(world);
 
