@@ -76,20 +76,16 @@ class AtomVecAtomicKokkos : public AtomVecKokkos {
   int unpack_border_stencil_md(int, int, double *, Atom* atom_, int) override;
   int pack_border_stencil_md(int, int*, double*, int*, int**) override;
 
+  int pack_data_to_process_stencil_md(int num_send_force, int* force_idx_list, int* force_size_list,
+                                      int num_segments, int* segment_idxs, int* segment_types, int* segment_lengths,
+                                      int* local_list, double* buf, int* pbc_flags) override;
+
   int pack_data_stencil_md(int num_send_force, int num_send_pos,
                            int* force_idx_list, int* force_size_list,
                            int* pos_idx_list, int* pos_size_list,
                            int* local_to_ghost_list,
                            int num_segments, int* segment_types, int* segment_idxs, int* segment_sizes,
                            double* buf, int* pbc_flags, bool debug=false) override;
-  /*
-  int pack_data_stencil_md(int num_send_force, int num_send_pos,
-                           int* force_idx_list, int* force_size_list,
-                           int* pos_idx_list, int* pos_size_list,
-                           int num_local_to_ghost, int* local_to_ghost_mapping, int* local_to_ghost_sizes, int* local_to_ghost_list,
-                           int num_ghost_to_ghost, int* ghost_to_ghost_idx_list, int* ghost_to_ghost_size_list,
-                           double* buf, int* pbc_flags, bool debug) override;
-  */
 
   void unpack_data_stencil_md(int num_recv_force, int num_recv_pos,
                               int* recv_force_list, int* recv_pos_list,

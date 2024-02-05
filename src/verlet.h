@@ -49,7 +49,6 @@ class Verlet : public Integrate {
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic
   int torqueflag, extraflag;
-
 };
 
 }    // namespace LAMMPS_NS

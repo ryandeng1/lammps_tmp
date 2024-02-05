@@ -233,8 +233,7 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
           const double start = q_info.zoid.cuts[dim].lower;
           const double end = q_info.zoid.cuts[dim].upper;
 
-          std::cout << "lb: " << lb << " mid: " << lb / 2 << " start: " << start << " end: " << end
-                    << std::endl;
+          // std::cout << "lb: " << lb << " mid: " << lb / 2 << " start: " << start << " end: " << end << std::endl;
 
           // bool initial_cut = std::abs(lb - args.lattice[dim * 3 + dim]) <=
           // 1e-8;

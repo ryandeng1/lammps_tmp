@@ -1814,8 +1814,6 @@ void CommBrick::construct_send_list_stencil_md_next_dt_send(
                 zoid.send_pos_sizes[t][i][j] = segment_lengths_pos[j];
             }
 
-            std::cout << "send list zoid: " << zoid_num << " send to: " << send_zoid_num << " time: " << t << " num pos segments: " << num_pos_segments << " num force: " << num_force_segments << std::endl;
-
             sendnum_stencil_md_next_dt[t][i] = nsend_stencil_md;
         }
 
@@ -3451,6 +3449,25 @@ void CommBrick::send_data_stencil_md(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLE
         }
     }
   }
+}
+
+void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
+                                                queue_info& zoid, std::vector<MPI_Request>& send_requests) {
+    int zoid_num = zoid.num;
+    auto &send_to_neighbors = lmp->send_to_neighbors[zoid_num];
+
+    for (int proc = 0; proc < comm->nprocs; proc++) {
+        // pack data into buffer
+
+    }
+}
+
+void CommBrick::receive_data_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {
+
+}
+
+void CommBrick::unpack_data_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {
+
 }
 
 void CommBrick::send_data_stencil_md_next_dt(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr,

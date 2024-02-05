@@ -363,14 +363,95 @@ int AtomVecAtomicKokkos::pack_border(int n, int *list, double *buf, int pbc_flag
   return m;
 }
 
-/*
-int AtomVecAtomicKokkos::pack_data_stencil_md(int num_send_force, int num_send_pos,
-                         int* force_idx_list, int* force_size_list,
-                         int* pos_idx_list, int* pos_size_list,
-                         int num_local_to_ghost, int* local_to_ghost_mapping, int* local_to_ghost_sizes, int* local_to_ghost_list,
-                         int num_ghost_to_ghost, int* ghost_to_ghost_idx_list, int* ghost_to_ghost_size_list,
-                         double* buf, int* pbc_flags, bool debug) {
-*/
+int AtomVecAtomicKokkos::pack_data_to_process_stencil_md(int num_send_force, int* force_idx_list, int* force_size_list,
+                                    int num_segments, int* segment_idxs, int* segment_types, int* segment_lengths,
+                                    int* local_list, double* buf, int* pbc_flags) {
+    if (DEBUG_SEND_RECV_DATA) {
+        int m = 0;
+
+        assert(num_send_force >= 0 && num_send_force <= 100000);
+
+        for (int i = 0; i < num_send_force; i++) {
+            int force_idx = force_idx_list[i];
+            int force_size = force_size_list[i];
+
+            for (int j = 0; j < force_size; j++) {
+                int idx = force_idx + j;
+                tagint tag_ = tag[idx];
+                // TODO: Kokkos-ify
+                buf[m++] = ubuf(tag_).d;
+                buf[m++] = eval_f_stencil_md[idx][0];
+                buf[m++] = eval_f_stencil_md[idx][1];
+                buf[m++] = eval_f_stencil_md[idx][2];
+            }
+        }
+
+        int local_list_idx = 0;
+
+        for (int i = 0; i < num_segments; i++) {
+            int segment_type = segment_types[i];
+            int segment_size = segment_lengths[i];
+            if (segment_type == LOCAL_SEGMENT_TYPE) {
+                for (int j = 0; j < segment_size; j++) {
+                    int idx = local_list[local_list_idx++];
+                    tagint tag_ = tag[idx];
+                    // TODO: Kokkos-ify
+                    buf[m++] = ubuf(tag_).d;
+                    buf[m++] = x[idx][0] + pbc_flags[0] * domain->prd[0];
+                    buf[m++] = x[idx][1] + pbc_flags[1] * domain->prd[1];
+                    buf[m++] = x[idx][2] + pbc_flags[2] * domain->prd[2];
+                }
+            } else {
+                assert(segment_type == GHOST_SEGMENT_TYPE);
+                int segment_idx = segment_idxs[i];
+                for (int j = 0; j < segment_size; j++) {
+                    int idx = segment_idx + j;
+                    tagint tag_ = tag[idx];
+                    // TODO: Kokkos-ify
+                    buf[m++] = ubuf(tag_).d;
+                    buf[m++] = x[idx][0] + pbc_flags[0] * domain->prd[0];
+                    buf[m++] = x[idx][1] + pbc_flags[1] * domain->prd[1];
+                    buf[m++] = x[idx][2] + pbc_flags[2] * domain->prd[2];
+                }
+            }
+        }
+
+        local_list_idx = 0;
+
+        for (int i = 0; i < num_segments; i++) {
+            int segment_type = segment_types[i];
+            int segment_size = segment_lengths[i];
+            if (segment_type == LOCAL_SEGMENT_TYPE) {
+                for (int j = 0; j < segment_size; j++) {
+                    int idx = local_list[local_list_idx++];
+                    tagint tag_ = tag[idx];
+                    // TODO: Kokkos-ify
+                    buf[m++] = ubuf(tag_).d;
+                    buf[m++] = v[idx][0];
+                    buf[m++] = v[idx][1];
+                    buf[m++] = v[idx][2];
+                }
+            } else {
+                assert(segment_type == GHOST_SEGMENT_TYPE);
+                int segment_idx = segment_idxs[i];
+                for (int j = 0; j < segment_size; j++) {
+                    int idx = segment_idx + j;
+                    tagint tag_ = tag[idx];
+                    // TODO: Kokkos-ify
+                    buf[m++] = ubuf(tag_).d;
+                    buf[m++] = v[idx][0];
+                    buf[m++] = v[idx][1];
+                    buf[m++] = v[idx][2];
+                }
+            }
+        }
+
+        // TODO: maybe add this method in Kokkos
+        // modified_stencil_md(Host, X_MASK | TAG_MASK | TYPE_MASK | MASK_MASK, this);
+
+        return m;
+    }
+}
 
 int AtomVecAtomicKokkos::pack_data_stencil_md(int num_send_force, int num_send_pos,
                              int* force_idx_list, int* force_size_list,
@@ -463,7 +544,6 @@ int AtomVecAtomicKokkos::pack_data_stencil_md(int num_send_force, int num_send_p
       int send_pos = m - send_force;
 
       int local_list_idx = 0;
-      int ghost_segment_idx = 0;
 
       for (int i = 0; i < num_segments; i++) {
           int segment_type = segment_types[i];
