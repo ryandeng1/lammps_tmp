@@ -304,7 +304,7 @@ void CommBrick::init_buffers()
   }
 
   int nprocs_;
-  MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocs_);
   for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
       num_elems_recv_process[t] = (int *) memory->smalloc(nprocs_ * sizeof(int), "comm::num_elems_recv_from_process");
   }
@@ -3121,6 +3121,10 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
             }
         }
 
+        if (neighbors_in_proc.size() == 0) {
+            continue;
+        }
+
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             for (int i = 0; i < send_to_neighbors.size(); i++) {
                 int neighbor = send_to_neighbors[i];
@@ -3220,15 +3224,9 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
         assert(num_elems_send == buf_idx);
 
         if (proc != comm->me) {
-            // MPI_Request r;
             int mpi_tag = (proc << 16 | zoid_num);
-            /*
-            MPI_Isend(buf_send_stencil_md[proc], buf_idx, MPI_DOUBLE, proc, mpi_tag, world,
-                      &r);
-            */
             MPI_Isend(buf_send_stencil_md[proc], buf_idx, MPI_DOUBLE, proc, mpi_tag, world,
                       &send_requests[send_request_vec_idx++]);
-            // send_requests.push_back(r);
         } else {
             assert(comm->me == proc);
 
@@ -3286,7 +3284,7 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
 }
 
 void CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
-                                                queue_info& zoid, std::vector<MPI_Request>& send_requests) {
+                                                        queue_info& zoid, std::vector<MPI_Request>& send_requests) {
     int zoid_num = zoid.num;
     auto &send_to_neighbors = lmp->send_to_neighbors_next_dt[zoid_num];
 
@@ -3302,6 +3300,12 @@ void CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
                 neighbors_in_proc.push_back(i);
             }
         }
+
+        if (neighbors_in_proc.size() == 0) {
+            continue;
+        }
+
+        std::cout << YELLOW << "next dt zoid: " << zoid.num << " on proc: " << comm->me << " send to proc: " << proc << " zoids: " << neighbors_in_proc << std::endl;
 
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             for (int i = 0; i < send_to_neighbors.size(); i++) {
@@ -3402,31 +3406,10 @@ void CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
         assert(num_elems_send == buf_idx);
 
         if (proc != comm->me) {
-            // MPI_Request r;
             int mpi_tag = (proc << 16 | zoid_num);
-            /*
-            MPI_Isend(buf_send_stencil_md[proc], buf_idx, MPI_DOUBLE, proc, mpi_tag, world,
-                      &);
-            */
-
             MPI_Isend(buf_send_stencil_md[proc], buf_idx, MPI_DOUBLE, proc, mpi_tag, world,
                       &send_requests[send_requests_vec_idx++]);
-
-            auto curr_time = std::chrono::system_clock::now();
-            std::time_t curr_time_t = std::chrono::system_clock::to_time_t(curr_time);
-            if (zoid_num == 32 && proc == 6) {
-                std::cout << "HELLO MAN FIRST ELEM SEND: " << buf_send_stencil_md[proc][0] << " tag: " << mpi_tag << " num send: " << buf_idx
-                    << " " << std::ctime(&curr_time_t) << std::endl;
-            } else if (proc == 6) {
-                /*
-                std::cout << "zoid num: " << zoid_num << " HELLO MAN THE FUCKING SHIT JUST WENT DOWN FIRST ELEM SEND: " << buf_send_stencil_md[proc][0] << " tag: " << mpi_tag << " num send: " << buf_idx
-                          << " " << std::ctime(&curr_time_t) << std::endl;
-                */
-            }
-            // send_requests.push_back(r);
         } else {
-            assert(comm->me == proc);
-
             for (int other_zoid_num = 0; other_zoid_num < NUM_ZOIDS; other_zoid_num++) {
                 if (other_zoid_num % comm->nprocs == comm->me) {
                     auto& other_atom_arr = lmp->atom_stencil_md[other_zoid_num];
@@ -3581,9 +3564,7 @@ void CommBrick::receive_data_process_stencil_md_next_dt(MPI_Request* request, in
     MPI_Irecv(buf_recv_stencil_md[idx_recv_zoid], nrecv, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, world,
               request);
 
-    if (mpi_tag == 393248) {
-        std::cout << "hey initial dt me: " << comm->me << " recv zoid num: " << recv_zoid_num << " idx: " << idx_recv_zoid << std::endl;
-    }
+    std::cout << CYAN << "proc: " << comm->me << " recv from: " << recv_zoid_num << RESET_COLOR << std::endl;
 
     if (comm->me == 6 && recv_zoid_num == 32) {
         auto curr_time = std::chrono::system_clock::now();

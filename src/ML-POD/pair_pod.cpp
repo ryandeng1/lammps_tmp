@@ -81,7 +81,6 @@ PairPOD::~PairPOD()
 void PairPOD::compute(int eflag, int vflag)
 {
   ev_init(eflag, vflag);
-  return;
 
   // we must enforce using F dot r, since we have no energy or stress tally calls.
   vflag_fdotr = 1;
@@ -248,7 +247,6 @@ void PairPOD::compute(int eflag, int vflag)
 void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
                                  bool* can_eval_center, queue_info &zoid, int timestep) {
   ev_init(eflag, vflag);
-  return;
 
   // we must enforce using F dot r, since we have no energy or stress tally calls.
   vflag_fdotr = 1;

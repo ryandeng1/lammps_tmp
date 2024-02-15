@@ -3688,13 +3688,10 @@ void Verlet::setup_stencil_md() {
 
     int num_zoids_recv_from = lmp->recv_from_neighbors_procs.size();
     std::thread receive_request_threads[num_zoids_recv_from];
+    // std::vector<MPI_Request> receive_request_vec;
+    // receive_request_vec.resize(num_zoids_recv_from);
 
     std::cout << "me: " << comm->me << " LAMMPS INITIAL DT RECV ZOIDS: " << lmp->recv_from_neighbors_procs << std::endl;
-
-    std::atomic<bool> done[num_zoids_recv_from];
-    for (int i = 0; i < num_zoids_recv_from; i++) {
-        done[i] = false;
-    }
 
     // map dependency levels to number of zoids to wait on
     std::map<int, std::vector<int>> dep_to_wait_idxs;
@@ -3727,21 +3724,36 @@ void Verlet::setup_stencil_md() {
         int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
         if (recv_zoid_num % comm->nprocs != comm->me) {
             receive_request_threads[i] =
-                std::move(std::thread([&](int idx, int recv_zoid_num_) {
+                std::move(std::thread([&](int recv_zoid_num_) {
                     MPI_Request r;
                     comm->receive_data_process_stencil_md(&r, recv_zoid_num_);
                     int wait_status = MPI_Wait(&r, MPI_STATUS_IGNORE);
                     assert(wait_status == MPI_SUCCESS);
-                    done[idx] = true;
-                }, i, recv_zoid_num));
+                }, recv_zoid_num));
+            // comm->receive_data_process_stencil_md(&receive_request_vec[i], recv_zoid_num);
         }
     }
 
     std::vector<MPI_Request> send_requests[NUM_ZOIDS];
     std::vector<std::thread> send_request_threads;
 
-    for (int i = 0; i < NUM_ZOIDS; i++) {
-        send_requests[i].reserve(comm->nprocs - 1);
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            int num_procs = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                if (proc == comm->me) {
+                    continue;
+                }
+                for (int i = 0; i < lmp->send_to_neighbors[zoid_num].size(); i++) {
+                    if (lmp->send_to_neighbors[zoid_num][i] % comm->nprocs == proc) {
+                        num_procs++;
+                        break;
+                    }
+                }
+            }
+            assert(num_procs >= 0 && num_procs < comm->nprocs);
+            send_requests[zoid_num] = std::vector<MPI_Request>(num_procs, MPI_REQUEST_NULL);
+        }
     }
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -3749,7 +3761,8 @@ void Verlet::setup_stencil_md() {
             for (int idx : dep_to_wait_idxs[dep]) {
                 int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
                 receive_request_threads[idx].join();
-                assert(done[idx]);
+                // int status = MPI_Wait(&receive_request_vec[idx], MPI_STATUS_IGNORE);
+                // assert(status == MPI_SUCCESS);
                 comm->unpack_data_process_stencil_md(recv_zoid_num);
             }
         }
@@ -3797,25 +3810,18 @@ void Verlet::setup_stencil_md() {
         t.join();
     }
 
-    for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
-        int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
-        if (recv_zoid_num % comm->nprocs != comm->me) {
-            assert(done[i]);
-            assert(!receive_request_threads[i].joinable());
-        } else {
-            assert(!receive_request_threads[i].joinable());
-        }
-    }
-
     // auto join_end = std::chrono::high_resolution_clock::now();
     // auto duration_join = std::chrono::duration_cast<std::chrono::microseconds>(join_end - join_start).count();
     // std::cout << CYAN << "me: " << comm->me << " duration join: " << duration_join << RESET_COLOR << std::endl;
 
     MPI_Barrier(world);
 
+    /*
     std::cout << GREEN << "TESTING NEXT DT SEND " << RESET_COLOR << std::endl;
     int num_zoids_recv_from_next_dt = lmp->recv_from_neighbors_procs_next_dt.size();
     std::thread receive_request_threads_next_dt[num_zoids_recv_from_next_dt];
+    // std::vector<MPI_Request> receive_request_vec_next_dt;
+    // receive_request_vec_next_dt.resize(num_zoids_recv_from_next_dt);
 
     // map dependency levels to number of zoids to wait on
     std::map<int, std::vector<int>> dep_to_wait_idxs_next_dt;
@@ -3831,9 +3837,6 @@ void Verlet::setup_stencil_md() {
         }
 
         auto& v = dep_to_wait_idxs_next_dt[dep];
-        for (int idx : v) {
-            std::cout << "next dt dep: " << dep << " wait on zoid: " << lmp->recv_from_neighbors_procs_next_dt[idx] << std::endl;
-        }
     }
 
     int num_to_wait_on_next_dt = 0;
@@ -3860,6 +3863,7 @@ void Verlet::setup_stencil_md() {
                         int wait_status = MPI_Wait(&r, MPI_STATUS_IGNORE);
                         assert(wait_status == MPI_SUCCESS);
                     }, recv_zoid_num));
+            // comm->receive_data_process_stencil_md_next_dt(&receive_request_vec_next_dt[i], recv_zoid_num);
         }
     }
 
@@ -3875,6 +3879,8 @@ void Verlet::setup_stencil_md() {
         if (dep > 0) {
             for (int idx : dep_to_wait_idxs_next_dt[dep]) {
                 int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[idx];
+                // int status = MPI_Wait(&receive_request_vec_next_dt[idx], MPI_STATUS_IGNORE);
+                // assert(status == MPI_SUCCESS);
                 receive_request_threads_next_dt[idx].join();
                 comm->unpack_data_process_stencil_md_next_dt(recv_zoid_num);
             }
@@ -3913,6 +3919,7 @@ void Verlet::setup_stencil_md() {
 
     std::cout << GREEN << "TESTING NEXT DT SEND SEEMS TO WORK? " << RESET_COLOR << std::endl;
     assert(false);
+    */
 
     /*
     std::vector<MPI_Request> receive_requests[NUM_ZOIDS];

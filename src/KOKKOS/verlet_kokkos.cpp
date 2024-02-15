@@ -709,6 +709,25 @@ void VerletKokkos::run(int n) {
     std::vector<MPI_Request> send_requests[NUM_ZOIDS];
     std::vector<std::thread> send_request_threads;
 
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            int num_procs = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                if (proc == comm->me) {
+                    continue;
+                }
+                for (int i = 0; i < lmp->send_to_neighbors[zoid_num].size(); i++) {
+                    if (lmp->send_to_neighbors[zoid_num][i] % comm->nprocs == proc) {
+                        num_procs++;
+                        break;
+                    }
+                }
+            }
+            assert(num_procs >= 0 && num_procs < comm->nprocs);
+            send_requests[zoid_num] = std::vector<MPI_Request>(num_procs, MPI_REQUEST_NULL);
+        }
+    }
+
     int64_t send_comm_duration = 0;
     int64_t recv_comm_duration = 0;
     int64_t stencil_md_compute_duration = 0;
@@ -1170,8 +1189,23 @@ void VerletKokkos::run(int n) {
     std::vector<MPI_Request> send_requests_next_dt[NUM_ZOIDS];
     std::vector<std::thread> send_request_threads_next_dt;
 
-    for (int i = 0; i < NUM_ZOIDS; i++) {
-        send_requests_next_dt[i].reserve(comm->nprocs - 1);
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            int num_procs = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                if (proc == comm->me) {
+                    continue;
+                }
+                for (int i = 0; i < lmp->send_to_neighbors_next_dt[zoid_num].size(); i++) {
+                    if (lmp->send_to_neighbors_next_dt[zoid_num][i] % comm->nprocs == proc) {
+                        num_procs++;
+                        break;
+                    }
+                }
+            }
+            assert(num_procs >= 0 && num_procs < comm->nprocs);
+            send_requests_next_dt[zoid_num] = std::vector<MPI_Request>(num_procs, MPI_REQUEST_NULL);
+        }
     }
 
     // start compute
