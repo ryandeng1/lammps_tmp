@@ -211,9 +211,6 @@ void AtomKokkos::sort()
     ibin = iz * nbiny * nbinx + iy * nbinx + ix;
     next[i] = binhead[ibin];
     binhead[ibin] = i;
-    if (tag[i] == 70982 || tag[i] == 70934) {
-        std::cout << "bin for tag: " << tag[i] << " is: " << ibin << std::endl;
-    }
   }
 
   // permute = desired permutation of atoms

@@ -28,6 +28,23 @@ int get_zoid_dep(int zoid_num)
   return my_zoid_dep;
 }
 
+int get_zoid_dep_next_dt(int zoid_num)
+{
+    int my_zoid_dep = -1;
+    if (zoid_num < 8) {
+        my_zoid_dep = 3;
+    } else if (zoid_num < 32) {
+        my_zoid_dep = 2;
+    } else if (zoid_num < 56) {
+        my_zoid_dep = 1;
+    } else {
+        assert(zoid_num < 64);
+        my_zoid_dep = 0;
+    }
+    assert(my_zoid_dep != -1);
+    return my_zoid_dep;
+}
+
 // use this if guarantee don't want shared ghosts
 /*
 int get_zoid_dep(int zoid_num) {
@@ -140,7 +157,8 @@ int get_segments(const std::vector<int>& idxs, std::vector<int>& segment_idxs, s
     int start = 0;
 
     for (int j = 1; j < idxs.size(); j++) {
-        if (idxs[j] - idxs[j - 1] > 1) {
+        // if (idxs[j] - idxs[j - 1] > 1) {
+        if (idxs[j] - idxs[j - 1] != 1) {
             segment_idxs.push_back(idxs[start]);
             int segment_length = (j - 1 - start + 1);
             segment_lengths.push_back(segment_length);

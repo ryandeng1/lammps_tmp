@@ -101,8 +101,12 @@ class Comm : protected Pointers {
   virtual void unpack_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
 
   virtual void send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
-  virtual void receive_data_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
-  virtual void unpack_data_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
+  virtual void receive_data_process_stencil_md(MPI_Request*, int) {assert(false);}
+  virtual void unpack_data_process_stencil_md(int) { assert(false); }
+
+  virtual void send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) { assert(false); }
+  virtual void receive_data_process_stencil_md_next_dt(MPI_Request*, int) { assert(false); }
+  virtual void unpack_data_process_stencil_md_next_dt(int) { assert(false); }
 
   virtual void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
 

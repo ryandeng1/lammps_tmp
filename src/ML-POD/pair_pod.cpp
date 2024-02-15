@@ -81,6 +81,7 @@ PairPOD::~PairPOD()
 void PairPOD::compute(int eflag, int vflag)
 {
   ev_init(eflag, vflag);
+  return;
 
   // we must enforce using F dot r, since we have no energy or stress tally calls.
   vflag_fdotr = 1;
@@ -247,6 +248,7 @@ void PairPOD::compute(int eflag, int vflag)
 void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
                                  bool* can_eval_center, queue_info &zoid, int timestep) {
   ev_init(eflag, vflag);
+  return;
 
   // we must enforce using F dot r, since we have no energy or stress tally calls.
   vflag_fdotr = 1;
@@ -298,6 +300,44 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
         free_tempmemory_fastpod();
         allocate_tempmemory_fastpod(nmem);
       }
+
+      /*
+      int *neigh_list = list->firstneigh[ii];
+      for (int j = 0; j < numneigh[ii]; j++) {
+          int neigh = neigh_list[j];
+
+          double x_i = x[i][0];
+          double y_i = x[i][1];
+          double z_i = x[i][2];
+
+          double x_j = x[neigh][0];
+          double y_j = x[neigh][1];
+          double z_j = x[neigh][2];
+
+          double delx = x[neigh][0] - x[i][0];    // xj - xi
+          double dely = x[neigh][1] - x[i][1];    // xj - xi
+          double delz = x[neigh][2] - x[i][2];    // xj - xi
+          double rsq = delx * delx + dely * dely + delz * delz;
+
+          if (rsq < rcutsq && rsq > 1e-20 && fabs(x_i + 1000) <= 1 || fabs(y_i + 1000) <= 1 || fabs(z_i + 1000) <= 1
+              || fabs(x_j + 1000) <= 1 || fabs(y_j + 1000) <= 1 || fabs(z_j + 1000) <= 1) {
+              std::cout << RED << "ERROR zoid num: " << zoid.num << " timestep: " << timestep << RESET_COLOR << std::endl;
+              std::cout << "rsq: " << rsq << " rcutsq: " << rcutsq << std::endl;
+              std::cout << "local idx: " << i << " out of: " << atom_->nlocal << " neigh: " << neigh << std::endl;
+              std::cout << "my pos: " << x_i << " " << y_i << " " << z_i
+                        << " original pos: " << zoid.debug_atom_pos[timestep][i * 3 + 0] << " " << zoid.debug_atom_pos[timestep][i * 3 + 1] << " " << zoid.debug_atom_pos[timestep][i * 3 + 2] << " tag: " << atom_->tag[i] << std::endl;
+              std::cout << "neigh pos: " << x_j << " " << y_j << " " << z_j
+                        << " neigh original pos: " << zoid.debug_atom_pos[timestep][neigh * 3 + 0] << " " << zoid.debug_atom_pos[timestep][neigh * 3 + 1] << " " << zoid.debug_atom_pos[timestep][neigh * 3 + 2] << " tag: " << atom_->tag[neigh] << std::endl;
+              std::cout << "force? " << atom_->f[i][0] << " " << atom_->f[i][1] << " " << atom_->f[i][2] << std::endl;
+
+              for (int dim = 0; dim < 3; dim++) {
+                  std::cout << "dim: " << dim << " lo: " << zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower
+                            << " hi: " << zoid.zoid.cuts[dim].upper + timestep * zoid.zoid.cuts[dim].slope_upper << std::endl;
+              }
+              assert(false);
+          }
+      }
+      */
 
       lammpsNeighborList(x, firstneigh, type, map, numneigh, rcutsq, i);
 

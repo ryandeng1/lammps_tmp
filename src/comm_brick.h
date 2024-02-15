@@ -53,8 +53,12 @@ class CommBrick : public Comm {
   void unpack_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
 
   void send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) override;
-  void receive_data_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) override;
-  void unpack_data_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) override;
+  void receive_data_process_stencil_md(MPI_Request*, int) override;
+  void unpack_data_process_stencil_md(int) override;
+
+  void send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) override;
+  void receive_data_process_stencil_md_next_dt(MPI_Request*, int) override;
+  void unpack_data_process_stencil_md_next_dt(int) override;
 
   void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
@@ -203,6 +207,8 @@ class CommBrick : public Comm {
   double** buf_recv2_stencil_md;
   int* maxsend2_stencil_md;
   int* maxrecv2_stencil_md;
+
+  int* num_elems_recv_process[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
   // TODO: change this to int*, just use std::vector<int> rn to avoid the headache
   std::vector<int> sendlist_shared_ghost_stencil_md[NUM_TIMESTEPS_IN_PARALLEL];

@@ -114,9 +114,18 @@ class AtomVec : protected Pointers {
   virtual int pack_border_stencil_md(int, int*, double*, int*, int**) {assert(false); }
   virtual int unpack_border_stencil_md(int, int, double*, Atom*, int) {assert(false); }
 
-  virtual int pack_data_to_process_stencil_md(int num_send_force, int* force_idx_list, int* force_size_list,
-                                              int num_segments, int* segment_idxs, int* segment_types, int* segment_lengths,
+  virtual int pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs, int* num_send_force, int** force_idx_list, int** force_size_list,
+                                              int num_pos_segments, int* segment_types, int* segment_idxs, int* segment_lengths,
+                                              int* num_send_vel, int** vel_idx_list, int** vel_size_list,
                                               int* local_list, double* buf, int* pbc_flags) { assert(false); }
+
+  // nrecv_force gets where pos is starting at in the buffer, and nrecv_pos gets where vel is starting at in the buffer
+  virtual void unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos,
+                                                   int force_offset_buf, int num_recv_force, int* recv_force_list,
+                                                   int num_pos_segments_buf, int* segment_types_buf, int* segment_idxs_buf, int* segment_sizes_buf,
+                                                   int vel_offset_buf, int num_recv_vel, int* recv_pos_local_list,
+                                                   int num_recv_ghost, int* recv_ghost_idx_list, int* recv_ghost_size_list,
+                                                   double* buf, int* pbc_flags) { assert(false); }
 
   virtual int pack_data_stencil_md(int num_send_force, int num_send_pos,
                                    int* force_idx_list, int* force_size_list,

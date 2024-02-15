@@ -197,6 +197,9 @@ struct queue_info {
   int where[3];
   int **atom_idx_mapping;
 
+  // debugging
+  double** debug_atom_pos;
+
   // use pointers since any copies, the pointers will be copied over rather than arrays it seems
   bool **can_eval_center;
   bool **can_eval_pos;
@@ -234,7 +237,9 @@ struct queue_info {
   int** num_elems_recv;
 
   // info used for sending data from zoid to a process
-  std::map<int, int>** ghost_idx_to_send_buf_idx_per_process;
+
+  int** num_elems_send_process;
+  int** num_elems_recv_process;
 
   int*** send_process_segment_sizes;
   int*** send_process_segment_idxs;
@@ -242,15 +247,31 @@ struct queue_info {
   int** send_process_num_segments;
   int*** send_process_local_list;
 
+  // int** send_process_num_ghost_to_local_segments;
+  // int*** send_process_ghost_to_local_segment_idxs;
+  // int*** send_process_ghost_to_local_segment_sizes;
+
+  int** recv_process_force_offset;
+  int** recv_process_vel_offset;
+  int** recv_process_pos_offset;
+
   int*** recv_process_segment_sizes;
   int*** recv_process_segment_types;
   int*** recv_process_segment_idxs;
   int** recv_process_num_segments;
 
+  /*
+  int** recv_process_num_ghost_to_local_segments;
+  int*** recv_process_ghost_to_local_segment_idxs;
+  int*** recv_process_ghost_to_local_segment_sizes;
+  */
+
   // TODO: might need some additional mapping between which zoid sends to which process?
 };
 
 int get_zoid_dep(int);
+
+int get_zoid_dep_next_dt(int);
 
 bool is_close(int *, int *);
 
