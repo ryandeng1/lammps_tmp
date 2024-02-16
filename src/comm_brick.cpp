@@ -3110,6 +3110,11 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
 
     int send_request_vec_idx = 0;
 
+    long long unpack_duration = 0;
+    int num_zoid_unpack = 0;
+
+    auto begin = std::chrono::high_resolution_clock::now();
+
     for (int proc = 0; proc < comm->nprocs; proc++) {
         // pack data into buffer
         int nsend_force = 0;
@@ -3169,10 +3174,6 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
             Atom *atom_ = atom_arr[t];
             // std::cout << MAGENTA << "zoid: " << zoid_num << " timestep: " << t << " send to process: " << proc << " nlocal: " << atom_->nlocal << " total: " << atom_->nlocal + atom_->nghost << RESET_COLOR << std::endl;
             int* pbc_flags_ = NULL;
-            if (zoid_num == 4 && proc == 4 && t <= 2) {
-                pbc_flags_ = new int[3]{1, 2, 3};
-                std::cout << "neighbors in proc debug: " << neighbors_in_proc << std::endl;
-            }
 
             int n = atom_->avec->pack_data_to_process_stencil_md(
                     neighbors_in_proc.size(), neighbors_in_proc.data(),
@@ -3182,9 +3183,6 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
                     zoid.send_pos_num_segments[t], zoid.send_pos_idxs[t], zoid.send_pos_sizes[t],
                     zoid.send_process_local_list[t][proc], &buf_send_stencil_md[proc][buf_idx], pbc_flags_);
 
-            if (zoid_num == 4 && proc == 4 && t <= 2) {
-                delete[] pbc_flags_;
-            }
             debug_buf_idx[t] = n;
             buf_idx += n;
         }
@@ -3221,6 +3219,7 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
             int total_timestep = nsend_force_timestep * (3 + 1) + nsend_pos_timestep * (3 + 1) + nsend_vel_timestep * (3 + 1);
         }
 
+
         assert(num_elems_send == buf_idx);
 
         if (proc != comm->me) {
@@ -3229,6 +3228,8 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
                       &send_requests[send_request_vec_idx++]);
         } else {
             assert(comm->me == proc);
+
+            auto begin_unpack = std::chrono::high_resolution_clock::now();
 
             for (int other_zoid_num = 0; other_zoid_num < NUM_ZOIDS; other_zoid_num++) {
                 if (other_zoid_num % comm->nprocs == comm->me) {
@@ -3244,6 +3245,7 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
                     }
 
                     if (std::find(other_recv_from.begin(), other_recv_from.end(), zoid_num) != other_recv_from.end()) {
+                        num_zoid_unpack++;
                         int recv_idx = std::find(other_recv_from.begin(), other_recv_from.end(), zoid_num) - other_recv_from.begin();
                         int lmp_recv_idx = std::find(lmp->recv_from_neighbors_procs.begin(), lmp->recv_from_neighbors_procs.end(), zoid_num) - lmp->recv_from_neighbors_procs.begin();
 
@@ -3279,7 +3281,21 @@ void CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
                     }
                 }
             }
+
+            auto end_unpack = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_unpack-begin_unpack).count();
+
+            unpack_duration += duration;
         }
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
+
+    if (zoid_num == 0) {
+        std::cout << MAGENTA << "SEND DATA CURR DT zoid: " << zoid_num
+            << " unpack duration: " << unpack_duration << " num unpack: " << num_zoid_unpack
+            << " overall duration: " << duration << RESET_COLOR << std::endl;
     }
 }
 
@@ -5127,15 +5143,9 @@ void CommBrick::grow_recv(int n)
 
 void CommBrick::grow_recv_stencil_md(int n, int idx)
 {
-  int prev_max = maxrecv_stencil_md[idx];
-  double* prev = buf_recv_stencil_md[idx];
   maxrecv_stencil_md[idx] = static_cast<int>(BUFFACTOR * n);
   memory->destroy(buf_recv_stencil_md[idx]);
   memory->create(buf_recv_stencil_md[idx], maxrecv_stencil_md[idx], "comm:buf_recv");
-  if (idx == 6 && comm->me == 6) {
-      std::cout << "grow recv called. n: " << n << " for idx: " << idx << " max: " << maxrecv_stencil_md[idx] << " prev max: " << prev_max
-        << " prev pointer: " << prev << " curr pointer: " << buf_recv_stencil_md[idx] << std::endl;
-  }
 }
 
 void CommBrick::grow_recv2_stencil_md(int n, int idx)

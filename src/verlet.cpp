@@ -2988,12 +2988,10 @@ void Verlet::setup_stencil_md() {
 
                             for (int k = 0; k < zoid.recv_list_local_num_force_only[t][i]; k++) {
                                 int idx = zoid.recv_list_local_force_only[t][i][k];
-                                std::cout << GREEN << "debug force idx: " << k << " atom idx: " << idx << " tag: " << atom_->tag[idx] << RESET_COLOR << std::endl;
                             }
 
                             for (int k = 0; k < zoid.recv_list_local_num_force_pos[t][i]; k++) {
                                 int idx = zoid.recv_list_local_force_pos[t][i][k];
-                                std::cout << GREEN << "debug pos idx: " << k << " atom idx: " << idx << " tag: " << atom_->tag[idx] << RESET_COLOR << std::endl;
                             }
                         }
 
@@ -3690,8 +3688,6 @@ void Verlet::setup_stencil_md() {
     std::thread receive_request_threads[num_zoids_recv_from];
     // std::vector<MPI_Request> receive_request_vec;
     // receive_request_vec.resize(num_zoids_recv_from);
-
-    std::cout << "me: " << comm->me << " LAMMPS INITIAL DT RECV ZOIDS: " << lmp->recv_from_neighbors_procs << std::endl;
 
     // map dependency levels to number of zoids to wait on
     std::map<int, std::vector<int>> dep_to_wait_idxs;
