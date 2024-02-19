@@ -254,15 +254,6 @@ void PairPOD::compute(int eflag, int vflag)
 
   std::cout << "process: " << comm->me << " LAMMPS num pair eval: " << num_pairs_eval << " num atoms eval: " << atom->nlocal
     << " debug: " << fastpodptr->debug[0] << " " << fastpodptr->debug[1] << std::endl;
-  if (comm->me == 0) {
-      std::cout << "lammps time: ";
-      double total = 0;
-      for (int i = 0; i < 20; i++) {
-          std::cout << " idx: " << i << " " << fastpodptr->comptime[i] << " " << std::endl;
-          total += fastpodptr->comptime[i];
-      }
-      std::cout << "lammps total: " << total << std::endl;
-  }
 }
 
 void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_,
@@ -387,15 +378,6 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_,
     << " curr time: " << timeSinceEpochMillisec() << " time before compute: " << time_before_compute
     << " num eval: " << num_eval_atoms << " num eval pairs: " << num_eval_pairs
     << " debug: " << fastpodptr->debug[0] << " " << fastpodptr->debug[1] << RESET_COLOR << std::endl;
-  if (zoid.num == 0) {
-      std::cout << "stencil md time: " << std::endl;
-      double total = 0;
-      for (int i = 0; i < 20; i++) {
-          std::cout << "idx: " << i << " " << fastpodptr->comptime[i] << " " << std::endl;
-          total += fastpodptr->comptime[i];
-      }
-      std::cout << "stencil md total? " << total << std::endl;
-  }
 
   if (num_pairs_evaled != NULL) {
       *num_pairs_evaled += num_eval_pairs;
