@@ -36,9 +36,7 @@ class Verlet : public Integrate {
   void cleanup() override;
 
   void setup_stencil_md();
-  void group_local_atoms_stencil_md(Atom*, queue_info&, int);
   void group_ghost_atoms_stencil_md(Atom*, Atom*, queue_info&, int);
-  void group_local_atoms_stencil_md_next_dt(Atom*, queue_info&, int);
   void group_ghost_atoms_stencil_md_next_dt(Atom*, Atom*, queue_info&, int);
   virtual void force_clear_stencil_md(Atom*, Force*, Neighbor*);
   void setup_bins_stencil_md(Atom*, queue_info&, int);

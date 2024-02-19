@@ -424,3 +424,8 @@ void print_cuts(const cuts_t &c)
               << " Slope upper: " << c.cuts[i].slope_upper << std::endl;
   }
 }
+
+uint64_t timeSinceEpochMillisec() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}

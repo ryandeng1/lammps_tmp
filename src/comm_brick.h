@@ -56,6 +56,8 @@ class CommBrick : public Comm {
   void receive_data_process_stencil_md(MPI_Request*, int) override;
   void unpack_data_process_stencil_md(int) override;
 
+  bool send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*, int) override;
+
   void send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) override;
   void receive_data_process_stencil_md_next_dt(MPI_Request*, int) override;
   void unpack_data_process_stencil_md_next_dt(int) override;

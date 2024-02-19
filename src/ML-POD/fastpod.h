@@ -123,6 +123,8 @@ public:
   int nbesselpars;
   int timing;
   double comptime[20];
+  int debug[20];
+
   double besselparams[3];
   double *Phi ;    // eigenvectors
   double *Lambda ; // eigenvalues

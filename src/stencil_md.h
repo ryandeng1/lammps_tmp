@@ -7,6 +7,8 @@
 
 #include <mpi.h>
 #include <map>
+#include <cassert>
+#include <chrono>
 
 #include <deque>
 #include <iostream>
@@ -61,6 +63,8 @@ constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 constexpr bool DEBUG_SEND_RECV_DATA = true;
 
 constexpr bool OPTIMIZE_SEND_RECV_DATA = true;
+
+constexpr bool TEST_AGAINST_LAMMPS = true;
 
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
@@ -288,5 +292,7 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
 void print_cuts(const cuts_t &);
 
 int get_segments(const std::vector<int>&, std::vector<int>&, std::vector<int>&, bool print=false);
+
+uint64_t timeSinceEpochMillisec();
 
 #endif    //LAMMPS_STENCIL_MD_H

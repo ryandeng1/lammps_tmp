@@ -29,7 +29,7 @@ class PairPOD : public Pair {
   PairPOD(class LAMMPS *);
   ~PairPOD() override;
   void compute(int, int) override;
-  void compute_stencil_md(int, int, Atom*, Atom*, bool*, queue_info&, int) override;
+  void compute_stencil_md(int, int, Atom*, bool*, queue_info&, int*) override;
 
 
   void settings(int, char **) override;
@@ -61,6 +61,7 @@ class PairPOD : public Pair {
                         double rcutsq, int i);
   void lammpsNeighborList(double **x, int **firstneigh, int *atomtype, int *map, int *numneigh,
                         double rcutsq, int i);
+
   void tallyforce(double **force, double *fij,  int *ai, int *aj, int N);
  protected:
   int nablockmax;    // maximum number of atoms per computation block

@@ -81,6 +81,10 @@ PairPOD::~PairPOD()
 void PairPOD::compute(int eflag, int vflag)
 {
   ev_init(eflag, vflag);
+  for (int i = 0; i < 20; i++) {
+      fastpodptr->comptime[i] = 0.0;
+      fastpodptr->debug[i] = 0;
+  }
 
   // we must enforce using F dot r, since we have no energy or stress tally calls.
   vflag_fdotr = 1;
@@ -103,7 +107,10 @@ void PairPOD::compute(int eflag, int vflag)
 
   // initialize global descriptors to zero
 
+  int num_pairs_eval = 0;
+
   if (descriptormethod == 0) {
+    assert(false);
     int nd1234 = podptr->pod.nd1234;
     podptr->podArraySetValue(gd, 0.0, nd1234);
 
@@ -160,6 +167,7 @@ void PairPOD::compute(int eflag, int vflag)
       // get neighbor pairs for atom i
 
       lammpsNeighPairs(x, firstneigh, type, map, numneigh, rcutsq, i);
+      num_pairs_eval += nij;
 
       // compute atomic force for atom i
 
@@ -212,6 +220,7 @@ void PairPOD::compute(int eflag, int vflag)
 
       // get neighbor list for atom i
       lammpsNeighborList(x, firstneigh, type, map, numneigh, rcutsq, i);
+      num_pairs_eval += nij;
 
       // compute atomic energy and force for atom i
 
@@ -242,11 +251,28 @@ void PairPOD::compute(int eflag, int vflag)
   //   }
 
   if (vflag_fdotr && false) { virial_fdotr_compute(); }
+
+  std::cout << "process: " << comm->me << " LAMMPS num pair eval: " << num_pairs_eval << " num atoms eval: " << atom->nlocal
+    << " debug: " << fastpodptr->debug[0] << " " << fastpodptr->debug[1] << std::endl;
+  if (comm->me == 0) {
+      std::cout << "lammps time: ";
+      double total = 0;
+      for (int i = 0; i < 20; i++) {
+          std::cout << " idx: " << i << " " << fastpodptr->comptime[i] << " " << std::endl;
+          total += fastpodptr->comptime[i];
+      }
+      std::cout << "lammps total: " << total << std::endl;
+  }
 }
 
-void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
-                                 bool* can_eval_center, queue_info &zoid, int timestep) {
+void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_,
+                                 bool* can_eval_center, queue_info &zoid, int* num_pairs_evaled) {
   ev_init(eflag, vflag);
+
+  for (int i = 0; i < 20; i++) {
+      fastpodptr->comptime[i] = 0.0;
+      fastpodptr->debug[i] = 0;
+  }
 
   // we must enforce using F dot r, since we have no energy or stress tally calls.
   vflag_fdotr = 1;
@@ -274,6 +300,15 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
 
   // initialize global descriptors to zero
 
+  int num_eval_atoms = 0;
+  int num_eval_pairs = 0;
+
+  int64_t neighbor_list_duration = 0;
+  int64_t compute_duration = 0;
+  int64_t time_before_compute = timeSinceEpochMillisec();
+  int64_t tally_duration = 0;
+  int64_t allocate_duration = 0;
+
   if (descriptormethod == 0) {
     std::cout << RED << " descriptor method 0 when it should be 1" << RESET_COLOR << std::endl;
     assert(false);
@@ -286,10 +321,12 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
       if (!can_eval_center[ii]) {
           continue;
       }
+      num_eval_atoms++;
 
       int i = ilist[ii];
       int jnum = numneigh[i];
 
+      auto begin_allocate = std::chrono::high_resolution_clock::now();
       // allocate temporary memory
       if (nijmax < jnum) {
         nijmax = MAX(nijmax, jnum);
@@ -298,50 +335,26 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
         free_tempmemory_fastpod();
         allocate_tempmemory_fastpod(nmem);
       }
+      auto end_allocate = std::chrono::high_resolution_clock::now();
+      auto duration_allocate = std::chrono::duration_cast<std::chrono::microseconds>(end_allocate - begin_allocate).count();
+      allocate_duration += duration_allocate;
 
-      /*
-      int *neigh_list = list->firstneigh[ii];
-      for (int j = 0; j < numneigh[ii]; j++) {
-          int neigh = neigh_list[j];
-
-          double x_i = x[i][0];
-          double y_i = x[i][1];
-          double z_i = x[i][2];
-
-          double x_j = x[neigh][0];
-          double y_j = x[neigh][1];
-          double z_j = x[neigh][2];
-
-          double delx = x[neigh][0] - x[i][0];    // xj - xi
-          double dely = x[neigh][1] - x[i][1];    // xj - xi
-          double delz = x[neigh][2] - x[i][2];    // xj - xi
-          double rsq = delx * delx + dely * dely + delz * delz;
-
-          if (rsq < rcutsq && rsq > 1e-20 && fabs(x_i + 1000) <= 1 || fabs(y_i + 1000) <= 1 || fabs(z_i + 1000) <= 1
-              || fabs(x_j + 1000) <= 1 || fabs(y_j + 1000) <= 1 || fabs(z_j + 1000) <= 1) {
-              std::cout << RED << "ERROR zoid num: " << zoid.num << " timestep: " << timestep << RESET_COLOR << std::endl;
-              std::cout << "rsq: " << rsq << " rcutsq: " << rcutsq << std::endl;
-              std::cout << "local idx: " << i << " out of: " << atom_->nlocal << " neigh: " << neigh << std::endl;
-              std::cout << "my pos: " << x_i << " " << y_i << " " << z_i
-                        << " original pos: " << zoid.debug_atom_pos[timestep][i * 3 + 0] << " " << zoid.debug_atom_pos[timestep][i * 3 + 1] << " " << zoid.debug_atom_pos[timestep][i * 3 + 2] << " tag: " << atom_->tag[i] << std::endl;
-              std::cout << "neigh pos: " << x_j << " " << y_j << " " << z_j
-                        << " neigh original pos: " << zoid.debug_atom_pos[timestep][neigh * 3 + 0] << " " << zoid.debug_atom_pos[timestep][neigh * 3 + 1] << " " << zoid.debug_atom_pos[timestep][neigh * 3 + 2] << " tag: " << atom_->tag[neigh] << std::endl;
-              std::cout << "force? " << atom_->f[i][0] << " " << atom_->f[i][1] << " " << atom_->f[i][2] << std::endl;
-
-              for (int dim = 0; dim < 3; dim++) {
-                  std::cout << "dim: " << dim << " lo: " << zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower
-                            << " hi: " << zoid.zoid.cuts[dim].upper + timestep * zoid.zoid.cuts[dim].slope_upper << std::endl;
-              }
-              assert(false);
-          }
-      }
-      */
-
+      auto begin = std::chrono::high_resolution_clock::now();
       lammpsNeighborList(x, firstneigh, type, map, numneigh, rcutsq, i);
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+      neighbor_list_duration += duration;
+
+      num_eval_pairs += nij;
 
       // compute atomic energy and force for atom i
 
+      auto begin_compute = std::chrono::high_resolution_clock::now();
       evdwl = fastpodptr->peratomenergyforce(fij, rij, tmpmem, ti, tj, nij);
+      auto end_compute = std::chrono::high_resolution_clock::now();
+      auto duration_compute = std::chrono::duration_cast<std::chrono::microseconds>(end_compute - begin_compute).count();
+
+      compute_duration += duration_compute;
 
       // tally atomic energy to global energy
 
@@ -349,7 +362,11 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
 
       // tally atomic force to global force
 
+      auto begin_tally = std::chrono::high_resolution_clock::now();
       tallyforce(f, fij, ai, aj, nij);
+      auto end_tally = std::chrono::high_resolution_clock::now();
+      auto duration_tally = std::chrono::duration_cast<std::chrono::microseconds>(end_tally - begin_tally).count();
+      tally_duration += duration_tally;
 
       // tally atomic stress
 
@@ -364,6 +381,25 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_, Atom *next,
   }
 
   if (vflag_fdotr && false) { virial_fdotr_compute(); }
+
+  std::cout << CYAN << "zoid: " << zoid.num << " time for neighbor list: " << neighbor_list_duration << " time for compute: " << compute_duration
+    << " tally duration: " << tally_duration << " allocate duration: " << allocate_duration
+    << " curr time: " << timeSinceEpochMillisec() << " time before compute: " << time_before_compute
+    << " num eval: " << num_eval_atoms << " num eval pairs: " << num_eval_pairs
+    << " debug: " << fastpodptr->debug[0] << " " << fastpodptr->debug[1] << RESET_COLOR << std::endl;
+  if (zoid.num == 0) {
+      std::cout << "stencil md time: " << std::endl;
+      double total = 0;
+      for (int i = 0; i < 20; i++) {
+          std::cout << "idx: " << i << " " << fastpodptr->comptime[i] << " " << std::endl;
+          total += fastpodptr->comptime[i];
+      }
+      std::cout << "stencil md total? " << total << std::endl;
+  }
+
+  if (num_pairs_evaled != NULL) {
+      *num_pairs_evaled += num_eval_pairs;
+  }
 
   return;
 }
@@ -618,6 +654,7 @@ void PairPOD::lammpsNeighborList(double **x, int **firstneigh, int *atomtypes, i
       nij++;
     }
   }
+
 }
 
 void PairPOD::tallyforce(double **force, double *fij, int *ai, int *aj, int N)

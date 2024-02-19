@@ -520,6 +520,7 @@ double FASTPOD::peratomenergyforce(double *fij, double *rij, double *temp,
   radialbasis(rbft, rbfxt, rbfyt, rbfzt, rij, besselparams, rin, rcut-rin, pdegree[0], pdegree[1], nbesselpars, Nj);
   end = std::chrono::high_resolution_clock::now();
   comptime[0] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
+  debug[0] += Nj;
 
   begin = std::chrono::high_resolution_clock::now();
   char chn = 'N';
@@ -530,6 +531,7 @@ double FASTPOD::peratomenergyforce(double *fij, double *rij, double *temp,
   DGEMM(&chn, &chn, &Nj, &nrbfmax, &ns, &alpha, rbfzt, &Nj, Phi, &ns, &beta, rbfz, &Nj);
   end = std::chrono::high_resolution_clock::now();
   comptime[1] += std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count()/1e6;
+  debug[1] += Nj;
 
   for (int j=0; j<3*Nj; j++) fij[j] = 0.0;
 

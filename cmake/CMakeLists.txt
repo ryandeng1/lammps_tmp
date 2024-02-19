@@ -85,11 +85,10 @@ get_lammps_version(${LAMMPS_SOURCE_DIR}/version.h PROJECT_VERSION)
 
 include(PreventInSourceBuilds)
 
+# string(APPEND CMAKE_CXX_FLAGS " -fsanitize=memory ")
 # string(APPEND CMAKE_CXX_FLAGS " -fsanitize=address,undefined ")
-string(APPEND CMAKE_CXX_FLAGS " -g ")
+# string(APPEND CMAKE_CXX_FLAGS " -g ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# string(APPEND CMAKE_CXX_FLAGS " -g -O3 ")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CXX_FLAGS)
   set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel." FORCE)
@@ -152,6 +151,8 @@ endif()
 if(PKG_KOKKOS AND (CMAKE_CXX_STANDARD LESS 14))
   set(CMAKE_CXX_STANDARD 14)
 endif()
+# Ryan, set this so stuff can compile
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF CACHE BOOL "Use compiler extensions")
 # ugly hacks for MSVC which by default always reports an old C++ standard in the __cplusplus macro
