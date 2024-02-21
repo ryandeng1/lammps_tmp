@@ -33,6 +33,7 @@
 #include "kokkos.h"
 #include <chrono>
 #include <thread>
+#include <unistd.h>
 
 using namespace LAMMPS_NS;
 
@@ -734,6 +735,28 @@ void VerletKokkos::run(int n) {
 
     MPI_Barrier(world);
 
+    std::vector<MPI_Request> receive_requests(lmp->recv_from_neighbors_procs.size(), MPI_REQUEST_NULL);
+    for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
+        int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
+        if (recv_zoid_num % comm->nprocs != comm->me) {
+            comm->receive_data_process_stencil_md(&receive_requests[i], recv_zoid_num);
+            /*
+            receive_request_threads[i] =
+                    std::move(std::thread([&](int recv_zoid_num_) {
+                        MPI_Request r;
+                        auto begin_mpi = std::chrono::high_resolution_clock::now();
+                        comm->receive_data_process_stencil_md(&r, recv_zoid_num_);
+                        int wait_status = MPI_Wait(&r, MPI_STATUS_IGNORE);
+                        assert(wait_status == MPI_SUCCESS);
+                        auto end_mpi = std::chrono::high_resolution_clock::now();
+                        auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi-begin_mpi).count();
+                        sleep(60);
+                    }, recv_zoid_num));
+            */
+        }
+    }
+
+    /*
     int num_threads_recv = 0;
     for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
         int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
@@ -752,6 +775,7 @@ void VerletKokkos::run(int n) {
                     }, recv_zoid_num));
         }
     }
+    */
 
     // start compute
 
@@ -791,7 +815,8 @@ void VerletKokkos::run(int n) {
 
                 auto time_before = timeSinceEpochMillisec();
 
-                receive_request_threads[idx].join();
+                // receive_request_threads[idx].join();
+                MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
                 auto end_mpi = std::chrono::high_resolution_clock::now();
                 auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi-begin_mpi).count();
 
@@ -1163,11 +1188,7 @@ void VerletKokkos::run(int n) {
                     auto duration_send = std::chrono::duration_cast<std::chrono::microseconds>(end_send-begin_send).count();
                     auto after_send_long = timeSinceEpochMillisec();
                     if (sent) {
-                        std::cout << MAGENTA << "zoid num: " << zoid_num << " send to proc: " << proc << " duration: " << duration_send
-                                  << " before send ms: " << before_send_long << " after send long: " << after_send_long
-                                  << " compute duration: " << zoid_compute_duration / 1000 << " ms "
-                                  << " atoms eval'ed: " << zoid_atoms_evaled_vec << " pairs eval'ed vec: " << zoid_pairs_evaled_vec << " time before compute: " << time_before_first_compute
-                                  << " compute duration vec: " << zoid_compute_duration_vec << RESET_COLOR << std::endl;
+                        auto begin_thread = std::chrono::high_resolution_clock::now();
                         send_request_threads.push_back(
                                 std::move(std::thread([&](int idx, int zoid_num_) {
                                               auto time_before = timeSinceEpochMillisec();
@@ -1177,6 +1198,13 @@ void VerletKokkos::run(int n) {
                                           }, vec_idx, zoid_num)
                                 ));
                         vec_idx++;
+                        auto end_thread = std::chrono::high_resolution_clock::now();
+                        auto duration_thread = std::chrono::duration_cast<std::chrono::microseconds>(end_thread - begin_thread).count();
+                        std::cout << MAGENTA << "zoid num: " << zoid_num << " send to proc: " << proc << " duration: " << duration_send
+                                  << " before send ms: " << before_send_long << " after send long: " << after_send_long
+                                  << " compute duration: " << zoid_compute_duration / 1000 << " ms "
+                                  << " atoms eval'ed: " << zoid_atoms_evaled_vec << " pairs eval'ed vec: " << zoid_pairs_evaled_vec << " time before compute: " << time_before_first_compute
+                                  << " compute duration vec: " << zoid_compute_duration_vec << " time thread: " << duration_thread << RESET_COLOR << std::endl;
                     }
                 }
 
