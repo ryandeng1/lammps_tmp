@@ -665,18 +665,6 @@ void VerletKokkos::run(int n) {
     std::cout << GREEN << "process: " << comm->me << " LAMMPS COMM DURATION: " << lammps_comm_duration << " microseconds. " << RESET_COLOR << std::endl;
     std::cout << "---------------Start STENCIL MD test run----------------" << std::endl;
 
-    double** f_arr = new double*[NUM_ZOIDS];
-    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
-        auto &atom_arr = lmp->atom_stencil_md[zoid_num];
-        Atom* start = atom_arr[0];
-        f_arr[zoid_num] = new double[(start->nlocal + start->nghost) * 3];
-        for (int k = 0; k < start->nlocal + start->nghost; k++) {
-            for (int dim = 0; dim < 3; dim++) {
-                f_arr[zoid_num][k * 3 + dim] = start->f[k][dim];
-            }
-        }
-    }
-
     int num_zoids_recv_from = lmp->recv_from_neighbors_procs.size();
     std::thread receive_request_threads[num_zoids_recv_from];
 
@@ -854,12 +842,6 @@ void VerletKokkos::run(int n) {
             std::vector<int> zoid_atoms_evaled_vec;
 
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
-            Atom* start = atom_arr[0];
-            for (int k = 0; k < start->nlocal + start->nghost; k++) {
-                for (int dim = 0; dim < 3; dim++) {
-                    // start->f[k][dim] = f_arr[zoid_num][k * 3 + dim];
-                }
-            }
 
             auto time_before_first_compute = timeSinceEpochMillisec();
 
@@ -1232,13 +1214,6 @@ void VerletKokkos::run(int n) {
     std::cout << YELLOW << "lammps compute duration: " << lammps_compute_duration << " microseconds. " << " stencil md compute duration: " << stencil_md_compute_duration << " microseconds. " << RESET_COLOR << std::endl;
 
     MPI_Barrier(world);
-
-    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
-        if (zoid_num % comm->nprocs == comm->me) {
-            delete[] f_arr[zoid_num];
-        }
-    }
-    delete[] f_arr;
 
     // clear force on everything except last timestep of initial,
     for (int i = 0; i < NUM_ZOIDS; i++) {

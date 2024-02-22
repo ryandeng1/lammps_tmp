@@ -146,16 +146,17 @@ const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         // group 5
         {std::make_tuple(PBC, LEFT, MIDDLE), 37},
         {std::make_tuple(PBC, RIGHT, MIDDLE), 45},
-        {std::make_tuple(LEFT, PBC, MIDDLE), 53},
+        {std::make_tuple(PBC, MIDDLE, LEFT), 53},
 
         // group 6
-        {std::make_tuple(RIGHT, PBC, MIDDLE), 38},
-        {std::make_tuple(PBC, MIDDLE, LEFT), 46},
+        {std::make_tuple(RIGHT, MIDDLE, PBC), 38},
+        {std::make_tuple(LEFT, MIDDLE, PBC), 46},
         {std::make_tuple(PBC, MIDDLE, RIGHT), 54},
 
+
         // group 7
-        {std::make_tuple(RIGHT, MIDDLE, PBC), 39},
-        {std::make_tuple(LEFT, MIDDLE, PBC), 47},
+        {std::make_tuple(LEFT, PBC, MIDDLE), 39},
+        {std::make_tuple(RIGHT, PBC, MIDDLE), 47},
         {std::make_tuple(MIDDLE, LEFT, PBC), 55},
 
         /*

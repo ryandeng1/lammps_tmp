@@ -1540,6 +1540,20 @@ void Verlet::setup_stencil_md() {
         for (int i = 0; i < NUM_ZOIDS; i++) {
             std::cout << "zoid: " << i << " send_to next dt: " << lmp->send_to_neighbors_next_dt[i] << " recv from next_dt: " << lmp->recv_from_neighbors_next_dt[i] << std::endl;
         }
+
+        for (int i = 0; i < NUM_ZOIDS; i++) {
+            if (get_zoid_dep(i) == 3) {
+                std::vector<int> recv_vec;
+                for (int r : lmp->recv_from_neighbors[i]) {
+                    if (get_zoid_dep(r) == 2) {
+                        recv_vec.push_back(r % comm->nprocs);
+                    }
+                }
+
+                std::cout << "recv from for zoid: " << i << " is: " << lmp->recv_from_neighbors[i]
+                          << " recv procs: " << recv_vec << std::endl;
+            }
+        }
     }
 
     // create objects
@@ -3640,8 +3654,6 @@ void Verlet::setup_stencil_md() {
     }
 
     MPI_Barrier(world);
-    // assert(false);
-
 
     // compute force and then clear everything
     constexpr bool DO_WARMUP_PAIR_CALC = false;
