@@ -43,6 +43,7 @@ class Verlet : public Integrate {
   void setup_atom_arr_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, Domain*);
 
   void sort_ghost_atoms_by_prev_and_next_zoid(Atom*, queue_info&, int);
+  void cleanup_stencil_md();
 
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic

@@ -119,6 +119,46 @@ const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         // end dep 1
 
         // begin dep 2
+        {std::make_tuple(LEFT, MIDDLE, MIDDLE), 32},
+        {std::make_tuple(RIGHT, MIDDLE, MIDDLE), 40},
+        {std::make_tuple(MIDDLE, LEFT, MIDDLE), 48},
+
+        // group 1
+        {std::make_tuple(MIDDLE, MIDDLE, LEFT), 33},
+        {std::make_tuple(MIDDLE, MIDDLE, RIGHT), 41},
+        {std::make_tuple(MIDDLE, RIGHT, MIDDLE), 49},
+
+        // group 2
+        {std::make_tuple(LEFT, PBC, PBC), 34},
+        {std::make_tuple(RIGHT, PBC, PBC), 42},
+        {std::make_tuple(PBC, LEFT, PBC), 50},
+
+        // group 3
+        {std::make_tuple(PBC, PBC, RIGHT), 35},
+        {std::make_tuple(PBC, PBC, LEFT), 43},
+        {std::make_tuple(PBC, RIGHT, PBC), 51},
+
+        // group 4
+        {std::make_tuple(MIDDLE, PBC, LEFT), 36},
+        {std::make_tuple(MIDDLE, PBC, RIGHT), 44},
+        {std::make_tuple(MIDDLE, RIGHT, PBC), 52},
+
+        // group 5
+        {std::make_tuple(PBC, LEFT, MIDDLE), 37},
+        {std::make_tuple(PBC, RIGHT, MIDDLE), 45},
+        {std::make_tuple(LEFT, PBC, MIDDLE), 53},
+
+        // group 6
+        {std::make_tuple(RIGHT, PBC, MIDDLE), 38},
+        {std::make_tuple(PBC, MIDDLE, LEFT), 46},
+        {std::make_tuple(PBC, MIDDLE, RIGHT), 54},
+
+        // group 7
+        {std::make_tuple(RIGHT, MIDDLE, PBC), 39},
+        {std::make_tuple(LEFT, MIDDLE, PBC), 47},
+        {std::make_tuple(MIDDLE, LEFT, PBC), 55},
+
+        /*
         // group 0
         {std::make_tuple(LEFT, MIDDLE, MIDDLE), 32},
         {std::make_tuple(MIDDLE, MIDDLE, LEFT), 40},
@@ -158,22 +198,28 @@ const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(RIGHT, MIDDLE, PBC), 39},
         {std::make_tuple(RIGHT, PBC, MIDDLE), 47},
         {std::make_tuple(PBC, RIGHT, MIDDLE), 55},
+        */
 
         // end dep 2
 
 
         // begin dep 3
+        // good
         {std::make_tuple(MIDDLE, MIDDLE, MIDDLE), 56},
+
         {std::make_tuple(MIDDLE, MIDDLE, PBC), 57},
 
         {std::make_tuple(PBC, PBC, PBC), 58},
+
         {std::make_tuple(PBC, PBC, MIDDLE), 59},
 
         {std::make_tuple(MIDDLE, PBC, MIDDLE), 60},
+
         {std::make_tuple(PBC, MIDDLE, MIDDLE), 61},
 
-        {std::make_tuple(MIDDLE, PBC, PBC), 62},
-        {std::make_tuple(PBC, MIDDLE, PBC), 63},
+        {std::make_tuple(PBC, MIDDLE, PBC), 62},
+
+        {std::make_tuple(MIDDLE, PBC, PBC), 63},
 
         // end dep 3
 };

@@ -317,6 +317,19 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_,
       int i = ilist[ii];
       int jnum = numneigh[i];
 
+      /*
+      for (int neigh_idx = 0; neigh_idx < jnum; neigh_idx++) {
+          int neigh = firstneigh[i][neigh_idx];
+          double* my_pos = x[i];
+          double* neigh_pos = x[neigh];
+          if (fabs(my_pos[0] - (-1000)) <= 1 || fabs(neigh_pos[0] - (-1000)) <= 1) {
+              std::cout << MAGENTA << "zoid: " << zoid.num << " nlocal? " << nlocal << " atom idx: " << i << " my pos: " << my_pos[0] << " " << my_pos[1] << " " << my_pos[2]
+                << " neigh pos: " << neigh_pos[0] << " " << neigh_pos[1] << " " << neigh_pos[2] << " my tag: " << atom_->tag[i] << " neigh tag: " << atom_->tag[neigh] << RESET_COLOR << std::endl;
+              assert(false);
+          }
+      }
+      */
+
       auto begin_allocate = std::chrono::high_resolution_clock::now();
       // allocate temporary memory
       if (nijmax < jnum) {
@@ -373,11 +386,13 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_,
 
   if (vflag_fdotr && false) { virial_fdotr_compute(); }
 
+  /*
   std::cout << CYAN << "zoid: " << zoid.num << " time for neighbor list: " << neighbor_list_duration << " time for compute: " << compute_duration
     << " tally duration: " << tally_duration << " allocate duration: " << allocate_duration
     << " curr time: " << timeSinceEpochMillisec() << " time before compute: " << time_before_compute
     << " num eval: " << num_eval_atoms << " num eval pairs: " << num_eval_pairs
     << " debug: " << fastpodptr->debug[0] << " " << fastpodptr->debug[1] << RESET_COLOR << std::endl;
+  */
 
   if (num_pairs_evaled != NULL) {
       *num_pairs_evaled += num_eval_pairs;

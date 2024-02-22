@@ -339,9 +339,7 @@ void VerletKokkos::run(int n) {
 
     atomKK->sync(Device, ALL_MASK);
 
-    bool test_correctness = true;
-
-    int test_num_timesteps = 1 * (NUM_TIMESTEPS_IN_PARALLEL + 1);
+    int test_num_timesteps = 2 * (NUM_TIMESTEPS_IN_PARALLEL + 1);
     double* test_f[test_num_timesteps];
     double* test_x[test_num_timesteps];
 
@@ -381,7 +379,7 @@ void VerletKokkos::run(int n) {
 
         // initial time integration
         timer->stamp();
-        if (test_correctness) {
+        if (TEST_AGAINST_LAMMPS) {
             // memset(send_f, 0, sizeof(send_f));
             for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
               send_f[j] = 0;
@@ -688,6 +686,7 @@ void VerletKokkos::run(int n) {
     std::set<int> zoids_already_waiting_on;
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         int num_zoids = 0;
+        std::vector<int> dep_recv_zoids;
         for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
             int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
             if (recv_zoid_num % comm->nprocs != comm->me) {
@@ -700,12 +699,14 @@ void VerletKokkos::run(int n) {
                             && zoids_already_waiting_on.find(recv_zoid_num) == zoids_already_waiting_on.end()) {
                             dep_to_wait_idxs[dep].push_back(i);
                             zoids_already_waiting_on.insert(recv_zoid_num);
+                            dep_recv_zoids.push_back(recv_zoid_num);
                             break;
                         }
                     }
                 }
             }
         }
+        std::cout << YELLOW << "me: " << comm->me << " dep: " << dep << " recv zoid: " << dep_recv_zoids << RESET_COLOR << std::endl;
     }
 
     /*
@@ -739,7 +740,7 @@ void VerletKokkos::run(int n) {
     for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
         int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
         if (recv_zoid_num % comm->nprocs != comm->me) {
-            comm->receive_data_process_stencil_md(&receive_requests[i], recv_zoid_num);
+            comm->receive_data_process_stencil_md(&receive_requests[i], recv_zoid_num, false);
             /*
             receive_request_threads[i] =
                     std::move(std::thread([&](int recv_zoid_num_) {
@@ -823,7 +824,7 @@ void VerletKokkos::run(int n) {
                 auto time_after = timeSinceEpochMillisec();
 
                 auto begin_pack = std::chrono::high_resolution_clock::now();
-                comm->unpack_data_process_stencil_md(recv_zoid_num);
+                comm->unpack_data_process_stencil_md(recv_zoid_num, false);
                 auto end_pack = std::chrono::high_resolution_clock::now();
                 auto duration_pack = std::chrono::duration_cast<std::chrono::microseconds>(end_pack-begin_pack).count();
 
@@ -856,7 +857,7 @@ void VerletKokkos::run(int n) {
             Atom* start = atom_arr[0];
             for (int k = 0; k < start->nlocal + start->nghost; k++) {
                 for (int dim = 0; dim < 3; dim++) {
-                    start->f[k][dim] = f_arr[zoid_num][k * 3 + dim];
+                    // start->f[k][dim] = f_arr[zoid_num][k * 3 + dim];
                 }
             }
 
@@ -1183,7 +1184,7 @@ void VerletKokkos::run(int n) {
                 for (int proc = 0; proc < comm->nprocs; proc++) {
                     auto begin_send = std::chrono::high_resolution_clock::now();
                     auto before_send_long = timeSinceEpochMillisec();
-                    bool sent = comm_->send_data_to_process_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], &send_requests[zoid_num][vec_idx], proc);
+                    bool sent = comm_->send_data_to_process_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], &send_requests[zoid_num][vec_idx], proc, false);
                     auto end_send = std::chrono::high_resolution_clock::now();
                     auto duration_send = std::chrono::duration_cast<std::chrono::microseconds>(end_send-begin_send).count();
                     auto after_send_long = timeSinceEpochMillisec();
@@ -1200,11 +1201,16 @@ void VerletKokkos::run(int n) {
                         vec_idx++;
                         auto end_thread = std::chrono::high_resolution_clock::now();
                         auto duration_thread = std::chrono::duration_cast<std::chrono::microseconds>(end_thread - begin_thread).count();
+                        int64_t total_compute_duration = 0;
+                        for (auto& d : zoid_compute_duration_vec) {
+                            total_compute_duration += d;
+                        }
                         std::cout << MAGENTA << "zoid num: " << zoid_num << " send to proc: " << proc << " duration: " << duration_send
                                   << " before send ms: " << before_send_long << " after send long: " << after_send_long
                                   << " compute duration: " << zoid_compute_duration / 1000 << " ms "
                                   << " atoms eval'ed: " << zoid_atoms_evaled_vec << " pairs eval'ed vec: " << zoid_pairs_evaled_vec << " time before compute: " << time_before_first_compute
-                                  << " compute duration vec: " << zoid_compute_duration_vec << " time thread: " << duration_thread << RESET_COLOR << std::endl;
+                                  << " compute duration vec: " << zoid_compute_duration_vec << " total duration: " << total_compute_duration
+                                  << " time thread: " << duration_thread << RESET_COLOR << std::endl;
                     }
                 }
 
@@ -1226,7 +1232,6 @@ void VerletKokkos::run(int n) {
     std::cout << YELLOW << "lammps compute duration: " << lammps_compute_duration << " microseconds. " << " stencil md compute duration: " << stencil_md_compute_duration << " microseconds. " << RESET_COLOR << std::endl;
 
     MPI_Barrier(world);
-    assert(false);
 
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
@@ -1254,9 +1259,39 @@ void VerletKokkos::run(int n) {
 
     int num_zoids_recv_from_next_dt = lmp->recv_from_neighbors_procs_next_dt.size();
     std::thread receive_request_threads_next_dt[num_zoids_recv_from_next_dt];
+    std::vector<MPI_Request> receive_requests_next_dt(num_zoids_recv_from_next_dt, MPI_REQUEST_NULL);
 
     // map dependency levels to number of zoids to wait on
     std::map<int, std::vector<int>> dep_to_wait_idxs_next_dt;
+
+    std::set<int> zoids_already_waiting_on_next_dt;
+    for (int dep = 1; dep < NUM_DEPS; dep++) {
+        int num_zoids = 0;
+        std::vector<int> dep_recv_zoids;
+        for (int i = 0; i < lmp->recv_from_neighbors_procs_next_dt.size(); i++) {
+            int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[i];
+            if (recv_zoid_num % comm->nprocs != comm->me) {
+                for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+                    queue_info& zoid = lmp->queues_next_dt[dep][j];
+                    int zoid_num = zoid.num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        auto& recv_from = lmp->recv_from_neighbors_next_dt[zoid_num];
+                        if (std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) != recv_from.end()
+                            && zoids_already_waiting_on_next_dt.find(recv_zoid_num) == zoids_already_waiting_on_next_dt.end()) {
+                            dep_to_wait_idxs_next_dt[dep].push_back(i);
+                            zoids_already_waiting_on_next_dt.insert(recv_zoid_num);
+                            dep_recv_zoids.push_back(recv_zoid_num);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        std::cout << YELLOW << "NEXT DT me: " << comm->me << " dep: " << dep << " recv zoid: " << dep_recv_zoids << RESET_COLOR << std::endl;
+    }
+
+    /*
+
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int i = 0; i < lmp->recv_from_neighbors_procs_next_dt.size(); i++) {
             int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[i];
@@ -1271,6 +1306,7 @@ void VerletKokkos::run(int n) {
             std::cout << "me: " << comm->me << " next dt dep: " << dep << " wait on zoid: " << lmp->recv_from_neighbors_procs_next_dt[idx] << std::endl;
         }
     }
+    */
 
     int num_to_wait_on_next_dt = 0;
     for (auto& [k, v] : dep_to_wait_idxs_next_dt) {
@@ -1288,6 +1324,7 @@ void VerletKokkos::run(int n) {
 
     std::cout << CYAN << "ME: " << comm->me << " RECV ZOIDS: " << lmp->recv_from_neighbors_procs_next_dt << RESET_COLOR << std::endl;
 
+    /*
     int num_threads = 0;
     for (int i = 0; i < lmp->recv_from_neighbors_procs_next_dt.size(); i++) {
         int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[i];
@@ -1304,6 +1341,14 @@ void VerletKokkos::run(int n) {
     }
 
     assert(num_threads == num_to_wait_on_next_dt);
+    */
+
+    for (int i = 0; i < lmp->recv_from_neighbors_procs_next_dt.size(); i++) {
+        int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[i];
+        if (recv_zoid_num % comm->nprocs != comm->me) {
+            comm->receive_data_process_stencil_md_next_dt(&receive_requests_next_dt[i], recv_zoid_num);
+        }
+    }
 
     std::vector<MPI_Request> send_requests_next_dt[NUM_ZOIDS];
     std::vector<std::thread> send_request_threads_next_dt;
@@ -1330,11 +1375,19 @@ void VerletKokkos::run(int n) {
     // start compute
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep > 0) {
+            auto begin = std::chrono::high_resolution_clock::now();
             for (int idx : dep_to_wait_idxs_next_dt[dep]) {
                 int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[idx];
-                receive_request_threads_next_dt[idx].join();
+                // receive_request_threads_next_dt[idx].join();
+                MPI_Wait(&receive_requests_next_dt[idx], MPI_STATUS_IGNORE);
                 comm->unpack_data_process_stencil_md_next_dt(recv_zoid_num);
             }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
+            if (duration > 100000) {
+                std::cout << YELLOW << "NEXT DT process: " << comm->me << " dep: " << dep << " recv time: " << duration << RESET_COLOR << std::endl;
+            }
+            recv_comm_duration += duration;
         }
 
         for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
@@ -1459,50 +1512,60 @@ void VerletKokkos::run(int n) {
 
                 modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], zoid.can_eval_pos[t]);
 
-                for (int k = 0; k < atom_next_timestep->nlocal; k++) {
-                    int tag = atom_next_timestep->tag[k];
-                    double* x_ = atom_next_timestep->x[k];
-                    for (int dim = 0; dim < 3; dim++) {
-                        double val = x_[dim];
-                        if (val < 0) {
-                            val += domain->prd[dim];
-                        } else if (val >= domain->prd[dim]) {
-                            val -= domain->prd[dim];
-                        }
-
-                        int timestep_to_compare = NUM_TIMESTEPS_IN_PARALLEL + t + 1;
-                        double test_val = test_x[timestep_to_compare][tag * 3 + dim];
-                        if (test_val < 0) {
-                            test_val += domain->prd[dim];
-                        } else if (test_val >= domain->prd[dim]) {
-                            test_val -= domain->prd[dim];
-                        }
-
-                        if (fabs(val - test_val) > 1e-6) {
-                            std::cout << "-------POS DIFF NEXT--------" << std::endl;
-                            std::cout << "idx: " << k << " out of: " << atom_next_timestep->nlocal << std::endl;
-                            std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t + 1 << " tag: " << tag << " different. " << std::endl;
-                            std::cout << "What I have: " << x_[0] << " " << x_[1] << " " << x_[2] << std::endl;
-                            std::cout << "What does LAMMPS have? "
-                                << test_x[timestep_to_compare][tag * 3 + 0] << " " << test_x[timestep_to_compare][tag * 3 + 1] << " "
-                                << test_x[timestep_to_compare][tag * 3 + 2] << std::endl;
-                            std::cout << "Diff: " << fabs(val - test_val) << std::endl;
-                            std::cout << "me val: " << val << " test_val: " << test_val << std::endl;
-                            std::cout << "pos: " << atom_next_timestep->x[k][0] << " " << atom_next_timestep->x[k][1] << " " << atom_next_timestep->x[k][2] << std::endl;
-
-                            for (int tmp = 0; tmp < 3; tmp++) {
-                                std::cout << "lo: " << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * (t + 1) << std::endl;
-                                std::cout << "hi: " << zoid.zoid.cuts[tmp].upper + zoid.zoid.cuts[tmp].slope_upper * (t + 1) << std::endl;
+                if (TEST_AGAINST_LAMMPS) {
+                    for (int k = 0; k < atom_next_timestep->nlocal; k++) {
+                        int tag = atom_next_timestep->tag[k];
+                        double *x_ = atom_next_timestep->x[k];
+                        for (int dim = 0; dim < 3; dim++) {
+                            double val = x_[dim];
+                            if (val < 0) {
+                                val += domain->prd[dim];
+                            } else if (val >= domain->prd[dim]) {
+                                val -= domain->prd[dim];
                             }
-                            assert(false);
-                        } else {
-//                            if (x_[dim] < 0) {
-//                                x_[dim] = test_val - domain->prd[dim];
-//                            } else if (x_[dim] >= domain->prd[dim]) {
-//                                x_[dim] = test_val + domain->prd[dim];
-//                            } else {
-//                                x_[dim] = test_val;
-//                            }
+
+                            int timestep_to_compare = NUM_TIMESTEPS_IN_PARALLEL + t + 1;
+                            double test_val = test_x[timestep_to_compare][tag * 3 + dim];
+                            if (test_val < 0) {
+                                test_val += domain->prd[dim];
+                            } else if (test_val >= domain->prd[dim]) {
+                                test_val -= domain->prd[dim];
+                            }
+
+                            if (fabs(val - test_val) > 1e-6) {
+                                std::cout << "-------POS DIFF NEXT--------" << std::endl;
+                                std::cout << "idx: " << k << " out of: " << atom_next_timestep->nlocal << std::endl;
+                                std::cout << "Dim: " << dim << " Zoid: " << zoid_num << " timestep: " << t + 1
+                                          << " tag: " << tag << " different. " << std::endl;
+                                std::cout << "What I have: " << x_[0] << " " << x_[1] << " " << x_[2] << std::endl;
+                                std::cout << "What does LAMMPS have? "
+                                          << test_x[timestep_to_compare][tag * 3 + 0] << " "
+                                          << test_x[timestep_to_compare][tag * 3 + 1] << " "
+                                          << test_x[timestep_to_compare][tag * 3 + 2] << std::endl;
+                                std::cout << "Diff: " << fabs(val - test_val) << std::endl;
+                                std::cout << "me val: " << val << " test_val: " << test_val << std::endl;
+                                std::cout << "pos: " << atom_next_timestep->x[k][0] << " "
+                                          << atom_next_timestep->x[k][1] << " " << atom_next_timestep->x[k][2]
+                                          << std::endl;
+
+                                for (int tmp = 0; tmp < 3; tmp++) {
+                                    std::cout << "lo: "
+                                              << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * (t + 1)
+                                              << std::endl;
+                                    std::cout << "hi: "
+                                              << zoid.zoid.cuts[tmp].upper + zoid.zoid.cuts[tmp].slope_upper * (t + 1)
+                                              << std::endl;
+                                }
+                                assert(false);
+                            } else {
+                                //                            if (x_[dim] < 0) {
+                                //                                x_[dim] = test_val - domain->prd[dim];
+                                //                            } else if (x_[dim] >= domain->prd[dim]) {
+                                //                                x_[dim] = test_val + domain->prd[dim];
+                                //                            } else {
+                                //                                x_[dim] = test_val;
+                                //                            }
+                            }
                         }
                     }
                 }
