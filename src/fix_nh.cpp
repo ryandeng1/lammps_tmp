@@ -743,6 +743,117 @@ void FixNH::init()
   }
 }
 
+void FixNH::init_stencil_md(Atom* atom_, Modify* modify_) {
+    // recheck that dilate group has not been deleted
+
+    if (allremap == 0) {
+        int idilate = group->find(id_dilate);
+        if (idilate == -1)
+            error->all(FLERR,"Fix nvt/npt/nph dilate group ID does not exist");
+        dilate_group_bit = group->bitmask[idilate];
+    }
+
+    // ensure no conflict with fix deform
+
+    if (pstat_flag)
+        for (int i = 0; i < modify->nfix; i++)
+            if (strcmp(modify_->fix[i]->style,"deform") == 0) {
+                int *dimflag = (dynamic_cast<FixDeform *>(modify->fix[i]))->dimflag;
+                if ((p_flag[0] && dimflag[0]) || (p_flag[1] && dimflag[1]) ||
+                    (p_flag[2] && dimflag[2]) || (p_flag[3] && dimflag[3]) ||
+                    (p_flag[4] && dimflag[4]) || (p_flag[5] && dimflag[5]))
+                    error->all(FLERR,"Cannot use fix npt and fix deform on "
+                                     "same component of stress tensor");
+            }
+
+    // set temperature and pressure ptrs
+
+    int icompute = modify_->find_compute(id_temp);
+    if (icompute < 0)
+        error->all(FLERR,"Temperature ID for fix nvt/npt does not exist");
+    temperature = modify_->compute[icompute];
+
+    if (temperature->tempbias) which = BIAS;
+    else which = NOBIAS;
+
+    if (pstat_flag) {
+        icompute = modify_->find_compute(id_press);
+        if (icompute < 0)
+            error->all(FLERR,"Pressure ID for fix npt/nph does not exist");
+        pressure = modify_->compute[icompute];
+    }
+
+    // set timesteps and frequencies
+
+    dtv = update->dt;
+    dtf = 0.5 * update->dt * force->ftm2v;
+    dthalf = 0.5 * update->dt;
+    dt4 = 0.25 * update->dt;
+    dt8 = 0.125 * update->dt;
+    dto = dthalf;
+
+    p_freq_max = 0.0;
+    if (pstat_flag) {
+        p_freq_max = MAX(p_freq[0],p_freq[1]);
+        p_freq_max = MAX(p_freq_max,p_freq[2]);
+        if (pstyle == TRICLINIC) {
+            p_freq_max = MAX(p_freq_max,p_freq[3]);
+            p_freq_max = MAX(p_freq_max,p_freq[4]);
+            p_freq_max = MAX(p_freq_max,p_freq[5]);
+        }
+        pdrag_factor = 1.0 - (update->dt * p_freq_max * drag / nc_pchain);
+    }
+
+    if (tstat_flag)
+        tdrag_factor = 1.0 - (update->dt * t_freq * drag / nc_tchain);
+
+    // tally the number of dimensions that are barostatted
+    // set initial volume and reference cell, if not already done
+
+    if (pstat_flag) {
+        assert(false);
+        pdim = p_flag[0] + p_flag[1] + p_flag[2];
+        if (vol0 == 0.0) {
+            if (dimension == 3) vol0 = domain->xprd * domain->yprd * domain->zprd;
+            else vol0 = domain->xprd * domain->yprd;
+            h0_inv[0] = domain->h_inv[0];
+            h0_inv[1] = domain->h_inv[1];
+            h0_inv[2] = domain->h_inv[2];
+            h0_inv[3] = domain->h_inv[3];
+            h0_inv[4] = domain->h_inv[4];
+            h0_inv[5] = domain->h_inv[5];
+        }
+    }
+
+    boltz = force->boltz;
+    nktv2p = force->nktv2p;
+
+    if (force->kspace) kspace_flag = 1;
+    else kspace_flag = 0;
+
+    if (utils::strmatch(update->integrate_style,"^respa")) {
+        nlevels_respa = (dynamic_cast<Respa *>(update->integrate))->nlevels;
+        step_respa = (dynamic_cast<Respa *>(update->integrate))->step;
+        dto = 0.5*step_respa[0];
+    }
+
+    // detect if any rigid fixes exist so rigid bodies move when box is remapped
+    // rfix[] = indices to each fix rigid
+
+    delete [] rfix;
+    nrigid = 0;
+    rfix = nullptr;
+
+    for (int i = 0; i < modify->nfix; i++)
+        if (modify_->fix[i]->rigid_flag) nrigid++;
+    if (nrigid) {
+        rfix = new int[nrigid];
+        nrigid = 0;
+        for (int i = 0; i < modify->nfix; i++)
+            if (modify_->fix[i]->rigid_flag) rfix[nrigid++] = i;
+    }
+}
+
 /* ----------------------------------------------------------------------
    compute T,P before integrator starts
 ------------------------------------------------------------------------- */
@@ -888,6 +999,195 @@ void FixNH::initial_integrate(int /*vflag*/)
   }
 }
 
+void FixNH::initial_integrate_stencil_md(int /*vflag*/, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
+    this->atom_idx_mapping = atom_idx_mapping;
+
+    // update eta_press_dot
+
+    if (pstat_flag && mpchain) {
+        assert(false);
+        nhc_press_integrate();
+    }
+
+    // update eta_dot
+
+    if (tstat_flag) {
+        compute_temp_target();
+        nhc_temp_integrate_stencil_md(atom_, next);
+        // nhc_temp_integrate();
+    }
+
+    // need to recompute pressure to account for change in KE
+    // t_current is up-to-date, but compute_temperature is not
+    // compute appropriately coupled elements of mvv_current
+
+    if (pstat_flag) {
+        assert(false);
+        if (pstyle == ISO) {
+            temperature->compute_scalar();
+            pressure->compute_scalar();
+        } else {
+            temperature->compute_vector();
+            pressure->compute_vector();
+        }
+        couple();
+        pressure->addstep(update->ntimestep+1);
+    }
+
+    if (pstat_flag) {
+        assert(false);
+        compute_press_target();
+        nh_omega_dot();
+        nh_v_press();
+    }
+
+    nve_v_stencil_md(atom_, next, true, can_eval);
+
+    // remap simulation box by 1/2 step
+
+    if (pstat_flag) {
+        assert(false);
+        remap();
+    }
+
+    nve_x_stencil_md(atom_, next, can_eval);
+
+    // remap simulation box by 1/2 step
+    // redo KSpace coeffs since volume has changed
+
+    if (pstat_flag) {
+        assert(false);
+        remap();
+        if (kspace_flag) force->kspace->setup();
+    }
+
+    this->atom_idx_mapping = NULL;
+}
+
+void FixNH::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_initial_integrate, bool* can_eval) {
+    double**v = atom_->v;
+    double** next_v = next->v;
+
+    double** f;
+    double** eval_f_stencil_md;
+    // int* tag;
+    int* type;
+    double* rmass;
+    double* mass;
+    int* mask;
+    int total;
+
+    if (is_initial_integrate) {
+        f = atom_->f;
+        eval_f_stencil_md = atom_->eval_f_stencil_md;
+        total = atom_->nlocal;
+        tag = atom_->tag;
+        type = atom_->type;
+        rmass = atom_->rmass;
+        mass = atom_->mass;
+        mask = atom_->mask;
+    } else {
+        f = next->f;
+        eval_f_stencil_md = next->eval_f_stencil_md;
+        total = next->nlocal;
+        tag = next->tag;
+        type = next->type;
+        rmass = next->rmass;
+        mass = next->mass;
+        mask = next->mask;
+
+        // update next_v based on curr_v
+        for (int i = 0; i < atom_->nlocal; i++) {
+            int next_idx = atom_idx_mapping[i];
+            assert(next_idx != -1);
+
+            next_v[next_idx][0] = v[i][0];
+            next_v[next_idx][1] = v[i][1];
+            next_v[next_idx][2] = v[i][2];
+        }
+    }
+
+    atom_can_eval = can_eval;
+
+    // int nlocal = atom_->nlocal;
+    // int total = atom_->nlocal + atom_->nghost;
+    // if (igroup == atomKK_->firstgroup) nlocal = atomKK_->nfirst;
+
+    next_tag = next->tag;
+
+    copymode = 1;
+    if (is_initial_integrate) {
+        for (int i = 0; i < total; i++) {
+            if (mask[i] & groupbit) {
+                const double dtfm = dtf / atom->mass[type[i]];
+                int next_idx = atom_idx_mapping[i];
+                assert(next_idx != -1);
+                assert(tag[i] == next_tag[next_idx]);
+                double v0 = v[i][0];
+                double v1 = v[i][1];
+                double v2 = v[i][2];
+                double f0 = (f[i][0] + eval_f_stencil_md[i][0]);
+                double f1 = (f[i][1] + eval_f_stencil_md[i][1]);
+                double f2 = (f[i][2] + eval_f_stencil_md[i][2]);
+
+                v[i][0] = v0 + dtfm * (f[i][0] + eval_f_stencil_md[i][0]);
+                v[i][1] = v1 + dtfm * (f[i][1] + eval_f_stencil_md[i][1]);
+                v[i][2] = v2 + dtfm * (f[i][2] + eval_f_stencil_md[i][2]);
+            }
+        }
+    } else {
+        for (int i = 0; i < total; i++) {
+            if (mask[i] & groupbit) {
+                const double dtfm = dtf / atom->mass[type[i]];
+                double v0 = next_v[i][0];
+                double v1 = next_v[i][1];
+                double v2 = next_v[i][2];
+                double f0 = (f[i][0] + eval_f_stencil_md[i][0]);
+                double f1 = (f[i][1] + eval_f_stencil_md[i][1]);
+                double f2 = (f[i][2] + eval_f_stencil_md[i][2]);
+
+                next_v[i][0] += dtfm*(f[i][0] + eval_f_stencil_md[i][0]);
+                next_v[i][1] += dtfm*(f[i][1] + eval_f_stencil_md[i][1]);
+                next_v[i][2] += dtfm*(f[i][2] + eval_f_stencil_md[i][2]);
+            }
+        }
+    }
+
+    copymode = 0;
+}
+
+void FixNH::nve_x_stencil_md(Atom* atom_, Atom* next, bool* can_eval) {
+    double** x = atom_->x;
+    double** v = atom_->v;
+    int* mask = atom_->mask;
+    int nlocal = atom_->nlocal;
+    int total = atom_->nlocal + atom_->nghost;
+    if (igroup == atom_->firstgroup) {
+        nlocal = atom_->nfirst;
+    }
+
+    tag = atom_->tag;
+    next_tag = next->tag;
+
+    atom_can_eval = can_eval;
+
+    double** next_x = next->x;
+    double** next_v = next->v;
+
+    // x update by full step only for atoms in group
+    copymode = 1;
+    for (int i = 0; i < nlocal; i++) {
+        if (mask[i] & groupbit) {
+            int next_idx = atom_idx_mapping[i];
+            next_x[next_idx][0] = x[i][0] + dtv * v[i][0];
+            next_x[next_idx][1] = x[i][1] + dtv * v[i][1];
+            next_x[next_idx][2] = x[i][2] + dtv * v[i][2];
+            assert(tag[i] == next_tag[next_idx]);
+        }
+    }
+    copymode = 0;
+}
+
 /* ----------------------------------------------------------------------
    2nd half of Verlet update
 ------------------------------------------------------------------------- */
@@ -999,6 +1299,65 @@ void FixNH::initial_integrate_respa(int /*vflag*/, int ilevel, int /*iloop*/)
   }
 }
 
+void FixNH::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_,
+                                       int* atom_idx_mapping_, bool* can_eval) {
+    atom_idx_mapping = atom_idx_mapping_;
+    nve_v_stencil_md(atom_, next, false, can_eval);
+
+    // re-compute temp before nh_v_press()
+    // only needed for temperature computes with BIAS on reneighboring steps:
+    //   b/c some biases store per-atom values (e.g. temp/profile)
+    //   per-atom values are invalid if reneigh/comm occurred
+    //     since temp->compute() in initial_integrate()
+
+    if (which == BIAS && neighbor->ago == 0)
+        t_current = temperature->compute_scalar();
+
+    if (pstat_flag) {
+        assert(false);
+        nh_v_press();
+    }
+
+    // compute new T,P after velocities rescaled by nh_v_press()
+    // compute appropriately coupled elements of mvv_current
+
+    t_current = temperature->compute_scalar();
+    tdof = temperature->dof;
+
+    atom_can_eval = can_eval;
+
+    // need to recompute pressure to account for change in KE
+    // t_current is up-to-date, but compute_temperature is not
+    // compute appropriately coupled elements of mvv_current
+
+    if (pstat_flag) {
+        assert(false);
+        if (pstyle == ISO) pressure->compute_scalar();
+        else {
+            temperature->compute_vector();
+            pressure->compute_vector();
+        }
+        couple();
+        pressure->addstep(update->ntimestep+1);
+    }
+
+    if (pstat_flag) {
+        assert(false);
+        nh_omega_dot();
+    }
+
+    // update eta_dot
+    // update eta_press_dot
+
+    if (tstat_flag) {
+        nhc_temp_integrate_stencil_md(atom_, next);
+    }
+
+    if (pstat_flag && mpchain) {
+        assert(false);
+        nhc_press_integrate();
+    }
+}
 /* ---------------------------------------------------------------------- */
 
 void FixNH::pre_force_respa(int /*vflag*/, int ilevel, int /*iloop*/)
@@ -2101,6 +2460,10 @@ void FixNH::nve_v()
     for (int i = 0; i < nlocal; i++) {
       if (mask[i] & groupbit) {
         dtfm = dtf / mass[type[i]];
+        double v0 = v[i][0];
+        double v1 = v[i][1];
+        double v2 = v[i][2];
+
         v[i][0] += dtfm*f[i][0];
         v[i][1] += dtfm*f[i][1];
         v[i][2] += dtfm*f[i][2];
@@ -2136,8 +2499,9 @@ void FixNH::nve_x()
    perform half-step thermostat scaling of velocities
 -----------------------------------------------------------------------*/
 
-void FixNH::nh_v_temp()
-{
+// TODO: stencil md disabled this for whatever reason
+void FixNH::nh_v_temp() {
+  return;
   double **v = atom->v;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
@@ -2164,47 +2528,39 @@ void FixNH::nh_v_temp()
   }
 }
 
-/*
 void FixNH::nh_v_temp_stencil_md(Atom* atom_, Atom* next) {
+    /*
     double **v = atom_->v;
     double **next_v = next->v;
+
     int *mask = atom_->mask;
-    // int nlocal = atom_->nlocal;
-    int nlocal = std::min(atom_->nlocal, next->nlocal);
-    if (igroup == atom_->firstgroup) nlocal = atom_->nfirst;
+    int nlocal = atom_->nlocal;
+    if (igroup == atom->firstgroup) nlocal = atom_->nfirst;
+
+    tagint* tag = atom_->tag;
+    tagint* next_tag = next->tag;
 
     if (which == NOBIAS) {
         for (int i = 0; i < nlocal; i++) {
             if (mask[i] & groupbit) {
-
-//                v[i][0] *= factor_eta;
-//                v[i][1] *= factor_eta;
-//                v[i][2] *= factor_eta;
-
-                next_v[i][0] = v[i][0] * factor_eta;
-                next_v[i][1] = v[i][1] * factor_eta;
-                next_v[i][2] = v[i][2] * factor_eta;
+                v[i][0] *= factor_eta;
+                v[i][1] *= factor_eta;
+                v[i][2] *= factor_eta;
             }
         }
     } else if (which == BIAS) {
-        assert(false);
         for (int i = 0; i < nlocal; i++) {
             if (mask[i] & groupbit) {
                 temperature->remove_bias(i,v[i]);
-                next_v[i][0] = v[i][0] * factor_eta;
-                next_v[i][1] = v[i][1] * factor_eta;
-                next_v[i][2] = v[i][2] * factor_eta;
-
-//                v[i][0] *= factor_eta;
-//                v[i][1] *= factor_eta;
-//                v[i][2] *= factor_eta;
-
+                v[i][0] *= factor_eta;
+                v[i][1] *= factor_eta;
+                v[i][2] *= factor_eta;
                 temperature->restore_bias(i,v[i]);
             }
         }
     }
+    */
 }
-*/
 
 /* ----------------------------------------------------------------------
    compute sigma tensor

@@ -417,13 +417,14 @@ void Pair::reinit()
    request default neighbor list = half list
 ------------------------------------------------------------------------- */
 
-void Pair::init_style()
-{
+void Pair::init_style() {
   neighbor->add_request(this);
 }
 
+
 void Pair::init_style_stencil_md(Neighbor* neighbor_) {
     neighbor_->add_request(this);
+    assert(false);
 }
 
 /* ----------------------------------------------------------------------

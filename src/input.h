@@ -15,7 +15,6 @@
 #define LMP_INPUT_H
 
 #include "pointers.h"
-
 #include <map>
 
 namespace LAMMPS_NS {

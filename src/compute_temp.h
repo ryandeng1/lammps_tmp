@@ -15,6 +15,10 @@
 // clang-format off
 ComputeStyle(temp,ComputeTemp);
 // clang-format on
+#elifdef COMPUTE_CLASS_STENCIL_MD
+// clang-format off
+ComputeStyleStencilMD(temp,ComputeTemp);
+// clang-format on
 #else
 
 #ifndef LMP_COMPUTE_TEMP_H
@@ -27,10 +31,12 @@ namespace LAMMPS_NS {
 class ComputeTemp : public Compute {
  public:
   ComputeTemp(class LAMMPS *, int, char **);
+  ComputeTemp(class LAMMPS *, class Modify *, int, char **);
   ~ComputeTemp() override;
   void init() override {}
   void setup() override;
   double compute_scalar() override;
+  double compute_scalar_stencil_md(Atom*) override;
   void compute_vector() override;
 
  protected:

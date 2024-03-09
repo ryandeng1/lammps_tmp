@@ -137,6 +137,80 @@ void PairLJCutKokkos<DeviceType>::compute(int eflag_in, int vflag_in)
 }
 
 template<class DeviceType>
+void PairLJCutKokkos<DeviceType>::compute_stencil_md(int eflag_in, int vflag_in, Atom *atom_,
+                                                     bool* can_eval_center, queue_info &zoid, int* num_pairs_evaled) {
+    eflag = eflag_in;
+    vflag = vflag_in;
+
+    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
+
+    if (neighflag == FULL) no_virial_fdotr_compute = 1;
+
+    ev_init(eflag,vflag,0);
+
+    // reallocate per-atom arrays if necessary
+
+    if (eflag_atom) {
+        memoryKK->destroy_kokkos(k_eatom,eatom);
+        memoryKK->create_kokkos(k_eatom,eatom,maxeatom,"pair:eatom");
+        d_eatom = k_eatom.view<DeviceType>();
+    }
+    if (vflag_atom) {
+        memoryKK->destroy_kokkos(k_vatom,vatom);
+        memoryKK->create_kokkos(k_vatom,vatom,maxvatom,"pair:vatom");
+        d_vatom = k_vatom.view<DeviceType>();
+    }
+
+    atomKK_->sync(execution_space,datamask_read);
+    k_cutsq.template sync<DeviceType>();
+    k_params.template sync<DeviceType>();
+    if (eflag || vflag) atomKK_->modified(execution_space,datamask_modify);
+    else atomKK_->modified(execution_space,F_MASK);
+
+    x = atomKK_->k_x.view<DeviceType>();
+    c_x = atomKK_->k_x.view<DeviceType>();
+    f = atomKK_->k_f.view<DeviceType>();
+    type = atomKK_->k_type.view<DeviceType>();
+    nlocal = atom_->nlocal;
+    nall = atom_->nlocal + atom_->nghost;
+    newton_pair = force->newton_pair;
+    special_lj[0] = force->special_lj[0];
+    special_lj[1] = force->special_lj[1];
+    special_lj[2] = force->special_lj[2];
+    special_lj[3] = force->special_lj[3];
+
+    // loop over neighbors of my atoms
+
+    copymode = 1;
+
+    EV_FLOAT ev = pair_compute<PairLJCutKokkos<DeviceType>,void >(this,(NeighListKokkos<DeviceType>*)list);
+
+    if (eflag_global) eng_vdwl += ev.evdwl;
+    if (vflag_global) {
+        virial[0] += ev.v[0];
+        virial[1] += ev.v[1];
+        virial[2] += ev.v[2];
+        virial[3] += ev.v[3];
+        virial[4] += ev.v[4];
+        virial[5] += ev.v[5];
+    }
+
+    if (eflag_atom) {
+        k_eatom.template modify<DeviceType>();
+        k_eatom.template sync<LMPHostType>();
+    }
+
+    if (vflag_atom) {
+        k_vatom.template modify<DeviceType>();
+        k_vatom.template sync<LMPHostType>();
+    }
+
+    if (vflag_fdotr) pair_virial_fdotr_compute(this);
+
+    copymode = 0;
+}
+
+template<class DeviceType>
 template<bool STACKPARAMS, class Specialisation>
 KOKKOS_INLINE_FUNCTION
 F_FLOAT PairLJCutKokkos<DeviceType>::
@@ -224,6 +298,31 @@ void PairLJCutKokkos<DeviceType>::init_style()
                            !std::is_same<DeviceType,LMPDeviceType>::value);
   request->set_kokkos_device(std::is_same<DeviceType,LMPDeviceType>::value);
   if (neighflag == FULL) request->enable_full();
+}
+
+template<class DeviceType>
+void PairLJCutKokkos<DeviceType>::init_style_stencil_md(Neighbor* neighbor_) {
+    PairLJCut::init_style_stencil_md(neighbor_);
+
+    // error if rRESPA with inner levels
+
+    if (update->whichflag == 1 && utils::strmatch(update->integrate_style,"^respa")) {
+        int respa = 0;
+        if (((Respa *) update->integrate)->level_inner >= 0) respa = 1;
+        if (((Respa *) update->integrate)->level_middle >= 0) respa = 2;
+        if (respa)
+            error->all(FLERR,"Cannot use Kokkos pair style with rRESPA inner/middle");
+    }
+
+    // adjust neighbor list request for KOKKOS
+
+    neighflag = lmp->kokkos->neighflag;
+    // auto request = neighbor->find_request(this);
+    auto request = neighbor_->find_request(this);
+    request->set_kokkos_host(std::is_same<DeviceType,LMPHostType>::value &&
+                             !std::is_same<DeviceType,LMPDeviceType>::value);
+    request->set_kokkos_device(std::is_same<DeviceType,LMPDeviceType>::value);
+    if (neighflag == FULL) request->enable_full();
 }
 
 /* ----------------------------------------------------------------------

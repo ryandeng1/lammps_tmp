@@ -106,18 +106,18 @@ class AtomVec : protected Pointers {
   virtual int pack_exchange(int, double *);
   virtual int unpack_exchange(double *);
 
-  virtual int pack_exchange_stencil_md(int, double*, int*) { assert(false); }
-  virtual int unpack_exchange_stencil_md(double*, Atom*, Domain*, int) { assert(false); }
+  virtual int pack_exchange_stencil_md(int, double*, int*);
+  virtual int unpack_exchange_stencil_md(double*, Atom*, Domain*, int);
   virtual void grow_stencil_md(int, Atom*);
 
   // virtual int pack_border_stencil_md(int, int*, double*, int, int*, Atom*) {return 0;}
-  virtual int pack_border_stencil_md(int, int*, double*, int*, int**) {assert(false); }
-  virtual int unpack_border_stencil_md(int, int, double*, Atom*, int) {assert(false); }
+  virtual int pack_border_stencil_md(int, int*, double*, int*, int**);
+  virtual int unpack_border_stencil_md(int, int, double*, Atom*, int);
 
   virtual int pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs, int* num_send_force, int** force_idx_list, int** force_size_list,
                                               int num_pos_segments, int* segment_types, int* segment_idxs, int* segment_lengths,
                                               int* num_send_vel, int** vel_idx_list, int** vel_size_list,
-                                              int* local_list, double* buf, int* pbc_flags) { assert(false); }
+                                              int* local_list, double* buf, int* pbc_flags);
 
   // nrecv_force gets where pos is starting at in the buffer, and nrecv_pos gets where vel is starting at in the buffer
   virtual void unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos,
@@ -125,22 +125,19 @@ class AtomVec : protected Pointers {
                                                    int num_pos_segments_buf, int* segment_types_buf, int* segment_idxs_buf, int* segment_sizes_buf,
                                                    int vel_offset_buf, int num_recv_vel, int* recv_pos_local_list,
                                                    int num_recv_ghost, int* recv_ghost_idx_list, int* recv_ghost_size_list,
-                                                   double* buf, int* pbc_flags) { assert(false); }
+                                                   double* buf, int* pbc_flags);
 
   virtual int pack_data_stencil_md(int num_send_force, int num_send_pos,
                                    int* force_idx_list, int* force_size_list,
                                    int* pos_idx_list, int* pos_size_list,
                                    int* local_to_ghost_list,
                                    int num_segments, int* segment_types, int* segment_idxs, int* segment_sizes,
-                                   double* buf, int* pbc_flags, bool debug=false) { assert(false); }
+                                   double* buf, int* pbc_flags, bool debug=false);
 
   virtual void unpack_data_stencil_md(int num_recv_force, int num_recv_pos,
                                       int* recv_force_list, int* recv_pos_list,
                                       int num_recv_ghost, int* recv_ghost_idx_list, int* recv_ghost_size_list,
-                                      double* buf) { assert(false); }
-
-  int pack_shared_ghost_stencil_md(Atom*, std::set<int>&, double* buf, bool debug=false);
-  void unpack_shared_ghost_stencil_md(Atom*, int, double* buf);
+                                      double* buf);
 
   virtual int pack_exchange_bonus(int, double *) { return 0; }
   virtual int unpack_exchange_bonus(int, double *) { return 0; }
@@ -211,9 +208,8 @@ class AtomVec : protected Pointers {
 
   int get_nmax() {return nmax;}
   int get_nexchange() {return nexchange;}
-  virtual void grow_pointers_stencil_md(Atom*) {};
+  virtual void grow_pointers_stencil_md(Atom*) {}
   virtual void add_local_atom_stencil_md(Atom*, Domain*, double *, double*, tagint, int, int, imageint);
-  // virtual void add_ghost_atom_stencil_md(Atom*, Domain*, double *, double*, tagint, int, int, imageint);
 
 protected:
   int nmax;             // local copy of atom->nmax

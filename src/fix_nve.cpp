@@ -35,6 +35,9 @@ FixNVE::FixNVE(LAMMPS *lmp, int narg, char **arg) :
   time_integrate = 1;
 }
 
+FixNVE::FixNVE(LAMMPS *lmp, Modify* modify_, int narg, char **arg) :
+        FixNVE(lmp, narg, arg) {}
+
 /* ---------------------------------------------------------------------- */
 
 int FixNVE::setmask()
@@ -58,6 +61,10 @@ void FixNVE::init()
     step_respa = (dynamic_cast<Respa *>(update->integrate))->step;
 }
 
+void FixNVE::init_stencil_md(Atom* atom_, Modify* modify_) {
+    init();
+}
+
 /* ----------------------------------------------------------------------
    allow for both per-type and per-atom mass
 ------------------------------------------------------------------------- */
@@ -76,9 +83,13 @@ void FixNVE::initial_integrate(int /*vflag*/)
   int *type = atom->type;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
-  if (igroup == atom->firstgroup) nlocal = atom->nfirst;
+  if (igroup == atom->firstgroup) {
+      assert(false);
+      nlocal = atom->nfirst;
+  }
 
   if (rmass) {
+    assert(false);
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit) {
         dtfm = dtf / rmass[i];
@@ -94,14 +105,74 @@ void FixNVE::initial_integrate(int /*vflag*/)
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit) {
         dtfm = dtf / mass[type[i]];
+        double x0 = x[i][0];
+        double x1 = x[i][1];
+        double x2 = x[i][2];
+
         v[i][0] += dtfm * f[i][0];
         v[i][1] += dtfm * f[i][1];
         v[i][2] += dtfm * f[i][2];
         x[i][0] += dtv * v[i][0];
         x[i][1] += dtv * v[i][1];
         x[i][2] += dtv * v[i][2];
+
+        // assert(fabs(x0 - x[i][0]) <= ADDITIONAL_CUTOFF);
+        // assert(fabs(x1 - x[i][1]) <= ADDITIONAL_CUTOFF);
+        // assert(fabs(x2 - x[i][2]) <= ADDITIONAL_CUTOFF);
       }
   }
+}
+
+void FixNVE::initial_integrate_stencil_md(int /*vflag*/, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
+    double dtfm;
+
+    // update v and x of atoms in group
+
+    double **x = atom_->x;
+    double **v = atom_->v;
+    double **f = atom_->f;
+    double **eval_f = atom_->eval_f_stencil_md;
+    double **next_x = next->x;
+
+    double *rmass = atom->rmass;
+    double *mass = atom->mass;
+    int *type = atom_->type;
+    int *mask = atom_->mask;
+    int nlocal = atom_->nlocal;
+    if (igroup == atom_->firstgroup) {
+        nlocal = atom_->nfirst;
+    }
+
+    if (rmass) {
+        assert(false);
+        for (int i = 0; i < nlocal; i++)
+            if (mask[i] & groupbit) {
+                dtfm = dtf / rmass[i];
+                v[i][0] += dtfm * f[i][0];
+                v[i][1] += dtfm * f[i][1];
+                v[i][2] += dtfm * f[i][2];
+                x[i][0] += dtv * v[i][0];
+                x[i][1] += dtv * v[i][1];
+                x[i][2] += dtv * v[i][2];
+            }
+
+    } else {
+        for (int i = 0; i < nlocal; i++) {
+            if (mask[i] & groupbit) {
+                dtfm = dtf / mass[type[i]];
+
+                v[i][0] += dtfm * (f[i][0] + eval_f[i][0]);
+                v[i][1] += dtfm * (f[i][1] + eval_f[i][1]);
+                v[i][2] += dtfm * (f[i][2] + eval_f[i][2]);
+
+                int next_idx = atom_idx_mapping[i];
+                next_x[next_idx][0] = x[i][0] + dtv * v[i][0];
+                next_x[next_idx][1] = x[i][1] + dtv * v[i][1];
+                next_x[next_idx][2] = x[i][2] + dtv * v[i][2];
+                assert(atom_->tag[i] == next->tag[next_idx]);
+            }
+        }
+    }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -119,9 +190,13 @@ void FixNVE::final_integrate()
   int *type = atom->type;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
-  if (igroup == atom->firstgroup) nlocal = atom->nfirst;
+  if (igroup == atom->firstgroup) {
+      assert(false);
+      nlocal = atom->nfirst;
+  }
 
   if (rmass) {
+    assert(false);
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit) {
         dtfm = dtf / rmass[i];
@@ -139,6 +214,58 @@ void FixNVE::final_integrate()
         v[i][2] += dtfm * f[i][2];
       }
   }
+}
+
+void FixNVE::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping, bool* can_eval) {
+    double dtfm;
+
+    // update v of atoms in group
+
+    double **v = atom_->v;
+    double **f = next->f;
+    double **eval_f = next->eval_f_stencil_md;
+    double **next_v = next->v;
+
+    double *rmass = atom->rmass;
+    double *mass = atom->mass;
+    int *type = next->type;
+    int *mask = next->mask;
+
+    int nlocal = atom_->nlocal;
+    int next_nlocal = next->nlocal;
+    if (igroup == atom_->firstgroup) {
+        assert(false);
+        nlocal = atom_->nfirst;
+    }
+
+    if (rmass) {
+        assert(false);
+        for (int i = 0; i < nlocal; i++)
+            if (mask[i] & groupbit) {
+                dtfm = dtf / rmass[i];
+                v[i][0] += dtfm * f[i][0];
+                v[i][1] += dtfm * f[i][1];
+                v[i][2] += dtfm * f[i][2];
+            }
+
+    } else {
+        for (int i = 0; i < nlocal; i++) {
+            int next_idx = atom_idx_mapping[i];
+            assert(next_idx != -1);
+            next_v[next_idx][0] = v[i][0];
+            next_v[next_idx][1] = v[i][1];
+            next_v[next_idx][2] = v[i][2];
+        }
+
+        for (int i = 0; i < next_nlocal; i++) {
+            if (mask[i] & groupbit) {
+                dtfm = dtf / mass[type[i]];
+                next_v[i][0] += dtfm * (f[i][0] + eval_f[i][0]);
+                next_v[i][1] += dtfm * (f[i][1] + eval_f[i][1]);
+                next_v[i][2] += dtfm * (f[i][2] + eval_f[i][2]);
+            }
+        }
+    }
 }
 
 /* ---------------------------------------------------------------------- */

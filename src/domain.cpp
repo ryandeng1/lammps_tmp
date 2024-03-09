@@ -2303,3 +2303,98 @@ void Domain::lamda_box_corners(double *lo, double *hi)
   corners[7][0] = hi[0]; corners[7][1] = hi[1]; corners[7][2] = hi[2];
   lamda2x(corners[7],corners[7]);
 }
+
+void Domain::remap_all_stencil_md(Atom* atom_) {
+    double** x = atom_->x;
+    imageint* image = atom_->image;
+
+    double lo[3],hi[3],period[3];
+
+    if (triclinic == 0) {
+        for (int i=0; i<3; i++) {
+            lo[i] = boxlo[i];
+            hi[i] = boxhi[i];
+            period[i] = prd[i];
+        }
+    } else {
+        assert(false);
+        /*
+        for (int i=0; i<3; i++) {
+            lo[i] = boxlo_lamda[i];
+            hi[i] = boxhi_lamda[i];
+            period[i] = prd_lamda[i];
+        }
+        x2lamda(nlocal);
+        */
+    }
+
+    copymode = 1;
+    int num_to_remap = atom_->nlocal + atom_->nghost;
+    imageint idim,otherdims;
+
+    for (int i = 0; i < num_to_remap; i++) {
+        if (xperiodic) {
+            while (x[i][0] < lo[0]) {
+                x[i][0] += period[0];
+                idim = image[i] & IMGMASK;
+                otherdims = image[i] ^ idim;
+                idim--;
+                idim &= IMGMASK;
+                image[i] = otherdims | idim;
+            }
+            while (x[i][0] >= hi[0]) {
+                x[i][0] -= period[0];
+                idim = image[i] & IMGMASK;
+                otherdims = image[i] ^ idim;
+                idim++;
+                idim &= IMGMASK;
+                image[i] = otherdims | idim;
+            }
+            x[i][0] = MAX(x[i][0], lo[0]);
+        }
+
+        if (yperiodic) {
+            while (x[i][1] < lo[1]) {
+                x[i][1] += period[1];
+                idim = (image[i] >> IMGBITS) & IMGMASK;
+                otherdims = image[i] ^ (idim << IMGBITS);
+                idim--;
+                idim &= IMGMASK;
+                image[i] = otherdims | (idim << IMGBITS);
+            }
+            while (x[i][1] >= hi[1]) {
+                x[i][1] -= period[1];
+                idim = (image[i] >> IMGBITS) & IMGMASK;
+                otherdims = image[i] ^ (idim << IMGBITS);
+                idim++;
+                idim &= IMGMASK;
+                image[i] = otherdims | (idim << IMGBITS);
+            }
+            x[i][1] = MAX(x[i][1],lo[1]);
+        }
+
+        if (zperiodic) {
+            while (x[i][2] < lo[2]) {
+                x[i][2] += period[2];
+                idim = image[i] >> IMG2BITS;
+                otherdims = image[i] ^ (idim << IMG2BITS);
+                idim--;
+                idim &= IMGMASK;
+                image[i] = otherdims | (idim << IMG2BITS);
+            }
+            while (x[i][2] >= hi[2]) {
+                x[i][2] -= period[2];
+                idim = image[i] >> IMG2BITS;
+                otherdims = image[i] ^ (idim << IMG2BITS);
+                idim++;
+                idim &= IMGMASK;
+                image[i] = otherdims | (idim << IMG2BITS);
+            }
+            x[i][2] = MAX(x[i][2],lo[2]);
+        }
+    }
+
+    copymode = 0;
+
+    // if (triclinic) lamda2x(nlocal);
+}

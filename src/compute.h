@@ -157,7 +157,8 @@ class Compute : protected Pointers {
   {
   }
 
-  virtual double compute_scalar_stencil_md(Atom*) { return 0.0; }
+  virtual double compute_scalar_stencil_md(Atom*) { assert(false); return 0.0; }
+  virtual void compute_peratom_stencil_md(Atom*, Force*) { assert(false); }
 
  protected:
   int instance_me;    // which Compute class instantiation I am

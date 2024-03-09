@@ -53,6 +53,8 @@
 #include <iostream>
 #include <mpi.h>
 
+#include "stencil_md.h"
+
 using namespace LAMMPS_NS;
 
 #define DELTALINE 256
@@ -1332,7 +1334,7 @@ void Input::atom_style()
   if (narg < 1) error->all(FLERR,"Illegal atom_style command");
   if (domain->box_exist)
     error->all(FLERR,"Atom_style command after simulation box is defined");
-  std::cout << "Atom style: " << arg[0] << " " << narg - 1 << std::endl;
+  std::cout << "Atom style: " << arg[0] << std::endl;
   atom->create_avec(arg[0],narg-1,&arg[1],1);
 
   atom_style_args = (char **) memory->smalloc(narg*sizeof(char *),"input:atom_style_args");
@@ -1431,7 +1433,12 @@ void Input::comm_style()
 
 void Input::compute()
 {
+  std::cout << GREEN << "start lammps add compute" << std::endl;
   modify->add_compute(narg,arg);
+  std::cout << GREEN << "end lammps add compute" << std::endl;
+
+  stencilMD->MODIFY_ADD_COMPUTE_STENCIL_MD(narg, arg);
+  std::cout << GREEN << "end stencil md add compute" << std::endl;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1511,17 +1518,18 @@ void Input::dump_modify()
 
 void Input::fix()
 {
+  std::cout << "LAMMPS ADD FIX" << std::endl;
   modify->add_fix(narg,arg);
   // do the same for stencil md
-  for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
-      lmp->modify_stencil_md[i]->add_fix(narg, arg, 1, true);
-  }
+
+  stencilMD->MODIFY_ADD_FIX_STENCIL_MD(narg, arg);
 }
 
 /* ---------------------------------------------------------------------- */
 
 void Input::fix_modify()
 {
+  std::cout << "LAMMPS MODIFY FIX" << std::endl;
   modify->modify_fix(narg,arg);
 }
 
@@ -1709,12 +1717,8 @@ void Input::pair_coeff()
     error->all(FLERR,"Incorrect args for pair coefficients");
   force->pair->coeff(narg,arg);
 
-  // TODO: stencil_md here
-  for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
-      for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-          lmp->force_stencil_md[i][j]->pair->coeff(narg, arg);
-      }
-  }
+  // stencil_md here
+  stencilMD->FORCE_PAIR_COEFF(narg, arg);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1725,12 +1729,8 @@ void Input::pair_modify()
     error->all(FLERR,"Pair_modify command before pair_style is defined");
   force->pair->modify_params(narg,arg);
 
-  // TODO: stencil_md here
-  for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
-    for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-        lmp->force_stencil_md[i][j]->pair->modify_params(narg, arg);
-      }
-  }
+  // stencil_md here
+  stencilMD->FORCE_MODIFY_PARAMS(narg, arg);
 }
 
 /* ----------------------------------------------------------------------
@@ -1756,36 +1756,21 @@ void Input::pair_style()
         if (style + "/" + lmp->suffix2 == force->pair_style) match = 1;
     }
     if (match) {
+      assert(false);
       force->pair->settings(narg-1,&arg[1]);
 
-      for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
-          for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-              lmp->force_stencil_md[i][j]->pair->settings(narg - 1, &arg[1]);
-          }
-          // lmp->force_stencil_md[i]->pair->settings(narg - 1, &arg[1]);
-      }
+      // stencil_md
+      stencilMD->FORCE_PAIR_SETTINGS(narg - 1, &arg[1]);
       return;
     }
   }
 
   force->create_pair(arg[0],1);
-  if (force->pair) force->pair->settings(narg-1,&arg[1]);
+  if (force->pair) force->pair->settings(narg-1, &arg[1]);
 
-  // TODO: stencil_md
-  for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
-    for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-        lmp->force_stencil_md[i][j]->create_pair(arg[0], 1);
-        if (lmp->force_stencil_md[i][j]->pair) {
-            lmp->force_stencil_md[i][j]->pair->settings(narg - 1, &arg[1]);
-        }
-    }
-    /*
-    lmp->force_stencil_md[i]->create_pair(arg[0], 1);
-    if (lmp->force_stencil_md[i]->pair) {
-        lmp->force_stencil_md[i]->pair->settings(narg - 1, &arg[1]);
-    }
-    */
-  }
+  // stencil_md
+  stencilMD->FORCE_CREATE_PAIR(arg[0], 1);
+  stencilMD->FORCE_PAIR_SETTINGS(narg - 1, &arg[1]);
 }
 
 /* ---------------------------------------------------------------------- */

@@ -82,11 +82,6 @@ template<class DeviceType>
 void NBinKokkos<DeviceType>::bin_atoms()
 {
   std::cout << "bin atoms kokkos" << std::endl;
-  /*
-  std::cout << "REGULAR MD some numbers: " << " num my bins x: " << mbinx << " num my bins y: " << mbiny << " num my bins z: " << mbinz << " "
-    << " my bins x lo: " << mbinxlo << " my bins y lo: " << mbinylo << " my bins z lo: " << mbinzlo << std::endl;
-  std::cout << "nbins x: " << nbinx << " nbins y: " << nbiny << " nbins z: " << nbinz << std::endl;
-  */
 
   last_bin = update->ntimestep;
 
@@ -131,7 +126,6 @@ void NBinKokkos<DeviceType>::bin_atoms()
 
 template<class DeviceType>
 void NBinKokkos<DeviceType>::bin_atoms_stencil_md(Atom* atom_) {
-    assert(false);
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
 
     last_bin = update->ntimestep;

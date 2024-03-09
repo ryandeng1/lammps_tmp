@@ -1274,10 +1274,8 @@ int Neighbor::init_pair()
 
   for (i = 0; i < nrequest; i++) {
     if ((requests[i]->kokkos_host || requests[i]->kokkos_device)) {
-        // std::cout << "KOKKOS??? " << std::endl;
         create_kokkos_list(i);
     } else {
-        // std::cout << "NOT KOKKOS???? " << std::endl;
         lists[i] = new NeighList(lmp);
     }
     lists[i]->index = i;
@@ -1292,7 +1290,6 @@ int Neighbor::init_pair()
     }
 
     if (requests[i]->pair && i < nrequest_original) {
-      // std::cout << "init list pair" << std::endl;
       auto pair = (Pair *) requests[i]->requestor;
       pair->init_list(requests[i]->id,lists[i]);
     } else if (requests[i]->fix && i < nrequest_original) {
@@ -2589,7 +2586,8 @@ void Neighbor::setup_bins_stencil_md(Atom* atom_, Domain* domain_, Comm* comm_) 
 
     for (int i = 0; i < nstencil_perpetual; i++) {
         neigh_stencil[slist[i]]->create_setup();
-        neigh_stencil[slist[i]]->create();
+        // neigh_stencil[slist[i]]->create();
+        neigh_stencil[slist[i]]->create_stencil_md();
     }
 
     last_setup_bins = update->ntimestep;
@@ -2769,8 +2767,7 @@ void Neighbor::build(int topoflag)
   if ((atom->molecular != Atom::ATOMIC) && topoflag) build_topology();
 }
 
-void Neighbor::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_) {
-    assert(false);
+void Neighbor::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_, queue_info& zoid) {
     int i,m;
 
     ago = 0;
@@ -2838,7 +2835,8 @@ void Neighbor::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm
         }
         for (i = 0; i < nbin; i++) {
             neigh_bin[i]->bin_atoms_setup(nall);
-            neigh_bin[i]->bin_atoms();
+            // neigh_bin[i]->bin_atoms();
+            neigh_bin[i]->bin_atoms_stencil_md(atom_);
         }
     }
 
@@ -2847,11 +2845,12 @@ void Neighbor::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm
 
     for (i = 0; i < npair_perpetual; i++) {
         m = plist[i];
-        if (!lists[m]->copy || lists[m]->kk2cpu)
-            lists[m]->grow(nlocal,nall);
+        if (!lists[m]->copy || lists[m]->kk2cpu) {
+            lists[m]->grow_stencil_md(nlocal, nall, atom_);
+        }
         neigh_pair[m]->build_setup();
         // neigh_pair[m]->build(lists[m]);
-        neigh_pair[m]->build_stencil_md(lists[m], atom_);
+        neigh_pair[m]->build_stencil_md(lists[m], atom_, domain_, zoid);
     }
 
     // build topology lists for bonds/angles/etc

@@ -58,6 +58,9 @@ class NStencil : protected Pointers {
 
   inline int get_maxstencil() { return maxstencil; }
   void copy_neighbor_info_stencil_md(Neighbor*);
+  virtual void create_stencil_md() {
+      assert(false);
+  }
 
  protected:
   // data from Neighbor class

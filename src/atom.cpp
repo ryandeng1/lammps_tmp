@@ -33,7 +33,7 @@
 #include "update.h"
 #include "variable.h"
 
-#include "stencil_md.h"
+#include "stencil_md_utils.h"
 
 #include "library.h"
 

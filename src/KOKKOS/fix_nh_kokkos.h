@@ -83,7 +83,7 @@ class FixNHKokkos : public FixNH {
 
   void setup_stencil_md(double*, Atom*) override;
 
-  void init_stencil_md(Atom*) override;
+  void init_stencil_md(Atom*, Modify*) override;
   void nve_v_stencil_md(Atom*, Atom*, bool, bool*) override;
   void nve_x_stencil_md(Atom*, Atom*, bool*) override;
   void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;

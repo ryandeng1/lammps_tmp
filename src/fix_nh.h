@@ -42,10 +42,13 @@ class FixNH : public Fix {
   void *extract(const char *, int &) override;
   double memory_usage() override;
 
-  virtual void nve_v_stencil_md(Atom*, Atom*, bool, bool*) { assert(false); }
-  virtual void nve_x_stencil_md(Atom*, Atom*, bool*) { assert(false); }
+  virtual void nve_v_stencil_md(Atom*, Atom*, bool, bool*);
+  virtual void nve_x_stencil_md(Atom*, Atom*, bool*);
   virtual void nhc_temp_integrate_stencil_md(Atom*, Atom*);
-  virtual void nh_v_temp_stencil_md(Atom*, Atom*) { assert(false); }
+  virtual void nh_v_temp_stencil_md(Atom*, Atom*);
+  void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;
+  void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
+  void init_stencil_md(Atom*, Modify*) override;
 
  protected:
   int dimension, which;
@@ -130,6 +133,14 @@ class FixNH : public Fix {
   int pre_exchange_flag;    // set if pre_exchange needed for box flips
 
   double fixedpoint[3];    // location of dilation fixed-point
+
+  // start stencil md
+  int* atom_idx_mapping;
+  tagint *tag;
+  tagint *next_tag;
+  bool* atom_can_eval;
+
+  // end stencil md
 
   void couple();
   virtual void remap();

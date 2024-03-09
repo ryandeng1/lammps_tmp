@@ -265,7 +265,6 @@ void NStencil::create_setup()
           memory->create(stencilxyz,maxstencil,3,"neighstencil:stencilxyz");
         }
       }
-
     } else {
       int i;
       int n = atom->ntypes;

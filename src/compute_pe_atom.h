@@ -15,7 +15,12 @@
 // clang-format off
 ComputeStyle(pe/atom,ComputePEAtom);
 // clang-format on
+#elifdef COMPUTE_CLASS_STENCIL_MD
+// clang-format off
+ComputeStyleStencilMD(pe/atom,ComputePEAtom);
+// clang-format on
 #else
+
 
 #ifndef LMP_COMPUTE_PE_ATOM_H
 #define LMP_COMPUTE_PE_ATOM_H
@@ -27,12 +32,15 @@ namespace LAMMPS_NS {
 class ComputePEAtom : public Compute {
  public:
   ComputePEAtom(class LAMMPS *, int, char **);
+  ComputePEAtom(class LAMMPS *, class Modify*, int, char **);
   ~ComputePEAtom() override;
   void init() override {}
   void compute_peratom() override;
   int pack_reverse_comm(int, int, double *) override;
   void unpack_reverse_comm(int, int *, double *) override;
   double memory_usage() override;
+
+  void compute_peratom_stencil_md(Atom*, Force*) override;
 
  private:
   int pairflag, bondflag, angleflag, dihedralflag, improperflag;

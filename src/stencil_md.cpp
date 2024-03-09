@@ -1,431 +1,833 @@
 //
-// Created by Ryan Deng on 5/7/23.
+// Created by Ryan Deng on 3/7/24.
 //
-
-#include <mpi.h>
-#include <cmath>
-#include <cstring>
-#include <deque>
-#include <iostream>
-#include <vector>
 
 #include "stencil_md.h"
 
-int get_zoid_dep(int zoid_num)
-{
-  int my_zoid_dep = -1;
-  if (zoid_num < 8) {
-    my_zoid_dep = 0;
-  } else if (zoid_num < 32) {
-    my_zoid_dep = 1;
-  } else if (zoid_num < 56) {
-    my_zoid_dep = 2;
-  } else {
-    assert(zoid_num < 64);
-    my_zoid_dep = 3;
-  }
-  assert(my_zoid_dep != -1);
-  return my_zoid_dep;
+using namespace LAMMPS_NS;
+
+void StencilMD::MODIFY_ADD_FIX_STENCIL_MD(int narg, char **arg) {
+    for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
+        lmp->modify_stencil_md[i]->add_fix(narg, arg, 1, true);
+    }
 }
 
-int get_zoid_dep_next_dt(int zoid_num)
-{
-    int my_zoid_dep = -1;
-    if (zoid_num < 8) {
-        my_zoid_dep = 3;
-    } else if (zoid_num < 32) {
-        my_zoid_dep = 2;
-    } else if (zoid_num < 56) {
-        my_zoid_dep = 1;
-    } else {
-        assert(zoid_num < 64);
-        my_zoid_dep = 0;
+void StencilMD::MODIFY_ADD_COMPUTE_STENCIL_MD(int narg, char **arg) {
+    std::cout << "modify add compute stencil md" << std::endl;
+    for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
+        lmp->modify_stencil_md[i]->add_compute(narg, arg, 1, true);
     }
-    assert(my_zoid_dep != -1);
-    return my_zoid_dep;
 }
 
-// use this if guarantee don't want shared ghosts
-/*
-int get_zoid_dep(int zoid_num) {
-  int my_zoid_dep = -1;
-  if (zoid_num < 8) {
-    my_zoid_dep = 0;
-  } else if (zoid_num < 16) {
-    my_zoid_dep = 1;
-  } else if (zoid_num < 24) {
-    my_zoid_dep = 2;
-  } else if (zoid_num < 32) {
-    my_zoid_dep = 3;
-  } else if (zoid_num < 40) {
-    my_zoid_dep = 4;
-  } else if (zoid_num < 48) {
-    my_zoid_dep = 5;
-  } else if (zoid_num < 56) {
-    my_zoid_dep = 6;
-  } else if (zoid_num < 64) {
-    my_zoid_dep = 7;
-  }
-
-  assert(my_zoid_dep != -1);
-  return my_zoid_dep;
-}
-*/
-
-bool is_close(int *pos1, int *pos2)
-{
-  for (int i = 0; i < 3; i++) {
-    if (pos1[i] == pos2[i]) { continue; }
-
-    if (pos1[i] == LEFT || pos1[i] == RIGHT) {
-      if (pos2[i] == MIDDLE || pos2[i] == PBC) { continue; }
-    }
-
-    if (pos1[i] == MIDDLE || pos1[i] == PBC) {
-      if (pos2[i] == LEFT || pos2[i] == RIGHT) { continue; }
-    }
-
-    return false;
-  }
-  return true;
-}
-
-bool is_close_test(int *pos1, int *pos2) {
-    for (int i = 0; i < 3; i++) {
-        if (pos1[i] == pos2[i]) { continue; }
-
-        if (pos1[i] == LEFT || pos1[i] == RIGHT) {
-            if (pos2[i] == MIDDLE || pos2[i] == PBC) { continue; }
-        }
-
-        return false;
-    }
-    return true;
-}
-
-bool is_close_test_next_dt(int *pos1, int *pos2) {
-    for (int i = 0; i < 3; i++) {
-        if (pos1[i] == pos2[i]) { continue; }
-
-        if (pos1[i] == MIDDLE || pos1[i] == PBC) {
-            if (pos2[i] == LEFT || pos2[i] == RIGHT) { continue; }
-        }
-
-        return false;
-    }
-    return true;
-}
-
-bool is_dep(int *pos1, int *pos2)
-{
-  bool is_diff_in_one_spot = false;
-  for (int i = 0; i < 3; i++) {
-    if (pos1[i] != pos2[i]) {
-      if (is_diff_in_one_spot) { return false; }
-      is_diff_in_one_spot = true;
-      if (pos1[i] == LEFT || pos1[i] == RIGHT) {
-        if (pos2[i] != MIDDLE && pos2[i] != PBC) { return false; }
-      }
-    }
-  }
-  return true;
-}
-
-bool is_dep_inverted(int *pos1, int *pos2)
-{
-  bool is_diff_in_one_spot = false;
-  for (int i = 0; i < 3; i++) {
-    if (pos1[i] != pos2[i]) {
-      if (is_diff_in_one_spot) { return false; }
-      is_diff_in_one_spot = true;
-      if (pos1[i] == MIDDLE || pos1[i] == PBC) {
-        if (pos2[i] != LEFT && pos2[i] != RIGHT) { return false; }
-      }
-    }
-  }
-  return true;
-}
-
-int get_segments(const std::vector<int>& idxs, std::vector<int>& segment_idxs, std::vector<int>& segment_lengths, bool print) {
-    if (idxs.size() == 0) {
-        return 0;
-    }
-
-    assert(segment_idxs.size() == 0);
-    assert(segment_lengths.size() == 0);
-
-    int start = 0;
-
-    for (int j = 1; j < idxs.size(); j++) {
-        // if (idxs[j] - idxs[j - 1] > 1) {
-        if (idxs[j] - idxs[j - 1] != 1) {
-            segment_idxs.push_back(idxs[start]);
-            int segment_length = (j - 1 - start + 1);
-            segment_lengths.push_back(segment_length);
-            start = j;
+void StencilMD::FORCE_PAIR_COEFF(int narg, char **arg) {
+    for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+            lmp->force_stencil_md[i][j]->pair->coeff(narg, arg);
+            lmp->force_stencil_md_next_dt[i][j]->pair->coeff(narg, arg);
         }
     }
-
-    int last_segment_length = idxs.size() - 1 - start + 1;
-    segment_idxs.push_back(idxs[start]);
-    segment_lengths.push_back(last_segment_length);
-
-    if (print) {
-        for (int i = 0; i < segment_idxs.size(); i++) {
-            std::cout << RED << "segment: " << i << " segment idx: " << segment_idxs[i] << " size: " << segment_lengths[i] << RESET_COLOR << std::endl;
+}
+void StencilMD::FORCE_MODIFY_PARAMS(int narg, char **arg) {
+    assert(false);
+    for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+            lmp->force_stencil_md[i][j]->pair->modify_params(narg, arg);
+            lmp->force_stencil_md_next_dt[i][j]->pair->modify_params(narg, arg);
         }
     }
-
-    return segment_lengths.size();
 }
 
-void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *queues)
-{
-  int num_dims = 3;
-  int initial_dep = 0;
-  queue_info initial_zoid;
-  cuts_t curr_cuts_t;
-
-  // lattice is equivalent to hi
-  double lattice[3] = {hi[0], hi[1], hi[2]};
-
-  for (int i = 0; i < 3; i++) {
-    curr_cuts_t.cuts[i].lower = lo[i];
-    curr_cuts_t.cuts[i].upper = hi[i];
-    curr_cuts_t.cuts[i].slope_lower = 0.0;
-    curr_cuts_t.cuts[i].slope_upper = 0.0;
-  }
-  initial_zoid.t0 = 0;
-  initial_zoid.t1 = NUM_TIMESTEPS_IN_PARALLEL;
-  initial_zoid.dim = num_dims - 1;
-  initial_zoid.zoid = curr_cuts_t;
-  initial_zoid.num = 0;
-  // double slope = lmp->neighbor->cutneighmax + ADDITIONAL_CUTOFF;
-  for (int dim = 0; dim < 3; dim++) {
-    initial_zoid.zoid.cuts[dim].slope_lower = 0.0;
-    initial_zoid.zoid.cuts[dim].slope_upper = 0.0;
-  }
-
-  int world_rank;
-  int world_size;
-  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-
-  queues[initial_dep].push_back(initial_zoid);
-  // 3 dimensions means 4 dependency levels
-  for (int dep = 0; dep < num_dims + 1; dep++) {
-    const std::deque<queue_info> &queue = queues[dep];
-    while (queue.size() > 0) {
-      queue_info q_info = queue.front();
-      bool done_cutting = true;
-      bool is_neg = false;
-      for (int i = 0; i < queue.size(); i++) {
-        if (queue[i].dim >= 0) { done_cutting = false; }
-        if (queue[i].dim < 0) { is_neg = true; }
-      }
-      if (done_cutting && is_neg) {
-        break;
-      } else {
-        queues[dep].pop_front();
-        const int dim = q_info.dim;
-        if (dim < 0) {
-          queues[dep].push_back(q_info);
-          continue;
+void StencilMD::FORCE_CREATE_PAIR(const std::string& style, int trysuffix) {
+    for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+            lmp->force_stencil_md[i][j]->create_pair(style, trysuffix);
+            lmp->force_stencil_md_next_dt[i][j]->create_pair(style, trysuffix);
         }
-        const int dt = q_info.t1 - q_info.t0;
-        // TODO: 2 * thresh needs to be changed to 3 * thresh for parallel
-        // receive
-        const double thresh = 2 * slope * dt + 2 * slope;
-        const double lb = q_info.zoid.cuts[dim].upper - q_info.zoid.cuts[dim].lower;
-        // const bool can_cut = lb >= 2 * thresh;
-        const bool can_cut = lb >= thresh;
-        if (!can_cut) {
-          queue_info next = q_info;
-          next.t0 = 0;
-          next.t1 = NUM_TIMESTEPS_IN_PARALLEL;
-          next.dim = dim - 1;
-          next.zoid = q_info.zoid;
-          queues[dep].push_back(next);
+    }
+}
+
+void StencilMD::FORCE_PAIR_SETTINGS(int narg, char **arg) {
+    for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+            assert(lmp->force_stencil_md[i][j]->pair != NULL);
+            lmp->force_stencil_md[i][j]->pair->settings(narg, arg);
+            lmp->force_stencil_md_next_dt[i][j]->pair->settings(narg, arg);
+        }
+    }
+}
+
+void StencilMD::CREATE() {
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_atom;
+        lmp->atom_stencil_md.push_back(arr_atom);
+
+        std::array<Domain *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_domain;
+        lmp->domain_stencil_md.push_back(arr_domain);
+
+        std::array<Neighbor *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_neighbor;
+        lmp->neighbor_stencil_md.push_back(arr_neighbor);
+
+        std::array<Force *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_force;
+        lmp->force_stencil_md.push_back(arr_force);
+    }
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+            Force* force_ = new Force(lmp);
+            lmp->force_stencil_md[i][j] = force_;
+        }
+
+        Modify* modify_;
+        if (lmp->kokkos) {
+            modify_ = new ModifyKokkos(lmp);
         } else {
-          const double mid = lb / 2;
-          const double start = q_info.zoid.cuts[dim].lower;
-          const double end = q_info.zoid.cuts[dim].upper;
-
-          // std::cout << "lb: " << lb << " mid: " << lb / 2 << " start: " << start << " end: " << end << std::endl;
-
-          // bool initial_cut = std::abs(lb - args.lattice[dim * 3 + dim]) <=
-          // 1e-8;
-          bool initial_cut = std::abs(lb - lattice[dim]) <= 1e-8;
-
-          cuts_t left_zoid = q_info.zoid;
-          if (initial_cut) {
-            left_zoid.cuts[dim].lower = start + MIDDLE_ZOID_WIDTH_RATIO * slope;
-            // left_zoid.cuts[dim].lower = start;
-          } else {
-            left_zoid.cuts[dim].lower = start;
-          }
-          left_zoid.cuts[dim].upper = start + mid - MIDDLE_ZOID_WIDTH_RATIO * slope;
-          // left_zoid.cuts[dim].upper = start + mid;
-          left_zoid.cuts[dim].slope_lower = slope;
-          left_zoid.cuts[dim].slope_upper = -slope;
-
-          queue_info left_zoid_info = q_info;
-          left_zoid_info.t0 = q_info.t0;
-          left_zoid_info.t1 = q_info.t1;
-          left_zoid_info.zoid = left_zoid;
-          left_zoid_info.dim = dim - 1;
-
-          left_zoid_info.where[dim] = LEFT;
-          if (!(left_zoid.cuts[dim].lower <= left_zoid.cuts[dim].upper)) {
-            std::cout << "ERROR ALERT" << std::endl;
-            // print_cuts_t(left_zoid);
-          }
-
-          queues[dep].push_back(left_zoid_info);
-          cuts_t right_zoid = q_info.zoid;
-          // right_zoid.cuts[dim].lower = start + mid;
-          right_zoid.cuts[dim].lower = start + mid + MIDDLE_ZOID_WIDTH_RATIO * slope;
-          // right_zoid.cuts_t[dim].upper = end;
-          if (initial_cut) {
-            right_zoid.cuts[dim].upper = end - MIDDLE_ZOID_WIDTH_RATIO * slope;
-            // right_zoid.cuts[dim].upper = end;
-          } else {
-            right_zoid.cuts[dim].upper = end;
-          }
-          right_zoid.cuts[dim].slope_lower = slope;
-          right_zoid.cuts[dim].slope_upper = -slope;
-
-          queue_info right_zoid_info = q_info;
-          right_zoid_info.t0 = q_info.t0;
-          right_zoid_info.t1 = q_info.t1;
-          right_zoid_info.zoid = right_zoid;
-          right_zoid_info.dim = dim - 1;
-
-          right_zoid_info.where[dim] = RIGHT;
-          queues[dep].push_back(right_zoid_info);
-
-          int next_dep = dep + 1;
-          cuts_t middle_zoid = q_info.zoid;
-          // middle_zoid.cuts[dim].lower = start + mid;
-          // middle_zoid.cuts[dim].upper = start + mid;
-          middle_zoid.cuts[dim].lower = start + mid - MIDDLE_ZOID_WIDTH_RATIO * slope;
-          middle_zoid.cuts[dim].upper = start + mid + MIDDLE_ZOID_WIDTH_RATIO * slope;
-          middle_zoid.cuts[dim].slope_lower = -slope;
-          middle_zoid.cuts[dim].slope_upper = slope;
-
-          queue_info middle_zoid_info = q_info;
-          middle_zoid_info.t0 = q_info.t0;
-          middle_zoid_info.t1 = q_info.t1;
-          middle_zoid_info.zoid = middle_zoid;
-          middle_zoid_info.dim = dim - 1;
-
-          middle_zoid_info.where[dim] = MIDDLE;
-          queues[next_dep].push_back(middle_zoid_info);
-
-          // if (std::abs(lb - args.lattice[dim * 3 + dim]) <= 1e-8) {
-          if (std::abs(lb - lattice[dim]) <= 1e-8) {
-            // initial cut
-            cuts_t pbc_zoid = q_info.zoid;
-            // pbc_zoid.cuts[dim].lower = -2 * slope;
-            // pbc_zoid.cuts[dim].upper = 2 * slope;
-            // pbc_zoid.cuts[dim].lower = start;
-            // pbc_zoid.cuts[dim].upper = start;
-            pbc_zoid.cuts[dim].lower = -MIDDLE_ZOID_WIDTH_RATIO * slope;
-            pbc_zoid.cuts[dim].upper = MIDDLE_ZOID_WIDTH_RATIO * slope;
-
-            pbc_zoid.cuts[dim].slope_lower = -slope;
-            pbc_zoid.cuts[dim].slope_upper = slope;
-
-            queue_info pbc_zoid_info = q_info;
-            pbc_zoid_info.t0 = q_info.t0;
-            pbc_zoid_info.t1 = q_info.t1;
-            pbc_zoid_info.zoid = pbc_zoid;
-            pbc_zoid_info.dim = dim - 1;
-
-            pbc_zoid_info.where[dim] = PBC;
-            queues[next_dep].push_back(pbc_zoid_info);
-          } else {
-            if (std::abs(q_info.zoid.cuts[dim].slope_lower - slope) > 1e-5) {
-              assert(false);
-              cuts_t left_inverted_zoid = q_info.zoid;
-              left_inverted_zoid.cuts[dim].lower = start;
-              left_inverted_zoid.cuts[dim].slope_lower = q_info.zoid.cuts[dim].slope_lower;
-              left_inverted_zoid.cuts[dim].upper = start;
-              left_inverted_zoid.cuts[dim].slope_upper = slope;
-
-              queue_info left_inverted_zoid_info;
-              left_inverted_zoid_info.t0 = q_info.t0;
-              left_inverted_zoid_info.t1 = q_info.t1;
-              left_inverted_zoid_info.zoid = left_inverted_zoid;
-              left_inverted_zoid_info.dim = dim - 1;
-              queues[next_dep].push_back(left_inverted_zoid_info);
-            }
-            if (std::abs(q_info.zoid.cuts[dim].slope_upper - (-slope)) > 1e-5) {
-              assert(false);
-              cuts_t right_inverted_zoid = q_info.zoid;
-              right_inverted_zoid.cuts[dim].lower = start;
-              right_inverted_zoid.cuts[dim].slope_lower = -slope;
-              right_inverted_zoid.cuts[dim].upper = start;
-              right_inverted_zoid.cuts[dim].slope_upper = q_info.zoid.cuts[dim].slope_upper;
-
-              queue_info right_inverted_zoid_info;
-              right_inverted_zoid_info.t0 = q_info.t0;
-              right_inverted_zoid_info.t1 = q_info.t1;
-              right_inverted_zoid_info.zoid = right_inverted_zoid;
-              right_inverted_zoid_info.dim = dim - 1;
-              queues[next_dep].push_back(right_inverted_zoid_info);
-            }
-          }
+            modify_ = new Modify(lmp);
         }
-      }
-    }
-  }
+        lmp->modify_stencil_md.push_back(modify_);
 
-  int num = 0;
-  for (int dep = 0; dep < 3 + 1; dep++) {
-    for (int j = 0; j < queues[dep].size(); j++) { queues[dep][j].num = num++; }
-  }
+        for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
+            Atom* atom_;
+            if (lmp->kokkos) {
+                atom_ = new AtomKokkos(lmp);
+            } else {
+                atom_ = new Atom(lmp);
+            }
 
-  // std::deque<queue_info> queues_next_dt[num_dims + 1];
-  for (int dep = 0; dep < 3 + 1; dep++) {
-    for (int j = 0; j < queues[dep].size(); j++) {
-      const queue_info &info = queues[dep][j];
-      int new_dep = 3 - dep;
-      queue_info initial;
-      initial.t0 = info.t1;
-      initial.t1 = info.t1 + NUM_TIMESTEPS_IN_PARALLEL;
-      // irrelevant
-      initial.dim = num_dims - 1;
-      cuts_t new_cuts_t;
-      for (int i = 0; i < 3; i++) {
-        int dt = (info.t1 - info.t0);
-        double new_start = info.zoid.cuts[i].lower + dt * info.zoid.cuts[i].slope_lower;
-        double new_end = info.zoid.cuts[i].upper + dt * info.zoid.cuts[i].slope_upper;
-        new_cuts_t.cuts[i].lower = new_start;
-        new_cuts_t.cuts[i].upper = new_end;
-        new_cuts_t.cuts[i].slope_lower = -1 * info.zoid.cuts[i].slope_lower;
-        new_cuts_t.cuts[i].slope_upper = -1 * info.zoid.cuts[i].slope_upper;
-      }
-      initial.zoid = new_cuts_t;
-      initial.num = info.num;
-      for (int i = 0; i < 3; i++) { initial.where[i] = info.where[i]; }
-      // queues_next_dt[new_dep].push_back(initial);
-      // queues[new_dep + 3 + 1].push_back(initial);
+            if (lmp->kokkos) {
+                atom_->create_avec_stencil_md("atomic/kk",0,nullptr,1);
+            } else {
+                atom_->create_avec_stencil_md("atomic", 0, nullptr, 1);
+            }
+            lmp->atom_stencil_md[i][j] = atom_;
+        }
+
+        Comm* comm_;
+        if (lmp->kokkos) {
+            comm_ = new CommKokkos(lmp);
+        } else {
+            comm_ = new CommBrick(lmp);
+        }
+
+        for (int j = 0; j < lmp->domain_stencil_md[i].size(); j++) {
+            Domain* domain_;
+            if (lmp->kokkos) {
+                domain_ = new DomainKokkos(lmp);
+            }
+#ifdef LMP_OPENMP
+                else {
+            domain_ = new DomainOMP(this);
+        }
+#else
+            else {
+                domain_ = new Domain(lmp);
+            }
+#endif
+            lmp->domain_stencil_md[i][j] = domain_;
+        }
+
+        for (int j = 0; j < lmp->neighbor_stencil_md[i].size(); j++) {
+            Neighbor* neighbor_;
+            if (lmp->kokkos) {
+                neighbor_ = new NeighborKokkos(lmp);
+            } else {
+                neighbor_ = new Neighbor(lmp);
+            }
+            lmp->neighbor_stencil_md[i][j] = neighbor_;
+        }
+
+        lmp->comm_stencil_md.push_back(comm_);
     }
-  }
 }
 
-void print_cuts(const cuts_t &c)
-{
-  for (int i = 0; i < 3; i++) {
-    std::cout << "cuts_t: " << i << " lower: " << c.cuts[i].lower << " upper: " << c.cuts[i].upper
-              << std::endl;
-    std::cout << "Slope lower: " << c.cuts[i].slope_lower
-              << " Slope upper: " << c.cuts[i].slope_upper << std::endl;
-  }
+void StencilMD::CREATE_NEXT_DT() {
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        std::array<Domain *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_domain;
+        lmp->domain_stencil_md_next_dt.push_back(arr_domain);
+
+        std::array<Neighbor *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_neighbor;
+        lmp->neighbor_stencil_md_next_dt.push_back(arr_neighbor);
+
+        std::array<Force *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_force;
+        lmp->force_stencil_md_next_dt.push_back(arr_force);
+    }
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+            Force *force_ = new Force(lmp);
+            lmp->force_stencil_md_next_dt[i][j] = force_;
+        }
+
+        for (int j = 0; j < lmp->domain_stencil_md[i].size(); j++) {
+            Domain *domain_;
+            if (lmp->kokkos) {
+                domain_ = new DomainKokkos(lmp);
+            }
+#ifdef LMP_OPENMP
+                else {
+            domain_ = new DomainOMP(this);
+        }
+#else
+            else {
+                domain_ = new Domain(lmp);
+            }
+#endif
+            lmp->domain_stencil_md_next_dt[i][j] = domain_;
+        }
+
+        for (int j = 0; j < lmp->neighbor_stencil_md_next_dt[i].size(); j++) {
+            Neighbor *neighbor_;
+            if (lmp->kokkos) {
+                neighbor_ = new NeighborKokkos(lmp);
+            } else {
+                neighbor_ = new Neighbor(lmp);
+            }
+            lmp->neighbor_stencil_md_next_dt[i][j] = neighbor_;
+        }
+    }
 }
 
-uint64_t timeSinceEpochMillisec() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+void StencilMD::INIT_ZOIDS() {
+    get_zoids(ALLEGRO_SLOPE, domain->boxlo, domain->boxhi, lmp->queues);
+
+    assert(zoid_to_num_map.size() == NUM_ZOIDS);
+    std::set<int> zoid_nums;
+    for (auto& [k, v] : zoid_to_num_map) {
+        zoid_nums.insert(v);
+    }
+    assert(zoid_nums.size() == NUM_ZOIDS);
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            auto key =
+                    std::make_tuple(zoid.where[0], zoid.where[1], zoid.where[2]);
+            if (zoid_to_num_map.find(key) == zoid_to_num_map.end()) {
+                std::cout << "error. key: " << std::get<0>(key) << " "
+                          << std::get<1>(key) << " " << std::get<2>(key)
+                          << std::endl;
+                assert(false);
+            }
+            lmp->queues[dep][j].num = zoid_to_num_map.at(key);
+            assert(zoid.num >= 0 && zoid.num < NUM_ZOIDS);
+        }
+    }
+
+    if (comm->me == 0) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            std::vector<int> nums;
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                nums.push_back(lmp->queues[dep][j].num);
+            }
+
+            std::cout << "DEP: " << dep << " zoid nums: " << nums << std::endl;
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            const queue_info& zoid = lmp->queues[dep][j];
+            int new_dep = NUM_DEPS - 1 - dep;
+            queue_info new_zoid;
+            cuts_t new_cuts_t;
+            for (int dim = 0; dim < 3; dim++) {
+                double new_start =
+                        zoid.zoid.cuts[dim].lower +
+                        NUM_TIMESTEPS_IN_PARALLEL * zoid.zoid.cuts[dim].slope_lower;
+                double new_end =
+                        zoid.zoid.cuts[dim].upper +
+                        NUM_TIMESTEPS_IN_PARALLEL * zoid.zoid.cuts[dim].slope_upper;
+                new_cuts_t.cuts[dim].lower = new_start;
+                new_cuts_t.cuts[dim].upper = new_end;
+                new_cuts_t.cuts[dim].slope_lower =
+                        -1 * zoid.zoid.cuts[dim].slope_lower;
+                new_cuts_t.cuts[dim].slope_upper =
+                        -1 * zoid.zoid.cuts[dim].slope_upper;
+            }
+            new_zoid.zoid = new_cuts_t;
+            new_zoid.num = zoid.num;
+            for (int i = 0; i < 3; i++) {
+                new_zoid.where[i] = zoid.where[i];
+            }
+            lmp->queues_next_dt[new_dep].push_back(new_zoid);
+        }
+    }
+}
+
+void StencilMD::INIT_ZOID_DATA() {
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            if (zoid.num % comm->nprocs == comm->me) {
+                // debugging
+                zoid.debug_atom_pos =
+                        new double*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.can_eval_center = new bool*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.can_eval_pos = new bool*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_list_local = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_list_local_size =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                // for send list
+                zoid.send_force_idxs = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_force_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_force_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_pos_idxs = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_sizes = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_list_local_force_only =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_list_local_num_force_only =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_list_local_force_pos =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_list_local_num_force_pos =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                // for second send list
+                zoid.send_segment_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_segment_types =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_segment_idxs =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_local_list = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_ghost_idxs = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_ghost_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_ghost_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                // need to init this so that "copies" can be made
+                zoid.num_elems_send = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.num_elems_recv = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.atom_idx_mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_process_segment_types =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_segment_idxs =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_segment_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_process_segment_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_process_segment_idxs =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_process_segment_types =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_process_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_process_local_list =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.send_process_segment_sizes[t] = new int*[comm->nprocs];
+                    zoid.send_process_segment_idxs[t] = new int*[comm->nprocs];
+                    zoid.send_process_segment_types[t] = new int*[comm->nprocs];
+                    zoid.send_process_num_segments[t] = new int[comm->nprocs];
+                    zoid.send_process_local_list[t] = new int*[comm->nprocs];
+                }
+
+                zoid.num_elems_send_process =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.num_elems_recv_process =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.num_elems_send_process[t] = new int[comm->nprocs];
+                    zoid.num_elems_recv_process[t] = new int[comm->nprocs];
+                }
+
+                zoid.recv_process_force_offset =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_vel_offset =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_pos_offset =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.relevant_atom_idxs =
+                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.relevant_atom_tags =
+                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.can_eval_center_tags =
+                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+            }
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            queue_info& zoid = lmp->queues_next_dt[dep][j];
+            if (zoid.num % comm->nprocs == comm->me) {
+                zoid.debug_atom_pos =
+                        new double*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.can_eval_center = new bool*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.can_eval_pos = new bool*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_list_local = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_list_local_size =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                // for send list
+                zoid.send_force_idxs = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_force_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_force_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_pos_idxs = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_sizes = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_list_local_force_only =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_list_local_force_pos =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_list_local_num_force_only =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_list_local_num_force_pos =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                // for second send list
+                zoid.send_segment_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_segment_types =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_segment_idxs =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_local_list = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_ghost_idxs = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_ghost_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_ghost_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.num_elems_send = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.num_elems_recv = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.atom_idx_mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_process_segment_types =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_segment_idxs =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_segment_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_process_segment_sizes =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_process_segment_idxs =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_process_segment_types =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_process_num_segments =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_process_local_list =
+                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.send_process_segment_sizes[t] = new int*[comm->nprocs];
+                    zoid.send_process_segment_idxs[t] = new int*[comm->nprocs];
+                    zoid.send_process_segment_types[t] = new int*[comm->nprocs];
+                    zoid.send_process_num_segments[t] = new int[comm->nprocs];
+                    zoid.send_process_local_list[t] = new int*[comm->nprocs];
+                }
+
+                zoid.num_elems_send_process =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.num_elems_recv_process =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.num_elems_send_process[t] = new int[comm->nprocs];
+                    zoid.num_elems_recv_process[t] = new int[comm->nprocs];
+                }
+
+                zoid.recv_process_force_offset =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_vel_offset =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_process_pos_offset =
+                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.relevant_atom_idxs =
+                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.relevant_atom_tags =
+                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.can_eval_center_tags =
+                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+            }
+        }
+    }
+
+    lmp->zoid_num_to_zoid = new queue_info[NUM_ZOIDS];
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            int zoid_num = lmp->queues[dep][j].num;
+            lmp->zoid_num_to_zoid[zoid_num] = lmp->queues[dep][j];
+        }
+    }
+
+    lmp->zoid_num_to_zoid_next_dt = new queue_info[NUM_ZOIDS];
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            int zoid_num = lmp->queues_next_dt[dep][j].num;
+            lmp->zoid_num_to_zoid_next_dt[zoid_num] =
+                    lmp->queues_next_dt[dep][j];
+        }
+    }
+}
+
+void StencilMD::INIT_ZOID_NEIGHBORS() {
+    // for neighbors
+    lmp->send_to_neighbors = new std::vector<int>[NUM_ZOIDS];
+    lmp->recv_from_neighbors = new std::vector<int>[NUM_ZOIDS];
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        auto& zoid = lmp->zoid_num_to_zoid[i];
+        int zoid_dep = get_zoid_dep(zoid.num);
+        for (int j = 0; j < NUM_ZOIDS; j++) {
+            int zoid_dep_neighbor = get_zoid_dep(j);
+            if (zoid_dep_neighbor > zoid_dep &&
+                is_close_test(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
+                // if (zoid_dep_neighbor > zoid_dep && is_dep(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
+                // TODO: test this extra condition
+                if (zoid_dep_neighbor == zoid_dep + 1 || true) {
+                    lmp->send_to_neighbors[i].push_back(j);
+                }
+            }
+
+            // if (zoid_dep_neighbor < zoid_dep && is_close(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
+            if (zoid_dep_neighbor < zoid_dep &&
+                is_close_test(lmp->zoid_num_to_zoid[j].where, zoid.where)) {
+                // if (zoid_dep_neighbor < zoid_dep && is_dep(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
+                if (zoid_dep_neighbor == zoid_dep - 1 || true) {
+                    lmp->recv_from_neighbors[i].push_back(j);
+                }
+            }
+        }
+    }
+
+    //  for next dt
+    lmp->send_to_neighbors_next_dt = new std::vector<int>[NUM_ZOIDS];
+    lmp->recv_from_neighbors_next_dt = new std::vector<int>[NUM_ZOIDS];
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        auto& zoid = lmp->zoid_num_to_zoid_next_dt[i];
+        int zoid_dep = get_zoid_dep(zoid.num);
+        zoid_dep = NUM_DEPS - 1 - zoid_dep;
+        for (int j = 0; j < NUM_ZOIDS; j++) {
+            int zoid_dep_neighbor = get_zoid_dep(j);
+            zoid_dep_neighbor = NUM_DEPS - 1 - zoid_dep_neighbor;
+            if (zoid_dep_neighbor > zoid_dep &&
+                is_close_test_next_dt(zoid.where,
+                                      lmp->zoid_num_to_zoid_next_dt[j].where)) {
+                // if (zoid_dep_neighbor > zoid_dep && is_dep(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
+                // TODO: test this extra condition
+                if (zoid_dep_neighbor == zoid_dep + 1 || true) {
+                    lmp->send_to_neighbors_next_dt[i].push_back(j);
+                }
+            }
+
+            // if (zoid_dep_neighbor < zoid_dep && is_close(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
+            if (zoid_dep_neighbor < zoid_dep &&
+                is_close_test_next_dt(lmp->zoid_num_to_zoid_next_dt[j].where,
+                                      zoid.where)) {
+                // if (zoid_dep_neighbor < zoid_dep && is_dep(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
+                if (zoid_dep_neighbor == zoid_dep - 1 || true) {
+                    lmp->recv_from_neighbors_next_dt[i].push_back(j);
+                }
+            }
+        }
+    }
+
+    lmp->send_to_neighbors_procs = new std::vector<int>[NUM_ZOIDS];
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            int zoid_num = lmp->queues[dep][j].num;
+
+            auto& send_to = lmp->send_to_neighbors[zoid_num];
+            std::set<int> send_procs;
+            for (int send_zoid : send_to) {
+                send_procs.insert(send_zoid % comm->nprocs);
+            }
+
+            for (int proc : send_procs) {
+                lmp->send_to_neighbors_procs[zoid_num].push_back(proc);
+
+                if (proc == comm->me &&
+                    std::find(lmp->recv_from_neighbors_procs.begin(),
+                              lmp->recv_from_neighbors_procs.end(), zoid_num) ==
+                    lmp->recv_from_neighbors_procs.end()) {
+                    lmp->recv_from_neighbors_procs.push_back(zoid_num);
+                }
+            }
+        }
+    }
+
+    lmp->send_to_neighbors_procs_next_dt = new std::vector<int>[NUM_ZOIDS];
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        auto& send_to = lmp->send_to_neighbors_next_dt[i];
+        std::set<int> send_procs;
+        for (int send_zoid : send_to) {
+            send_procs.insert(send_zoid % comm->nprocs);
+        }
+
+        for (int proc : send_procs) {
+            lmp->send_to_neighbors_procs_next_dt[i].push_back(proc);
+
+            if (proc == comm->me &&
+                std::find(lmp->recv_from_neighbors_procs_next_dt.begin(),
+                          lmp->recv_from_neighbors_procs_next_dt.end(),
+                          i) == lmp->recv_from_neighbors_procs_next_dt.end()) {
+                lmp->recv_from_neighbors_procs_next_dt.push_back(i);
+            }
+        }
+    }
+}
+
+void StencilMD::INIT_DOMAIN_BOUNDS() {
+    // set the domains for each zoid
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            int zoid_num = zoid.num;
+            for (int k = 0; k < lmp->domain_stencil_md[j].size(); k++) {
+                Domain* domain_ = lmp->domain_stencil_md[zoid_num][k];
+                for (int dim = 0; dim < 3; dim++) {
+                    domain_->sublo[dim] = zoid.zoid.cuts[dim].lower +
+                                          k * zoid.zoid.cuts[dim].slope_lower;
+                    domain_->subhi[dim] = zoid.zoid.cuts[dim].upper +
+                                          k * zoid.zoid.cuts[dim].slope_upper;
+                    domain_->boxlo[dim] = zoid.zoid.cuts[dim].lower +
+                                          k * zoid.zoid.cuts[dim].slope_lower;
+                    domain_->boxhi[dim] = zoid.zoid.cuts[dim].upper +
+                                          k * zoid.zoid.cuts[dim].slope_upper;
+                    domain_->prd[dim] = domain->prd[dim];
+                }
+            }
+        }
+    }
+
+    // set the domains for each zoid
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            queue_info& zoid = lmp->queues_next_dt[dep][j];
+            int zoid_num = zoid.num;
+            for (int k = 0; k < lmp->domain_stencil_md_next_dt[j].size(); k++) {
+                Domain* domain_ = lmp->domain_stencil_md_next_dt[zoid_num][k];
+                for (int dim = 0; dim < 3; dim++) {
+                    domain_->sublo[dim] = zoid.zoid.cuts[dim].lower +
+                                          k * zoid.zoid.cuts[dim].slope_lower;
+                    domain_->subhi[dim] = zoid.zoid.cuts[dim].upper +
+                                          k * zoid.zoid.cuts[dim].slope_upper;
+                    domain_->boxlo[dim] = zoid.zoid.cuts[dim].lower +
+                                          k * zoid.zoid.cuts[dim].slope_lower;
+                    domain_->boxhi[dim] = zoid.zoid.cuts[dim].upper +
+                                          k * zoid.zoid.cuts[dim].slope_upper;
+                    domain_->prd[dim] = domain->prd[dim];
+                }
+            }
+        }
+    }
+}
+
+void StencilMD::INIT_ALL() {
+    // init
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                Force *force_ = lmp->force_stencil_md[i][j];
+                Neighbor *neighbor_ = lmp->neighbor_stencil_md[i][j];
+                Domain *domain_ = lmp->domain_stencil_md[i][j];
+                force_->init_stencil_md(neighbor_);
+                domain_->init();
+            }
+
+            Modify *modify_ = lmp->modify_stencil_md[i];
+            Comm *comm_ = lmp->comm_stencil_md[i];
+
+            for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
+                Atom *atom_ = lmp->atom_stencil_md[i][j];
+                atom_->init();
+            }
+
+            modify_->init_stencil_md(lmp->atom_stencil_md[i][0]);
+
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                Neighbor *neighbor_ = lmp->neighbor_stencil_md[i][j];
+                Domain *domain_ = lmp->domain_stencil_md[i][j];
+                neighbor_->init_stencil_md(domain_);
+            }
+            comm_->init();
+        }
+    }
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md_next_dt[i].size(); j++) {
+                Force *force_ = lmp->force_stencil_md_next_dt[i][j];
+                Neighbor *neighbor_next_dt = lmp->neighbor_stencil_md_next_dt[i][j];
+                Domain *domain_ = lmp->domain_stencil_md_next_dt[i][j];
+                force_->init_stencil_md(neighbor_next_dt);
+                domain_->init();
+            }
+
+            for (int j = 0; j < lmp->force_stencil_md_next_dt[i].size(); j++) {
+                Neighbor *neighbor_next_dt = lmp->neighbor_stencil_md_next_dt[i][j];
+                Domain *domain_ = lmp->domain_stencil_md_next_dt[i][j];
+                neighbor_next_dt->init_stencil_md(domain_);
+            }
+        }
+    }
+}
+
+void StencilMD::SETUP() {
+    // atom setup
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            int zoid_num = zoid.num;
+            if (zoid_num % comm->nprocs == comm->me) {
+                for (int k = 0; k < lmp->atom_stencil_md[zoid_num].size();
+                     k++) {
+                    lmp->atom_stencil_md[zoid_num][k]->setup_stencil_md(
+                            lmp->domain_stencil_md[zoid_num][k]);
+                }
+            }
+        }
+    }
+}
+
+void StencilMD::GET_LOCAL_ATOMS_ZOID() {
+    // get local atoms for each zoid
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        comm->exchange_stencil_md_initial_send();
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                // receive only if the zoid belongs to me
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom* first = lmp->atom_stencil_md[zoid_num][t];
+                    lmp->comm_stencil_md[zoid_num]
+                            ->exchange_stencil_md_initial_receive(
+                                    first, lmp->domain_stencil_md[zoid_num][t], zoid);
+                }
+            }
+        }
+
+        MPI_Barrier(world);
+    }
+}
+
+void StencilMD::GET_GHOST_ATOMS_ZOID() {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        comm->exchange_stencil_md_initial_send();
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                // receive only if the zoid belongs to me
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom* first = lmp->atom_stencil_md[zoid_num][t];
+                    lmp->comm_stencil_md[zoid_num]
+                            ->borders_stencil_md_initial_receive_from_lammps(
+                                    first, lmp->domain_stencil_md[zoid_num][t], zoid,
+                                    t);
+                }
+            }
+        }
+
+        MPI_Barrier(world);
+    }
+}
+
+void StencilMD::BUILD_NEIGHBOR_LIST() {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs == comm->me) {
+                    lmp->neighbor_stencil_md[zoid_num][t]
+                            ->setup_bins_stencil_md(
+                                    lmp->atom_stencil_md[zoid_num][t],
+                                    lmp->domain_stencil_md[zoid_num][t],
+                                    lmp->comm_stencil_md[zoid_num]);
+                    lmp->neighbor_stencil_md[zoid_num][t]->build_stencil_md(
+                            1, lmp->atom_stencil_md[zoid_num][t],
+                            lmp->domain_stencil_md[zoid_num][t],
+                            lmp->comm_stencil_md[zoid_num], zoid);
+                    lmp->neighbor_stencil_md[zoid_num][t]->ncalls = 0;
+
+                    MPI_Barrier(world);
+
+                    Force* force_ = lmp->force_stencil_md[zoid_num][t];
+                    force_->setup();
+                }
+            }
+        }
+    }
+}
+
+void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+                queue_info& zoid = lmp->queues_next_dt[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom* atom_next_dt = lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t];
+                    Domain* domain_next_dt = lmp->domain_stencil_md_next_dt[zoid_num][t];
+
+                    lmp->neighbor_stencil_md_next_dt[zoid_num][t]
+                            ->setup_bins_stencil_md(
+                                    atom_next_dt,
+                                    domain_next_dt,
+                                    lmp->comm_stencil_md[zoid_num]);
+
+                    if (t == 3 && zoid_num == 63) {
+                        zoid.debug_int = ZOID_DEBUG_INT;
+                    } else {
+                        zoid.debug_int = 5;
+                    }
+
+                    lmp->neighbor_stencil_md_next_dt[zoid_num][t]->build_stencil_md(
+                            1, atom_next_dt, domain_next_dt,
+                            lmp->comm_stencil_md[zoid_num], zoid);
+                    lmp->neighbor_stencil_md_next_dt[zoid_num][t]->ncalls = 0;
+
+                    MPI_Barrier(world);
+
+                    Force* force_ = lmp->force_stencil_md_next_dt[zoid_num][t];
+                    force_->setup();
+                }
+            }
+        }
+    }
 }

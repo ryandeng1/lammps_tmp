@@ -18,7 +18,7 @@
 #include <mpi.h>
 #include <vector>
 #include <array>
-#include "stencil_md.h"
+#include "stencil_md_utils.h"
 #include <torch/torch.h>
 
 namespace LAMMPS_NS {
@@ -48,22 +48,22 @@ class LAMMPS {
   class Python *python;            // Python interface
   class CiteMe *citeme;            // handle citation info
 
+  class StencilMD *stencilMD;
+
   // Stencil MD classes
-  /*
-  std::vector<class Atom*> atom_stencil_md;
-  std::vector<class AtomKokkos*> atom_kokkos_stencil_md;
-  std::vector<class Neighbor*> neighbor_stencil_md;
-  std::vector<class Comm*> comm_stencil_md;
-  std::vector<class Modify*> modify_stencil_md;
-  std::vector<class Update*> update_stencil_md;
-  */
   // std::vector<class Neighbor*> neighbor_stencil_md;
   // std::vector<class Domain*> domain_stencil_md;
   std::vector<std::array<class Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>> atom_stencil_md;
   std::vector<std::array<class AtomKokkos*, NUM_TIMESTEPS_IN_PARALLEL + 1>> atom_kokkos_stencil_md;
   std::vector<class Comm*> comm_stencil_md;
+
   std::vector<std::array<class Domain*, NUM_TIMESTEPS_IN_PARALLEL + 1>> domain_stencil_md;
   std::vector<std::array<class Neighbor*, NUM_TIMESTEPS_IN_PARALLEL + 1>> neighbor_stencil_md;
+  std::vector<std::array<class Force*, NUM_TIMESTEPS_IN_PARALLEL + 1>> force_stencil_md;
+
+  std::vector<std::array<class Domain*, NUM_TIMESTEPS_IN_PARALLEL + 1>> domain_stencil_md_next_dt;
+  std::vector<std::array<class Neighbor*, NUM_TIMESTEPS_IN_PARALLEL + 1>> neighbor_stencil_md_next_dt;
+  std::vector<std::array<class Force*, NUM_TIMESTEPS_IN_PARALLEL + 1>> force_stencil_md_next_dt;
 
   // need a separate comm, but can reuse neighbor lists
   // need a separate comm for the send_lists, as sending to "next" zoid is different compared to sending to "prev" zoid as I walk down the
@@ -72,7 +72,6 @@ class LAMMPS {
 
   std::vector<class Modify*> modify_stencil_md;
   std::vector<class Update*> update_stencil_md;
-  std::vector<std::array<class Force*, NUM_TIMESTEPS_IN_PARALLEL + 1>> force_stencil_md;
   std::deque<queue_info> queues[NUM_DEPS];
 
   std::deque<queue_info> queues_next_dt[NUM_DEPS];

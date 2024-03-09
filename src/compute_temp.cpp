@@ -20,6 +20,7 @@
 #include "domain.h"
 #include "group.h"
 #include "error.h"
+#include "stencil_md_utils.h"
 
 using namespace LAMMPS_NS;
 
@@ -38,6 +39,9 @@ ComputeTemp::ComputeTemp(LAMMPS *lmp, int narg, char **arg) :
 
   vector = new double[size_vector];
 }
+
+ComputeTemp::ComputeTemp(LAMMPS *lmp, Modify* modify_, int narg, char **arg) :
+    ComputeTemp(lmp, narg, arg) {}
 
 /* ---------------------------------------------------------------------- */
 
@@ -100,6 +104,40 @@ double ComputeTemp::compute_scalar()
     error->all(FLERR,"Temperature compute degrees of freedom < 0");
   scalar *= tfactor;
   return scalar;
+}
+
+double ComputeTemp::compute_scalar_stencil_md(Atom* atom_) {
+    invoked_scalar = update->ntimestep;
+
+    double **v = atom_->v;
+    double *mass = atom_->mass;
+    double *rmass = atom_->rmass;
+    int *type = atom_->type;
+    int *mask = atom_->mask;
+    int nlocal = atom_->nlocal;
+
+    double t = 0.0;
+
+    if (rmass) {
+        for (int i = 0; i < nlocal; i++)
+            if (mask[i] & groupbit)
+                t += (v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2]) * rmass[i];
+    } else {
+        for (int i = 0; i < nlocal; i++)
+            if (mask[i] & groupbit)
+                t += (v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2]) *
+                     mass[type[i]];
+    }
+
+    if (USE_FAKE_COMPUTE_TEMP) {
+        return 4000;
+    }
+    MPI_Allreduce(&t,&scalar,1,MPI_DOUBLE,MPI_SUM,world);
+    if (dynamic) dof_compute();
+    if (dof < 0.0 && natoms_temp > 0.0)
+        error->all(FLERR,"Temperature compute degrees of freedom < 0");
+    scalar *= tfactor;
+    return scalar;
 }
 
 /* ---------------------------------------------------------------------- */

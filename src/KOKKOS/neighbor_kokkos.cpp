@@ -322,16 +322,16 @@ void NeighborKokkos::build_kokkos(int topoflag)
   if ((atom->molecular != Atom::ATOMIC) && topoflag) build_topology();
 }
 
-void NeighborKokkos::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_) {
+void NeighborKokkos::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_, queue_info& zoid) {
     if (device_flag) {
-        build_kokkos_stencil_md<LMPDeviceType>(topoflag, atom_, domain_, comm_);
+        build_kokkos_stencil_md<LMPDeviceType>(topoflag, atom_, domain_, comm_, zoid);
     } else {
-        build_kokkos_stencil_md<LMPHostType>(topoflag, atom_, domain_, comm_);
+        build_kokkos_stencil_md<LMPHostType>(topoflag, atom_, domain_, comm_, zoid);
     }
 }
 
 template<class DeviceType>
-void NeighborKokkos::build_kokkos_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_) {
+void NeighborKokkos::build_kokkos_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm* comm_, queue_info& zoid) {
     int i,m;
 
     ago = 0;
@@ -416,7 +416,7 @@ void NeighborKokkos::build_kokkos_stencil_md(int topoflag, Atom* atom_, Domain* 
         }
         neigh_pair[m]->build_setup();
         // neigh_pair[m]->build(lists[m]);
-        neigh_pair[m]->build_stencil_md(lists[m], atom_);
+        neigh_pair[m]->build_stencil_md(lists[m], atom_, domain_, zoid);
     }
 
     // build topology lists for bonds/angles/etc

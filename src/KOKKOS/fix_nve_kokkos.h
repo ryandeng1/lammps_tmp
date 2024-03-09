@@ -17,6 +17,12 @@ FixStyle(nve/kk,FixNVEKokkos<LMPDeviceType>);
 FixStyle(nve/kk/device,FixNVEKokkos<LMPDeviceType>);
 FixStyle(nve/kk/host,FixNVEKokkos<LMPHostType>);
 // clang-format on
+#elifdef FIX_CLASS_STENCIL_MD
+// clang-format off
+FixStyleStencilMD(nve/kk,FixNVEKokkos<LMPDeviceType>);
+FixStyleStencilMD(nve/kk/device,FixNVEKokkos<LMPDeviceType>);
+FixStyleStencilMD(nve/kk/host,FixNVEKokkos<LMPHostType>);
+// clang-format on
 #else
 
 // clang-format off
@@ -41,6 +47,7 @@ template<class DeviceType>
 class FixNVEKokkos : public FixNVE {
  public:
   FixNVEKokkos(class LAMMPS *, int, char **);
+  FixNVEKokkos(class LAMMPS *, class Modify*, int, char **);
 
   void cleanup_copy();
   void init() override;

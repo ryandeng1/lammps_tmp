@@ -381,20 +381,19 @@ void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::build(NeighList *list_)
 }
 
 template<class DeviceType, int HALF, int NEWTON, int GHOST, int TRI, int SIZE>
-void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::build_stencil_md(NeighList *list_, Atom* atom_) {
+void NPairKokkos<DeviceType,HALF,NEWTON,GHOST,TRI,SIZE>::build_stencil_md(NeighList *list_, Atom* atom_, Domain* domain_, queue_info& zoid) {
+    std::cout << "kokkos npair stencil md" << std::endl;
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
 
     NeighListKokkos<DeviceType>* list = (NeighListKokkos<DeviceType>*) list_;
     const int nlocal = includegroup?atom_->nfirst:atom_->nlocal;
     int nall = nlocal;
     if (GHOST) {
-        // std::cout << "STENCIL MD YES GHOST" << std::endl;
+        std::cout << "STENCIL MD YES GHOST" << std::endl;
         nall += atom_->nghost;
     } else {
-        // std::cout << "STENCIL MD NO GHOST" << std::endl;
+        std::cout << "STENCIL MD NO GHOST" << std::endl;
     }
-
-    // std::cout << "nall: " << nall << " nlocal: " << atom_->nlocal << " nghost: " << atom_->nghost << std::endl;
 
     if (nall == 0) return;
 

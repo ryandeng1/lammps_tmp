@@ -170,7 +170,7 @@ class Neighbor : protected Pointers {
   bigint last_setup_bins;    // step of last neighbor::setup_bins() call
 
   void setup_bins_stencil_md(Atom*, Domain*, Comm*);
-  virtual void build_stencil_md(int, Atom*, Domain*, Comm*);          // build all perpetual neighbor lists
+  virtual void build_stencil_md(int, Atom*, Domain*, Comm*, queue_info&);          // build all perpetual neighbor lists
   virtual void init_stencil_md(Domain*);
 
  protected:

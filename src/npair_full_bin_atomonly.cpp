@@ -91,7 +91,7 @@ void NPairFullBinAtomonly::build(NeighList *list)
   list->gnum = 0;
 }
 
-void NPairFullBinAtomonly::build_stencil_md(NeighList *list, Atom* atom_) {
+void NPairFullBinAtomonly::build_stencil_md(NeighList *list, Atom* atom_, Domain* domain_, queue_info& zoid) {
     int i, j, k, n, itype, jtype, ibin;
     double xtmp, ytmp, ztmp, delx, dely, delz, rsq;
     int *neighptr;

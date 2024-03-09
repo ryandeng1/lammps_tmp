@@ -156,7 +156,7 @@ void NPairFullBinGhost::build(NeighList *list)
 }
 
 
-void NPairFullBinGhost::build_stencil_md(NeighList *list, Atom* atom_) {
+void NPairFullBinGhost::build_stencil_md(NeighList *list, Atom* atom_, Domain* domain_, queue_info& zoid) {
     int i,j,k,n,itype,jtype,ibin,which,imol,iatom,moltemplate;
     tagint tagprev;
     double xtmp,ytmp,ztmp,delx,dely,delz,rsq;

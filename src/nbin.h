@@ -64,7 +64,6 @@ class NBin : protected Pointers {
 
   int kokkos;    // 1 if class stores Kokkos data
 
-  // virtual void bin_atoms_setup_stencil_md(int) {assert(false);}
   virtual void bin_atoms_stencil_md(Atom*) {assert(false);}
   virtual void copy_neighbor_info_stencil_md(Neighbor*);
 

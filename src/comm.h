@@ -15,7 +15,7 @@
 #define LMP_COMM_H
 
 #include "pointers.h"    // IWYU pragma: export
-#include "stencil_md.h"
+#include "stencil_md_utils.h"
 
 namespace LAMMPS_NS {
 
@@ -81,9 +81,9 @@ class Comm : protected Pointers {
   virtual void exchange() = 0;                     // move atoms to new procs
   virtual void borders() = 0;                      // setup list of atoms to comm
 
-  virtual void exchange_stencil_md_initial_send_to_dep0() {assert(false);};
-  virtual void exchange_stencil_md_initial_send() {assert(false);};
-  virtual void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) {assert(false);};
+  virtual void exchange_stencil_md_initial_send_to_dep0() { assert(false); };
+  virtual void exchange_stencil_md_initial_send() { assert(false); };
+  virtual void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) { assert(false); };
   virtual void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) { assert(false); }
 
   virtual void exchange_stencil_md_initial_send_to_zoid(Atom*, queue_info&, queue_info&, int timestep) { assert(false); }
@@ -130,11 +130,6 @@ class Comm : protected Pointers {
   virtual void construct_second_send_list_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
 
   virtual void construct_second_send_list_stencil_md_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
-
-  virtual void construct_shared_ghost_send_list_stencil_md(Atom*, queue_info& zoid, std::vector<int>&) {assert(false);}
-
-  virtual void send_shared_ghost_stencil_md(Atom* atom_, queue_info& zoid, std::set<int>& indices, std::vector<int>& neighbors, bool) {assert(false);}
-  virtual void receive_shared_ghost_stencil_md(Atom* atom_, queue_info& zoid, std::vector<int>& neighbors) {assert(false);};
 
   // forward/reverse comm from a Pair, Bond, Fix, Compute, Dump
   virtual void forward_comm(class Pair *) = 0;

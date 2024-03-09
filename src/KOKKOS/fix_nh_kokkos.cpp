@@ -74,7 +74,7 @@ void FixNHKokkos<DeviceType>::init()
 }
 
 template<class DeviceType>
-void FixNHKokkos<DeviceType>::init_stencil_md(Atom* atom_)
+void FixNHKokkos<DeviceType>::init_stencil_md(Atom* atom_, Modify* modify_)
 {
     // TODO: k_mass specifically is a global setting so don't need to init it here.
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;

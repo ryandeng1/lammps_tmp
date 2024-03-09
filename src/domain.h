@@ -172,7 +172,7 @@ class Domain : protected Pointers {
     return 0;
   }
 
-  virtual void remap_all_stencil_md(Atom*) {}
+  virtual void remap_all_stencil_md(Atom*);
 
  protected:
   double small[3];    // fractions of box lengths

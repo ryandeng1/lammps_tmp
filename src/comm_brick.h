@@ -15,7 +15,7 @@
 #define LMP_COMM_BRICK_H
 
 #include "comm.h"
-#include "stencil_md.h"
+#include "stencil_md_utils.h"
 
 namespace LAMMPS_NS {
 
@@ -80,11 +80,6 @@ class CommBrick : public Comm {
 
   void construct_second_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_second_send_list_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
-
-  void construct_shared_ghost_send_list_stencil_md(Atom*, queue_info& zoid, std::vector<int>&) override;
-
-  void send_shared_ghost_stencil_md(Atom* atom_, queue_info& zoid, std::set<int>& indices, std::vector<int>& neighbors, bool) override;
-  void receive_shared_ghost_stencil_md(Atom* atom_, queue_info& zoid, std::vector<int>& neighbors) override;
 
   void forward_comm(class Pair *) override;                 // forward comm from a Pair
   void reverse_comm(class Pair *) override;                 // reverse comm from a Pair

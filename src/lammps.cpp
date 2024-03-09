@@ -54,6 +54,7 @@
 #include <torch/torch.h>
 #include <torch/script.h>
 #include <torch/csrc/jit/runtime/graph_executor.h>
+#include "stencil_md.h"
 
 
 #if defined(LMP_PLUGIN)
@@ -145,6 +146,9 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator) :
   infile = nullptr;
 
   initclock = platform::walltime();
+
+  // Stencil MD init
+  stencilMD = new StencilMD(this);
 
   init_pkg_lists();
 
@@ -819,10 +823,8 @@ void LAMMPS::create()
   else comm = new CommBrick(this);
 
   if (kokkos) {
-      std::cout << "NEIGHBOR KOKKOS" << std::endl;
       neighbor = new NeighborKokkos(this);
   } else {
-      std::cout << "NEIGHBOR NO KOKKOS" << std::endl;
       neighbor = new Neighbor(this);
   }
 
@@ -859,91 +861,8 @@ void LAMMPS::create()
   plugin_auto_load(this);
 #endif
 
-  for (int i = 0; i < NUM_ZOIDS; i++) {
-      std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_atom;
-      atom_stencil_md.push_back(arr_atom);
-
-      std::array<Domain *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_domain;
-      domain_stencil_md.push_back(arr_domain);
-
-      std::array<Neighbor *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_neighbor;
-      neighbor_stencil_md.push_back(arr_neighbor);
-
-      std::array<Force *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_force;
-      force_stencil_md.push_back(arr_force);
-  }
-
-  for (int i = 0; i < NUM_ZOIDS; i++) {
-      for (int j = 0; j < force_stencil_md[i].size(); j++) {
-          Force* force_ = new Force(this);
-          force_stencil_md[i][j] = force_;
-      }
-      // Force* force = new Force(this);
-      // force_stencil_md.push_back(force);
-      Modify* modify_;
-      if (kokkos) {
-          modify_ = new ModifyKokkos(this);
-      } else {
-          modify_ = new Modify(this);
-      }
-      modify_stencil_md.push_back(modify_);
-
-      for (int j = 0; j < atom_stencil_md[i].size(); j++) {
-          Atom* atom_;
-          if (kokkos) {
-              atom_ = new AtomKokkos(this);
-          } else {
-              atom_ = new Atom(this);
-          }
-
-          if (kokkos) {
-              atom_->create_avec_stencil_md("atomic/kk",0,nullptr,1);
-          } else {
-              atom_->create_avec_stencil_md("atomic", 0, nullptr, 1);
-          }
-          atom_stencil_md[i][j] = atom_;
-      }
-
-      Comm* comm_;
-      Comm* comm_next_dt;
-      if (kokkos) {
-          comm_ = new CommKokkos(this);
-          comm_next_dt = new CommKokkos(this);
-      } else {
-          comm_ = new CommBrick(this);
-          comm_next_dt = new CommBrick(this);
-      }
-
-      for (int j = 0; j < domain_stencil_md[i].size(); j++) {
-          Domain* domain_;
-          if (kokkos) {
-              domain_ = new DomainKokkos(this);
-          }
-#ifdef LMP_OPENMP
-              else {
-            domain_ = new DomainOMP(this);
-        }
-#else
-          else {
-              domain_ = new Domain(this);
-          }
-#endif
-          domain_stencil_md[i][j] = domain_;
-      }
-
-      for (int j = 0; j < neighbor_stencil_md[i].size(); j++) {
-          Neighbor* neighbor_;
-          if (kokkos) {
-              neighbor_ = new NeighborKokkos(this);
-          } else {
-              neighbor_ = new Neighbor(this);
-          }
-          neighbor_stencil_md[i][j] = neighbor_;
-      }
-
-      comm_stencil_md.push_back(comm_);
-      comm_stencil_md_next_dt.push_back(comm_next_dt);
-  }
+  stencilMD->CREATE();
+  stencilMD->CREATE_NEXT_DT();
 
   // read_model();
 }
@@ -1193,51 +1112,47 @@ void LAMMPS::destroy()
   delete python;
   python = nullptr;
 
-  /*
-  if (!USE_STENCIL_MD) {
-      return;
-  }
-  */
-
   // stencil md
   for (int i = 0; i < neighbor_stencil_md.size(); i++) {
       for (int j = 0; j < neighbor_stencil_md[i].size(); j++) {
           delete neighbor_stencil_md[i][j];
       }
   }
+
   for (int i = 0; i < domain_stencil_md.size(); i++) {
       for (int j = 0; j < domain_stencil_md[i].size(); j++) {
           delete domain_stencil_md[i][j];
       }
   }
+
   for (int i = 0; i < atom_stencil_md.size(); i++) {
     for (int j = 0; j < atom_stencil_md[i].size(); j++) {
       delete atom_stencil_md[i][j];
     }
   }
+
   for (int i = 0; i < comm_stencil_md.size(); i++) {
     delete comm_stencil_md[i];
   }
+
   // TODO: the delete method deletes the global modify pointer
   /*
   for (int i = 0; i < modify_stencil_md.size(); i++) {
     delete modify_stencil_md[i];
   }
   */
+
   for (int i = 0; i < update_stencil_md.size(); i++) {
     delete update_stencil_md[i];
   }
+
   for (int i = 0; i < force_stencil_md.size(); i++) {
     for (int j = 0; j < force_stencil_md[i].size(); j++) {
         delete force_stencil_md[i][j];
     }
   }
-
-  // stencil_md
-  delete[] zoid_num_to_idx;
-  // delete[] send_to_next_dt;
-  // delete[] recv_from_next_dt;
 }
+
 
 /* ----------------------------------------------------------------------
    initialize lists of styles in packages

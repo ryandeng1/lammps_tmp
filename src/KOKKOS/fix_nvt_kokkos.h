@@ -17,6 +17,12 @@ FixStyle(nvt/kk,FixNVTKokkos<LMPDeviceType>);
 FixStyle(nvt/kk/device,FixNVTKokkos<LMPDeviceType>);
 FixStyle(nvt/kk/host,FixNVTKokkos<LMPHostType>);
 // clang-format on
+#elifdef FIX_CLASS_STENCIL_MD
+// clang-format off
+FixStyleStencilMD(nvt/kk,FixNVTKokkos<LMPDeviceType>);
+FixStyleStencilMD(nvt/kk/device,FixNVTKokkos<LMPDeviceType>);
+FixStyleStencilMD(nvt/kk/host,FixNVTKokkos<LMPHostType>);
+// clang-format on
 #else
 
 // clang-format off

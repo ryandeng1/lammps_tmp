@@ -71,6 +71,9 @@ ComputePEAtom::ComputePEAtom(LAMMPS *lmp, int narg, char **arg) :
   nmax = 0;
 }
 
+ComputePEAtom::ComputePEAtom(LAMMPS *lmp, Modify* modify_, int narg, char **arg) :
+        ComputePEAtom(lmp, narg, arg) {}
+
 /* ---------------------------------------------------------------------- */
 
 ComputePEAtom::~ComputePEAtom()
@@ -82,6 +85,7 @@ ComputePEAtom::~ComputePEAtom()
 
 void ComputePEAtom::compute_peratom()
 {
+  std::cout << CYAN << "COMPUTE PER ATOM LAMMPS" << RESET_COLOR << std::endl;
   int i;
 
   invoked_peratom = update->ntimestep;
@@ -168,6 +172,99 @@ void ComputePEAtom::compute_peratom()
 
   for (i = 0; i < nlocal; i++)
     if (!(mask[i] & groupbit)) energy[i] = 0.0;
+}
+
+// Use settings/flags from LAMMPS force, but use data from stencilMD force
+void ComputePEAtom::compute_peratom_stencil_md(Atom* atom_, Force* force_) {
+    assert(false);
+    int i;
+
+    invoked_peratom = update->ntimestep;
+    if (update->eflag_atom != invoked_peratom)
+        error->all(FLERR,"Per-atom energy was not tallied on needed timestep");
+
+    // grow local energy array if necessary
+    // needs to be atom->nmax in length
+
+    if (atom_->nmax > nmax) {
+        memory->destroy(energy);
+        nmax = atom_->nmax;
+        memory->create(energy,nmax,"pe/atom:energy");
+        vector_atom = energy;
+    }
+
+    // npair includes ghosts if either newton flag is set
+    //   b/c some bonds/dihedrals call pair::ev_tally with pairwise info
+    // nbond includes ghosts if newton_bond is set
+    // ntotal includes ghosts if either newton flag is set
+    // KSpace includes ghosts if tip4pflag is set
+
+    int nlocal = atom_->nlocal;
+    int npair = nlocal;
+    int nbond = nlocal;
+    int ntotal = nlocal;
+    int nkspace = nlocal;
+    if (force->newton) npair += atom_->nghost;
+    if (force->newton_bond) nbond += atom_->nghost;
+    if (force->newton) ntotal += atom_->nghost;
+    if (force->kspace && force->kspace->tip4pflag) nkspace += atom_->nghost;
+
+    // clear local energy array
+
+    for (i = 0; i < ntotal; i++) energy[i] = 0.0;
+
+    // add in per-atom contributions from each force
+
+    if (pairflag && force->pair && force->pair->compute_flag) {
+        // double *eatom = force->pair->eatom;
+        double *eatom = force_->pair->eatom;
+        for (i = 0; i < npair; i++) energy[i] += eatom[i];
+    }
+
+    if (bondflag && force->bond) {
+        // double *eatom = force->bond->eatom;
+        double *eatom = force_->bond->eatom;
+        for (i = 0; i < nbond; i++) energy[i] += eatom[i];
+    }
+
+    if (angleflag && force->angle) {
+        double *eatom = force_->angle->eatom;
+        for (i = 0; i < nbond; i++) energy[i] += eatom[i];
+    }
+
+    if (dihedralflag && force->dihedral) {
+        double *eatom = force_->dihedral->eatom;
+        for (i = 0; i < nbond; i++) energy[i] += eatom[i];
+    }
+
+    if (improperflag && force->improper) {
+        double *eatom = force_->improper->eatom;
+        for (i = 0; i < nbond; i++) energy[i] += eatom[i];
+    }
+
+    if (kspaceflag && force->kspace && force->kspace->compute_flag) {
+        double *eatom = force_->kspace->eatom;
+        for (i = 0; i < nkspace; i++) energy[i] += eatom[i];
+    }
+
+    // add in per-atom contributions from relevant fixes
+    // always only for owned atoms, not ghost
+
+    if (fixflag && modify->n_energy_atom)
+        modify->energy_atom(nlocal,energy);
+
+    // communicate ghost energy between neighbor procs
+
+    if (force->newton || (force->kspace && force->kspace->tip4pflag))
+        comm->reverse_comm(this);
+
+    // zero energy of atoms not in group
+    // only do this after comm since ghost contributions must be included
+
+    int *mask = atom->mask;
+
+    for (i = 0; i < nlocal; i++)
+        if (!(mask[i] & groupbit)) energy[i] = 0.0;
 }
 
 /* ---------------------------------------------------------------------- */

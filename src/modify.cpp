@@ -28,6 +28,9 @@
 #include "update.h"
 #include "variable.h"
 
+#include "stencil_md_style_fix.h"
+#include "stencil_md_style_compute.h"
+
 #include <cstring>
 
 using namespace LAMMPS_NS;
@@ -97,6 +100,7 @@ Modify::Modify(LAMMPS *lmp) : Pointers(lmp)
   compute = nullptr;
 
   create_factories();
+  create_factories_stencil_md();
 }
 
 void _noopt Modify::create_factories()
@@ -104,7 +108,6 @@ void _noopt Modify::create_factories()
   // fill map with fixes listed in style_fix.h
 
   fix_map = new FixCreatorMap();
-  fix_map_stencil_md = new FixCreatorStencilMDMap();
 
 #define FIX_CLASS
 #define FixStyle(key, Class) (*fix_map)[#key] = &style_creator<Fix, Class>;
@@ -122,10 +125,35 @@ void _noopt Modify::create_factories()
 #undef ComputeStyle
 #undef COMPUTE_CLASS
 
-  (*fix_map_stencil_md)["nvt/kk"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
-  (*fix_map_stencil_md)["nvt/kk/device"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
-  (*fix_map_stencil_md)["nvt/kk/host"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
-  (*fix_map_stencil_md)["nvt"] = &style_creator_stencil_md<Fix, FixNVT>;
+}
+
+void _noopt Modify::create_factories_stencil_md() {
+    // fill map with fixes listed in style_fix.h
+    fix_map_stencil_md = new FixCreatorMapStencilMD();
+
+#define FIX_CLASS_STENCIL_MD
+#define FixStyleStencilMD(key, Class) (*fix_map_stencil_md)[#key] = &style_creator_stencil_md<Fix, Class>;
+#include "stencil_md_style_fix.h"    // IWYU pragma: keep
+#undef FixStyleStencilMD
+#undef FIX_CLASS_STENCIL_MD
+
+    // fill map with computes listed in style_compute.h
+
+    compute_map_stencil_md = new ComputeCreatorMapStencilMD();
+
+#define COMPUTE_CLASS_STENCIL_MD
+#define ComputeStyleStencilMD(key, Class) (*compute_map_stencil_md)[#key] = &style_creator_stencil_md<Compute, Class>;
+#include "stencil_md_style_compute.h"    // IWYU pragma: keep
+#undef ComputeStyleStencilMD
+#undef COMPUTE_CLASS_STENCIL_MD
+
+    // StencilMD Add in these templated constructors
+    /*
+    (*fix_map_stencil_md)["nvt/kk"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
+    (*fix_map_stencil_md)["nvt/kk/device"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
+    (*fix_map_stencil_md)["nvt/kk/host"] = &style_creator_stencil_md<Fix, FixNVTKokkos<LMPDeviceType>>;
+    (*fix_map_stencil_md)["nvt"] = &style_creator_stencil_md<Fix, FixNVT>;
+    */
 }
 
 /* ---------------------------------------------------------------------- */
@@ -335,7 +363,7 @@ void Modify::init_stencil_md(Atom* atom_) {
     //   but computes now do their DOF in setup()
 
     for (i = 0; i < nfix; i++) {
-        fix[i]->init_stencil_md(atom_);
+        fix[i]->init_stencil_md(atom_, this);
     }
 
     // set global flag if any fix has its restart_pbc flag set
@@ -528,6 +556,11 @@ void Modify::initial_integrate(int vflag)
     fix[list_initial_integrate[i]]->initial_integrate(vflag);
 }
 
+void Modify::initial_integrate_stencil_md(int vflag, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
+    for (int i = 0; i < n_initial_integrate; i++)
+        fix[list_initial_integrate[i]]->initial_integrate_stencil_md(vflag, atom_, next, atom_idx_mapping, can_eval);
+}
+
 /* ----------------------------------------------------------------------
    post_integrate call, only for relevant fixes
 ------------------------------------------------------------------------- */
@@ -605,6 +638,12 @@ void Modify::post_force(int vflag)
 void Modify::final_integrate()
 {
   for (int i = 0; i < n_final_integrate; i++) fix[list_final_integrate[i]]->final_integrate();
+}
+
+void Modify::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping, bool* can_eval) {
+    for (int i = 0; i < n_final_integrate; i++) {
+        fix[list_final_integrate[i]]->final_integrate_stencil_md(atom_, next, neighbor_, atom_idx_mapping, can_eval);
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -1006,17 +1045,9 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix, bool use_stencil_md)
   // try first with suffix appended
   fix[ifix] = nullptr;
 
-  if (use_stencil_md) {
-      // TODO: ryan this will be a nightmare to fix but
-      // std::cout << "HERE: " << trysuffix << " " << lmp->suffix_enable << std::endl;
-  }
-
   if (trysuffix && lmp->suffix_enable) {
     if (lmp->suffix) {
       std::string estyle = arg[2] + std::string("/") + lmp->suffix;
-      if (use_stencil_md) {
-          // std::cout << "estyle: " << estyle << std::endl;
-      }
       if (fix_map->find(estyle) != fix_map->end()) {
         if (use_stencil_md) {
             FixCreatorStencilMD &fix_creator = (*fix_map_stencil_md)[estyle];
@@ -1028,13 +1059,24 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix, bool use_stencil_md)
 
         delete[] fix[ifix]->style;
         fix[ifix]->style = utils::strdup(estyle);
+      } else {
+          if (use_stencil_md) {
+              error->message(FLERR," stencil md cannot find style: { }", estyle);
+              assert(false);
+          }
       }
     }
+
     if ((fix[ifix] == nullptr) && lmp->suffix2) {
       std::string estyle = arg[2] + std::string("/") + lmp->suffix2;
       if (fix_map->find(estyle) != fix_map->end()) {
-        FixCreator &fix_creator = (*fix_map)[estyle];
-        fix[ifix] = fix_creator(lmp, narg, arg);
+          if (use_stencil_md) {
+              FixCreatorStencilMD &fix_creator = (*fix_map_stencil_md)[estyle];
+              fix[ifix] = fix_creator(lmp, this, narg, arg);
+          } else {
+              FixCreator &fix_creator = (*fix_map)[estyle];
+              fix[ifix] = fix_creator(lmp, narg, arg);
+          }
         delete[] fix[ifix]->style;
         fix[ifix]->style = utils::strdup(estyle);
       }
@@ -1042,8 +1084,15 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix, bool use_stencil_md)
   }
 
   if ((fix[ifix] == nullptr) && (fix_map->find(arg[2]) != fix_map->end())) {
-    FixCreator &fix_creator = (*fix_map)[arg[2]];
-    fix[ifix] = fix_creator(lmp, narg, arg);
+      if (use_stencil_md) {
+          FixCreatorStencilMD &fix_creator = (*fix_map_stencil_md)[arg[2]];
+          fix[ifix] = fix_creator(lmp, this, narg, arg);
+      } else {
+          FixCreator &fix_creator = (*fix_map)[arg[2]];
+          fix[ifix] = fix_creator(lmp, narg, arg);
+      }
+    // FixCreator &fix_creator = (*fix_map)[arg[2]];
+    // fix[ifix] = fix_creator(lmp, narg, arg);
   }
 
   if (fix[ifix] == nullptr) error->all(FLERR, utils::check_packages_for_style("fix", arg[2], lmp));
@@ -1368,13 +1417,11 @@ int Modify::check_rigid_list_overlap(int *select)
    add a new compute
 ------------------------------------------------------------------------- */
 
-Compute *Modify::add_compute(int narg, char **arg, int trysuffix)
+Compute *Modify::add_compute(int narg, char **arg, int trysuffix, bool use_stencil_md)
 {
   if (narg < 3) error->all(FLERR, "Illegal compute command");
 
   // error check
-  std::cout << "ADDING COMPUTE: " << arg[0] << std::endl;
-
   for (int icompute = 0; icompute < ncompute; icompute++)
     if (strcmp(arg[0], compute[icompute]->id) == 0)
       error->all(FLERR, "Reuse of compute ID '{}'", arg[0]);
@@ -1396,8 +1443,13 @@ Compute *Modify::add_compute(int narg, char **arg, int trysuffix)
     if (lmp->suffix) {
       std::string estyle = arg[2] + std::string("/") + lmp->suffix;
       if (compute_map->find(estyle) != compute_map->end()) {
-        ComputeCreator &compute_creator = (*compute_map)[estyle];
-        compute[ncompute] = compute_creator(lmp, narg, arg);
+        if (use_stencil_md) {
+          ComputeCreatorStencilMD &compute_creator = (*compute_map_stencil_md)[estyle];
+          compute[ncompute] = compute_creator(lmp, this, narg, arg);
+        } else {
+          ComputeCreator &compute_creator = (*compute_map)[estyle];
+          compute[ncompute] = compute_creator(lmp, narg, arg);
+        }
         delete[] compute[ncompute]->style;
         compute[ncompute]->style = utils::strdup(estyle);
       }
@@ -1405,8 +1457,13 @@ Compute *Modify::add_compute(int narg, char **arg, int trysuffix)
     if (compute[ncompute] == nullptr && lmp->suffix2) {
       std::string estyle = arg[2] + std::string("/") + lmp->suffix2;
       if (compute_map->find(estyle) != compute_map->end()) {
-        ComputeCreator &compute_creator = (*compute_map)[estyle];
-        compute[ncompute] = compute_creator(lmp, narg, arg);
+          if (use_stencil_md) {
+              ComputeCreatorStencilMD &compute_creator = (*compute_map_stencil_md)[estyle];
+              compute[ncompute] = compute_creator(lmp, this, narg, arg);
+          } else {
+              ComputeCreator &compute_creator = (*compute_map)[estyle];
+              compute[ncompute] = compute_creator(lmp, narg, arg);
+          }
         delete[] compute[ncompute]->style;
         compute[ncompute]->style = utils::strdup(estyle);
       }
@@ -1414,8 +1471,13 @@ Compute *Modify::add_compute(int narg, char **arg, int trysuffix)
   }
 
   if (compute[ncompute] == nullptr && compute_map->find(arg[2]) != compute_map->end()) {
-    ComputeCreator &compute_creator = (*compute_map)[arg[2]];
-    compute[ncompute] = compute_creator(lmp, narg, arg);
+      if (use_stencil_md) {
+          ComputeCreatorStencilMD &compute_creator = (*compute_map_stencil_md)[arg[2]];
+          compute[ncompute] = compute_creator(lmp, this, narg, arg);
+      } else {
+          ComputeCreator &compute_creator = (*compute_map)[arg[2]];
+          compute[ncompute] = compute_creator(lmp, narg, arg);
+      }
   }
 
   if (compute[ncompute] == nullptr)
@@ -1429,13 +1491,13 @@ Compute *Modify::add_compute(int narg, char **arg, int trysuffix)
    convenience function to allow adding a compute from a single string
 ------------------------------------------------------------------------- */
 
-Compute *Modify::add_compute(const std::string &computecmd, int trysuffix)
+Compute *Modify::add_compute(const std::string &computecmd, int trysuffix, bool use_stencil_md)
 {
   auto args = utils::split_words(computecmd);
   std::vector<char *> newarg(args.size());
   int i = 0;
   for (const auto &arg : args) { newarg[i++] = (char *) arg.c_str(); }
-  return add_compute(args.size(), newarg.data(), trysuffix);
+  return add_compute(args.size(), newarg.data(), trysuffix, use_stencil_md);
 }
 
 /* ----------------------------------------------------------------------

@@ -11,9 +11,21 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
+/*
 #ifdef FIX_CLASS
 // clang-format off
 FixStyle(nvt,FixNVT);
+// clang-format on
+#else
+*/
+
+#ifdef FIX_CLASS
+// clang-format off
+FixStyle(nvt,FixNVT);
+// clang-format on
+#elifdef FIX_CLASS_STENCIL_MD
+// clang-format off
+FixStyleStencilMD(nvt,FixNVT);
 // clang-format on
 #else
 

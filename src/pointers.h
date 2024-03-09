@@ -34,7 +34,7 @@
 #include "platform.h"   // IWYU pragma: export
 #include "utils.h"      // IWYU pragma: export
 
-#include "stencil_md.h"
+#include "stencil_md_utils.h"
 
 namespace LAMMPS_NS {
 
@@ -92,27 +92,17 @@ class Pointers {
     logfile(ptr->logfile),
     atomKK(ptr->atomKK),
     memoryKK(ptr->memoryKK),
-    python(ptr->python) {}
+    python(ptr->python),
+    stencilMD(ptr->stencilMD) {}
 
-    /*
-    atom_stencil_md(ptr->atom_stencil_md),
-    atom_kokkos_stencil_md(ptr->atom_kokkos_stencil_md),
-    neighbor_stencil_md(ptr->neighbor_stencil_md),
-    comm_stencil_md(ptr->comm_stencil_md),
-    domain_stencil_md(ptr->domain_stencil_md),
-    modify_stencil_md(ptr->modify_stencil_md),
-    update_stencil_md(ptr->update_stencil_md) {}
-    */
   virtual ~Pointers() = default;
 
   // remove default members execept for the copy constructor
-
   Pointers() = delete;
   Pointers(const Pointers &) = default;
   Pointers(Pointers &&) = delete;
   Pointers & operator=(const Pointers&) = delete;
   Pointers & operator=(Pointers&&) = delete;
-
 
  protected:
   LAMMPS *lmp;
@@ -141,16 +131,8 @@ class Pointers {
   class MemoryKokkos *&memoryKK;
   class Python *&python;
 
-  /*
-  std::vector<class Atom*>& atom_stencil_md;
-  std::vector<class AtomKokkos*>& atom_kokkos_stencil_md;
-  std::vector<class Neighbor*>& neighbor_stencil_md;
-  std::vector<class Comm*>& comm_stencil_md;
-  std::vector<class Domain*>& domain_stencil_md;
-  std::vector<class Modify*>& modify_stencil_md;
-  std::vector<class Update*>& update_stencil_md;
-  int* zoid_num_to_idx;
-  */
+  // stencilMD
+  StencilMD *&stencilMD;
 };
 
 }

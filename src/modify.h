@@ -101,7 +101,7 @@ class Modify : protected Pointers {
   virtual int min_dof();
   virtual int min_reset_ref();
 
-  Fix *add_fix(int, char **, int trysuffix = 1, bool stencil_md = false);
+  Fix *add_fix(int, char **, int trysuffix = 1, bool use_stencil_md = false);
   Fix *add_fix(const std::string &, int trysuffix = 1);
   Fix *replace_fix(const char *, int, char **, int trysuffix = 1);
   Fix *replace_fix(const std::string &, const std::string &, int trysuffix = 1);
@@ -117,8 +117,8 @@ class Modify : protected Pointers {
   const std::vector<Fix *> get_fix_by_style(const std::string &) const;
   const std::vector<Fix *> &get_fix_list();
 
-  Compute *add_compute(int, char **, int trysuffix = 1);
-  Compute *add_compute(const std::string &, int trysuffix = 1);
+  Compute *add_compute(int, char **, int trysuffix = 1, bool use_stencil_md = false);
+  Compute *add_compute(const std::string &, int trysuffix = 1, bool use_stencil_md = false);
   void modify_compute(int, char **);
   void delete_compute(const std::string &);
   void delete_compute(int);
@@ -150,9 +150,9 @@ class Modify : protected Pointers {
   double memory_usage();
 
   virtual void init_stencil_md(Atom*);
-  virtual void setup_stencil_md(double*, Atom*) {assert(false);}
-  virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) {assert(false);}
-  virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) {assert(false);}
+  virtual void setup_stencil_md(double*, Atom*) { assert(false); }
+  virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*);
+  virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*);
 
 
  protected:
@@ -216,11 +216,16 @@ class Modify : protected Pointers {
   FixCreatorMap *fix_map;
 
   typedef Fix *(*FixCreatorStencilMD)(LAMMPS *, Modify*, int, char **);
-  typedef std::map<std::string, FixCreatorStencilMD> FixCreatorStencilMDMap;
-  FixCreatorStencilMDMap *fix_map_stencil_md;
+  typedef std::map<std::string, FixCreatorStencilMD> FixCreatorMapStencilMD;
+  FixCreatorMapStencilMD *fix_map_stencil_md;
+
+  typedef Compute *(*ComputeCreatorStencilMD)(LAMMPS *, Modify*, int, char **);
+  typedef std::map<std::string, ComputeCreatorStencilMD> ComputeCreatorMapStencilMD;
+  ComputeCreatorMapStencilMD *compute_map_stencil_md;
 
  protected:
   void create_factories();
+  void create_factories_stencil_md();
 };
 
 }    // namespace LAMMPS_NS

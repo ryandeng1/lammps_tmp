@@ -218,6 +218,22 @@ void PairPOD::compute(int eflag, int vflag)
         allocate_tempmemory_fastpod(nmem);
       }
 
+      /*
+      for (int neigh_idx = 0; neigh_idx < jnum; neigh_idx++) {
+        int neigh = firstneigh[i][neigh_idx];
+        double delx = x[neigh][0] - x[i][0];    // xj - xi
+        double dely = x[neigh][1] - x[i][1];    // xj - xi
+        double delz = x[neigh][2] - x[i][2];    // xj - xi
+        double rsq = delx * delx + dely * dely + delz * delz;
+        if (rsq < rcutsq && rsq > 1e-20) {
+            if (atom->tag[neigh] == 11613) {
+                std::cout << "compute lammps parent idx: " << i << " parent tag: " << atom->tag[i] << " neigh idx: " << neigh << " tag: " << atom->tag[neigh]
+                          << " nlocal: " << atom->nlocal << std::endl;
+            }
+        }
+      }
+      */
+
       // get neighbor list for atom i
       lammpsNeighborList(x, firstneigh, type, map, numneigh, rcutsq, i);
       num_pairs_eval += nij;
@@ -319,14 +335,17 @@ void PairPOD::compute_stencil_md(int eflag, int vflag, Atom *atom_,
 
       /*
       for (int neigh_idx = 0; neigh_idx < jnum; neigh_idx++) {
-          int neigh = firstneigh[i][neigh_idx];
-          double* my_pos = x[i];
-          double* neigh_pos = x[neigh];
-          if (fabs(my_pos[0] - (-1000)) <= 1 || fabs(neigh_pos[0] - (-1000)) <= 1) {
-              std::cout << MAGENTA << "zoid: " << zoid.num << " nlocal? " << nlocal << " atom idx: " << i << " my pos: " << my_pos[0] << " " << my_pos[1] << " " << my_pos[2]
-                << " neigh pos: " << neigh_pos[0] << " " << neigh_pos[1] << " " << neigh_pos[2] << " my tag: " << atom_->tag[i] << " neigh tag: " << atom_->tag[neigh] << RESET_COLOR << std::endl;
-              assert(false);
-          }
+        int neigh = firstneigh[i][neigh_idx];
+        double delx = x[neigh][0] - x[i][0];    // xj - xi
+        double dely = x[neigh][1] - x[i][1];    // xj - xi
+        double delz = x[neigh][2] - x[i][2];    // xj - xi
+        double rsq = delx * delx + dely * dely + delz * delz;
+        if (rsq < rcutsq && rsq > 1e-20) {
+            if (atom_->tag[neigh] == 11613) {
+                std::cout << "zoid: " << zoid.num << " compute stencil md parent idx: " << i << " parent tag: " << atom_->tag[i] << " neigh idx: " << neigh << " tag: " << atom_->tag[neigh]
+                          << " nlocal: " << atom_->nlocal << std::endl;
+            }
+        }
       }
       */
 

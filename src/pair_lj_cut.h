@@ -47,6 +47,9 @@ class PairLJCut : public Pair {
   void compute_middle() override;
   void compute_outer(int, int) override;
 
+  void init_style_stencil_md(Neighbor*) override;
+  void compute_stencil_md(int, int, Atom*, bool*, queue_info&, int*) override;
+
  protected:
   double cut_global;
   double **cut;

@@ -1,4 +1,3 @@
-// clang-format off
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
    https://www.lammps.org/, Sandia National Laboratories
@@ -310,6 +309,7 @@ void VerletKokkos::setup_minimal(int flag)
 ------------------------------------------------------------------------- */
 
 void VerletKokkos::run(int n) {
+    assert(false);
     std::cout << "atom nlocal: " << atom->nlocal << " nghost: " << atom->nghost << std::endl;
     constexpr auto max_precision{std::numeric_limits<long double>::digits10 + 1};
     std::cout << std::setprecision(max_precision);
@@ -339,7 +339,7 @@ void VerletKokkos::run(int n) {
 
     atomKK->sync(Device, ALL_MASK);
 
-    int test_num_timesteps = 2 * (NUM_TIMESTEPS_IN_PARALLEL + 1);
+    int test_num_timesteps = 1 * (NUM_TIMESTEPS_IN_PARALLEL + 1);
     double* test_f[test_num_timesteps];
     double* test_x[test_num_timesteps];
 
@@ -823,7 +823,6 @@ void VerletKokkos::run(int n) {
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
-            std::cout << "proc: " << comm->me << " dep: " << dep << " duration: " << duration << std::endl;
             recv_comm_duration += duration;
         }
 
@@ -989,6 +988,15 @@ void VerletKokkos::run(int n) {
                                 std::cout << "pos: " << atom_next_timestep->x[k][0] << " "
                                           << atom_next_timestep->x[k][1] << " " << atom_next_timestep->x[k][2]
                                           << std::endl;
+                                std::cout << "can eval center? " << zoid.can_eval_center[t + 1][k]
+                                          << " relevant? " << (zoid.relevant_atom_idxs[t + 1].find(k) != zoid.relevant_atom_idxs[t + 1].end()) << std::endl;
+                                if (atom_->tag_to_idx.count(atom_next_timestep->tag[k])) {
+                                    int prev_idx = atom_->tag_to_idx[atom_next_timestep->tag[k]];
+                                    std::cout << "prev nlocal: " << atom_->nlocal << " prev idx: " << prev_idx << " prev can eval center? " << zoid.can_eval_center[t][prev_idx]
+                                              << " relevant? " << (zoid.relevant_atom_idxs[t].find(prev_idx) != zoid.relevant_atom_idxs[t].end()) << std::endl;
+                                } else {
+                                    std::cout << "could not find prev tag" << std::endl;
+                                }
 
                                 for (int tmp = 0; tmp < 3; tmp++) {
                                     std::cout << "lo: "
@@ -1187,12 +1195,15 @@ void VerletKokkos::run(int n) {
                         for (auto& d : zoid_compute_duration_vec) {
                             total_compute_duration += d;
                         }
+
+                        /*
                         std::cout << MAGENTA << "zoid num: " << zoid_num << " send to proc: " << proc << " duration: " << duration_send
                                   << " before send ms: " << before_send_long << " after send long: " << after_send_long
                                   << " compute duration: " << zoid_compute_duration / 1000 << " ms "
                                   << " atoms eval'ed: " << zoid_atoms_evaled_vec << " pairs eval'ed vec: " << zoid_pairs_evaled_vec << " time before compute: " << time_before_first_compute
                                   << " compute duration vec: " << zoid_compute_duration_vec << " total duration: " << total_compute_duration
                                   << " time thread: " << duration_thread << RESET_COLOR << std::endl;
+                        */
                     }
                 }
 
@@ -1200,6 +1211,45 @@ void VerletKokkos::run(int n) {
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
                 send_comm_duration += duration;
             }
+
+            /*
+            auto& send_to = lmp->send_to_neighbors[zoid_num];
+            queue_info& zoid = lmp->queues[dep][j];
+            for (int i = 0; i < send_to.size(); i++) {
+                if (send_to[i] != 22) {
+                    continue;
+                }
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    Atom *atom_ = lmp->atom_stencil_md[zoid_num][t];
+                    int num_segments = zoid.send_force_num_segments[t][i];
+                    for (int k = 0; k < num_segments; k++) {
+                        int segment_idx = zoid.send_force_idxs[t][i][k];
+                        int segment_size = zoid.send_force_sizes[t][i][k];
+                        for (int h = 0; h < segment_size; h++) {
+                            int idx = segment_idx + h;
+                            if (fabs(atom_->eval_f_stencil_md[idx][0]) <= 1e-6) {
+                                std::cout << CYAN << "SEND EMPTY FORCE zoid num: " << zoid.num << " send to: " << send_to[i] << " time: " << t
+                                          << " tag: " << atom_->tag[idx] << " can eval? " << zoid.can_eval_center[t][idx]
+                                          << " pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1] << " " << atom_->x[idx][2]
+                                          << " force: " << atom_->eval_f_stencil_md[idx][0] << " " << atom_->eval_f_stencil_md[idx][1] << " " << atom_->eval_f_stencil_md[idx][2] << RESET_COLOR << std::endl;
+                            }
+                        }
+                    }
+
+                    int num_pos_segments = zoid.send_pos_num_segments[t][i];
+                    for (int k = 0; k < num_pos_segments; k++) {
+                        int segment_idx = zoid.send_pos_idxs[t][i][k];
+                        int segment_size = zoid.send_pos_sizes[t][i][k];
+                        for (int h = 0; h < segment_size; h++) {
+                            int idx = segment_idx + h;
+                            std::cout << YELLOW << "SEND POS zoid num: " << zoid.num << " send to: " << send_to[i] << " time: " << t
+                                      << " tag: " << atom_->tag[idx] << " can eval? " << zoid.can_eval_center[t][idx]
+                                      << " pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1] << " " << atom_->x[idx][2] << RESET_COLOR << std::endl;
+                        }
+                    }
+                }
+            }
+            */
         }
     }
 
@@ -1262,7 +1312,7 @@ void VerletKokkos::run(int n) {
                 }
             }
         }
-        std::cout << YELLOW << "NEXT DT me: " << comm->me << " dep: " << dep << " recv zoid: " << dep_recv_zoids << RESET_COLOR << std::endl;
+        // std::cout << YELLOW << "NEXT DT me: " << comm->me << " dep: " << dep << " recv zoid: " << dep_recv_zoids << RESET_COLOR << std::endl;
     }
 
     /*
@@ -1297,7 +1347,7 @@ void VerletKokkos::run(int n) {
 
     assert(num_zoids_not_mine_next_dt == num_to_wait_on_next_dt);
 
-    std::cout << CYAN << "ME: " << comm->me << " RECV ZOIDS: " << lmp->recv_from_neighbors_procs_next_dt << RESET_COLOR << std::endl;
+    // std::cout << CYAN << "ME: " << comm->me << " RECV ZOIDS: " << lmp->recv_from_neighbors_procs_next_dt << RESET_COLOR << std::endl;
 
     /*
     int num_threads = 0;
@@ -1423,6 +1473,7 @@ void VerletKokkos::run(int n) {
                                 << test_x[timestep_to_compare][tag * 3 + 1] << " " << test_x[timestep_to_compare][tag * 3 + 2] << std::endl;
                             std::cout << "Diff: " << fabs(x_[dim] - test_x[timestep_to_compare][tag * 3 + dim]) << std::endl;
                             std::cout << "pos: " << atom_->x[k][0] << " " << atom_->x[k][1] << " " << atom_->x[k][2] << std::endl;
+                            std::cout << "can eval center? " << zoid.can_eval_center[t][k] << " relevant? " << (zoid.relevant_atom_idxs[t].find(k) != zoid.relevant_atom_idxs[t].end()) << std::endl;
 
                             for (int tmp = 0; tmp < 3; tmp++) {
                                 std::cout << "lo: " << zoid.zoid.cuts[tmp].lower + zoid.zoid.cuts[tmp].slope_lower * t << std::endl;
@@ -1522,6 +1573,15 @@ void VerletKokkos::run(int n) {
                                 std::cout << "pos: " << atom_next_timestep->x[k][0] << " "
                                           << atom_next_timestep->x[k][1] << " " << atom_next_timestep->x[k][2]
                                           << std::endl;
+                                std::cout << "can eval center? " << zoid.can_eval_center[t + 1][k]
+                                    << " relevant? " << (zoid.relevant_atom_idxs[t + 1].find(k) != zoid.relevant_atom_idxs[t + 1].end()) << std::endl;
+                                if (atom_->tag_to_idx.count(atom_next_timestep->tag[k])) {
+                                    int prev_idx = atom_->tag_to_idx[atom_next_timestep->tag[k]];
+                                    std::cout << "prev can eval center? " << zoid.can_eval_center[t][prev_idx]
+                                        << " relevant? " << (zoid.relevant_atom_idxs[t].find(prev_idx) != zoid.relevant_atom_idxs[t].end()) << std::endl;
+                                } else {
+                                    std::cout << "could not find prev tag" << std::endl;
+                                }
 
                                 for (int tmp = 0; tmp < 3; tmp++) {
                                     std::cout << "lo: "

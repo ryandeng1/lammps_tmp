@@ -226,7 +226,6 @@ void NBinStandard::setup_bins_stencil_md(int style, Atom* atom_, Domain* domain_
     //   domain->bbox() converts lamda extent to box coords and computes bbox
 
     double bbox[3],bsubboxlo[3],bsubboxhi[3];
-    // double *cutghost = comm->cutghost;
     double cutghost[3] = {ALLEGRO_SLOPE, ALLEGRO_SLOPE, ALLEGRO_SLOPE};
 
     if (triclinic == 0) {
@@ -262,8 +261,6 @@ void NBinStandard::setup_bins_stencil_md(int style, Atom* atom_, Domain* domain_
     else binsize_optimal = 0.5*cutneighmin;
     if (binsize_optimal == 0.0) binsize_optimal = bbox[0];
     double binsizeinv = 1.0/binsize_optimal;
-
-    // std::cout << "stencil md binsize: " << binsize_optimal << " cutneighmax: " << cutneighmax << std::endl;
 
     // test for too many global bins in any dimension due to huge global domain
 
@@ -429,11 +426,12 @@ void NBinStandard::bin_atoms_stencil_md(Atom* atom_) {
             bins[i] = binhead[ibin];
             binhead[ibin] = i;
         }
-
     } else {
         for (i = nall-1; i >= 0; i--) {
             ibin = coord2bin(x[i]);
-            if (ibin < 0) {
+            if (ibin < 0 || ibin >= maxbin) {
+                std::cout << "error at me: " << comm->me << std::endl;
+                std::cout << "maxbin: " << maxbin << " idx: " << i << " nlocal? " << nlocal << std::endl;
                 std::cout << "ibin: " << ibin << " coord: " << x[i][0] << " " << x[i][1] << " " << x[i][2] << std::endl;
                 std::cout << "nlocal: " << atom_->nlocal << " " << " nghost: " << atom_->nghost << std::endl;
                 std::cout << "box lo: " << bboxlo[0] << " " << bboxlo[1] << " " << bboxlo[2] << std::endl;
@@ -473,7 +471,7 @@ void NBinStandard::bin_atoms_stencil_md(Atom* atom_) {
                 int ibin2 =  (iz-mbinzlo)*mbiny*mbinx + (iy-mbinylo)*mbinx + (ix-mbinxlo);
                 assert(false);
             }
-            // std::cout << "me: " << comm->me << "coord: " << x[i][0] << " " << x[i][1] << " " << x[i][2] << " ibin: " << ibin << std::endl;
+
             atom2bin[i] = ibin;
             bins[i] = binhead[ibin];
             binhead[ibin] = i;

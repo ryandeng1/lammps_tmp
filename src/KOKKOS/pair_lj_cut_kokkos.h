@@ -45,6 +45,10 @@ class PairLJCutKokkos : public PairLJCut {
   void init_style() override;
   double init_one(int, int) override;
 
+  void init_style_stencil_md(Neighbor*) override;
+  void compute_stencil_md(int eflag, int vflag, Atom *atom_,
+                          bool* can_eval_center, queue_info &zoid, int* num_pairs_evaled);
+
   struct params_lj{
     KOKKOS_INLINE_FUNCTION
     params_lj() {cutsq=0,lj1=0;lj2=0;lj3=0;lj4=0;offset=0;};

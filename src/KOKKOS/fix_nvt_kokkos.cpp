@@ -56,8 +56,6 @@ FixNVTKokkos<DeviceType>::FixNVTKokkos(LAMMPS *lmp, Modify* modify_, int narg, c
     // id = fix-ID + temp
 
     this->id_temp = utils::strdup(std::string(this->id)+"_temp");
-    // TODO: something here needs fixing, I am actually not sure what
-    // std::cout << "in kokkos???" << std::endl;
     modify_->add_compute(fmt::format("{} {} temp/kk",this->id_temp,this->group->names[this->igroup]));
     this->tcomputeflag = 1;
 }
