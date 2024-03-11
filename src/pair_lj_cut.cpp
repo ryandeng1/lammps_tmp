@@ -34,8 +34,6 @@
 using namespace LAMMPS_NS;
 using namespace MathConst;
 
-static int global_idx = 0;
-
 /* ---------------------------------------------------------------------- */
 
 PairLJCut::PairLJCut(LAMMPS *lmp) : Pair(lmp)
@@ -128,12 +126,6 @@ void PairLJCut::compute(int eflag, int vflag)
           f[j][2] -= delz * fpair;
         }
 
-        /*
-        if (global_idx == 9 && (atom->tag[i] == 65 || atom->tag[j] == 65)) {
-            std::cout << "timestep? " << global_idx << " LAMMPS compute tag src: " << atom->tag[i] << " tag dst: " << atom->tag[j] << " pos src: " << xtmp << " " << ytmp << " " << ztmp
-                << " pos dst: " << x[j][0] << " " << x[j][1] << " " << x[j][2] << std::endl;
-        }
-        */
         num_pairs_evaled++;
 
         if (eflag) {
@@ -147,8 +139,6 @@ void PairLJCut::compute(int eflag, int vflag)
   }
 
   if (vflag_fdotr) virial_fdotr_compute();
-  // std::cout << "me: " << comm->me << " LAMMPS num pairs eval'ed: " << num_pairs_evaled << std::endl;
-  global_idx++;
 }
 
 void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
@@ -176,11 +166,6 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
     // loop over neighbors of my atoms
 
     for (ii = 0; ii < inum; ii++) {
-        /*
-        if (!can_eval_center[i]) {
-            continue;
-        }
-        */
 
         i = ilist[ii];
         xtmp = x[i][0];
@@ -201,35 +186,6 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
             rsq = delx * delx + dely * dely + delz * delz;
             jtype = type[j];
 
-            /*
-            if (num_eval != NULL) {
-                double debug_xtmp = zoid.debug_atom_pos[*num_eval][j * 3 + 0];
-                double debug_ytmp = zoid.debug_atom_pos[*num_eval][j * 3 + 1];
-                double debug_ztmp = zoid.debug_atom_pos[*num_eval][j * 3 + 2];
-
-                double debug_delx = zoid.debug_atom_pos[*num_eval][i * 3 + 0] - zoid.debug_atom_pos[*num_eval][j * 3 + 0];
-                double debug_dely = zoid.debug_atom_pos[*num_eval][i * 3 + 1] - zoid.debug_atom_pos[*num_eval][j * 3 + 1];
-                double debug_delz = zoid.debug_atom_pos[*num_eval][i * 3 + 2] - zoid.debug_atom_pos[*num_eval][j * 3 + 2];
-                double debug_rsq = debug_delx * debug_delx + debug_dely * debug_dely + debug_delz * debug_delz;
-                if (debug_rsq < cutsq[itype][jtype]) {
-                    if (x[i][0] - (-1000) <= 1 || x[j][0] - (-1000) <= 1) {
-                        std::cout << "zoid num: " << zoid.num << " timestep: " << *num_eval
-                                  << " my pos: " << x[i][0] << " " << x[i][1] << " " << x[i][2] << " my tag: " << atom_->tag[i]
-                                  << " other pos: " << x[j][0] << " " << x[j][1] << " " << x[j][2]
-                                  << " debug other pos: " << debug_xtmp << " " << debug_ytmp << " " << debug_ztmp
-                                  << " other tag: " << atom_->tag[j] << std::endl;
-                        assert(false);
-                    }
-                }
-            }
-
-            if (num_eval != NULL && zoid.debug_int == ZOID_DEBUG_INT && zoid.num == 63 && *num_eval == 3 && (atom_->tag[i] == 65 || atom_->tag[j] == 65)) {
-                std::cout << "timestep? " << *num_eval << " PROSPECTIVE STENCIL MD compute tag src: " << atom_->tag[i] << " tag dst: " << atom_->tag[j] << " pos src: " << xtmp << " " << ytmp << " " << ztmp
-                          << " pos dst: " << x[j][0] << " " << x[j][1] << " " << x[j][2] << " rsq? " << rsq
-                          << " list ptr? " << list << std::endl;
-            }
-            */
-
             if (rsq < cutsq[itype][jtype]) {
                 r2inv = 1.0 / rsq;
                 r6inv = r2inv * r2inv * r2inv;
@@ -249,13 +205,6 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
                     // (*num_eval)++;
                 }
 
-                /*
-                if (num_eval != NULL && zoid.debug_int == ZOID_DEBUG_INT && zoid.num == 63 && *num_eval == 3 && (atom_->tag[i] == 65 || atom_->tag[j] == 65)) {
-                    std::cout << "timestep? " << *num_eval << " STENCIL MD compute tag src: " << atom_->tag[i] << " tag dst: " << atom_->tag[j] << " pos src: " << xtmp << " " << ytmp << " " << ztmp
-                              << " pos dst: " << x[j][0] << " " << x[j][1] << " " << x[j][2] << std::endl;
-                }
-                */
-
                 if (eflag) {
                     evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
                     evdwl *= factor_lj;
@@ -267,17 +216,6 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
     }
 
     if (vflag_fdotr) virial_fdotr_compute();
-
-    for (int k = 0; k < atom_->nlocal; k++) {
-        if (atom_->tag[k] == 7198) {
-            /*
-            std::cout << CYAN << "STENCIL MD GOT TARGET ATOM FORCE: "
-                << atom_->eval_f_stencil_md[k][0] << " " << atom_->eval_f_stencil_md[k][1] << " " << atom_->eval_f_stencil_md[k][2]
-                << " recv force: " << atom_->f[k][0] << " " << atom_->f[k][1] << " " << atom_->f[k][2]
-                << " pos: " << atom_->x[k][0] << " " << atom_->x[k][1] << " " << atom_->x[k][2] << RESET_COLOR << std::endl;
-            */
-        }
-    }
 }
 
 /* ---------------------------------------------------------------------- */

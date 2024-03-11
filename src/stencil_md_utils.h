@@ -64,7 +64,7 @@ constexpr bool DEBUG_SEND_RECV_DATA = true;
 
 constexpr bool OPTIMIZE_SEND_RECV_DATA = true;
 
-constexpr bool TEST_AGAINST_LAMMPS = true;
+constexpr bool TEST_AGAINST_LAMMPS = false;
 
 constexpr bool PURELY_LOCAL_POTENTIAL = true;
 
