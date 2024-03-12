@@ -20,6 +20,7 @@
 #include <iostream>
 #include <ctime>
 #include <iomanip>
+#include <algorithm>
 
 #include "atom.h"
 #include "atom_vec.h"

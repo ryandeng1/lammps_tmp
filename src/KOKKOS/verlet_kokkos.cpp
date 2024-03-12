@@ -694,7 +694,7 @@ void VerletKokkos::run(int n) {
                 }
             }
         }
-        std::cout << YELLOW << "me: " << comm->me << " dep: " << dep << " recv zoid: " << dep_recv_zoids << RESET_COLOR << std::endl;
+        // std::cout << YELLOW << "me: " << comm->me << " dep: " << dep << " recv zoid: " << dep_recv_zoids << RESET_COLOR << std::endl;
     }
 
     /*
