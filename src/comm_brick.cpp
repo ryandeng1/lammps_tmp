@@ -2335,6 +2335,10 @@ void CommBrick::construct_second_send_list_stencil_md(
                 assert(debug_num_local == local_idxs.size());
 
             }
+        } else {
+            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                zoid.send_num_segments[t][i] = 0;
+            }
         }
     }
 }
@@ -2531,6 +2535,10 @@ void CommBrick::construct_second_send_list_stencil_md_next_dt(
                     std::cout << "num segments: " << num_segments << " num local segments: " << debug_num_local_segments << std::endl;
                 }
                 assert(debug_num_local == local_idxs.size());
+            }
+        } else {
+            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                zoid.send_num_segments[t][i] = 0;
             }
         }
     }
@@ -4366,9 +4374,6 @@ void CommBrick::borders_stencil_md_initial_receive_from_zoid(Atom *atom_, Domain
         avec->unpack_border_vel(nrecv, atom_->nlocal + atom_->nghost, buf);
     } else {
         // avec->unpack_border(nrecv, atom_->nlocal + atom_->nghost, buf);
-        if (timestep == 1 && recv_zoid_num == 0 && zoid_num == 10) {
-            std::cout << "WHAT THE FUCK. TESTING" << std::endl;
-        }
         num_ghosts_added = avec->unpack_border_stencil_md(nrecv, atom_->nlocal + atom_->nghost, buf,
                                                           atom_, zoid_num);
         for (int k = 0; k < num_ghosts_added; k++) {
