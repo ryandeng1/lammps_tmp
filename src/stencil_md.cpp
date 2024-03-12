@@ -219,7 +219,7 @@ void StencilMD::INIT_ZOIDS() {
                 nums.push_back(lmp->queues[dep][j].num);
             }
 
-            std::cout << "DEP: " << dep << " zoid nums: " << nums << std::endl;
+            // std::cout << "DEP: " << dep << " zoid nums: " << nums << std::endl;
         }
     }
 

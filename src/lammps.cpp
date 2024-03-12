@@ -51,9 +51,9 @@
 #include "update.h"
 #include "variable.h"
 #include "version.h"
-#include <torch/torch.h>
-#include <torch/script.h>
-#include <torch/csrc/jit/runtime/graph_executor.h>
+// #include <torch/torch.h>
+// #include <torch/script.h>
+// #include <torch/csrc/jit/runtime/graph_executor.h>
 #include "stencil_md.h"
 
 
@@ -868,6 +868,7 @@ void LAMMPS::create()
 }
 
 // DEPRECATED: Used for allegro, currently deprecated
+/*
 void LAMMPS::read_model() {
     torch::Device device = torch::kCPU;
     if(torch::cuda::is_available()){
@@ -976,6 +977,7 @@ void LAMMPS::read_model() {
     at::globalContext().setAllowTF32CuBLAS(allow_tf32);
     at::globalContext().setAllowTF32CuDNN(allow_tf32);
 }
+*/
 
 /* ----------------------------------------------------------------------
    check suffix consistency with installed packages

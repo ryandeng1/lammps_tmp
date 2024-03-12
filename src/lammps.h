@@ -19,7 +19,7 @@
 #include <vector>
 #include <array>
 #include "stencil_md_utils.h"
-#include <torch/torch.h>
+// #include <torch/torch.h>
 
 namespace LAMMPS_NS {
 
@@ -101,6 +101,7 @@ class LAMMPS {
   queue_info* zoid_num_to_zoid;
   queue_info* zoid_num_to_zoid_next_dt;
 
+  /*
   torch::jit::Module lmp_model;
   std::unordered_map<std::string, std::string> lmp_model_metadata = {
         {"config", ""},
@@ -112,6 +113,7 @@ class LAMMPS {
         {"_jit_fusion_strategy", ""},
         {"allow_tf32", ""}
   };
+  */
 
   const char *version;    // LAMMPS version string = date
   int num_ver;            // numeric version id derived from *version*
@@ -155,7 +157,7 @@ class LAMMPS {
   void destroy();
   void print_config(FILE *);    // print compile time settings
 
-  void read_model();
+  void read_model() { assert(false); }
 
  private:
   struct package_styles_lists *pkg_lists;

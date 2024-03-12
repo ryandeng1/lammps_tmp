@@ -1672,10 +1672,12 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
             }
         }
 
+        /*
         if (pbc_flags != NULL) {
             std::cout << "proc: " << comm->me << " pack pos start: " << pos_start_idx << " vel start: " << vel_start_idx << " end: " << m
                 << " force offset idxs: " << force_offset_idxs << " num segments: " << force_num_segments << std::endl;
         }
+        */
 
         // TODO: maybe add this method in Kokkos
         // modified_stencil_md(Host, X_MASK | TAG_MASK | TYPE_MASK | MASK_MASK, this);

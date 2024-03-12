@@ -18,6 +18,8 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <ctime>
+#include <iomanip>
 
 #include "atom.h"
 #include "atom_vec.h"
@@ -3777,9 +3779,11 @@ void CommBrick::receive_data_process_stencil_md_next_dt(MPI_Request* request, in
         }
     }
 
+    /*
     if (idx_recv_zoid == -1) {
         std::cout << "proc: " << comm->me << " next dt. recv zoid num: " << recv_zoid_num << " recv from neighbors procs: " << lmp->recv_from_neighbors_procs_next_dt << std::endl;
     }
+    */
 
     assert(idx_recv_zoid != -1);
 

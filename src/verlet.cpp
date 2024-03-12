@@ -638,11 +638,13 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
     std::vector<int> test_segment_sizes;
     int test_num_segments = get_segments(test_nonrelevant_idxs,
                                          test_segment_idxs, test_segment_sizes);
+    /*
     if (test_nonrelevant_idxs.size() > 0) {
         std::cout << "curr dt test num segments: " << test_num_segments
                   << " idxs: " << test_segment_idxs
                   << " sizes: " << test_segment_sizes << std::endl;
     }
+    */
 
     for (int i = 0; i < atom_->nghost; i++) {
         int actual_idx = i + atom_->nlocal;
@@ -747,6 +749,7 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             int num_segments =
                 get_segments(idx_vec, segment_idxs, segment_lengths);
 
+            /*
             if (num_segments > 10) {
                 std::cout << GREEN << "CURR DT zoid: " << zoid_num
                           << " recv from: " << recv_from_zoid_num
@@ -757,6 +760,7 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 std::cout << "segment lengths? " << segment_lengths
                           << std::endl;
             }
+            */
 
             zoid.recv_ghost_idxs[timestep][i] = new int[num_segments];
             zoid.recv_ghost_sizes[timestep][i] = new int[num_segments];
@@ -795,11 +799,13 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
     std::vector<int> test_segment_sizes;
     int test_num_segments = get_segments(test_nonrelevant_idxs,
                                          test_segment_idxs, test_segment_sizes);
+    /*
     if (test_nonrelevant_idxs.size() > 0) {
         std::cout << "next dt test num segments: " << test_num_segments
                   << " idxs: " << test_segment_idxs
                   << " sizes: " << test_segment_sizes << std::endl;
     }
+    */
 
     for (int i = 0; i < atom_->nghost; i++) {
         int actual_idx = i + atom_->nlocal;
@@ -904,6 +910,7 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
             int num_segments =
                 get_segments(idx_vec, segment_idxs, segment_lengths);
 
+            /*
             if (num_segments > 10) {
                 std::cout << MAGENTA << "NEXT DT zoid: " << zoid.num
                           << " recv from: " << recv_from_zoid_num
@@ -913,6 +920,7 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
                           << " segment lengths? " << segment_lengths
                           << RESET_COLOR << std::endl;
             }
+            */
 
             zoid.recv_ghost_idxs[timestep][i] = new int[num_segments];
             zoid.recv_ghost_sizes[timestep][i] = new int[num_segments];
@@ -1459,12 +1467,15 @@ void Verlet::setup_stencil_md() {
             }
         }
 
+
         for (int i = 0; i < NUM_ZOIDS; i++) {
+            /*
             if (test[i].size() != lmp->recv_from_neighbors[i].size()) {
                 std::cout << "ZOID NUM: " << i << " sent: " << test[i]
                           << " recv: " << lmp->recv_from_neighbors[i]
                           << std::endl;
             }
+            */
             assert(test[i].size() == lmp->recv_from_neighbors[i].size());
         }
 
@@ -1483,18 +1494,21 @@ void Verlet::setup_stencil_md() {
         }
 
         for (int i = 0; i < NUM_ZOIDS; i++) {
+            /*
             if (test_next_dt[i].size() !=
                 lmp->recv_from_neighbors_next_dt[i].size()) {
                 std::cout << "ZOID NUM: " << i << " sent: " << test[i]
                           << " recv: " << lmp->recv_from_neighbors_next_dt[i]
                           << std::endl;
             }
+            */
             assert(test_next_dt[i].size() ==
                    lmp->recv_from_neighbors_next_dt[i].size());
         }
     }
 
     // print out send_to_recv info
+    /*
     if (comm->me == 0) {
         for (int i = 0; i < NUM_ZOIDS; i++) {
             queue_info& zoid = lmp->zoid_num_to_zoid[i];
@@ -1535,6 +1549,7 @@ void Verlet::setup_stencil_md() {
             }
         }
     }
+    */
 
     stencilMD->INIT_DOMAIN_BOUNDS();
 
@@ -1645,6 +1660,7 @@ void Verlet::setup_stencil_md() {
     }
 
     if (comm->me == 0) {
+        /*
         for (int i = 0; i < NUM_ZOIDS; i++) {
             std::cout << "send to for zoid: " << i
                       << " is: " << lmp->send_to_neighbors[i] << std::endl;
@@ -1653,6 +1669,7 @@ void Verlet::setup_stencil_md() {
             // std::cout << "send to next dt for zoid: " << i << " is: " << lmp->send_to_neighbors_next_dt[i] << std::endl;
             // std::cout << "recv from next dt for zoid: " << i << " is: " << lmp->recv_from_neighbors_next_dt[i] << std::endl;
         }
+        */
     }
 
     if (comm->me == 0) {
@@ -2428,6 +2445,7 @@ void Verlet::setup_stencil_md() {
                                         int idx = ghost_idx + h;
                                         ghost_idxs_sent_to_procs[neighbor_proc]
                                             .insert(idx);
+                                        /*
                                         if (print && print2) {
                                             std::cout
                                                 << YELLOW
@@ -2444,6 +2462,7 @@ void Verlet::setup_stencil_md() {
                                                 << " tag: " << atom_->tag[idx]
                                                 << RESET_COLOR << std::endl;
                                         }
+                                        */
                                     }
                                 } else {
                                     int local_size =
@@ -2455,6 +2474,7 @@ void Verlet::setup_stencil_md() {
                                         auto& vec = local_idxs_sent_to_procs
                                             [neighbor_proc];
 
+                                        /*
                                         if (print && print2) {
                                             std::cout
                                                 << CYAN << "zoid: " << zoid_num
@@ -2473,6 +2493,7 @@ void Verlet::setup_stencil_md() {
                                                 << atom_->tag[local_idx]
                                                 << RESET_COLOR << std::endl;
                                         }
+                                        */
 
                                         if (std::find(vec.begin(), vec.end(),
                                                       local_idx) == vec.end()) {
@@ -2496,6 +2517,7 @@ void Verlet::setup_stencil_md() {
                                     ghost_to_local_idxs_sent_to_procs
                                         [neighbor_proc]
                                             .insert(idx);
+                                    /*
                                     if (print && print2) {
                                         std::cout
                                             << YELLOW
@@ -2515,6 +2537,7 @@ void Verlet::setup_stencil_md() {
                                             << " tag: " << atom_->tag[idx]
                                             << RESET_COLOR << std::endl;
                                     }
+                                    */
                                 }
                             }
                         }
@@ -2545,6 +2568,7 @@ void Verlet::setup_stencil_md() {
                                     get_segments(ghost_vec_idxs, tmp_idxs,
                                                  tmp_lengths, false);
                                 if (k != comm->me) {
+                                    /*
                                     if (tmp_num_segments >= 15) {
                                         std::cout
                                             << "curr dt zoid: " << zoid_num
@@ -2557,6 +2581,7 @@ void Verlet::setup_stencil_md() {
                                             << " lengths: " << tmp_lengths
                                             << std::endl;
                                     }
+                                    */
                                 }
                             }
                         }
@@ -3085,6 +3110,7 @@ void Verlet::setup_stencil_md() {
                             get_segments(local_buf_idxs, local_segment_idxs_buf,
                                          local_segment_sizes_buf);
 
+                        /*
                         if (print) {
                             std::cout
                                 << "DEBUG local buf idxs: " << local_buf_idxs
@@ -3110,6 +3136,7 @@ void Verlet::setup_stencil_md() {
                                     zoid.recv_list_local_force_pos[t][i][k];
                             }
                         }
+                        */
 
                         std::vector<int> ghost_buf_idxs;
 
@@ -3319,6 +3346,7 @@ void Verlet::setup_stencil_md() {
                                         int idx = ghost_idx + h;
                                         ghost_idxs_sent_to_procs[neighbor_proc]
                                             .insert(idx);
+                                        /*
                                         if (print && print2) {
                                             std::cout
                                                 << YELLOW
@@ -3335,6 +3363,7 @@ void Verlet::setup_stencil_md() {
                                                 << " tag: " << atom_->tag[idx]
                                                 << RESET_COLOR << std::endl;
                                         }
+                                        */
                                     }
                                 } else {
                                     int local_size =
@@ -3346,6 +3375,7 @@ void Verlet::setup_stencil_md() {
                                         auto& vec = local_idxs_sent_to_procs
                                             [neighbor_proc];
 
+                                        /*
                                         if (print && print2) {
                                             std::cout
                                                 << CYAN << "zoid: " << zoid_num
@@ -3364,6 +3394,7 @@ void Verlet::setup_stencil_md() {
                                                 << atom_->tag[local_idx]
                                                 << RESET_COLOR << std::endl;
                                         }
+                                        */
 
                                         if (std::find(vec.begin(), vec.end(),
                                                       local_idx) == vec.end()) {
@@ -3384,6 +3415,7 @@ void Verlet::setup_stencil_md() {
                                     int idx = start_idx + h;
                                     ghost_idxs_sent_to_procs[neighbor_proc]
                                         .insert(idx);
+                                    /*
                                     if (print && print2) {
                                         std::cout
                                             << YELLOW
@@ -3403,6 +3435,7 @@ void Verlet::setup_stencil_md() {
                                             << " tag: " << atom_->tag[idx]
                                             << RESET_COLOR << std::endl;
                                     }
+                                    */
                                 }
                             }
                         }
@@ -3433,6 +3466,7 @@ void Verlet::setup_stencil_md() {
                                     get_segments(ghost_vec_idxs, tmp_idxs,
                                                  tmp_lengths, false);
                                 if (k != comm->me) {
+                                    /*
                                     if (tmp_num_segments >= 15) {
                                         std::cout
                                             << "zoid: " << zoid_num
@@ -3446,6 +3480,7 @@ void Verlet::setup_stencil_md() {
                                             << " lengths: " << tmp_lengths
                                             << std::endl;
                                     }
+                                    */
                                 }
                             }
                         }
