@@ -272,6 +272,8 @@ void StencilMD::INIT_ZOID_DATA() {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
+                zoid.num_send_process = new int[comm->nprocs];
+                zoid.num_recv_process = new int[comm->nprocs];
                 // debugging
                 zoid.debug_atom_pos =
                         new double*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -388,6 +390,9 @@ void StencilMD::INIT_ZOID_DATA() {
         for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info& zoid = lmp->queues_next_dt[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
+                zoid.num_send_process = new int[comm->nprocs];
+                zoid.num_recv_process = new int[comm->nprocs];
+
                 zoid.debug_atom_pos =
                         new double*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
@@ -842,6 +847,103 @@ void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
                     Force* force_ = lmp->force_stencil_md_next_dt[zoid_num][t];
                     force_->setup();
                 }
+            }
+        }
+    }
+}
+
+
+void StencilMD::COMPUTE_NUM_SEND_RECV_PROCESS() {
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
+            auto &send_to_neighbors = lmp->send_to_neighbors[zoid_num];
+
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                int nsend_force = 0;
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    for (int i = 0; i < send_to_neighbors.size(); i++) {
+                        int neighbor = send_to_neighbors[i];
+                        if (neighbor % comm->nprocs == proc) {
+                            int num_force_segments = zoid.send_force_num_segments[t][i];
+                            for (int j = 0; j < num_force_segments; j++) {
+                                nsend_force += zoid.send_force_sizes[t][i][j];
+                            }
+                        }
+                    }
+                }
+
+                int nsend_vel = 0;
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    for (int i = 0; i < send_to_neighbors.size(); i++) {
+                        int neighbor = send_to_neighbors[i];
+                        if (neighbor % comm->nprocs == proc) {
+                            int num_vel_segments = zoid.send_pos_num_segments[t][i];
+                            for (int j = 0; j < num_vel_segments; j++) {
+                                nsend_vel += zoid.send_pos_sizes[t][i][j];
+                            }
+                        }
+                    }
+                }
+
+                // count positions
+                int nsend_pos = 0;
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    nsend_pos += zoid.num_elems_send_process[t][proc];
+                }
+
+                int num_elems_send;
+                if (DEBUG_SEND_RECV_DATA) {
+                    num_elems_send = nsend_force * (3 + 1) + nsend_pos * (3 + 1) + nsend_vel * (3 + 1);
+                }
+                zoid.num_send_process[proc] = num_elems_send;
+            }
+        }
+    }
+
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            queue_info& zoid = lmp->zoid_num_to_zoid_next_dt[zoid_num];
+            auto &send_to_neighbors = lmp->send_to_neighbors_next_dt[zoid_num];
+
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                int nsend_force = 0;
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    for (int i = 0; i < send_to_neighbors.size(); i++) {
+                        int neighbor = send_to_neighbors[i];
+                        if (neighbor % comm->nprocs == proc) {
+                            int num_force_segments = zoid.send_force_num_segments[t][i];
+                            for (int j = 0; j < num_force_segments; j++) {
+                                nsend_force += zoid.send_force_sizes[t][i][j];
+                            }
+                        }
+                    }
+                }
+
+                int nsend_vel = 0;
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    for (int i = 0; i < send_to_neighbors.size(); i++) {
+                        int neighbor = send_to_neighbors[i];
+                        if (neighbor % comm->nprocs == proc) {
+                            int num_vel_segments = zoid.send_pos_num_segments[t][i];
+                            for (int j = 0; j < num_vel_segments; j++) {
+                                nsend_vel += zoid.send_pos_sizes[t][i][j];
+                            }
+                        }
+                    }
+                }
+
+                // count positions
+                int nsend_pos = 0;
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    nsend_pos += zoid.num_elems_send_process[t][proc];
+                }
+
+                int num_elems_send;
+                if (DEBUG_SEND_RECV_DATA) {
+                    num_elems_send = nsend_force * (3 + 1) + nsend_pos * (3 + 1) + nsend_vel * (3 + 1);
+                }
+                zoid.num_send_process[proc] = num_elems_send;
             }
         }
     }

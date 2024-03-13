@@ -4575,6 +4575,8 @@ void Verlet::setup_stencil_md() {
         }
     }
 
+    stencilMD->COMPUTE_NUM_SEND_RECV_PROCESS();
+
     std::cout << GREEN << "-------- SETUP STENCIL MD PASSED ---------"
               << RESET_COLOR << std::endl;
     MPI_Barrier(world);

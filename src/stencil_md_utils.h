@@ -76,6 +76,8 @@ constexpr int ZOID_DEBUG_INT = 17;
 
 constexpr bool TRY_PRECOMPUTE_RELEVANT_ATOM_IDX = false;
 
+constexpr bool DEBUG = true;
+
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
         {std::make_tuple(RIGHT, RIGHT, RIGHT), 1},
@@ -300,6 +302,7 @@ struct queue_info {
 
   // info used for sending data from zoid to a process
 
+  // helper variables to help with having a temporary place to store data when doing MPI_Isend
   int** num_elems_send_process;
   int** num_elems_recv_process;
 
@@ -321,6 +324,10 @@ struct queue_info {
   std::set<int>* relevant_atom_idxs;
   std::set<int>* relevant_atom_tags;
   std::set<int>* can_eval_center_tags;
+
+  // num elems send to process across ALL timesteps
+  int* num_send_process;
+  int* num_recv_process;
 };
 
 int get_zoid_dep(int);

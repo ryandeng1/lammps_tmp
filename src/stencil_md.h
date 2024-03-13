@@ -53,6 +53,8 @@ public:
 
     void BUILD_NEIGHBOR_LIST();
     void BUILD_NEIGHBOR_LIST_NEXT_DT();
+
+    void COMPUTE_NUM_SEND_RECV_PROCESS();
 };
 
 }
