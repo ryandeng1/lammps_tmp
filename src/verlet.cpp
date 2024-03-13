@@ -5556,12 +5556,16 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
         if (i % comm->nprocs == comm->me) {
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
                 Atom* atom_ = lmp->atom_stencil_md[i][t];
+                memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double));
+                memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double));
+                /*
                 for (int j = 0; j < atom_->nlocal + atom_->nghost; j++) {
                     for (int dim = 0; dim < 3; dim++) {
                         atom_->f[j][dim] = 0;
                         atom_->eval_f_stencil_md[j][dim] = 0;
                     }
                 }
+                */
             }
         }
     }
@@ -6079,12 +6083,16 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
         if (i % comm->nprocs == comm->me) {
             for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 Atom* atom_ = lmp->atom_stencil_md[i][t];
+                memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double));
+                memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double));
+                /*
                 for (int j = 0; j < atom_->nlocal + atom_->nghost; j++) {
                     for (int dim = 0; dim < 3; dim++) {
                         atom_->f[j][dim] = 0;
                         atom_->eval_f_stencil_md[j][dim] = 0;
                     }
                 }
+                */
             }
         }
     }
