@@ -4885,17 +4885,20 @@ void Verlet::run(int n) {
         auto end_m2 = std::chrono::high_resolution_clock::now();
         auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
         lammps_modify_duration += duration_m2;
-        if (n_end_of_step)
+        if (n_end_of_step) {
             modify->end_of_step();
+        }
         timer->stamp(Timer::MODIFY);
 
         // all output
 
+        /*
         if (ntimestep == output->next) {
             timer->stamp();
             output->write(ntimestep);
             timer->stamp(Timer::OUTPUT);
         }
+        */
     }
 
     auto end_lammps = std::chrono::high_resolution_clock::now();
@@ -5492,12 +5495,14 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
 
                 // all output
 
+                /*
                 if (ntimestep == output->next) {
                     assert(false);
                     timer->stamp();
                     output->write(ntimestep);
                     timer->stamp(Timer::OUTPUT);
                 }
+                */
             }
 
             if (dep < NUM_DEPS - 1) {
@@ -5991,12 +5996,14 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
 
                 // all output
 
+                /*
                 if (ntimestep == output->next) {
                     assert(false);
                     timer->stamp();
                     output->write(ntimestep);
                     timer->stamp(Timer::OUTPUT);
                 }
+                */
             }
 
             // send data
