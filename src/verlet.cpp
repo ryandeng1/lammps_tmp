@@ -5534,7 +5534,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                             vec_idx, zoid_num)));
                         */
                         // send_request_threads.push_back(std::async(std::launch::async,
-                        send_request_threads.emplace_back(std::async(std::launch::deferred,
+                        send_request_threads.emplace_back(std::async(std::launch::async,
                                                                   [&](int idx, int zoid_num_) {
                                     int wait_status =
                                             MPI_Wait(&send_requests[zoid_num_][idx],
@@ -6029,7 +6029,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                             &send_requests_next_dt[zoid_num][vec_idx], proc, false);
                     if (sent) {
                         // send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
-                        send_request_threads_next_dt.emplace_back(std::async(std::launch::deferred,
+                        send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
                                                                   [&](int idx, int zoid_num_) {
                                                                       int wait_status =
                                                                               MPI_Wait(&send_requests_next_dt[zoid_num_][idx],
