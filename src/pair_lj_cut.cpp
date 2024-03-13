@@ -215,9 +215,11 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
                     evdwl *= factor_lj;
                 }
 
+                /*
                 if (num_eval != nullptr) {
                     (*num_eval)++;
                 }
+                */
 
                 if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
             }
