@@ -52,6 +52,7 @@
 #include <unistd.h>
 #include <future>
 #include <algorithm>
+#include "pair_lj_cut.h"
 
 #include "stencil_md.h"
 
@@ -171,7 +172,8 @@ void Verlet::setup(int flag) {
     modify->setup_pre_force(vflag);
 
     if (pair_compute_flag) {
-        force->pair->compute(eflag, vflag);
+        // force->pair->compute(eflag, vflag);
+        force->pair->compute(-1, -1);
     } else if (force->pair) {
         force->pair->compute_dummy(eflag, vflag);
     }
@@ -4239,7 +4241,7 @@ void Verlet::setup_stencil_md() {
                         force_->pair->compute_stencil_md(
                             eflag, vflag, lmp->atom_stencil_md[zoid_num][t],
                             zoid.can_eval_center[t],
-                            lmp->zoid_num_to_zoid[zoid_num], NULL);
+                            lmp->zoid_num_to_zoid[zoid_num], nullptr);
                         force_clear_stencil_md(
                             lmp->atom_stencil_md[zoid_num][t], force_,
                             lmp->neighbor_stencil_md[zoid_num][t]);
@@ -5003,17 +5005,20 @@ void Verlet::run(int n) {
     int64_t curr_dt_comm_duration = 0;
     int64_t next_dt_comm_duration = 0;
 
+    int num_pairs_evaled = 0;
+
     MPI_Barrier(world);
 
     auto begin = std::chrono::high_resolution_clock::now();
     for (int t = 0; t < n; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
         run_stencil_md(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt,
                        test_f, test_x, &compute_duration, &send_comm_duration, &recv_comm_duration, &modify_duration, &mpi_duration,
-                       &curr_dt_comm_duration, &next_dt_comm_duration);
+                       &curr_dt_comm_duration, &next_dt_comm_duration,
+                       &num_pairs_evaled);
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-    std::cout << "stencil md total just running the thing: " << duration << " microseconds. " << std::endl;
+    std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " num pairs eval'ed: " << num_pairs_evaled << std::endl;
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
@@ -5050,7 +5055,8 @@ void Verlet::run(int n) {
 void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int>>& dep_to_wait_idxs, std::map<int, std::vector<int>>& dep_to_wait_idxs_next_dt,
                             double** test_f, double** test_x, int64_t* compute_duration,
                             int64_t* send_comm_duration, int64_t* recv_comm_duration, int64_t* modify_duration, int64_t* mpi_duration,
-                            int64_t* curr_dt_comm_duration, int64_t* next_dt_comm_duration) {
+                            int64_t* curr_dt_comm_duration, int64_t* next_dt_comm_duration,
+                            int* num_pairs_evaled) {
     bigint ntimestep;
     int nflag, sortflag;
 
@@ -5131,8 +5137,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 std::vector<MPI_Request>(num_procs, MPI_REQUEST_NULL);
         }
     }
-
-    int64_t num_pairs_evaled = 0;
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         // start compute curr dt
@@ -5453,7 +5457,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         eflag, vflag, atom_next_timestep,
                         zoid.can_eval_center[t + 1],
                         lmp->zoid_num_to_zoid[zoid_num],
-                        &timestep_debug);
+                        num_pairs_evaled);
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration =
                         std::chrono::duration_cast<std::chrono::microseconds>(
@@ -5961,7 +5965,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                     next_force->pair->compute_stencil_md(
                         eflag, vflag, atom_next_timestep,
                         zoid.can_eval_center[t + 1],
-                        lmp->zoid_num_to_zoid_next_dt[zoid_num], &timestep_debug);
+                        lmp->zoid_num_to_zoid_next_dt[zoid_num], num_pairs_evaled);
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                     *compute_duration += duration;

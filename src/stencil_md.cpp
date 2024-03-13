@@ -751,6 +751,7 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                     lmp->comm_stencil_md[zoid_num]
                             ->exchange_stencil_md_initial_receive(
                                     first, lmp->domain_stencil_md[zoid_num][t], zoid);
+                    first->sort_stencil_md();
                 }
             }
         }

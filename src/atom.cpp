@@ -2187,7 +2187,6 @@ void Atom::sort()
 }
 
 void Atom::sort_stencil_md() {
-    assert(false);
     int i,m,n,ix,iy,iz,ibin,empty;
 
     // set next timestep for sorting to take place

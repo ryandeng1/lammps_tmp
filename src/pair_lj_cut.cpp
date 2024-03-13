@@ -27,12 +27,15 @@
 #include "neighbor.h"
 #include "respa.h"
 #include "update.h"
+#include "stencil_md_utils.h"
 
 #include <cmath>
 #include <cstring>
 
 using namespace LAMMPS_NS;
 using namespace MathConst;
+
+static int num_pairs_evaled = 0;
 
 /* ---------------------------------------------------------------------- */
 
@@ -68,6 +71,12 @@ PairLJCut::~PairLJCut()
 
 void PairLJCut::compute(int eflag, int vflag)
 {
+  bool LAMMPS_INCREMENT_PAIRS = true;
+  if (eflag == -1) {
+      eflag = 0;
+      vflag = 0;
+      LAMMPS_INCREMENT_PAIRS = false;
+  }
   int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, evdwl, fpair;
   double rsq, r2inv, r6inv, forcelj, factor_lj;
@@ -89,7 +98,6 @@ void PairLJCut::compute(int eflag, int vflag)
   firstneigh = list->firstneigh;
 
   // loop over neighbors of my atoms
-  int num_pairs_evaled = 0;
 
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
@@ -126,7 +134,9 @@ void PairLJCut::compute(int eflag, int vflag)
           f[j][2] -= delz * fpair;
         }
 
-        num_pairs_evaled++;
+        if (LAMMPS_INCREMENT_PAIRS) {
+            num_pairs_evaled++;
+        }
 
         if (eflag) {
           evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
@@ -139,6 +149,7 @@ void PairLJCut::compute(int eflag, int vflag)
   }
 
   if (vflag_fdotr) virial_fdotr_compute();
+  // std::cout << "ME: " << comm->me << " num pairs eval'ed so far: " << num_pairs_evaled << std::endl;
 }
 
 void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
@@ -202,6 +213,10 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
                 if (eflag) {
                     evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
                     evdwl *= factor_lj;
+                }
+
+                if (num_eval != nullptr) {
+                    (*num_eval)++;
                 }
 
                 if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
