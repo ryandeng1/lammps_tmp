@@ -105,9 +105,6 @@ void FixNVE::initial_integrate(int /*vflag*/)
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit) {
         dtfm = dtf / mass[type[i]];
-        double x0 = x[i][0];
-        double x1 = x[i][1];
-        double x2 = x[i][2];
 
         v[i][0] += dtfm * f[i][0];
         v[i][1] += dtfm * f[i][1];
