@@ -51,6 +51,8 @@
 #include <map>
 #include <unistd.h>
 #include <future>
+#include <algorithm>
+
 #include "stencil_md.h"
 
 using namespace LAMMPS_NS;

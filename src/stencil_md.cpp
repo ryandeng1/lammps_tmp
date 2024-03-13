@@ -1,6 +1,7 @@
 //
 // Created by Ryan Deng on 3/7/24.
 //
+#include <algorithm>
 
 #include "stencil_md.h"
 #include "comm.h"
