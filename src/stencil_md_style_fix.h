@@ -3,5 +3,5 @@
 //
 
 #include "fix_nvt.h"
-#include "fix_nvt_kokkos.h"
+// #include "fix_nvt_kokkos.h"
 #include "fix_nve.h"

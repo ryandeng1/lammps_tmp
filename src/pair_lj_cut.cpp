@@ -164,9 +164,7 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
     firstneigh = list->firstneigh;
 
     // loop over neighbors of my atoms
-
     for (ii = 0; ii < inum; ii++) {
-
         i = ilist[ii];
         xtmp = x[i][0];
         ytmp = x[i][1];
@@ -199,10 +197,6 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
                     f[j][0] -= delx * fpair;
                     f[j][1] -= dely * fpair;
                     f[j][2] -= delz * fpair;
-                }
-
-                if (num_eval != NULL) {
-                    // (*num_eval)++;
                 }
 
                 if (eflag) {

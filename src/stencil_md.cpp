@@ -3,6 +3,11 @@
 //
 
 #include "stencil_md.h"
+#include "comm.h"
+#include "comm_brick.h"
+#include "domain.h"
+#include "neigh_list.h"
+#include "modify.h"
 
 using namespace LAMMPS_NS;
 
@@ -57,6 +62,7 @@ void StencilMD::FORCE_PAIR_SETTINGS(int narg, char **arg) {
 }
 
 void StencilMD::CREATE() {
+    assert(!lmp->kokkos);
     for (int i = 0; i < NUM_ZOIDS; i++) {
         std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_atom;
         lmp->atom_stencil_md.push_back(arr_atom);
@@ -79,7 +85,8 @@ void StencilMD::CREATE() {
 
         Modify* modify_;
         if (lmp->kokkos) {
-            modify_ = new ModifyKokkos(lmp);
+            // modify_ = new ModifyKokkos(lmp);
+            modify_ = nullptr;
         } else {
             modify_ = new Modify(lmp);
         }
@@ -88,7 +95,8 @@ void StencilMD::CREATE() {
         for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
             Atom* atom_;
             if (lmp->kokkos) {
-                atom_ = new AtomKokkos(lmp);
+                // atom_ = new AtomKokkos(lmp);
+                atom_ = nullptr;
             } else {
                 atom_ = new Atom(lmp);
             }
@@ -103,7 +111,8 @@ void StencilMD::CREATE() {
 
         Comm* comm_;
         if (lmp->kokkos) {
-            comm_ = new CommKokkos(lmp);
+            // comm_ = new CommKokkos(lmp);
+            comm_ = nullptr;
         } else {
             comm_ = new CommBrick(lmp);
         }
@@ -111,7 +120,8 @@ void StencilMD::CREATE() {
         for (int j = 0; j < lmp->domain_stencil_md[i].size(); j++) {
             Domain* domain_;
             if (lmp->kokkos) {
-                domain_ = new DomainKokkos(lmp);
+                // domain_ = new DomainKokkos(lmp);
+                domain_ = nullptr;
             }
 #ifdef LMP_OPENMP
                 else {
@@ -128,7 +138,8 @@ void StencilMD::CREATE() {
         for (int j = 0; j < lmp->neighbor_stencil_md[i].size(); j++) {
             Neighbor* neighbor_;
             if (lmp->kokkos) {
-                neighbor_ = new NeighborKokkos(lmp);
+                // neighbor_ = new NeighborKokkos(lmp);
+                neighbor_ = nullptr;
             } else {
                 neighbor_ = new Neighbor(lmp);
             }
@@ -160,7 +171,8 @@ void StencilMD::CREATE_NEXT_DT() {
         for (int j = 0; j < lmp->domain_stencil_md[i].size(); j++) {
             Domain *domain_;
             if (lmp->kokkos) {
-                domain_ = new DomainKokkos(lmp);
+                // domain_ = new DomainKokkos(lmp);
+                domain_ = nullptr;
             }
 #ifdef LMP_OPENMP
                 else {
@@ -177,7 +189,8 @@ void StencilMD::CREATE_NEXT_DT() {
         for (int j = 0; j < lmp->neighbor_stencil_md_next_dt[i].size(); j++) {
             Neighbor *neighbor_;
             if (lmp->kokkos) {
-                neighbor_ = new NeighborKokkos(lmp);
+                // neighbor_ = new NeighborKokkos(lmp);
+                neighbor_ = nullptr;
             } else {
                 neighbor_ = new Neighbor(lmp);
             }

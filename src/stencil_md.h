@@ -8,13 +8,10 @@
 #include "force.h"
 #include "modify.h"
 #include "pair.h"
-#include "modify_kokkos.h"
 #include "atom.h"
-#include "atom_kokkos.h"
-#include "neighbor_kokkos.h"
 #include "neighbor.h"
 #include "comm.h"
-#include "comm_kokkos.h"
+#include "neigh_list.h"
 
 namespace LAMMPS_NS {
 

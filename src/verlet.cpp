@@ -2120,6 +2120,8 @@ void Verlet::setup_stencil_md() {
         }
     }
 
+    MPI_Barrier(world);
+
     int total_recv = 0;
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
