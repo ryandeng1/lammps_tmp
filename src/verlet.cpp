@@ -4361,7 +4361,7 @@ void Verlet::setup_stencil_md() {
                 force_->pair->compute_stencil_md(
                     eflag, vflag, lmp->atom_stencil_md[zoid_num][0],
                     zoid.can_eval_center[0], lmp->zoid_num_to_zoid[zoid_num],
-                    NULL);
+                    nullptr);
 
                 if (dep < NUM_DEPS - 1) {
                     queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
@@ -4372,7 +4372,7 @@ void Verlet::setup_stencil_md() {
                     for (int proc = 0; proc < comm->nprocs; proc++) {
                         bool sent = comm_->send_data_to_process_stencil_md(
                             atom_arr, lmp->zoid_num_to_zoid[zoid_num],
-                            &send_requests[zoid_num][vec_idx], proc, true);
+                            &send_requests[zoid_num][vec_idx], proc, true, nullptr);
                         if (sent) {
                             send_request_threads.push_back(
                                 std::move(std::thread(
@@ -5008,6 +5008,7 @@ void Verlet::run(int n) {
     int64_t next_dt_comm_duration = 0;
 
     int num_pairs_evaled = 0;
+    int64_t send_pack_duration = 0;
 
     MPI_Barrier(world);
 
@@ -5016,7 +5017,7 @@ void Verlet::run(int n) {
         run_stencil_md(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt,
                        test_f, test_x, &compute_duration, &send_comm_duration, &recv_comm_duration, &modify_duration, &mpi_duration,
                        &curr_dt_comm_duration, &next_dt_comm_duration,
-                       &num_pairs_evaled);
+                       &num_pairs_evaled, &send_pack_duration);
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
@@ -5029,6 +5030,7 @@ void Verlet::run(int n) {
     int64_t stencil_md_total_mpi_duration = 0;
     int64_t stencil_md_total_curr_dt_comm_duration = 0;
     int64_t stencil_md_total_next_dt_comm_duration = 0;
+    int64_t stencil_md_total_send_pack_duration = 0;
     MPI_Allreduce(&compute_duration, &stencil_md_total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&mpi_duration, &stencil_md_total_mpi_duration, 1, MPI_INT64_T, MPI_SUM, world);
@@ -5038,12 +5040,15 @@ void Verlet::run(int n) {
     MPI_Allreduce(&send_comm_duration, &stencil_md_total_send_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&recv_comm_duration, &stencil_md_total_recv_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
+    MPI_Allreduce(&send_pack_duration, &stencil_md_total_send_pack_duration, 1, MPI_INT64_T, MPI_SUM, world);
+
     std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
         << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
         << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
         << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
         << " TOTAL MODIFY: " << stencil_md_total_modify_duration
-        << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration << RESET_COLOR << std::endl;
+        << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration
+        << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration << RESET_COLOR << std::endl;
 
     std::cout << YELLOW << "CURR DT TOTAL COMM DURATION: " << stencil_md_total_curr_dt_comm_duration
         << " NEXT DT COMM DURATION: " << stencil_md_total_next_dt_comm_duration << RESET_COLOR << std::endl;
@@ -5058,7 +5063,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                             double** test_f, double** test_x, int64_t* compute_duration,
                             int64_t* send_comm_duration, int64_t* recv_comm_duration, int64_t* modify_duration, int64_t* mpi_duration,
                             int64_t* curr_dt_comm_duration, int64_t* next_dt_comm_duration,
-                            int* num_pairs_evaled) {
+                            int* num_pairs_evaled, int64_t* send_pack_duration) {
     bigint ntimestep;
     int nflag, sortflag;
 
@@ -5527,7 +5532,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                     auto begin_send = std::chrono::high_resolution_clock::now();
                     bool sent = comm_->send_data_to_process_stencil_md(
                         atom_arr, lmp->zoid_num_to_zoid[zoid_num],
-                        &send_requests[zoid_num][vec_idx], proc, false);
+                        &send_requests[zoid_num][vec_idx], proc, false, send_pack_duration);
                     if (sent) {
                         /*
                         send_request_threads.push_back(std::move(std::thread(
@@ -6048,7 +6053,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 for (int proc = 0; proc < comm->nprocs; proc++) {
                     bool sent = comm_->send_data_to_process_stencil_md_next_dt(
                             atom_arr, lmp->zoid_num_to_zoid_next_dt[zoid_num],
-                            &send_requests_next_dt[zoid_num][vec_idx], proc, false);
+                            &send_requests_next_dt[zoid_num][vec_idx], proc, false, send_pack_duration);
                     if (sent) {
                         // send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
                         send_request_threads_next_dt.emplace_back(std::async(std::launch::async,

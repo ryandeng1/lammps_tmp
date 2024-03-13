@@ -51,7 +51,7 @@ class Verlet : public Integrate {
                       double**, double**, int64_t* compute_duration, int64_t* send_comm_duration, int64_t* recv_comm_duration,
                       int64_t* modify_duration, int64_t* mpi_duration,
                       int64_t* curr_dt_comm_duration, int64_t* next_dt_comm_duration,
-                      int* num_pairs_evaled);
+                      int* num_pairs_evaled, int64_t* send_pack_duration);
 
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic

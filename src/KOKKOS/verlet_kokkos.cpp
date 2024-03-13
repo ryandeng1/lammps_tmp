@@ -1174,7 +1174,7 @@ void VerletKokkos::run(int n) {
                 for (int proc = 0; proc < comm->nprocs; proc++) {
                     auto begin_send = std::chrono::high_resolution_clock::now();
                     auto before_send_long = timeSinceEpochMillisec();
-                    bool sent = comm_->send_data_to_process_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], &send_requests[zoid_num][vec_idx], proc, false);
+                    bool sent = comm_->send_data_to_process_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], &send_requests[zoid_num][vec_idx], proc, false, nullptr);
                     auto end_send = std::chrono::high_resolution_clock::now();
                     auto duration_send = std::chrono::duration_cast<std::chrono::microseconds>(end_send-begin_send).count();
                     auto after_send_long = timeSinceEpochMillisec();

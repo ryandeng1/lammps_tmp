@@ -3160,7 +3160,7 @@ void CommBrick::send_data_stencil_md(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLE
 }
 
 bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
-                                                queue_info& zoid, MPI_Request* request, int proc, bool is_initial) {
+                                                queue_info& zoid, MPI_Request* request, int proc, bool is_initial, int64_t* pack_duration) {
     int start_timestep;
     int end_timestep;
 
@@ -3241,6 +3241,7 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
         grow_send_stencil_md(num_elems_send, proc, 0);
     }
 
+    auto begin_atom_pack = std::chrono::high_resolution_clock::now();
     int debug_buf_idx[NUM_TIMESTEPS_IN_PARALLEL + 1];
     int buf_idx = 0;
     for (int t = start_timestep; t < end_timestep; t++) {
@@ -3257,6 +3258,12 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
 
         debug_buf_idx[t] = n;
         buf_idx += n;
+    }
+    auto end_atom_pack = std::chrono::high_resolution_clock::now();
+    auto duration_atom_pack = std::chrono::duration_cast<std::chrono::microseconds>(end_atom_pack-begin_atom_pack).count();
+
+    if (pack_duration != nullptr) {
+        (*pack_duration) += duration_atom_pack;
     }
 
     assert(num_elems_send == buf_idx);
@@ -3329,7 +3336,7 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
 }
 
 bool CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
-                                                        queue_info& zoid, MPI_Request* request, int proc, bool is_initial) {
+                                                        queue_info& zoid, MPI_Request* request, int proc, bool is_initial, int64_t* pack_duration) {
     int start_timestep;
     int end_timestep;
 
@@ -3407,6 +3414,7 @@ bool CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
         grow_send_stencil_md(num_elems_send, proc, 0);
     }
 
+    auto begin_atom_pack = std::chrono::high_resolution_clock::now();
     int buf_idx = 0;
     for (int t = start_timestep; t < end_timestep; t++) {
         Atom *atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
@@ -3421,6 +3429,12 @@ bool CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
                 zoid.send_process_local_list[t][proc], &buf_send_stencil_md[proc][buf_idx], pbc_flags_);
 
         buf_idx += n;
+    }
+    auto end_atom_pack = std::chrono::high_resolution_clock::now();
+    auto duration_atom_pack = std::chrono::duration_cast<std::chrono::microseconds>(end_atom_pack-begin_atom_pack).count();
+
+    if (pack_duration != nullptr) {
+        (*pack_duration) += duration_atom_pack;
     }
 
     assert(num_elems_send == buf_idx);
