@@ -3179,9 +3179,6 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
 
     int send_request_vec_idx = 0;
 
-    long long unpack_duration = 0;
-    int num_zoid_unpack = 0;
-
     auto begin = std::chrono::high_resolution_clock::now();
 
     // pack data into buffer
@@ -3263,7 +3260,7 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
     auto duration_atom_pack = std::chrono::duration_cast<std::chrono::microseconds>(end_atom_pack-begin_atom_pack).count();
 
     if (pack_duration != nullptr) {
-        (*pack_duration) += duration_atom_pack;
+        // (*pack_duration) += duration_atom_pack;
     }
 
     assert(num_elems_send == buf_idx);
@@ -3330,7 +3327,9 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
         auto end_unpack = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_unpack-begin_unpack).count();
 
-        unpack_duration += duration;
+        if (pack_duration != nullptr) {
+            (*pack_duration) += duration;
+        }
         return false;
     }
 }
@@ -3353,9 +3352,6 @@ bool CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
     auto &send_to_neighbors = lmp->send_to_neighbors_next_dt[zoid_num];
 
     int send_request_vec_idx = 0;
-
-    long long unpack_duration = 0;
-    int num_zoid_unpack = 0;
 
     // pack data into buffer
     int nsend_force = 0;
@@ -3434,7 +3430,7 @@ bool CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
     auto duration_atom_pack = std::chrono::duration_cast<std::chrono::microseconds>(end_atom_pack-begin_atom_pack).count();
 
     if (pack_duration != nullptr) {
-        (*pack_duration) += duration_atom_pack;
+        // (*pack_duration) += duration_atom_pack;
     }
 
     assert(num_elems_send == buf_idx);
@@ -3493,7 +3489,9 @@ bool CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
         auto end_unpack = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_unpack-begin_unpack).count();
 
-        unpack_duration += duration;
+        if (pack_duration != nullptr) {
+            (*pack_duration) += duration;
+        }
         return false;
     }
 }
