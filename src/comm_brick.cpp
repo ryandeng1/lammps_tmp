@@ -3287,7 +3287,6 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
                 }
 
                 if (std::find(other_recv_from.begin(), other_recv_from.end(), zoid_num) != other_recv_from.end()) {
-                    num_zoid_unpack++;
                     int recv_idx = std::find(other_recv_from.begin(), other_recv_from.end(), zoid_num) - other_recv_from.begin();
                     int lmp_recv_idx = std::find(lmp->recv_from_neighbors_procs.begin(), lmp->recv_from_neighbors_procs.end(), zoid_num) - lmp->recv_from_neighbors_procs.begin();
 
@@ -3457,7 +3456,6 @@ bool CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
                 }
 
                 if (std::find(other_recv_from.begin(), other_recv_from.end(), zoid_num) != other_recv_from.end()) {
-                    num_zoid_unpack++;
                     int recv_idx = std::find(other_recv_from.begin(), other_recv_from.end(), zoid_num) - other_recv_from.begin();
                     int lmp_recv_idx = std::find(lmp->recv_from_neighbors_procs_next_dt.begin(), lmp->recv_from_neighbors_procs_next_dt.end(), zoid_num) - lmp->recv_from_neighbors_procs_next_dt.begin();
 
