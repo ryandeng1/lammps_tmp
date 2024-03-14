@@ -59,6 +59,7 @@
 using namespace LAMMPS_NS;
 
 static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
+static constexpr bool ENABLE_SEND_THREADS = false;
 
 /* ---------------------------------------------------------------------- */
 
@@ -5545,15 +5546,18 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                             vec_idx, zoid_num)));
                         */
                         // send_request_threads.push_back(std::async(std::launch::async,
-                        send_request_threads.emplace_back(std::async(std::launch::async,
-                                                                  [&](int idx, int zoid_num_) {
-                                    int wait_status =
-                                            MPI_Wait(&send_requests[zoid_num_][idx],
-                                                     MPI_STATUS_IGNORE);
-                                    assert(wait_status == MPI_SUCCESS);
-                                },
-                                vec_idx, zoid_num));
-                        vec_idx++;
+                        if (ENABLE_SEND_THREADS) {
+                            send_request_threads.emplace_back(std::async(std::launch::async,
+                                                                         [&](int idx, int zoid_num_) {
+                                                                             int wait_status =
+                                                                                     MPI_Wait(
+                                                                                             &send_requests[zoid_num_][idx],
+                                                                                             MPI_STATUS_IGNORE);
+                                                                             assert(wait_status == MPI_SUCCESS);
+                                                                         },
+                                                                         vec_idx, zoid_num));
+                            vec_idx++;
+                        }
                     }
                 }
                 auto end = std::chrono::high_resolution_clock::now();
@@ -5565,8 +5569,10 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
         }
     }
 
-    for (auto& t : send_request_threads) {
-        t.get();
+    if (ENABLE_SEND_THREADS) {
+        for (auto& t : send_request_threads) {
+            t.get();
+        }
     }
 
     // clear force on everything except last timestep of initial,
@@ -6056,15 +6062,18 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                             &send_requests_next_dt[zoid_num][vec_idx], proc, false, send_pack_duration);
                     if (sent) {
                         // send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
-                        send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
-                                                                  [&](int idx, int zoid_num_) {
-                                                                      int wait_status =
-                                                                              MPI_Wait(&send_requests_next_dt[zoid_num_][idx],
-                                                                                       MPI_STATUS_IGNORE);
-                                                                      assert(wait_status == MPI_SUCCESS);
-                                                                  },
-                                                                  vec_idx, zoid_num));
-                        vec_idx++;
+                        if (ENABLE_SEND_THREADS) {
+                            send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
+                                                                                 [&](int idx, int zoid_num_) {
+                                                                                     int wait_status =
+                                                                                             MPI_Wait(
+                                                                                                     &send_requests_next_dt[zoid_num_][idx],
+                                                                                                     MPI_STATUS_IGNORE);
+                                                                                     assert(wait_status == MPI_SUCCESS);
+                                                                                 },
+                                                                                 vec_idx, zoid_num));
+                            vec_idx++;
+                        }
                     }
                 }
                 auto end = std::chrono::high_resolution_clock::now();
@@ -6107,9 +6116,11 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
         }
     }
 
-    for (auto& t : send_request_threads_next_dt) {
-        // t.join();
-        t.get();
+    if (ENABLE_SEND_THREADS) {
+        for (auto& t : send_request_threads_next_dt) {
+            // t.join();
+            t.get();
+        }
     }
 
     // clear force on everything except first timestep

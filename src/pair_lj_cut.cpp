@@ -71,12 +71,6 @@ PairLJCut::~PairLJCut()
 
 void PairLJCut::compute(int eflag, int vflag)
 {
-  bool LAMMPS_INCREMENT_PAIRS = true;
-  if (eflag == -1) {
-      eflag = 0;
-      vflag = 0;
-      LAMMPS_INCREMENT_PAIRS = false;
-  }
   int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, evdwl, fpair;
   double rsq, r2inv, r6inv, forcelj, factor_lj;
