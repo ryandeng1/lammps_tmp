@@ -1703,12 +1703,15 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             double f_z = buf[m++];
 
             int idx = recv_force_list[i];
-            if (target_tag != tag[idx] && comm->me == 6) {
+
+            /*
+            if (target_tag != tag[idx]) {
                 std::cout << RED << "process: " << comm->me << " error recv local force. Received tag: " << target_tag << " but I want tag: " << tag[idx]
                     << " at idx: " << idx << " i: " << i << " out of: " << num_recv_force
                     << " force offset in buf: " << force_offset_buf << RESET_COLOR << std::endl;
-                assert(tag[idx] == target_tag);
             }
+            */
+            assert(tag[idx] == target_tag);
 
             f[idx][0] += f_x;
             f[idx][1] += f_y;
@@ -1735,12 +1738,14 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
                     double x_z = buf[counter++];
 
                     int idx = recv_pos_local_list[local_list_idx++];
-                    if (target_tag != tag[idx] && comm->me == 6) {
+                    /*
+                    if (target_tag != tag[idx]) {
                         std::cout << RED << " error at process: " << comm->me << " recv local pos. Received tag: " << target_tag << " but I want tag: " << tag[idx] << " at idx: " << idx
                             << " force start buf idx: " << force_offset_buf << " pos start buf idx: " << pos_start_idx << " counter? " << counter
                             << " segment number: " << i << " segment idx: " << segment_idxs_buf[i] << " segment size: " << segment_sizes_buf[i] << RESET_COLOR << std::endl;
-                        assert(tag[idx] == target_tag);
                     }
+                    */
+                    assert(tag[idx] == target_tag);
 
                     x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
                     x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
@@ -1761,15 +1766,17 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
                     }
 
                     int idx = recv_ghost_idx_list[curr_pos_segment] + ghost_idx;
-                    if (target_tag != tag[idx] && comm->me == 6) {
+                    /*
+                    if (target_tag != tag[idx]) {
                         std::cout << RED << " error at process: " << comm->me << " recv ghost pos. Received tag: " << target_tag << " but I want tag: " << tag[idx]
                                   << " at atom local idx: " << idx << " buf idx: " << buf_idx << " segment idx: " << segment_idx << " segment buf number: " << i
                                   << " force start buf idx: " << force_offset_buf << " pos start buf idx: " << pos_start_idx << " counter? " << counter
                                   << " segment number: " << i << " segment idx: " << segment_idxs_buf[i] << " segment size: " << segment_sizes_buf[i]
                                   << " curr pos segment? " << curr_pos_segment << " ghost idx: " << ghost_idx
                                   << " recv ghost size: " << recv_ghost_size_list[curr_pos_segment] << RESET_COLOR << std::endl;
-                        assert(tag[idx] == target_tag);
                     }
+                    */
+                    assert(tag[idx] == target_tag);
 
                     // TODO: test if ghost pos actually needed
                     x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
@@ -1792,12 +1799,14 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             double v_z = buf[m++];
 
             int idx = recv_pos_local_list[i];
-            if (target_tag != tag[idx] && comm->me == 6) {
+            /*
+            if (target_tag != tag[idx]) {
                 std::cout << RED << "process: " << comm->me << " error recv local force. Received tag: " << target_tag << " but I want tag: " << tag[idx]
                           << " at idx: " << idx << " i: " << i << " out of: " << num_recv_force
                           << " force start buf idx: " << force_offset_buf << RESET_COLOR << std::endl;
-                assert(tag[idx] == target_tag);
             }
+            */
+            assert(tag[idx] == target_tag);
 
             v[idx][0] = v_x;
             v[idx][1] = v_y;
