@@ -134,9 +134,11 @@ void PairLJCut::compute(int eflag, int vflag)
           f[j][2] -= delz * fpair;
         }
 
+        /*
         if (LAMMPS_INCREMENT_PAIRS) {
             num_pairs_evaled++;
         }
+        */
 
         if (eflag) {
           evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
