@@ -105,6 +105,10 @@ class Comm : protected Pointers {
   virtual void receive_data_process_stencil_md(MPI_Request*, int, bool is_initial) {assert(false);}
   virtual void unpack_data_process_stencil_md(int, bool is_initial) { assert(false); }
 
+  // blocking versions to see if this helps
+  virtual void receive_data_process_stencil_md_blocking(int, bool is_initial) { assert(false); }
+  virtual void receive_data_process_stencil_md_blocking_next_dt(int, bool is_initial) { assert(false); }
+
   virtual void send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) { assert(false); }
   virtual void receive_data_process_stencil_md_next_dt(MPI_Request*, int) { assert(false); }
   virtual void unpack_data_process_stencil_md_next_dt(int) { assert(false); }

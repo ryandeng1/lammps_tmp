@@ -3588,6 +3588,204 @@ void CommBrick::receive_data_process_stencil_md_next_dt(MPI_Request* request, in
 
 }
 
+void CommBrick::receive_data_process_stencil_md_blocking(int recv_zoid_num, bool is_initial) {
+    if (recv_zoid_num % comm->nprocs == comm->me) {
+        std::cout << RED << "RECEIVE DATA PROCESS ERROR. proc: " << comm->me << " recv zoid num: " << recv_zoid_num << RESET_COLOR << std::endl;
+        assert(false);
+        return;
+    }
+
+    int start_timestep;
+    int end_timestep;
+
+    if (is_initial) {
+        start_timestep = 0;
+        end_timestep = NUM_TIMESTEPS_IN_PARALLEL + 1;
+    } else {
+        start_timestep = 1;
+        end_timestep = NUM_TIMESTEPS_IN_PARALLEL + 1;
+    }
+
+    int idx_recv_zoid = -1;
+    for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
+        if (lmp->recv_from_neighbors_procs[i] == recv_zoid_num) {
+            idx_recv_zoid = i;
+            break;
+        }
+    }
+
+    assert(idx_recv_zoid != -1);
+
+    int mpi_tag = (comm->me << 16 | recv_zoid_num);
+
+    int nrecv_force_from_zoid = 0;
+    int nrecv_pos_from_zoid = 0;
+    int nrecv_vel_from_zoid = 0;
+
+    for (int t = start_timestep; t < end_timestep; t++) {
+        if (DEBUG_SEND_RECV_DATA) {
+            nrecv_force_from_zoid += lmp->num_recv_force_from_zoid[t][idx_recv_zoid];
+            nrecv_pos_from_zoid += lmp->num_recv_pos_from_zoid[t][idx_recv_zoid];
+            nrecv_vel_from_zoid += lmp->num_recv_vel_from_zoid[t][idx_recv_zoid];
+        }
+    }
+
+    int nrecv = nrecv_force_from_zoid * (3 + 1) + nrecv_pos_from_zoid * (3 + 1) + nrecv_vel_from_zoid * (3 + 1);
+
+    if (nrecv > maxrecv_stencil_md[idx_recv_zoid]) {
+        grow_recv_stencil_md(nrecv, idx_recv_zoid);
+    }
+
+    MPI_Recv(buf_recv_stencil_md[idx_recv_zoid], nrecv, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, world, MPI_STATUS_IGNORE);
+
+    queue_info& recv_zoid = lmp->zoid_num_to_zoid[recv_zoid_num];
+
+    auto begin = std::chrono::high_resolution_clock::now();
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+            auto& recv_from = lmp->recv_from_neighbors[zoid_num];
+            queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
+
+            int pbc_flag_[3] = {0};
+            for (int dim = 0; dim < 3; dim++) {
+                if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+
+                if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+            }
+
+            if (std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) != recv_from.end()) {
+                int recv_idx = std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) - recv_from.begin();
+                int buf_idx = 0;
+                for (int t = start_timestep; t < end_timestep; t++) {
+                    Atom* atom_ = atom_arr[t];
+                    int nrecv_force = lmp->num_recv_force_from_zoid[t][idx_recv_zoid];
+                    int nrecv_pos = lmp->num_recv_pos_from_zoid[t][idx_recv_zoid];
+                    int nrecv_vel = lmp->num_recv_vel_from_zoid[t][idx_recv_zoid];
+
+                    /*
+                    std::cout << "unpack process REGULAR UNPACK: " << comm->me << " zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << t
+                        << " pos start: " << zoid.recv_process_pos_offset[t][recv_idx] << " vel start: " << nrecv_force + nrecv_pos
+                        << " force start: " << zoid.recv_process_force_offset[t][recv_idx] << std::endl;
+                    */
+
+                    atom_->avec->unpack_data_from_process_stencil_md(
+                            nrecv_force, nrecv_pos,
+                            zoid.recv_process_force_offset[t][recv_idx], zoid.recv_list_local_num_force_only[t][recv_idx], zoid.recv_list_local_force_only[t][recv_idx],
+                            zoid.recv_process_num_segments[t][recv_idx], zoid.recv_process_segment_types[t][recv_idx],
+                            zoid.recv_process_segment_idxs[t][recv_idx], zoid.recv_process_segment_sizes[t][recv_idx],
+                            zoid.recv_process_vel_offset[t][recv_idx], zoid.recv_list_local_num_force_pos[t][recv_idx], zoid.recv_list_local_force_pos[t][recv_idx],
+                            zoid.recv_ghost_num_segments[t][recv_idx], zoid.recv_ghost_idxs[t][recv_idx], zoid.recv_ghost_sizes[t][recv_idx],
+                            &buf_recv_stencil_md[idx_recv_zoid][buf_idx], pbc_flag_);
+
+                    if (DEBUG_SEND_RECV_DATA) {
+                        buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void CommBrick::receive_data_process_stencil_md_blocking_next_dt(int recv_zoid_num, bool is_initial) {
+    if (recv_zoid_num % comm->nprocs == comm->me) {
+        std::cout << RED << "RECEIVE DATA PROCESS ERROR. proc: " << comm->me << " recv zoid num: " << recv_zoid_num << RESET_COLOR << std::endl;
+        assert(false);
+        return;
+    }
+
+    int start_timestep;
+    int end_timestep;
+
+    if (is_initial) {
+        start_timestep = 0;
+        end_timestep = NUM_TIMESTEPS_IN_PARALLEL + 1;
+    } else {
+        start_timestep = 1;
+        end_timestep = NUM_TIMESTEPS_IN_PARALLEL + 1;
+    }
+
+    int idx_recv_zoid = -1;
+    for (int i = 0; i < lmp->recv_from_neighbors_procs_next_dt.size(); i++) {
+        if (lmp->recv_from_neighbors_procs_next_dt[i] == recv_zoid_num) {
+            idx_recv_zoid = i;
+            break;
+        }
+    }
+
+    assert(idx_recv_zoid != -1);
+
+    int mpi_tag = (comm->me << 16 | recv_zoid_num);
+
+    int nrecv_force_from_zoid = 0;
+    int nrecv_pos_from_zoid = 0;
+    int nrecv_vel_from_zoid = 0;
+
+    for (int t = start_timestep; t < end_timestep; t++) {
+        if (DEBUG_SEND_RECV_DATA) {
+            nrecv_force_from_zoid += lmp->num_recv_force_from_zoid_next_dt[t][idx_recv_zoid];
+            nrecv_pos_from_zoid += lmp->num_recv_pos_from_zoid_next_dt[t][idx_recv_zoid];
+            nrecv_vel_from_zoid += lmp->num_recv_vel_from_zoid_next_dt[t][idx_recv_zoid];
+        }
+    }
+
+    int nrecv = nrecv_force_from_zoid * (3 + 1) + nrecv_pos_from_zoid * (3 + 1) + nrecv_vel_from_zoid * (3 + 1);
+
+    if (nrecv > maxrecv_stencil_md[idx_recv_zoid]) {
+        grow_recv_stencil_md(nrecv, idx_recv_zoid);
+    }
+
+    MPI_Recv(buf_recv_stencil_md[idx_recv_zoid], nrecv, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, world, MPI_STATUS_IGNORE);
+
+    queue_info& recv_zoid = lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+
+    auto begin = std::chrono::high_resolution_clock::now();
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+            auto& recv_from = lmp->recv_from_neighbors_next_dt[zoid_num];
+            queue_info& zoid = lmp->zoid_num_to_zoid_next_dt[zoid_num];
+
+            int pbc_flag_[3] = {0};
+            for (int dim = 0; dim < 3; dim++) {
+                if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+
+                if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+            }
+
+            if (std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) != recv_from.end()) {
+                int recv_idx = std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) - recv_from.begin();
+                int buf_idx = 0;
+                for (int t = start_timestep; t < end_timestep; t++) {
+                    Atom* atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+                    int nrecv_force = lmp->num_recv_force_from_zoid_next_dt[t][idx_recv_zoid];
+                    int nrecv_pos = lmp->num_recv_pos_from_zoid_next_dt[t][idx_recv_zoid];
+                    int nrecv_vel = lmp->num_recv_vel_from_zoid_next_dt[t][idx_recv_zoid];
+
+                    /*
+                    std::cout << "unpack process REGULAR UNPACK: " << comm->me << " zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << t
+                        << " pos start: " << zoid.recv_process_pos_offset[t][recv_idx] << " vel start: " << nrecv_force + nrecv_pos
+                        << " force start: " << zoid.recv_process_force_offset[t][recv_idx] << std::endl;
+                    */
+
+                    atom_->avec->unpack_data_from_process_stencil_md(
+                            nrecv_force, nrecv_pos,
+                            zoid.recv_process_force_offset[t][recv_idx], zoid.recv_list_local_num_force_only[t][recv_idx], zoid.recv_list_local_force_only[t][recv_idx],
+                            zoid.recv_process_num_segments[t][recv_idx], zoid.recv_process_segment_types[t][recv_idx],
+                            zoid.recv_process_segment_idxs[t][recv_idx], zoid.recv_process_segment_sizes[t][recv_idx],
+                            zoid.recv_process_vel_offset[t][recv_idx], zoid.recv_list_local_num_force_pos[t][recv_idx], zoid.recv_list_local_force_pos[t][recv_idx],
+                            zoid.recv_ghost_num_segments[t][recv_idx], zoid.recv_ghost_idxs[t][recv_idx], zoid.recv_ghost_sizes[t][recv_idx],
+                            &buf_recv_stencil_md[idx_recv_zoid][buf_idx], pbc_flag_);
+
+                    if (DEBUG_SEND_RECV_DATA) {
+                        buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+                    }
+                }
+            }
+        }
+    }
+}
+
 void CommBrick::unpack_data_process_stencil_md(int recv_zoid_num, bool is_initial) {
     // assume the sender will have done all of the unpacking
     if (recv_zoid_num % comm->nprocs == comm->me) {
