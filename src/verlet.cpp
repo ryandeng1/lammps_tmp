@@ -2128,6 +2128,14 @@ void Verlet::setup_stencil_md() {
 
     MPI_Barrier(world);
 
+    int mul_factor;
+    if (DEBUG_SEND_RECV_DATA) {
+        // 3 elements for pos/vel/force + 1 for tag
+        mul_factor = 3 + 1;
+    } else {
+        mul_factor = 3;
+    }
+
     int total_recv = 0;
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -2149,52 +2157,51 @@ void Verlet::setup_stencil_md() {
 
                     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                         int num_elems_timestep = 0;
-                        if (DEBUG_SEND_RECV_DATA) {
-                            // 3 elems for data, 1 for the debug tag
-                            int num_force_sizes = 0;
-                            for (int k = 0;
-                                 k < zoid.send_force_num_segments[t][i]; k++) {
-                                num_elems_timestep +=
-                                    zoid.send_force_sizes[t][i][k] * (3 + 1);
-                                num_force_sizes +=
-                                    zoid.send_force_sizes[t][i][k];
-                            }
 
-                            int num_pos_sizes = 0;
-                            for (int k = 0;
-                                 k < zoid.send_pos_num_segments[t][i]; k++) {
-                                num_elems_timestep +=
-                                    zoid.send_pos_sizes[t][i][k] * 2 * (3 + 1);
-                                num_pos_sizes += zoid.send_pos_sizes[t][i][k];
-                            }
-
-                            int num_local_sizes = 0;
-                            int num_ghost_sizes = 0;
-
-                            int num_ghost_segments = 0;
-
-                            for (int k = 0; k < zoid.send_num_segments[t][i];
-                                 k++) {
-                                int segment_type =
-                                    zoid.send_segment_types[t][i][k];
-                                if (segment_type == LOCAL_SEGMENT_TYPE) {
-                                    num_local_sizes +=
-                                        zoid.send_segment_sizes[t][i][k];
-                                } else {
-                                    assert(segment_type == GHOST_SEGMENT_TYPE);
-                                    num_ghost_sizes +=
-                                        zoid.send_segment_sizes[t][i][k];
-                                    num_ghost_segments++;
-                                }
-                            }
-
+                        // 3 elems for data, 1 for the debug tag
+                        int num_force_sizes = 0;
+                        for (int k = 0;
+                             k < zoid.send_force_num_segments[t][i]; k++) {
                             num_elems_timestep +=
-                                (num_local_sizes + num_ghost_sizes) * (3 + 1);
+                                zoid.send_force_sizes[t][i][k] * mul_factor;
+                            num_force_sizes +=
+                                zoid.send_force_sizes[t][i][k];
+                        }
 
-                            zoid.num_elems_send[t][i] = num_elems_timestep;
-                            if (num_ghost_segments >= 20) {
-                                // std::cout << GREEN << "zoid num: " << zoid_num << " send to: " << send_zoid_num << " time: " << t << " debug num ghost segments: " << num_ghost_segments << std::endl;
+                        int num_pos_sizes = 0;
+                        for (int k = 0;
+                             k < zoid.send_pos_num_segments[t][i]; k++) {
+                            num_elems_timestep +=
+                                zoid.send_pos_sizes[t][i][k] * 2 * mul_factor;
+                            num_pos_sizes += zoid.send_pos_sizes[t][i][k];
+                        }
+
+                        int num_local_sizes = 0;
+                        int num_ghost_sizes = 0;
+
+                        int num_ghost_segments = 0;
+
+                        for (int k = 0; k < zoid.send_num_segments[t][i];
+                             k++) {
+                            int segment_type =
+                                zoid.send_segment_types[t][i][k];
+                            if (segment_type == LOCAL_SEGMENT_TYPE) {
+                                num_local_sizes +=
+                                    zoid.send_segment_sizes[t][i][k];
+                            } else {
+                                assert(segment_type == GHOST_SEGMENT_TYPE);
+                                num_ghost_sizes +=
+                                    zoid.send_segment_sizes[t][i][k];
+                                num_ghost_segments++;
                             }
+                        }
+
+                        num_elems_timestep +=
+                            (num_local_sizes + num_ghost_sizes) * mul_factor;
+
+                        zoid.num_elems_send[t][i] = num_elems_timestep;
+                        if (num_ghost_segments >= 20) {
+                            // std::cout << GREEN << "zoid num: " << zoid_num << " send to: " << send_zoid_num << " time: " << t << " debug num ghost segments: " << num_ghost_segments << std::endl;
                         }
                     }
                 }
@@ -2208,32 +2215,26 @@ void Verlet::setup_stencil_md() {
 
                     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                         int num_elems_timestep = 0;
-                        if (DEBUG_SEND_RECV_DATA) {
-                            // 3 elems for data, 1 for the debug tag
-                            num_elems_timestep +=
-                                zoid.recv_list_local_num_force_only[t][i] *
-                                (3 + 1);
-                            num_elems_timestep +=
-                                zoid.recv_list_local_num_force_pos[t][i] * 2 *
-                                (3 + 1);
+                        // 3 elems for data, 1 for the debug tag
+                        num_elems_timestep +=
+                            zoid.recv_list_local_num_force_only[t][i] * mul_factor;
+                        num_elems_timestep +=
+                            zoid.recv_list_local_num_force_pos[t][i] * 2 * mul_factor;
 
-                            int total_ghost_idxs = 0;
-                            for (int k = 0;
-                                 k < zoid.recv_ghost_num_segments[t][i]; k++) {
-                                total_ghost_idxs +=
-                                    zoid.recv_ghost_sizes[t][i][k];
-                            }
-
-                            num_elems_timestep += total_ghost_idxs * (3 + 1);
-
-                            zoid_recv_ghost_pos += total_ghost_idxs * (3 + 1);
-                            zoid_recv_local_force +=
-                                zoid.recv_list_local_num_force_only[t][i] *
-                                (3 + 1);
-                            zoid_recv_local_pos +=
-                                zoid.recv_list_local_num_force_pos[t][i] * 2 *
-                                (3 + 1);
+                        int total_ghost_idxs = 0;
+                        for (int k = 0;
+                             k < zoid.recv_ghost_num_segments[t][i]; k++) {
+                            total_ghost_idxs +=
+                                zoid.recv_ghost_sizes[t][i][k];
                         }
+
+                        num_elems_timestep += total_ghost_idxs * mul_factor;
+
+                        zoid_recv_ghost_pos += total_ghost_idxs * mul_factor;
+                        zoid_recv_local_force +=
+                            zoid.recv_list_local_num_force_only[t][i] * mul_factor;
+                        zoid_recv_local_pos +=
+                            zoid.recv_list_local_num_force_pos[t][i] * 2 * mul_factor;
 
                         zoid.num_elems_recv[t][i] = num_elems_timestep;
                         if (recv_zoid_num % comm->nprocs != comm->me) {
@@ -2275,50 +2276,48 @@ void Verlet::setup_stencil_md() {
 
                     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                         int num_elems_timestep = 0;
-                        if (DEBUG_SEND_RECV_DATA) {
-                            // 3 elems for data, 1 for the debug tag
-                            for (int k = 0;
-                                 k < zoid.send_force_num_segments[t][i]; k++) {
-                                num_elems_timestep +=
-                                    zoid.send_force_sizes[t][i][k] * (3 + 1);
-                            }
-
-                            for (int k = 0;
-                                 k < zoid.send_pos_num_segments[t][i]; k++) {
-                                num_elems_timestep +=
-                                    zoid.send_pos_sizes[t][i][k] * 2 * (3 + 1);
-                            }
-
-                            int num_local_sizes = 0;
-                            int num_ghost_sizes = 0;
-
-                            int num_ghost_segments = 0;
-
-                            for (int k = 0; k < zoid.send_num_segments[t][i];
-                                 k++) {
-                                int segment_type =
-                                    zoid.send_segment_types[t][i][k];
-                                if (segment_type == LOCAL_SEGMENT_TYPE) {
-                                    num_local_sizes +=
-                                        zoid.send_segment_sizes[t][i][k];
-                                } else {
-                                    assert(segment_type == GHOST_SEGMENT_TYPE);
-                                    num_ghost_sizes +=
-                                        zoid.send_segment_sizes[t][i][k];
-                                    num_ghost_segments++;
-                                }
-                            }
-
+                        // 3 elems for data, 1 for the debug tag
+                        for (int k = 0;
+                             k < zoid.send_force_num_segments[t][i]; k++) {
                             num_elems_timestep +=
-                                (num_local_sizes + num_ghost_sizes) * (3 + 1);
-
-                            zoid.num_elems_send[t][i] = num_elems_timestep;
-                            /*
-                            std::cout << MAGENTA << "NEXT DT zoid: " << zoid.num << " send to: " << send_zoid_num << " time: " << t << " num send force: "
-                                      << zoid.send_force_num_segments[t][i] << " num send pos: " << zoid.send_pos_num_segments[t][i]
-                                      << " send ghost num segments: " << num_ghost_segments << RESET_COLOR << std::endl;
-                            */
+                                zoid.send_force_sizes[t][i][k] * mul_factor;
                         }
+
+                        for (int k = 0;
+                             k < zoid.send_pos_num_segments[t][i]; k++) {
+                            num_elems_timestep +=
+                                zoid.send_pos_sizes[t][i][k] * 2 * mul_factor;
+                        }
+
+                        int num_local_sizes = 0;
+                        int num_ghost_sizes = 0;
+
+                        int num_ghost_segments = 0;
+
+                        for (int k = 0; k < zoid.send_num_segments[t][i];
+                             k++) {
+                            int segment_type =
+                                zoid.send_segment_types[t][i][k];
+                            if (segment_type == LOCAL_SEGMENT_TYPE) {
+                                num_local_sizes +=
+                                    zoid.send_segment_sizes[t][i][k];
+                            } else {
+                                assert(segment_type == GHOST_SEGMENT_TYPE);
+                                num_ghost_sizes +=
+                                    zoid.send_segment_sizes[t][i][k];
+                                num_ghost_segments++;
+                            }
+                        }
+
+                        num_elems_timestep +=
+                            (num_local_sizes + num_ghost_sizes) * mul_factor;
+
+                        zoid.num_elems_send[t][i] = num_elems_timestep;
+                        /*
+                        std::cout << MAGENTA << "NEXT DT zoid: " << zoid.num << " send to: " << send_zoid_num << " time: " << t << " num send force: "
+                                  << zoid.send_force_num_segments[t][i] << " num send pos: " << zoid.send_pos_num_segments[t][i]
+                                  << " send ghost num segments: " << num_ghost_segments << RESET_COLOR << std::endl;
+                        */
                     }
                 }
 
@@ -2327,24 +2326,20 @@ void Verlet::setup_stencil_md() {
 
                     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                         int num_elems_timestep = 0;
-                        if (DEBUG_SEND_RECV_DATA) {
-                            // 3 elems for data, 1 for the debug tag
-                            num_elems_timestep +=
-                                zoid.recv_list_local_num_force_only[t][i] *
-                                (3 + 1);
-                            num_elems_timestep +=
-                                zoid.recv_list_local_num_force_pos[t][i] * 2 *
-                                (3 + 1);
+                        // 3 elems for data, 1 for the debug tag
+                        num_elems_timestep +=
+                            zoid.recv_list_local_num_force_only[t][i] * mul_factor;
+                        num_elems_timestep +=
+                            zoid.recv_list_local_num_force_pos[t][i] * 2 * mul_factor;
 
-                            int total_ghost_idxs = 0;
-                            for (int k = 0;
-                                 k < zoid.recv_ghost_num_segments[t][i]; k++) {
-                                total_ghost_idxs +=
-                                    zoid.recv_ghost_sizes[t][i][k];
-                            }
-
-                            num_elems_timestep += total_ghost_idxs * (3 + 1);
+                        int total_ghost_idxs = 0;
+                        for (int k = 0;
+                             k < zoid.recv_ghost_num_segments[t][i]; k++) {
+                            total_ghost_idxs +=
+                                zoid.recv_ghost_sizes[t][i][k];
                         }
+
+                        num_elems_timestep += total_ghost_idxs * mul_factor;
 
                         zoid.num_elems_recv[t][i] = num_elems_timestep;
 
@@ -4188,11 +4183,9 @@ void Verlet::setup_stencil_md() {
     for (int k = 0; k < lmp->recv_from_neighbors_procs.size(); k++) {
         if (lmp->recv_from_neighbors_procs[k] % comm->nprocs != comm->me) {
             for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                if (DEBUG_SEND_RECV_DATA) {
-                    nrecv_force += lmp->num_recv_force_from_zoid[t][k];
-                    nrecv_pos += lmp->num_recv_pos_from_zoid[t][k];
-                    nrecv_vel += lmp->num_recv_vel_from_zoid[t][k];
-                }
+                nrecv_force += lmp->num_recv_force_from_zoid[t][k];
+                nrecv_pos += lmp->num_recv_pos_from_zoid[t][k];
+                nrecv_vel += lmp->num_recv_vel_from_zoid[t][k];
             }
         }
     }

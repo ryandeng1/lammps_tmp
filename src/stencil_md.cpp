@@ -855,12 +855,6 @@ void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
                                     domain_next_dt,
                                     lmp->comm_stencil_md[zoid_num]);
 
-                    if (t == 3 && zoid_num == 63) {
-                        zoid.debug_int = ZOID_DEBUG_INT;
-                    } else {
-                        zoid.debug_int = 5;
-                    }
-
                     lmp->neighbor_stencil_md_next_dt[zoid_num][t]->build_stencil_md(
                             1, atom_next_dt, domain_next_dt,
                             lmp->comm_stencil_md[zoid_num], zoid);
@@ -919,6 +913,8 @@ void StencilMD::COMPUTE_NUM_SEND_RECV_PROCESS() {
                 int num_elems_send;
                 if (DEBUG_SEND_RECV_DATA) {
                     num_elems_send = nsend_force * (3 + 1) + nsend_pos * (3 + 1) + nsend_vel * (3 + 1);
+                } else {
+                    num_elems_send = nsend_force * (3) + nsend_pos * (3) + nsend_vel * (3);
                 }
                 zoid.num_send_process[proc] = num_elems_send;
             }
@@ -966,6 +962,8 @@ void StencilMD::COMPUTE_NUM_SEND_RECV_PROCESS() {
                 int num_elems_send;
                 if (DEBUG_SEND_RECV_DATA) {
                     num_elems_send = nsend_force * (3 + 1) + nsend_pos * (3 + 1) + nsend_vel * (3 + 1);
+                } else {
+                    num_elems_send = nsend_force * (3) + nsend_pos * (3) + nsend_vel * (3);
                 }
                 zoid.num_send_process[proc] = num_elems_send;
             }

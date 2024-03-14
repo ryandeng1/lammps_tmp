@@ -1683,6 +1683,95 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
         // modified_stencil_md(Host, X_MASK | TAG_MASK | TYPE_MASK | MASK_MASK, this);
 
         return m;
+    } else {
+        int m = 0;
+
+        // pack all the force data at the beginning?
+        std::vector<int> force_offset_idxs;
+        std::vector<int> force_num_segments;
+
+        for (int i = 0; i < num_zoid_recv; i++) {
+            int zoid_idx = zoid_idxs[i];
+            assert(zoid_idx >= 0 && zoid_idx <= 26);
+
+            int num_send_force_segments = num_send_force[zoid_idx];
+
+            int* force_segment_idxs = force_idx_list[zoid_idx];
+            int* force_segment_sizes = force_size_list[zoid_idx];
+
+            for (int j = 0; j < num_send_force_segments; j++) {
+                int force_idx = force_segment_idxs[j];
+                int force_size = force_segment_sizes[j];
+
+                for (int k = 0; k < force_size; k++) {
+                    int idx = force_idx + k;
+                    buf[m++] = eval_f_stencil_md[idx][0];
+                    buf[m++] = eval_f_stencil_md[idx][1];
+                    buf[m++] = eval_f_stencil_md[idx][2];
+                }
+            }
+
+            force_offset_idxs.push_back(m);
+            force_num_segments.push_back(num_send_force_segments);
+        }
+
+        int pos_start_idx = m;
+
+        int local_list_idx = 0;
+
+        // Note: potentially sending data to middle and pbc, so just send raw positions, have the receiver reinterpret it?
+        for (int i = 0; i < num_segments; i++) {
+            int segment_type = segment_types[i];
+            int segment_size = segment_lengths[i];
+            if (segment_type == SEND_DATA_PROCESS_LOCAL) {
+                for (int j = 0; j < segment_size; j++) {
+                    int idx = local_list[local_list_idx++];
+                    buf[m++] = x[idx][0];
+                    buf[m++] = x[idx][1];
+                    buf[m++] = x[idx][2];
+                }
+            } else {
+                if (segment_type != SEND_DATA_PROCESS_GHOST) {
+                    std::cout << RED << "error segment type: " << segment_type << RESET_COLOR << std::endl;
+                }
+                assert(segment_type == SEND_DATA_PROCESS_GHOST);
+                int segment_idx = segment_idxs[i];
+                for (int j = 0; j < segment_size; j++) {
+                    int idx = segment_idx + j;
+                    buf[m++] = x[idx][0];
+                    buf[m++] = x[idx][1];
+                    buf[m++] = x[idx][2];
+                }
+            }
+        }
+
+        // TODO: only send velocity for atoms that are local to the zoids
+
+        int vel_start_idx = m;
+
+        for (int i = 0; i < num_zoid_recv; i++) {
+            int zoid_idx = zoid_idxs[i];
+            assert(zoid_idx >= 0 && zoid_idx <= 26);
+
+            int num_send_vel_segments = num_send_vel[zoid_idx];
+
+            int* vel_segment_idxs = vel_idx_list[zoid_idx];
+            int* vel_segment_sizes = vel_size_list[zoid_idx];
+
+            for (int j = 0; j < num_send_vel_segments; j++) {
+                int vel_idx = vel_segment_idxs[j];
+                int vel_size = vel_segment_sizes[j];
+
+                for (int k = 0; k < vel_size; k++) {
+                    int idx = vel_idx + k;
+                    buf[m++] = v[idx][0];
+                    buf[m++] = v[idx][1];
+                    buf[m++] = v[idx][2];
+                }
+            }
+        }
+
+        return m;
     }
 }
 
@@ -1812,6 +1901,86 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             v[idx][1] = v_y;
             v[idx][2] = v_z;
         }
+    } else {
+        // 0 is the starting idx of the buffeer
+        int m = 0 + force_offset_buf * (3);
+
+        for (int i = 0; i < num_recv_force; i++) {
+            double f_x = buf[m++];
+            double f_y = buf[m++];
+            double f_z = buf[m++];
+
+            int idx = recv_force_list[i];
+
+            f[idx][0] += f_x;
+            f[idx][1] += f_y;
+            f[idx][2] += f_z;
+        }
+
+        int pos_start_idx = nrecv_force * (3);
+
+        int local_list_idx = 0;
+
+        int ghost_idx = 0;
+        int curr_pos_segment = 0;
+
+        for (int i = 0; i < num_pos_segments_buf; i++) {
+            int segment_type = segment_types_buf[i];
+            int segment_size = segment_sizes_buf[i];
+            int segment_idx = segment_idxs_buf[i];
+            int counter = segment_idx * (3) + pos_start_idx;
+            if (segment_type == RECV_DATA_PROCESS_LOCAL) {
+                for (int j = 0; j < segment_size; j++) {
+                    double x_x = buf[counter++];
+                    double x_y = buf[counter++];
+                    double x_z = buf[counter++];
+
+                    int idx = recv_pos_local_list[local_list_idx++];
+
+                    x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
+                    x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
+                    x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+                }
+            } else {
+                assert(segment_type == RECV_DATA_PROCESS_GHOST);
+                for (int j = 0; j < segment_size; j++) {
+                    int buf_idx = counter / 3;
+                    double x_x = buf[counter++];
+                    double x_y = buf[counter++];
+                    double x_z = buf[counter++];
+
+                    if (ghost_idx >= recv_ghost_size_list[curr_pos_segment]) {
+                        ghost_idx = 0;
+                        curr_pos_segment++;
+                    }
+
+                    int idx = recv_ghost_idx_list[curr_pos_segment] + ghost_idx;
+
+                    // TODO: test if ghost pos actually needed
+                    x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
+                    x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
+                    x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+
+                    ghost_idx++;
+                }
+            }
+        }
+
+        // TODO: need to send the pos/vel offset?
+        int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
+        m = vel_start_idx;
+
+        for (int i = 0; i < num_recv_vel; i++) {
+            double v_x = buf[m++];
+            double v_y = buf[m++];
+            double v_z = buf[m++];
+
+            int idx = recv_pos_local_list[i];
+
+            v[idx][0] = v_x;
+            v[idx][1] = v_y;
+            v[idx][2] = v_z;
+        }
     }
 }
 
@@ -1935,39 +2104,75 @@ int AtomVec::pack_data_stencil_md(int num_send_force, int num_send_pos,
           }
       }
 
-      /*
-      local_list_idx = 0;
+      return m;
+  } else {
+      int m = 0;
+
+      assert(num_send_force >= 0 && num_send_force <= 100000);
+      assert(num_send_pos >= 0 && num_send_pos <= 100000);
+
+      for (int i = 0; i < num_send_force; i++) {
+          int force_idx = force_idx_list[i];
+          int force_size = force_size_list[i];
+
+          for (int j = 0; j < force_size; j++) {
+              int idx = force_idx + j;
+              buf[m++] = eval_f_stencil_md[idx][0];
+              buf[m++] = eval_f_stencil_md[idx][1];
+              buf[m++] = eval_f_stencil_md[idx][2];
+          }
+      }
+
+      int send_force = m;
+
+      for (int i = 0; i < num_send_pos; i++) {
+          int pos_idx = pos_idx_list[i];
+          int pos_size = pos_size_list[i];
+          // std::cout << "num send pos? " << num_send_pos << " pos size: " << pos_size << std::endl;
+          for (int j = 0; j < pos_size; j++) {
+              int idx = pos_idx + j;
+              buf[m++] = x[idx][0] + pbc_flags[0] * domain->prd[0];
+              buf[m++] = x[idx][1] + pbc_flags[1] * domain->prd[1];
+              buf[m++] = x[idx][2] + pbc_flags[2] * domain->prd[2];
+          }
+      }
+
+      for (int i = 0; i < num_send_pos; i++) {
+          int pos_idx = pos_idx_list[i];
+          int pos_size = pos_size_list[i];
+          for (int j = 0; j < pos_size; j++) {
+              int idx = pos_idx + j;
+              buf[m++] = v[idx][0];
+              buf[m++] = v[idx][1];
+              buf[m++] = v[idx][2];
+          }
+      }
+
+      int send_pos = m - send_force;
+
+      int local_list_idx = 0;
+
       for (int i = 0; i < num_segments; i++) {
           int segment_type = segment_types[i];
           int segment_size = segment_sizes[i];
           if (segment_type == LOCAL_SEGMENT_TYPE) {
               for (int j = 0; j < segment_size; j++) {
                   int idx = local_to_ghost_list[local_list_idx++];
-                  tagint tag_ = tag[idx];
-                  // TODO: Kokkos-ify
-                  buf[m++] = ubuf(tag_).d;
-                  buf[m++] = v[idx][0];
-                  buf[m++] = v[idx][1];
-                  buf[m++] = v[idx][2];
+                  buf[m++] = x[idx][0] + pbc_flags[0] * domain->prd[0];
+                  buf[m++] = x[idx][1] + pbc_flags[1] * domain->prd[1];
+                  buf[m++] = x[idx][2] + pbc_flags[2] * domain->prd[2];
               }
           } else {
               assert(segment_type == GHOST_SEGMENT_TYPE);
               int segment_idx = segment_idxs[i];
               for (int j = 0; j < segment_size; j++) {
                   int idx = segment_idx + j;
-                  tagint tag_ = tag[idx];
-                  // TODO: Kokkos-ify
-                  buf[m++] = ubuf(tag_).d;
-                  buf[m++] = v[idx][0];
-                  buf[m++] = v[idx][1];
-                  buf[m++] = v[idx][2];
+                  buf[m++] = x[idx][0] + pbc_flags[0] * domain->prd[0];
+                  buf[m++] = x[idx][1] + pbc_flags[1] * domain->prd[1];
+                  buf[m++] = x[idx][2] + pbc_flags[2] * domain->prd[2];
               }
           }
       }
-      */
-
-      // TODO: maybe add this method in Kokkos
-      // modified_stencil_md(Host, X_MASK | TAG_MASK | TYPE_MASK | MASK_MASK, this);
 
       return m;
   }
@@ -2116,6 +2321,59 @@ void AtomVec::unpack_data_stencil_md(int num_recv_force, int num_recv_pos,
 
       return;
       */
+  } else {
+      int m = 0;
+      for (int i = 0; i < num_recv_force; i++) {
+          double f_x = buf[m++];
+          double f_y = buf[m++];
+          double f_z = buf[m++];
+
+          int idx = recv_force_list[i];
+
+          f[idx][0] += f_x;
+          f[idx][1] += f_y;
+          f[idx][2] += f_z;
+      }
+
+      for (int i = 0; i < num_recv_pos; i++) {
+          double x_x = buf[m++];
+          double x_y = buf[m++];
+          double x_z = buf[m++];
+
+          int idx = recv_pos_list[i];
+
+          x[idx][0] = x_x;
+          x[idx][1] = x_y;
+          x[idx][2] = x_z;
+      }
+
+      for (int i = 0; i < num_recv_pos; i++) {
+          double v_x = buf[m++];
+          double v_y = buf[m++];
+          double v_z = buf[m++];
+
+          int idx = recv_pos_list[i];
+
+          v[idx][0] = v_x;
+          v[idx][1] = v_y;
+          v[idx][2] = v_z;
+      }
+
+      for (int i = 0; i < num_recv_ghost; i++) {
+          int ghost_idx = recv_ghost_idx_list[i];
+          int ghost_size = recv_ghost_size_list[i];
+          for (int j = 0; j < ghost_size; j++) {
+              int idx = ghost_idx + j;
+              int buf_idx = m;
+              double x_x = buf[m++];
+              double x_y = buf[m++];
+              double x_z = buf[m++];
+
+              x[idx][0] = x_x;
+              x[idx][1] = x_y;
+              x[idx][2] = x_z;
+          }
+      }
   }
 }
 

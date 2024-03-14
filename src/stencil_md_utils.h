@@ -60,9 +60,7 @@ constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
 
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
-constexpr bool DEBUG_SEND_RECV_DATA = true;
-
-constexpr bool OPTIMIZE_SEND_RECV_DATA = true;
+constexpr bool DEBUG_SEND_RECV_DATA = false;
 
 constexpr bool TEST_AGAINST_LAMMPS = false;
 
@@ -71,8 +69,6 @@ constexpr bool PURELY_LOCAL_POTENTIAL = true;
 constexpr bool USE_FAKE_COMPUTE_TEMP = true;
 
 constexpr double ALLEGRO_SLOPE = ALLEGRO_CUTOFF_RADIUS + ADDITIONAL_CUTOFF;
-
-constexpr int ZOID_DEBUG_INT = 17;
 
 constexpr bool TRY_PRECOMPUTE_RELEVANT_ATOM_IDX = false;
 

@@ -3229,7 +3229,11 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
         }
 
         // force = 3 elems + 1 for tag, send pos is 3 elems for pos and 3 elems for velocity
-        num_elems_send = nsend_force * (3 + 1) + nsend_pos * (3 + 1) + nsend_vel * (3 + 1);
+        if (DEBUG_SEND_RECV_DATA) {
+            num_elems_send = nsend_force * (3 + 1) + nsend_pos * (3 + 1) + nsend_vel * (3 + 1);
+        } else {
+            num_elems_send = nsend_force * (3) + nsend_pos * (3) + nsend_vel * (3);
+        }
     } else {
         num_elems_send = zoid.num_send_process[proc];
     }
@@ -3263,6 +3267,9 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
         // (*pack_duration) += duration_atom_pack;
     }
 
+    if (num_elems_send != buf_idx) {
+        std::cout << "num elems send: " << num_elems_send << " buf idx: " << buf_idx << std::endl;
+    }
     assert(num_elems_send == buf_idx);
 
     if (proc != comm->me) {
@@ -3317,6 +3324,8 @@ bool CommBrick::send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_
 
                         if (DEBUG_SEND_RECV_DATA) {
                             other_buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+                        } else {
+                            other_buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
                         }
                     }
                 }
@@ -3478,6 +3487,8 @@ bool CommBrick::send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TI
 
                         if (DEBUG_SEND_RECV_DATA) {
                             other_buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+                        } else {
+                            other_buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
                         }
                     }
                 }
@@ -3529,14 +3540,17 @@ void CommBrick::receive_data_process_stencil_md(MPI_Request* request, int recv_z
     int nrecv_vel = 0;
 
     for (int t = start_timestep; t < end_timestep; t++) {
-        if (DEBUG_SEND_RECV_DATA) {
-            nrecv_force += lmp->num_recv_force_from_zoid[t][idx_recv_zoid];
-            nrecv_pos += lmp->num_recv_pos_from_zoid[t][idx_recv_zoid];
-            nrecv_vel += lmp->num_recv_vel_from_zoid[t][idx_recv_zoid];
-        }
+        nrecv_force += lmp->num_recv_force_from_zoid[t][idx_recv_zoid];
+        nrecv_pos += lmp->num_recv_pos_from_zoid[t][idx_recv_zoid];
+        nrecv_vel += lmp->num_recv_vel_from_zoid[t][idx_recv_zoid];
     }
 
-    int nrecv = nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+    int nrecv;
+    if (DEBUG_SEND_RECV_DATA) {
+        nrecv = nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+    } else {
+        nrecv = nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
+    }
 
     if (nrecv > maxrecv_stencil_md[idx_recv_zoid]) {
         grow_recv_stencil_md(nrecv, idx_recv_zoid);
@@ -3570,14 +3584,17 @@ void CommBrick::receive_data_process_stencil_md_next_dt(MPI_Request* request, in
     int nrecv_vel = 0;
 
     for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-        if (DEBUG_SEND_RECV_DATA) {
-            nrecv_force += lmp->num_recv_force_from_zoid_next_dt[t][idx_recv_zoid];
-            nrecv_pos += lmp->num_recv_pos_from_zoid_next_dt[t][idx_recv_zoid];
-            nrecv_vel += lmp->num_recv_vel_from_zoid_next_dt[t][idx_recv_zoid];
-        }
+        nrecv_force += lmp->num_recv_force_from_zoid_next_dt[t][idx_recv_zoid];
+        nrecv_pos += lmp->num_recv_pos_from_zoid_next_dt[t][idx_recv_zoid];
+        nrecv_vel += lmp->num_recv_vel_from_zoid_next_dt[t][idx_recv_zoid];
     }
 
-    int nrecv = nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+    int nrecv;
+    if (DEBUG_SEND_RECV_DATA) {
+        nrecv = nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+    } else {
+        nrecv = nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
+    }
 
     if (nrecv > maxrecv_stencil_md[idx_recv_zoid]) {
         grow_recv_stencil_md(nrecv, idx_recv_zoid);
@@ -3623,14 +3640,17 @@ void CommBrick::receive_data_process_stencil_md_blocking(int recv_zoid_num, bool
     int nrecv_vel_from_zoid = 0;
 
     for (int t = start_timestep; t < end_timestep; t++) {
-        if (DEBUG_SEND_RECV_DATA) {
-            nrecv_force_from_zoid += lmp->num_recv_force_from_zoid[t][idx_recv_zoid];
-            nrecv_pos_from_zoid += lmp->num_recv_pos_from_zoid[t][idx_recv_zoid];
-            nrecv_vel_from_zoid += lmp->num_recv_vel_from_zoid[t][idx_recv_zoid];
-        }
+        nrecv_force_from_zoid += lmp->num_recv_force_from_zoid[t][idx_recv_zoid];
+        nrecv_pos_from_zoid += lmp->num_recv_pos_from_zoid[t][idx_recv_zoid];
+        nrecv_vel_from_zoid += lmp->num_recv_vel_from_zoid[t][idx_recv_zoid];
     }
 
-    int nrecv = nrecv_force_from_zoid * (3 + 1) + nrecv_pos_from_zoid * (3 + 1) + nrecv_vel_from_zoid * (3 + 1);
+    int nrecv;
+    if (DEBUG_SEND_RECV_DATA) {
+        nrecv = nrecv_force_from_zoid * (3 + 1) + nrecv_pos_from_zoid * (3 + 1) + nrecv_vel_from_zoid * (3 + 1);
+    } else {
+        nrecv = nrecv_force_from_zoid * (3) + nrecv_pos_from_zoid * (3) + nrecv_vel_from_zoid * (3);
+    }
 
     if (nrecv > maxrecv_stencil_md[idx_recv_zoid]) {
         grow_recv_stencil_md(nrecv, idx_recv_zoid);
@@ -3680,6 +3700,8 @@ void CommBrick::receive_data_process_stencil_md_blocking(int recv_zoid_num, bool
 
                     if (DEBUG_SEND_RECV_DATA) {
                         buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+                    } else {
+                        buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
                     }
                 }
             }
@@ -3722,14 +3744,17 @@ void CommBrick::receive_data_process_stencil_md_blocking_next_dt(int recv_zoid_n
     int nrecv_vel_from_zoid = 0;
 
     for (int t = start_timestep; t < end_timestep; t++) {
-        if (DEBUG_SEND_RECV_DATA) {
-            nrecv_force_from_zoid += lmp->num_recv_force_from_zoid_next_dt[t][idx_recv_zoid];
-            nrecv_pos_from_zoid += lmp->num_recv_pos_from_zoid_next_dt[t][idx_recv_zoid];
-            nrecv_vel_from_zoid += lmp->num_recv_vel_from_zoid_next_dt[t][idx_recv_zoid];
-        }
+        nrecv_force_from_zoid += lmp->num_recv_force_from_zoid_next_dt[t][idx_recv_zoid];
+        nrecv_pos_from_zoid += lmp->num_recv_pos_from_zoid_next_dt[t][idx_recv_zoid];
+        nrecv_vel_from_zoid += lmp->num_recv_vel_from_zoid_next_dt[t][idx_recv_zoid];
     }
 
-    int nrecv = nrecv_force_from_zoid * (3 + 1) + nrecv_pos_from_zoid * (3 + 1) + nrecv_vel_from_zoid * (3 + 1);
+    int nrecv;
+    if (DEBUG_SEND_RECV_DATA) {
+        nrecv = nrecv_force_from_zoid * (3 + 1) + nrecv_pos_from_zoid * (3 + 1) + nrecv_vel_from_zoid * (3 + 1);
+    } else {
+        nrecv = nrecv_force_from_zoid * (3) + nrecv_pos_from_zoid * (3) + nrecv_vel_from_zoid * (3);
+    }
 
     if (nrecv > maxrecv_stencil_md[idx_recv_zoid]) {
         grow_recv_stencil_md(nrecv, idx_recv_zoid);
@@ -3779,6 +3804,8 @@ void CommBrick::receive_data_process_stencil_md_blocking_next_dt(int recv_zoid_n
 
                     if (DEBUG_SEND_RECV_DATA) {
                         buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+                    } else {
+                        buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
                     }
                 }
             }
@@ -3887,6 +3914,8 @@ void CommBrick::unpack_data_process_stencil_md(int recv_zoid_num, bool is_initia
 
             if (DEBUG_SEND_RECV_DATA) {
                 buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+            } else {
+                buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
             }
         }
     }
@@ -3991,6 +4020,8 @@ void CommBrick::unpack_data_process_stencil_md_next_dt(int recv_zoid_num) {
 
             if (DEBUG_SEND_RECV_DATA) {
                 buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+            } else {
+                buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
             }
         }
     }
