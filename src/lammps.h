@@ -80,6 +80,9 @@ class LAMMPS {
   std::vector<int>* send_to_neighbors;
   std::vector<int>* recv_from_neighbors;
 
+  std::map<int, std::vector<std::pair<int, int>>> recv_zoid_to_my_zoids;
+  std::map<int, std::vector<std::pair<int, int>>> recv_zoid_to_my_zoids_next_dt;
+
   std::vector<int>* send_to_neighbors_next_dt;
   std::vector<int>* recv_from_neighbors_next_dt;
 

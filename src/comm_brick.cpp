@@ -3816,6 +3816,7 @@ void CommBrick::unpack_data_process_stencil_md(int recv_zoid_num, bool is_initia
     queue_info& recv_zoid = lmp->zoid_num_to_zoid[recv_zoid_num];
 
     auto begin = std::chrono::high_resolution_clock::now();
+    /*
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
@@ -3838,12 +3839,6 @@ void CommBrick::unpack_data_process_stencil_md(int recv_zoid_num, bool is_initia
                     int nrecv_pos = lmp->num_recv_pos_from_zoid[t][receive_request_idx];
                     int nrecv_vel = lmp->num_recv_vel_from_zoid[t][receive_request_idx];
 
-                    /*
-                    std::cout << "unpack process REGULAR UNPACK: " << comm->me << " zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << t
-                        << " pos start: " << zoid.recv_process_pos_offset[t][recv_idx] << " vel start: " << nrecv_force + nrecv_pos
-                        << " force start: " << zoid.recv_process_force_offset[t][recv_idx] << std::endl;
-                    */
-
                     atom_->avec->unpack_data_from_process_stencil_md(
                             nrecv_force, nrecv_pos,
                             zoid.recv_process_force_offset[t][recv_idx], zoid.recv_list_local_num_force_only[t][recv_idx], zoid.recv_list_local_force_only[t][recv_idx],
@@ -3857,6 +3852,41 @@ void CommBrick::unpack_data_process_stencil_md(int recv_zoid_num, bool is_initia
                         buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
                     }
                 }
+            }
+        }
+    }
+    */
+
+    for (auto& [zoid_num, recv_idx] : lmp->recv_zoid_to_my_zoids[recv_zoid_num]) {
+        auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+        auto& recv_from = lmp->recv_from_neighbors[zoid_num];
+        queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
+
+        int pbc_flag_[3] = {0};
+        for (int dim = 0; dim < 3; dim++) {
+            if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+
+            if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+        }
+
+        int buf_idx = 0;
+        for (int t = start_timestep; t < end_timestep; t++) {
+            Atom* atom_ = atom_arr[t];
+            int nrecv_force = lmp->num_recv_force_from_zoid[t][receive_request_idx];
+            int nrecv_pos = lmp->num_recv_pos_from_zoid[t][receive_request_idx];
+            int nrecv_vel = lmp->num_recv_vel_from_zoid[t][receive_request_idx];
+
+            atom_->avec->unpack_data_from_process_stencil_md(
+                    nrecv_force, nrecv_pos,
+                    zoid.recv_process_force_offset[t][recv_idx], zoid.recv_list_local_num_force_only[t][recv_idx], zoid.recv_list_local_force_only[t][recv_idx],
+                    zoid.recv_process_num_segments[t][recv_idx], zoid.recv_process_segment_types[t][recv_idx],
+                    zoid.recv_process_segment_idxs[t][recv_idx], zoid.recv_process_segment_sizes[t][recv_idx],
+                    zoid.recv_process_vel_offset[t][recv_idx], zoid.recv_list_local_num_force_pos[t][recv_idx], zoid.recv_list_local_force_pos[t][recv_idx],
+                    zoid.recv_ghost_num_segments[t][recv_idx], zoid.recv_ghost_idxs[t][recv_idx], zoid.recv_ghost_sizes[t][recv_idx],
+                    &buf_recv_stencil_md[receive_request_idx][buf_idx], pbc_flag_);
+
+            if (DEBUG_SEND_RECV_DATA) {
+                buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
             }
         }
     }
@@ -3881,6 +3911,7 @@ void CommBrick::unpack_data_process_stencil_md_next_dt(int recv_zoid_num) {
     queue_info& recv_zoid = lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
 
     auto begin = std::chrono::high_resolution_clock::now();
+    /*
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
@@ -3923,6 +3954,43 @@ void CommBrick::unpack_data_process_stencil_md_next_dt(int recv_zoid_num) {
                         buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
                     }
                 }
+            }
+        }
+    }
+    */
+
+    for (auto& [zoid_num, recv_idx] : lmp->recv_zoid_to_my_zoids_next_dt[recv_zoid_num]) {
+        auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+        auto& recv_from = lmp->recv_from_neighbors_next_dt[zoid_num];
+        queue_info& zoid = lmp->zoid_num_to_zoid_next_dt[zoid_num];
+
+        int pbc_flag_[3] = {0};
+        for (int dim = 0; dim < 3; dim++) {
+            if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+
+            if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+        }
+
+        int buf_idx = 0;
+        for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            int vel_offset = zoid.recv_process_vel_offset[t][recv_idx];
+
+            Atom* atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+            int nrecv_force = lmp->num_recv_force_from_zoid_next_dt[t][receive_request_idx];
+            int nrecv_pos = lmp->num_recv_pos_from_zoid_next_dt[t][receive_request_idx];
+            int nrecv_vel = lmp->num_recv_vel_from_zoid_next_dt[t][receive_request_idx];
+
+            atom_->avec->unpack_data_from_process_stencil_md(
+                    nrecv_force, nrecv_pos,
+                    zoid.recv_process_force_offset[t][recv_idx], zoid.recv_list_local_num_force_only[t][recv_idx], zoid.recv_list_local_force_only[t][recv_idx],
+                    zoid.recv_process_num_segments[t][recv_idx], zoid.recv_process_segment_types[t][recv_idx],
+                    zoid.recv_process_segment_idxs[t][recv_idx], zoid.recv_process_segment_sizes[t][recv_idx],
+                    zoid.recv_process_vel_offset[t][recv_idx], zoid.recv_list_local_num_force_pos[t][recv_idx], zoid.recv_list_local_force_pos[t][recv_idx],
+                    zoid.recv_ghost_num_segments[t][recv_idx], zoid.recv_ghost_idxs[t][recv_idx], zoid.recv_ghost_sizes[t][recv_idx],
+                    &buf_recv_stencil_md[receive_request_idx][buf_idx], pbc_flag_);
+
+            if (DEBUG_SEND_RECV_DATA) {
+                buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
             }
         }
     }

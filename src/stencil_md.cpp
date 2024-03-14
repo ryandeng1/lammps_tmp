@@ -551,6 +551,18 @@ void StencilMD::INIT_ZOID_NEIGHBORS() {
         }
     }
 
+    for (int recv_zoid_num = 0; recv_zoid_num < NUM_ZOIDS; recv_zoid_num++) {
+        for (int my_zoid_num = 0; my_zoid_num < NUM_ZOIDS; my_zoid_num++) {
+            if (my_zoid_num % comm->nprocs == comm->me) {
+                auto& recv_from = lmp->recv_from_neighbors[my_zoid_num];
+                if (std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) != recv_from.end()) {
+                    int recv_idx = std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) - recv_from.begin();
+                    lmp->recv_zoid_to_my_zoids[recv_zoid_num].push_back({my_zoid_num, recv_idx});
+                }
+            }
+        }
+    }
+
     //  for next dt
     lmp->send_to_neighbors_next_dt = new std::vector<int>[NUM_ZOIDS];
     lmp->recv_from_neighbors_next_dt = new std::vector<int>[NUM_ZOIDS];
@@ -579,6 +591,18 @@ void StencilMD::INIT_ZOID_NEIGHBORS() {
                 // if (zoid_dep_neighbor < zoid_dep && is_dep(zoid.where, lmp->zoid_num_to_zoid[j].where)) {
                 if (zoid_dep_neighbor == zoid_dep - 1 || true) {
                     lmp->recv_from_neighbors_next_dt[i].push_back(j);
+                }
+            }
+        }
+    }
+
+    for (int recv_zoid_num = 0; recv_zoid_num < NUM_ZOIDS; recv_zoid_num++) {
+        for (int my_zoid_num = 0; my_zoid_num < NUM_ZOIDS; my_zoid_num++) {
+            if (my_zoid_num % comm->nprocs == comm->me) {
+                auto& recv_from = lmp->recv_from_neighbors_next_dt[my_zoid_num];
+                if (std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) != recv_from.end()) {
+                    int recv_idx = std::find(recv_from.begin(), recv_from.end(), recv_zoid_num) - recv_from.begin();
+                    lmp->recv_zoid_to_my_zoids_next_dt[recv_zoid_num].push_back({my_zoid_num, recv_idx});
                 }
             }
         }
