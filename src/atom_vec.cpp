@@ -1703,12 +1703,16 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                 int force_idx = force_segment_idxs[j];
                 int force_size = force_segment_sizes[j];
 
+                /*
                 for (int k = 0; k < force_size; k++) {
                     int idx = force_idx + k;
                     buf[m++] = eval_f_stencil_md[idx][0];
                     buf[m++] = eval_f_stencil_md[idx][1];
                     buf[m++] = eval_f_stencil_md[idx][2];
                 }
+                */
+                memcpy(&buf[m], &eval_f_stencil_md[force_idx][0], force_size * sizeof(double) * 3);
+                m += force_size * 3;
             }
 
             force_offset_idxs.push_back(m);
@@ -1736,12 +1740,16 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                 }
                 assert(segment_type == SEND_DATA_PROCESS_GHOST);
                 int segment_idx = segment_idxs[i];
+                /*
                 for (int j = 0; j < segment_size; j++) {
                     int idx = segment_idx + j;
                     buf[m++] = x[idx][0];
                     buf[m++] = x[idx][1];
                     buf[m++] = x[idx][2];
                 }
+                */
+                memcpy(&buf[m], &x[segment_idx][0], segment_size * sizeof(double) * 3);
+                m += segment_size * 3;
             }
         }
 
@@ -1762,12 +1770,17 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                 int vel_idx = vel_segment_idxs[j];
                 int vel_size = vel_segment_sizes[j];
 
+                /*
                 for (int k = 0; k < vel_size; k++) {
                     int idx = vel_idx + k;
                     buf[m++] = v[idx][0];
                     buf[m++] = v[idx][1];
                     buf[m++] = v[idx][2];
                 }
+                */
+
+                memcpy(&buf[m], &v[vel_idx][0], vel_size * sizeof(double) * 3);
+                m += vel_size * 3;
             }
         }
 
