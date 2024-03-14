@@ -5043,6 +5043,7 @@ void Verlet::run(int n) {
     MPI_Allreduce(&send_pack_duration, &stencil_md_total_send_pack_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
+        << " LOCAL COMPUTE: " << compute_duration
         << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
         << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
         << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
@@ -5523,17 +5524,16 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             }
 
             if (dep < NUM_DEPS - 1) {
+                auto begin = std::chrono::high_resolution_clock::now();
                 queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
                 // comm_->send_data_stencil_md(atom_arr, lmp->zoid_num_to_zoid[zoid_num], send_requests[zoid_num]);
                 int vec_idx = 0;
                 for (int proc = 0; proc < comm->nprocs; proc++) {
-                    auto begin_send = std::chrono::high_resolution_clock::now();
                     bool sent = comm_->send_data_to_process_stencil_md(
                         atom_arr, lmp->zoid_num_to_zoid[zoid_num],
                         &send_requests[zoid_num][vec_idx], proc, false, send_pack_duration);
                     if (sent) {
-                        auto begin = std::chrono::high_resolution_clock::now();
                         /*
                         send_request_threads.push_back(std::move(std::thread(
                             [&](int idx, int zoid_num_) {
@@ -5554,12 +5554,12 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                                 },
                                 vec_idx, zoid_num));
                         vec_idx++;
-                        auto end = std::chrono::high_resolution_clock::now();
-                        auto duration =
-                                std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                        *send_comm_duration += duration;
                     }
                 }
+                auto end = std::chrono::high_resolution_clock::now();
+                auto duration =
+                        std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                *send_comm_duration += duration;
 
             }
         }
@@ -6046,6 +6046,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
 
             // send data
             if (dep < NUM_DEPS - 1) {
+                auto begin = std::chrono::high_resolution_clock::now();
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
 
                 int vec_idx = 0;
@@ -6054,7 +6055,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                             atom_arr, lmp->zoid_num_to_zoid_next_dt[zoid_num],
                             &send_requests_next_dt[zoid_num][vec_idx], proc, false, send_pack_duration);
                     if (sent) {
-                        auto begin = std::chrono::high_resolution_clock::now();
                         // send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
                         send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
                                                                   [&](int idx, int zoid_num_) {
@@ -6065,11 +6065,11 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                                                                   },
                                                                   vec_idx, zoid_num));
                         vec_idx++;
-                        auto end = std::chrono::high_resolution_clock::now();
-                        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                        *send_comm_duration += duration;
                     }
                 }
+                auto end = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                *send_comm_duration += duration;
 
                 /*
                 comm_->send_data_to_process_stencil_md_next_dt(
