@@ -60,7 +60,7 @@ using namespace LAMMPS_NS;
 
 static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
 static constexpr bool ENABLE_SEND_THREADS = false;
-static constexpr bool ENABLE_RECV_THREADS = true;
+static constexpr bool ENABLE_RECV_THREADS = false;
 
 /* ---------------------------------------------------------------------- */
 
@@ -4923,6 +4923,7 @@ void Verlet::run(int n) {
     }
 
     if (comm->me == 0) {
+        /*
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 std::cout << "j: " << j << " zoid: " << lmp->queues[dep][j].num << std::endl;
@@ -4936,6 +4937,7 @@ void Verlet::run(int n) {
                 std::cout << "Wait on idx: " << idx << " zoid: " << recv_zoid_num << std::endl;
             }
         }
+        */
     }
 
     // map dependency levels to number of zoids to wait on
@@ -5153,8 +5155,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                     comm->unpack_data_process_stencil_md(true, recv_zoid_num, false);
                 } else {
                     auto begin_mpi = std::chrono::high_resolution_clock::now();
-                    receive_request_futures[idx].wait();
-                    // MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
+                    MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
                     auto end_mpi = std::chrono::high_resolution_clock::now();
                     auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
                     *mpi_duration += duration_mpi;
