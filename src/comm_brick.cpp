@@ -3082,8 +3082,6 @@ bool CommBrick::send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
         receive_request_idx = std::distance(recv_from_neighbor_procs.begin(), it);
 
         auto begin_unpack = std::chrono::high_resolution_clock::now();
-        // TODO: optimize
-
         queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
         auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[zoid_num];
 

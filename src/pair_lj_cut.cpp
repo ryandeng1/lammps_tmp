@@ -128,12 +128,6 @@ void PairLJCut::compute(int eflag, int vflag)
           f[j][2] -= delz * fpair;
         }
 
-        /*
-        if (LAMMPS_INCREMENT_PAIRS) {
-            num_pairs_evaled++;
-        }
-        */
-
         if (eflag) {
           evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
           evdwl *= factor_lj;
@@ -145,7 +139,6 @@ void PairLJCut::compute(int eflag, int vflag)
   }
 
   if (vflag_fdotr) virial_fdotr_compute();
-  // std::cout << "ME: " << comm->me << " num pairs eval'ed so far: " << num_pairs_evaled << std::endl;
 }
 
 void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
@@ -210,12 +203,6 @@ void PairLJCut::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_
                     evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
                     evdwl *= factor_lj;
                 }
-
-                /*
-                if (num_eval != nullptr) {
-                    (*num_eval)++;
-                }
-                */
 
                 if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
             }
