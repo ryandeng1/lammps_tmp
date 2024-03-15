@@ -100,18 +100,10 @@ class Comm : protected Pointers {
   virtual void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
   virtual void unpack_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
 
-  virtual bool send_data_to_process_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*, int, bool is_initial, int64_t* pack_duration) {assert(false);}
-  virtual bool send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*, int, bool is_initial, int64_t* pack_duration) {assert(false);}
-  virtual void receive_data_process_stencil_md(MPI_Request*, int, bool is_initial) {assert(false);}
-  virtual void unpack_data_process_stencil_md(int, bool is_initial) { assert(false); }
-
-  // blocking versions to see if this helps
-  virtual void receive_data_process_stencil_md_blocking(int, bool is_initial) { assert(false); }
-  virtual void receive_data_process_stencil_md_blocking_next_dt(int, bool is_initial) { assert(false); }
-
-  virtual void send_data_to_process_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) { assert(false); }
-  virtual void receive_data_process_stencil_md_next_dt(MPI_Request*, int) { assert(false); }
-  virtual void unpack_data_process_stencil_md_next_dt(int) { assert(false); }
+  // combine curr_dt and next_dt implementations
+  virtual bool send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*, int, bool is_initial, int64_t* pack_duration) {assert(false);}
+  virtual void receive_data_process_stencil_md(bool curr_dt, MPI_Request*, int, bool is_initial) {assert(false);}
+  virtual void unpack_data_process_stencil_md(bool curr_dt, int, bool is_initial) { assert(false); }
 
   virtual void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
 
@@ -125,16 +117,8 @@ class Comm : protected Pointers {
   virtual void receive_data_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&) {assert(false);}
   virtual void construct_send_list_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
 
-  virtual int* send_exclude_eval_tags(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
-  virtual void receive_exclude_eval_tags(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
-
-  virtual int* send_exclude_eval_tags_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
-  virtual void receive_exclude_eval_tags_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
-
   virtual void construct_second_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
   virtual void construct_second_send_list_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
-
-  virtual void construct_second_send_list_stencil_md_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) { assert(false); }
 
   // forward/reverse comm from a Pair, Bond, Fix, Compute, Dump
   virtual void forward_comm(class Pair *) = 0;
