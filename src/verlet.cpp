@@ -61,7 +61,7 @@ using namespace LAMMPS_NS;
 static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
 static constexpr bool ENABLE_SEND_THREADS = false;
 static constexpr bool ENABLE_RECV_THREADS = false;
-constexpr bool USE_DEP_TO_WAIT_IDXS = false;
+constexpr bool USE_DEP_TO_WAIT_IDXS = true;
 
 /* ---------------------------------------------------------------------- */
 
