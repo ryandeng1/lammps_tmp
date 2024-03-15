@@ -4344,10 +4344,6 @@ void Verlet::setup_stencil_md() {
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs == comm->me) {
                 Atom* atom_ = lmp->atom_stencil_md[zoid_num][0];
-                /*
-                AtomKokkos* atomKK_ =
-                    (AtomKokkos*)lmp->atom_stencil_md[zoid_num][0];
-                */
                 Force* force_ = lmp->force_stencil_md[zoid_num][0];
                 // todo: eflag and vflag might cause some issues
                 // TODO: compute force for each pair in parallel
@@ -4381,43 +4377,10 @@ void Verlet::setup_stencil_md() {
                         }
                     }
                 }
-
-                auto& send_to = lmp->send_to_neighbors[zoid_num];
-                for (int i = 0; i < send_to.size(); i++) {
-                    if (send_to[i] != 17) {
-                        continue;
-                    }
-                    for (int t = 0; t < 1; t++) {
-                        Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
-                        int num_segments = zoid.send_force_num_segments[t][i];
-                        for (int k = 0; k < num_segments; k++) {
-                            int segment_idx = zoid.send_force_idxs[t][i][k];
-                            int segment_size = zoid.send_force_sizes[t][i][k];
-                            for (int h = 0; h < segment_size; h++) {
-                                int idx = segment_idx + h;
-                                /*
-                                if (fabs(atom_->eval_f_stencil_md[idx][0]) <= 1e-6) {
-                                    std::cout << BLUE << "SEND EMPTY FORCE zoid num: " << zoid.num << " send to: " << send_to[i] << " time: " << t
-                                              << " tag: " << atom_->tag[idx] << " can eval? " << zoid.can_eval_center[t][idx]
-                                              << " pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1] << " " << atom_->x[idx][2]
-                                              << " force: " << atom_->eval_f_stencil_md[idx][0] << " " << atom_->eval_f_stencil_md[idx][1] << " " << atom_->eval_f_stencil_md[idx][2] << RESET_COLOR << std::endl;
-                                } else {
-                                    std::cout << GREEN << "SEND SOME FORCE zoid num: " << zoid.num << " send to: " << send_to[i] << " time: " << t
-                                              << " tag: " << atom_->tag[idx] << " can eval? " << zoid.can_eval_center[t][idx]
-                                              << " pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1] << " " << atom_->x[idx][2]
-                                              << " force: " << atom_->eval_f_stencil_md[idx][0] << " " << atom_->eval_f_stencil_md[idx][1] << " " << atom_->eval_f_stencil_md[idx][2] << RESET_COLOR << std::endl;
-
-                                }
-                                */
-                            }
-                        }
-                    }
-                }
             }
         }
     }
 
-    // auto join_start = std::chrono::high_resolution_clock::now();
     for (auto& t : send_request_threads) {
         t.join();
     }
