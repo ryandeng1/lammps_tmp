@@ -49,10 +49,7 @@ class Verlet : public Integrate {
 
   void run_stencil_md(int start_timestep, std::map<int, std::vector<int>>& dep_to_wait_idxs, std::map<int, std::vector<int>>& dep_to_wait_idxs_next_dt,
                       std::map<int, int>& zoid_num_to_num_procs, std::map<int, int>& zoid_num_to_num_procs_next_dt,
-                      double**, double**, int64_t* compute_duration, int64_t* send_comm_duration, int64_t* recv_comm_duration,
-                      int64_t* modify_duration, int64_t* mpi_duration,
-                      int64_t* curr_dt_comm_duration, int64_t* next_dt_comm_duration,
-                      int* num_pairs_evaled, int64_t* send_pack_duration);
+                      double** test_f, double** test_x);
 
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic
