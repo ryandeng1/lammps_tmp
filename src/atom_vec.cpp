@@ -1686,10 +1686,6 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
     } else {
         int m = 0;
 
-        // pack all the force data at the beginning?
-        std::vector<int> force_offset_idxs;
-        std::vector<int> force_num_segments;
-
         for (int i = 0; i < num_zoid_recv; i++) {
             int zoid_idx = zoid_idxs[i];
             assert(zoid_idx >= 0 && zoid_idx <= 26);
@@ -1714,9 +1710,6 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                 memcpy(&buf[m], &eval_f_stencil_md[force_idx][0], force_size * sizeof(double) * 3);
                 m += force_size * 3;
             }
-
-            force_offset_idxs.push_back(m);
-            force_num_segments.push_back(num_send_force_segments);
         }
 
         int pos_start_idx = m;
@@ -1735,9 +1728,6 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                     buf[m++] = x[idx][2];
                 }
             } else {
-                if (segment_type != SEND_DATA_PROCESS_GHOST) {
-                    std::cout << RED << "error segment type: " << segment_type << RESET_COLOR << std::endl;
-                }
                 assert(segment_type == SEND_DATA_PROCESS_GHOST);
                 int segment_idx = segment_idxs[i];
                 /*
