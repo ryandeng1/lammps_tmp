@@ -62,6 +62,7 @@ static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
 static constexpr bool ENABLE_SEND_THREADS = false;
 static constexpr bool ENABLE_RECV_THREADS = false;
 constexpr bool USE_DEP_TO_WAIT_IDXS = true;
+static int64_t unpack_duration = 0;
 
 /* ---------------------------------------------------------------------- */
 
@@ -5012,7 +5013,7 @@ void Verlet::run(int n) {
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-    std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " num pairs eval'ed: " << num_pairs_evaled << std::endl;
+    std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " num pairs eval'ed: " << num_pairs_evaled << " unpack duration? " << unpack_duration << std::endl;
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
@@ -5179,17 +5180,13 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
                                 end_mpi - begin_mpi).count();
                         *mpi_duration += duration_mpi;
-                        // auto begin_pack = std::chrono::high_resolution_clock::now();
+                        auto begin_unpack = std::chrono::high_resolution_clock::now();
                         comm->unpack_data_process_stencil_md(true, recv_zoid_num, false);
+                        auto end_unpack = std::chrono::high_resolution_clock::now();
+                        auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
+                                end_unpack - begin_unpack).count();
+                        unpack_duration += duration_unpack;
                     }
-                    // auto end_pack = std::chrono::high_resolution_clock::now();
-                    /*
-                    auto duration_pack =
-                        std::chrono::duration_cast<std::chrono::microseconds>(
-                            end_pack - begin_pack)
-                            .count();
-
-                    */
                 }
 
                 auto end = std::chrono::high_resolution_clock::now();
@@ -5227,7 +5224,12 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
                                 end_mpi - begin_mpi).count();
                         *mpi_duration += duration_mpi;
+                        auto begin_unpack = std::chrono::high_resolution_clock::now();
                         comm->unpack_data_process_stencil_md(true, recv_zoid_num, false);
+                        auto end_unpack = std::chrono::high_resolution_clock::now();
+                        auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
+                                end_unpack - begin_unpack).count();
+                        unpack_duration += duration_unpack;
                     }
                 }
 
@@ -5738,13 +5740,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 }
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                /*
-                if (duration > 100000) {
-                    std::cout << YELLOW << "NEXT DT process: " << comm->me
-                              << " dep: " << dep << " recv time: " << duration
-                              << RESET_COLOR << std::endl;
-                }
-                */
                 *recv_comm_duration += duration;
                 *next_dt_comm_duration += duration;
             }
