@@ -67,6 +67,9 @@ static int64_t curr_dt_comm_duration = 0;
 static int64_t next_dt_comm_duration = 0;
 static int64_t send_pack_duration = 0;
 
+static int64_t curr_dt_dep_time[NUM_DEPS] = {0};
+static int64_t next_dt_dep_time[NUM_DEPS] = {0};
+
 /* ---------------------------------------------------------------------- */
 
 Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
@@ -5149,6 +5152,8 @@ void Verlet::run(int n) {
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
     std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << std::endl;
+    std::cout << YELLOW << "me: " << comm->me << " dep times curr dt: " << curr_dt_dep_time[0] << " " << curr_dt_dep_time[1] << " " << curr_dt_dep_time[2] << curr_dt_dep_time[3] << RESET_COLOR << std::endl;
+    std::cout << YELLOW << "me: " << comm->me << " dep times next dt: " << next_dt_dep_time[0] << " " << next_dt_dep_time[1] << " " << next_dt_dep_time[2] << next_dt_dep_time[3] << RESET_COLOR << std::endl;
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
@@ -5312,6 +5317,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                 recv_comm_duration += duration;
                 curr_dt_comm_duration += duration;
+                curr_dt_dep_time[dep] += duration;
             }
         }
 
@@ -5356,6 +5362,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                 recv_comm_duration += duration;
                 curr_dt_comm_duration += duration;
+                curr_dt_dep_time[dep] += duration;
             }
 
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
@@ -5831,6 +5838,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                 recv_comm_duration += duration;
                 next_dt_comm_duration += duration;
+                next_dt_dep_time[dep] += duration;
             }
         }
 
@@ -5872,6 +5880,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                 recv_comm_duration += duration;
                 next_dt_comm_duration += duration;
+                next_dt_dep_time[dep] += duration;
             }
 
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
