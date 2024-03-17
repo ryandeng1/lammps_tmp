@@ -5152,8 +5152,8 @@ void Verlet::run(int n) {
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
     std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << std::endl;
-    std::cout << YELLOW << "me: " << comm->me << " dep times curr dt: " << curr_dt_dep_time[0] << " " << curr_dt_dep_time[1] << " " << curr_dt_dep_time[2] << curr_dt_dep_time[3] << RESET_COLOR << std::endl;
-    std::cout << YELLOW << "me: " << comm->me << " dep times next dt: " << next_dt_dep_time[0] << " " << next_dt_dep_time[1] << " " << next_dt_dep_time[2] << next_dt_dep_time[3] << RESET_COLOR << std::endl;
+    std::cout << YELLOW << "me: " << comm->me << " dep times curr dt: " << curr_dt_dep_time[0] << " " << curr_dt_dep_time[1] << " " << curr_dt_dep_time[2] << " " << curr_dt_dep_time[3] << RESET_COLOR << std::endl;
+    std::cout << YELLOW << "me: " << comm->me << " dep times next dt: " << next_dt_dep_time[0] << " " << next_dt_dep_time[1] << " " << next_dt_dep_time[2] << " " << next_dt_dep_time[3] << RESET_COLOR << std::endl;
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
