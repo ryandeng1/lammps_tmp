@@ -58,7 +58,8 @@ static constexpr bool ENABLE_SEND_THREADS = false;
 static constexpr bool ENABLE_RECV_THREADS = false;
 constexpr bool USE_DEP_TO_WAIT_IDXS = true;
 static int64_t unpack_duration = 0;
-static int64_t compute_duration = 0;
+static int64_t curr_dt_compute_duration = 0;
+static int64_t next_dt_compute_duration = 0;
 static int64_t send_comm_duration = 0;
 static int64_t recv_comm_duration = 0;
 static int64_t modify_duration = 0;
@@ -5164,7 +5165,9 @@ void Verlet::run(int n) {
     int64_t stencil_md_total_next_dt_comm_duration = 0;
     int64_t stencil_md_total_send_pack_duration = 0;
 
-    MPI_Allreduce(&compute_duration, &stencil_md_total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    int64_t my_compute_duration = curr_dt_comm_duration + next_dt_compute_duration;
+
+    MPI_Allreduce(&my_compute_duration, &stencil_md_total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&mpi_duration, &stencil_md_total_mpi_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&curr_dt_comm_duration, &stencil_md_total_curr_dt_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
@@ -5176,7 +5179,7 @@ void Verlet::run(int n) {
     MPI_Allreduce(&send_pack_duration, &stencil_md_total_send_pack_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
-        << " LOCAL COMPUTE: " << compute_duration
+        << " LOCAL COMPUTE: " << " CURR DT: " << curr_dt_compute_duration << " NEXT DT: " << next_dt_compute_duration
         << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
         << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
         << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
@@ -5641,7 +5644,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         std::chrono::duration_cast<std::chrono::microseconds>(
                             end - begin)
                             .count();
-                    compute_duration += duration;
+                    curr_dt_compute_duration += duration;
                 }
 
                 // reverse communication of forces
@@ -6181,7 +6184,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         lmp->zoid_num_to_zoid_next_dt[zoid_num], nullptr);
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    compute_duration += duration;
+                    next_dt_compute_duration += duration;
                 }
 
                 // reverse communication of forces
