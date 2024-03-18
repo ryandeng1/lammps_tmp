@@ -12,7 +12,6 @@
 ------------------------------------------------------------------------- */
 
 #include "verlet.h"
-#include <gperftools/profiler.h>
 
 #include "accelerator_kokkos.h"
 #include "accelerator_omp.h"
@@ -5172,7 +5171,6 @@ void Verlet::run(int n) {
 
     MPI_Barrier(world);
 
-    // ProfilerStart("output_inside.prof"); //Start profiling section and save to file
     auto begin = std::chrono::high_resolution_clock::now();
     for (int t = 0; t < n; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
         if (USE_DEP_TO_WAIT_IDXS) {
@@ -5183,7 +5181,6 @@ void Verlet::run(int n) {
                            test_f, test_x);
         }
     }
-    // ProfilerStop(); //End profiling section
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
     std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << std::endl;
