@@ -87,6 +87,8 @@ include(PreventInSourceBuilds)
 
 # string(APPEND CMAKE_CXX_FLAGS " -fsanitize=memory ")
 # string(APPEND CMAKE_CXX_FLAGS " -fsanitize=address,undefined ")
+set(Gperftools_DIR ${CMAKE_MODULE_PATH})
+find_package(Gperftools REQUIRED)
 string(APPEND CMAKE_CXX_FLAGS " -g ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
