@@ -5870,7 +5870,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
                                 end_unpack - begin_unpack).count();
                         unpack_duration += duration_unpack;
-                        next_dt_wait_dep[get_zoid_dep(recv_zoid_num)] += duration_mpi;
+                        next_dt_wait_dep[get_zoid_dep_next_dt(recv_zoid_num)] += duration_mpi;
                     }
                 }
                 auto end = std::chrono::high_resolution_clock::now();
@@ -5913,7 +5913,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                         auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
                                 end_unpack - begin_unpack).count();
                         unpack_duration += duration_unpack;
-                        next_dt_wait_dep[get_zoid_dep(recv_zoid_num)] += duration_mpi;
+                        next_dt_wait_dep[get_zoid_dep_next_dt(recv_zoid_num)] += duration_mpi;
                     }
                 }
                 auto end = std::chrono::high_resolution_clock::now();
