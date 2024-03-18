@@ -55,7 +55,7 @@ using namespace LAMMPS_NS;
 
 static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
 static constexpr bool ENABLE_SEND_THREADS = false;
-static constexpr bool ENABLE_RECV_THREADS = true;
+static constexpr bool ENABLE_RECV_THREADS = false;
 constexpr bool USE_DEP_TO_WAIT_IDXS = true;
 static int64_t unpack_duration = 0;
 static int64_t curr_dt_compute_duration = 0;
@@ -6278,7 +6278,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                             atom_arr, lmp->zoid_num_to_zoid_next_dt[zoid_num],
                             &send_requests_next_dt[zoid_num][vec_idx], proc, false, &send_pack_duration);
                     if (sent) {
-                        // send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
                         if (ENABLE_SEND_THREADS) {
                             send_request_threads_next_dt.emplace_back(std::async(std::launch::async,
                                                                                  [&](int idx, int zoid_num_) {
@@ -6324,6 +6323,16 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 }
                 */
             }
+        }
+    }
+
+    // cleanup MPI_Isend objects
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        if (send_requests[i].size() > 0) {
+            MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
+        }
+        if (send_requests_next_dt[i].size() > 0) {
+            MPI_Waitall(send_requests_next_dt[i].size(), send_requests_next_dt[i].data(), MPI_STATUSES_IGNORE);
         }
     }
 }
