@@ -5805,6 +5805,12 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
     }
     */
 
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        if (send_requests[i].size() > 0) {
+            MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
+        }
+    }
+
     int num_zoids_recv_from_next_dt = lmp->recv_from_neighbors_procs_next_dt.size();
     std::vector<std::future<void>> receive_request_futures_next_dt;
     std::vector<MPI_Request> receive_requests_next_dt(
@@ -6328,9 +6334,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
 
     // cleanup MPI_Isend objects
     for (int i = 0; i < NUM_ZOIDS; i++) {
-        if (send_requests[i].size() > 0) {
-            MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
-        }
         if (send_requests_next_dt[i].size() > 0) {
             MPI_Waitall(send_requests_next_dt[i].size(), send_requests_next_dt[i].data(), MPI_STATUSES_IGNORE);
         }
