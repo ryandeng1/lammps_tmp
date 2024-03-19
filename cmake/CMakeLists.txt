@@ -87,8 +87,8 @@ include(PreventInSourceBuilds)
 
 # string(APPEND CMAKE_CXX_FLAGS " -fsanitize=memory ")
 # string(APPEND CMAKE_CXX_FLAGS " -fsanitize=address,undefined ")
-set(Gperftools_DIR ${CMAKE_MODULE_PATH})
-find_package(Gperftools REQUIRED)
+# set(Gperftools_DIR ${CMAKE_MODULE_PATH})
+# find_package(Gperftools REQUIRED)
 string(APPEND CMAKE_CXX_FLAGS " -g ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -222,7 +222,8 @@ if(BUILD_SHARED_LIBS AND (CMAKE_SYSTEM_NAME STREQUAL "Windows") AND CMAKE_CROSSC
 endif()
 
 add_executable(lmp ${MAIN_SOURCES})
-target_link_libraries(lmp PRIVATE lammps ${GPERFTOOLS_PROFILER})
+# target_link_libraries(lmp PRIVATE lammps ${GPERFTOOLS_PROFILER})
+target_link_libraries(lmp PRIVATE lammps)
 set_target_properties(lmp PROPERTIES OUTPUT_NAME ${LAMMPS_BINARY})
 install(TARGETS lmp EXPORT LAMMPS_Targets DESTINATION ${CMAKE_INSTALL_BINDIR})
 
