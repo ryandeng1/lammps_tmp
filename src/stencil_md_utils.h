@@ -53,8 +53,8 @@ constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 5;
-constexpr double ADDITIONAL_CUTOFF = 0.2;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
+constexpr double ADDITIONAL_CUTOFF = 0.15;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
 
