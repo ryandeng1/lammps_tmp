@@ -4379,6 +4379,12 @@ void Verlet::setup_stencil_md() {
         }
     }
 
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        if (send_requests_next_dt[i].size() > 0) {
+            MPI_Waitall(send_requests_next_dt[i].size(), send_requests_next_dt[i].data(), MPI_STATUSES_IGNORE);
+        }
+    }
+
     // compute force but only for the first timestep
     int num_zoids_recv_from = lmp->recv_from_neighbors_procs.size();
     std::vector<MPI_Request> receive_requests(
