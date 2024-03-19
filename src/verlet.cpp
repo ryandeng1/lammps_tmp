@@ -4381,7 +4381,15 @@ void Verlet::setup_stencil_md() {
 
     // compute force but only for the first timestep
     int num_zoids_recv_from = lmp->recv_from_neighbors_procs.size();
-    std::thread receive_request_threads[num_zoids_recv_from];
+    std::vector<MPI_Request> receive_requests(
+            lmp->recv_from_neighbors_procs.size(), MPI_REQUEST_NULL);
+
+    for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
+        int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
+        if (recv_zoid_num % comm->nprocs != comm->me) {
+            comm->receive_data_process_stencil_md(true, &receive_requests[i], recv_zoid_num, true);
+        }
+    }
 
     // map dependency levels to number of zoids to wait on
     std::map<int, std::vector<int>> dep_to_wait_idxs;
@@ -4408,21 +4416,6 @@ void Verlet::setup_stencil_md() {
                     }
                 }
             }
-        }
-    }
-
-    for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
-        int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
-        if (recv_zoid_num % comm->nprocs != comm->me) {
-            receive_request_threads[i] = std::move(std::thread(
-                [&](int recv_zoid_num_) {
-                    MPI_Request r;
-                    comm->receive_data_process_stencil_md(true, &r, recv_zoid_num_,
-                                                          true);
-                    int wait_status = MPI_Wait(&r, MPI_STATUS_IGNORE);
-                    assert(wait_status == MPI_SUCCESS);
-                },
-                recv_zoid_num));
         }
     }
 
@@ -4457,7 +4450,7 @@ void Verlet::setup_stencil_md() {
         if (dep > 0) {
             for (int idx : dep_to_wait_idxs[dep]) {
                 int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
-                receive_request_threads[idx].join();
+                MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
                 comm->unpack_data_process_stencil_md(true, recv_zoid_num, true);
             }
         }
@@ -4476,6 +4469,28 @@ void Verlet::setup_stencil_md() {
                     zoid.can_eval_center[0], lmp->zoid_num_to_zoid[zoid_num],
                     nullptr);
 
+                if (dep < NUM_DEPS - 1) {
+                    auto begin = std::chrono::high_resolution_clock::now();
+                    Comm *comm_ = lmp->comm_stencil_md[zoid_num];
+
+                    int vec_idx = 0;
+                    for (int proc = 0; proc < comm->nprocs; proc++) {
+                        bool sent = comm_->send_data_to_process_stencil_md(true,
+                                                                           lmp->atom_stencil_md[zoid_num],
+                                                                           lmp->zoid_num_to_zoid[zoid_num],
+                                                                           &send_requests[zoid_num][vec_idx], proc,
+                                                                           true, &send_pack_duration);
+                        if (sent) {
+                            vec_idx++;
+                        }
+                    }
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto duration =
+                            std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    send_comm_duration += duration;
+                }
+
+                /*
                 if (dep < NUM_DEPS - 1) {
                     queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
                     auto& atom_arr = lmp->atom_stencil_md[zoid_num];
@@ -4500,12 +4515,21 @@ void Verlet::setup_stencil_md() {
                         }
                     }
                 }
+                */
             }
         }
     }
 
+    /*
     for (auto& t : send_request_threads) {
         t.join();
+    }
+    */
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        if (send_requests[i].size() > 0) {
+            MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
+        }
     }
 
     double* send_f = new double[(atom->natoms + 1) * 3];
