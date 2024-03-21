@@ -128,6 +128,9 @@ void NPairHalfBinAtomonlyNewton::build(NeighList *list)
 
 // default lj/cut calls this npair
 void NPairHalfBinAtomonlyNewton::build_stencil_md(NeighList *list, Atom* atom_, Domain* domain_, queue_info& zoid) {
+    if (zoid.num == 0) {
+        std::cout << "npairhalfbinatomonlynewton stencilmd build" << std::endl;
+    }
     int i,j,k,n,itype,jtype,ibin;
     double xtmp,ytmp,ztmp,delx,dely,delz,rsq;
     int *neighptr;

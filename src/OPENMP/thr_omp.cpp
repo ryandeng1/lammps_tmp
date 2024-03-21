@@ -53,6 +53,15 @@ ThrOMP::ThrOMP(LAMMPS *ptr, int style)
   fix = static_cast<FixOMP *>(lmp->modify->fix[ifix]);
 }
 
+ThrOMP::ThrOMP(LAMMPS *ptr, Modify* modify_, int style)
+        : lmp(ptr), fix(nullptr), thr_style(style), thr_error(0) {
+    // register fix omp with this class
+    int ifix = modify_->find_fix("package_omp");
+    if (ifix < 0)
+        lmp->error->all(FLERR,"The 'package omp' command is required for /omp styles");
+    fix = static_cast<FixOMP *>(modify_->fix[ifix]);
+}
+
 /* ----------------------------------------------------------------------
    Hook up per thread per atom arrays into the tally infrastructure
    ---------------------------------------------------------------------- */
@@ -450,8 +459,297 @@ void ThrOMP::reduce_thr(void *style, const int eflag, const int vflag,
 
     if (lmp->atom->torque)
       data_reduce_thr(&(lmp->atom->torque[0][0]), nall, nthreads, 3, tid);
+  } else {
+      assert(false);
   }
   thr->timer(Timer::COMM);
+}
+
+void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag,
+                        ThrData *const thr, Atom* atom_) {
+    const int nlocal = atom_->nlocal;
+    const int nghost = atom_->nghost;
+    const int nall = nlocal + nghost;
+    const int nfirst = atom_->nfirst;
+    const int nthreads = lmp->comm->nthreads;
+    const int evflag = eflag | vflag;
+
+    const int tid = thr->get_tid();
+    double **f = atom_->eval_f_stencil_md;
+    double **x = atom_->x;
+
+    int need_force_reduce = 1;
+
+    if (evflag)
+        sync_threads();
+
+    switch (thr_style) {
+
+        case THR_PAIR: {
+
+            if (lmp->force->pair->vflag_fdotr) {
+                // this is a non-hybrid pair style. compute per thread fdotr
+                if (fix->last_pair_hybrid == nullptr) {
+                    if (lmp->neighbor->includegroup == 0)
+                        thr->virial_fdotr_compute(x, nlocal, nghost, -1);
+                    else
+                        thr->virial_fdotr_compute(x, nlocal, nghost, nfirst);
+                } else {
+                    if (style == fix->last_pair_hybrid) {
+                        std::cout << "stencilmd style is fix last pair hybrid? " << std::endl;
+                        // pair_style hybrid will compute fdotr for us
+                        // but we first need to reduce the forces
+                        data_reduce_thr(&(f[0][0]), nall, nthreads, 3, tid);
+                        fix->did_reduce();
+                        need_force_reduce = 0;
+                    }
+                }
+            }
+
+            if (evflag) {
+                auto  const pair = (Pair *)style;
+
+#if defined(_OPENMP)
+#pragma omp critical
+#endif
+                {
+                    if (eflag & ENERGY_GLOBAL) {
+                        pair->eng_vdwl += thr->eng_vdwl;
+                        pair->eng_coul += thr->eng_coul;
+                        thr->eng_vdwl = 0.0;
+                        thr->eng_coul = 0.0;
+                    }
+                    if (vflag & (VIRIAL_PAIR | VIRIAL_FDOTR))
+                        for (int i=0; i < 6; ++i) {
+                            pair->virial[i] += thr->virial_pair[i];
+                            thr->virial_pair[i] = 0.0;
+                        }
+                }
+
+                if (eflag & ENERGY_ATOM) {
+                    data_reduce_thr(&(pair->eatom[0]), nall, nthreads, 1, tid);
+                }
+                // per-atom virial and per-atom centroid virial are the same for two-body
+                // many-body pair styles not yet implemented
+                if (vflag & (VIRIAL_ATOM | VIRIAL_CENTROID)) {
+                    data_reduce_thr(&(pair->vatom[0][0]), nall, nthreads, 6, tid);
+                }
+                // check cvatom_pair, because can't access centroidstressflag
+                if ((vflag & VIRIAL_CENTROID) && thr->cvatom_pair) {
+                    data_reduce_thr(&(pair->cvatom[0][0]), nall, nthreads, 9, tid);
+                }
+            }
+        }
+            break;
+
+        case THR_BOND:
+
+            if (evflag) {
+                Bond * const bond = lmp->force->bond;
+#if defined(_OPENMP)
+#pragma omp critical
+#endif
+                {
+                    if (eflag & ENERGY_GLOBAL) {
+                        bond->energy += thr->eng_bond;
+                        thr->eng_bond = 0.0;
+                    }
+
+                    if (vflag & (VIRIAL_PAIR | VIRIAL_FDOTR)) {
+                        for (int i=0; i < 6; ++i) {
+                            bond->virial[i] += thr->virial_bond[i];
+                            thr->virial_bond[i] = 0.0;
+                        }
+                    }
+                }
+
+                if (eflag & ENERGY_ATOM) {
+                    data_reduce_thr(&(bond->eatom[0]), nall, nthreads, 1, tid);
+                }
+                // per-atom virial and per-atom centroid virial are the same for bonds
+                if (vflag & (VIRIAL_ATOM | VIRIAL_CENTROID)) {
+                    data_reduce_thr(&(bond->vatom[0][0]), nall, nthreads, 6, tid);
+                }
+
+            }
+            break;
+
+        case THR_ANGLE:
+
+            if (evflag) {
+                Angle * const angle = lmp->force->angle;
+#if defined(_OPENMP)
+#pragma omp critical
+#endif
+                {
+                    if (eflag & ENERGY_GLOBAL) {
+                        angle->energy += thr->eng_angle;
+                        thr->eng_angle = 0.0;
+                    }
+
+                    if (vflag & (VIRIAL_PAIR | VIRIAL_FDOTR)) {
+                        for (int i=0; i < 6; ++i) {
+                            angle->virial[i] += thr->virial_angle[i];
+                            thr->virial_angle[i] = 0.0;
+                        }
+                    }
+                }
+
+                if (eflag & ENERGY_ATOM) {
+                    data_reduce_thr(&(angle->eatom[0]), nall, nthreads, 1, tid);
+                }
+                if (vflag & VIRIAL_ATOM) {
+                    data_reduce_thr(&(angle->vatom[0][0]), nall, nthreads, 6, tid);
+                }
+                if (vflag & VIRIAL_CENTROID) {
+                    data_reduce_thr(&(angle->cvatom[0][0]), nall, nthreads, 9, tid);
+                }
+
+            }
+            break;
+
+        case THR_DIHEDRAL:
+
+            if (evflag) {
+                Dihedral * const dihedral = lmp->force->dihedral;
+#if defined(_OPENMP)
+#pragma omp critical
+#endif
+                {
+                    if (eflag & ENERGY_GLOBAL) {
+                        dihedral->energy += thr->eng_dihed;
+                        thr->eng_dihed = 0.0;
+                    }
+
+                    if (vflag & (VIRIAL_PAIR | VIRIAL_FDOTR)) {
+                        for (int i=0; i < 6; ++i) {
+                            dihedral->virial[i] += thr->virial_dihed[i];
+                            thr->virial_dihed[i] = 0.0;
+                        }
+                    }
+                }
+
+                if (eflag & ENERGY_ATOM) {
+                    data_reduce_thr(&(dihedral->eatom[0]), nall, nthreads, 1, tid);
+                }
+                if (vflag & VIRIAL_ATOM) {
+                    data_reduce_thr(&(dihedral->vatom[0][0]), nall, nthreads, 6, tid);
+                }
+                if (vflag & VIRIAL_CENTROID) {
+                    data_reduce_thr(&(dihedral->cvatom[0][0]), nall, nthreads, 9, tid);
+                }
+
+            }
+            break;
+
+        case THR_DIHEDRAL|THR_CHARMM: // special case for CHARMM dihedrals
+
+            if (evflag) {
+                Dihedral * const dihedral = lmp->force->dihedral;
+                Pair * const pair = lmp->force->pair;
+#if defined(_OPENMP)
+#pragma omp critical
+#endif
+                {
+                    if (eflag & ENERGY_GLOBAL) {
+                        dihedral->energy += thr->eng_dihed;
+                        pair->eng_vdwl += thr->eng_vdwl;
+                        pair->eng_coul += thr->eng_coul;
+                        thr->eng_dihed = 0.0;
+                        thr->eng_vdwl = 0.0;
+                        thr->eng_coul = 0.0;
+                    }
+
+                    if (vflag & (VIRIAL_PAIR | VIRIAL_FDOTR)) {
+                        for (int i=0; i < 6; ++i) {
+                            dihedral->virial[i] += thr->virial_dihed[i];
+                            pair->virial[i] += thr->virial_pair[i];
+                            thr->virial_dihed[i] = 0.0;
+                            thr->virial_pair[i] = 0.0;
+                        }
+                    }
+                }
+
+                if (eflag & ENERGY_ATOM) {
+                    data_reduce_thr(&(dihedral->eatom[0]), nall, nthreads, 1, tid);
+                    data_reduce_thr(&(pair->eatom[0]), nall, nthreads, 1, tid);
+                }
+                if (vflag & VIRIAL_ATOM) {
+                    data_reduce_thr(&(dihedral->vatom[0][0]), nall, nthreads, 6, tid);
+                }
+                if (vflag & VIRIAL_CENTROID) {
+                    data_reduce_thr(&(dihedral->cvatom[0][0]), nall, nthreads, 9, tid);
+                }
+                // per-atom virial and per-atom centroid virial are the same for two-body
+                // many-body pair styles not yet implemented
+                if (vflag & (VIRIAL_ATOM | VIRIAL_CENTROID)) {
+                    data_reduce_thr(&(pair->vatom[0][0]), nall, nthreads, 6, tid);
+                }
+                // check cvatom_pair, because can't access centroidstressflag
+                if ((vflag & VIRIAL_CENTROID) && thr->cvatom_pair) {
+                    data_reduce_thr(&(pair->cvatom[0][0]), nall, nthreads, 9, tid);
+                }
+            }
+            break;
+
+        case THR_IMPROPER:
+
+            if (evflag) {
+                Improper *improper = lmp->force->improper;
+#if defined(_OPENMP)
+#pragma omp critical
+#endif
+                {
+                    if (eflag & ENERGY_GLOBAL) {
+                        improper->energy += thr->eng_imprp;
+                        thr->eng_imprp = 0.0;
+                    }
+
+                    if (vflag & (VIRIAL_PAIR | VIRIAL_FDOTR)) {
+                        for (int i=0; i < 6; ++i) {
+                            improper->virial[i] += thr->virial_imprp[i];
+                            thr->virial_imprp[i] = 0.0;
+                        }
+                    }
+                }
+
+                if (eflag & ENERGY_ATOM) {
+                    data_reduce_thr(&(improper->eatom[0]), nall, nthreads, 1, tid);
+                }
+                if (vflag & VIRIAL_ATOM) {
+                    data_reduce_thr(&(improper->vatom[0][0]), nall, nthreads, 6, tid);
+                }
+                if (vflag & VIRIAL_CENTROID) {
+                    data_reduce_thr(&(improper->cvatom[0][0]), nall, nthreads, 9, tid);
+                }
+
+            }
+            break;
+
+        case THR_KSPACE:
+            // nothing to do. XXX may need to add support for per-atom info
+            break;
+
+        case THR_INTGR:
+            // nothing to do
+            break;
+
+        default:
+            printf("tid:%d unhandled thr_style case %d\n", tid, thr_style);
+            break;
+    }
+
+    // TODO: RYAN, if anything goes wrong, check back on this. This might assume that there are multiple computations happening at once and then reduce at the end?
+    if (style == fix->last_omp_style || true) {
+        if (need_force_reduce) {
+            data_reduce_thr(&(f[0][0]), nall, nthreads, 3, tid);
+            fix->did_reduce();
+        }
+
+        if (lmp->atom->torque)
+            data_reduce_thr(&(lmp->atom->torque[0][0]), nall, nthreads, 3, tid);
+    }
+    thr->timer(Timer::COMM);
 }
 
 /* ----------------------------------------------------------------------

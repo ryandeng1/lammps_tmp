@@ -107,6 +107,11 @@ class Force : protected Pointers {
   ImproperCreatorMap *improper_map;
   KSpaceCreatorMap *kspace_map;
 
+  // TODO: need this for lj/cut/omp
+  typedef Pair *(*PairCreatorStencilMD)(LAMMPS *, Modify *);
+  typedef std::map<std::string, PairCreatorStencilMD> PairCreatorMapStencilMD;
+  PairCreatorMapStencilMD *pair_map_stencil_md;
+
   // index [0] is not used in these arrays
   double special_lj[4];      // 1-2, 1-3, 1-4 prefactors for LJ
   double special_coul[4];    // 1-2, 1-3, 1-4 prefactors for Coulombics
@@ -121,8 +126,8 @@ class Force : protected Pointers {
   void init();
   void setup();
 
-  void create_pair(const std::string &, int);
-  Pair *new_pair(const std::string &, int, int &);
+  void create_pair(const std::string &, int, bool use_stencil_md = false, Modify* = nullptr);
+  Pair *new_pair(const std::string &, int, int &, bool use_stencil_md = false, Modify* = nullptr);
   Pair *pair_match(const std::string &, int, int nsub = 0);
   char *pair_match_ptr(Pair *);
 
@@ -154,6 +159,7 @@ class Force : protected Pointers {
   void init_stencil_md(Neighbor*);
  private:
   void create_factories();
+  void create_factories_stencil_md();
 };
 
 }    // namespace LAMMPS_NS

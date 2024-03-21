@@ -15,6 +15,10 @@
 // clang-format off
 FixStyle(nve/omp,FixNVEOMP);
 // clang-format on
+#elifdef FIX_CLASS_STENCIL_MD
+// clang-format off
+FixStyleStencilMD(nve/omp,FixNVEOMP);
+// clang-format on
 #else
 
 #ifndef LMP_FIX_NVE_OMP_H
@@ -27,9 +31,13 @@ namespace LAMMPS_NS {
 class FixNVEOMP : public FixNVE {
  public:
   FixNVEOMP(class LAMMPS *, int, char **);
+  FixNVEOMP(class LAMMPS *, class Modify*, int, char **);
 
   void initial_integrate(int) override;
   void final_integrate() override;
+
+  void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
+  void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;
 };
 
 }    // namespace LAMMPS_NS

@@ -100,8 +100,6 @@ AtomKokkos::~AtomKokkos()
   dvector = nullptr;
 
   // stencil md
-  memoryKK->destroy_kokkos(k_eval_mask_stencil_md, eval_mask_stencil_md);
-  memoryKK->destroy_kokkos(k_actually_eval_mask_stencil_md, actually_eval_mask_stencil_md);
   memoryKK->destroy_kokkos(k_eval_f_stencil_md, eval_f_stencil_md);
 }
 

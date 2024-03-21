@@ -1518,7 +1518,7 @@ void Input::dump_modify()
 
 void Input::fix()
 {
-  std::cout << "LAMMPS ADD FIX" << std::endl;
+  std::cout << "LAMMPS ADD FIX" << " narg? " << narg << " arg? " << arg[0] << " " << arg[1] << " " << arg[2] << std::endl;
   modify->add_fix(narg,arg);
   // do the same for stencil md
 
@@ -1692,6 +1692,7 @@ void Input::package()
     for (int i = 1; i < narg; i++) fixcmd += std::string(" ") + arg[i];
     modify->add_fix(fixcmd);
 
+    stencilMD->MODIFY_ADD_FIX_PACKAGE_STENCIL_MD(fixcmd);
  } else if (strcmp(arg[0],"intel") == 0) {
     if (!modify->check_package("INTEL"))
       error->all(FLERR,

@@ -223,8 +223,6 @@ protected:
   double **x, **v, **f;
 
   double **eval_f_stencil_md;
-  int* eval_mask_stencil_md;
-  int* actually_eval_mask_stencil_md;
 
   // standard list of peratom fields always operated on by different methods
   // common to all styles, so not listed in field strings

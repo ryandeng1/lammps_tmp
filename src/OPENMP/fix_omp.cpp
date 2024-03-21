@@ -37,6 +37,7 @@
 #include "kspace.h"
 
 #include <cstring>
+#include <unistd.h>
 
 #include "omp_compat.h"
 #if defined(_OPENMP)
@@ -85,6 +86,7 @@ FixOMP::FixOMP(LAMMPS *lmp, int narg, char **arg)
 
   int reset_thr = 0;
 #endif
+  std::cout << "LAMMPS FIXOMP nthreads: " << nthreads << " comm nthreads: " << comm->nthreads << std::endl;
   if (nthreads != comm->nthreads) {
 #if defined(_OPENMP)
     reset_thr = 1;
@@ -134,6 +136,8 @@ FixOMP::FixOMP(LAMMPS *lmp, int narg, char **arg)
     thr[tid] = new ThrData(tid,t);
   }
 }
+
+FixOMP::FixOMP(LAMMPS *lmp, Modify * modify_, int narg, char **arg) : FixOMP(lmp, narg, arg) {}
 
 /* ---------------------------------------------------------------------- */
 
@@ -289,6 +293,137 @@ void FixOMP::init()
   }
 }
 
+void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_) {
+    // OPENMP package cannot be used with atom_style template
+    if (atom->molecular == Atom::TEMPLATE)
+        error->all(FLERR,"OPENMP package does not (yet) work with "
+                         "atom_style template");
+
+    // adjust number of data objects when the number of OpenMP
+    // threads has been changed somehow
+    const int nthreads = comm->nthreads;
+    if (_nthr != nthreads) {
+        if (comm->me == 0)
+            utils::logmesg(lmp,"Re-init OPENMP for {} OpenMP thread(s)\n", nthreads);
+
+        for (int i=0; i < _nthr; ++i)
+            delete thr[i];
+
+        thr = new ThrData *[nthreads];
+        _nthr = nthreads;
+#if defined(_OPENMP)
+#pragma omp parallel LMP_DEFAULT_NONE
+#endif
+        {
+            const int tid = get_tid();
+            auto t = new Timer(lmp);
+            thr[tid] = new ThrData(tid,t);
+        }
+    }
+
+    // reset per thread timer
+    for (int i=0; i < nthreads; ++i) {
+        thr[i]->_timer_active=1;
+        thr[i]->timer(Timer::RESET);
+        thr[i]->_timer_active=-1;
+    }
+
+    if (utils::strmatch(update->integrate_style,"^respa")
+        && !utils::strmatch(update->integrate_style,"^respa/omp"))
+        error->all(FLERR,"Must use respa/omp for r-RESPA with /omp styles");
+
+    _pair_compute_flag = force->pair && force->pair->compute_flag;
+    _kspace_compute_flag = force->kspace && force->kspace->compute_flag;
+
+    int check_hybrid, kspace_split;
+    last_pair_hybrid = nullptr;
+    last_omp_style = nullptr;
+    const char *last_omp_name = nullptr;
+    const char *last_hybrid_name = nullptr;
+    const char *last_force_name = nullptr;
+
+    // support for verlet/split operation.
+    // kspace_split == 0 : regular processing
+    // kspace_split < 0  : master partition, does not do kspace
+    // kspace_split > 0  : slave partition, only does kspace
+
+    if (strstr(update->integrate_style,"verlet/split") != nullptr) {
+        if (universe->iworld == 0) kspace_split = -1;
+        else kspace_split = 1;
+    } else {
+        kspace_split = 0;
+    }
+
+// determine which is the last force style with OpenMP
+// support as this is the one that has to reduce the forces
+
+// Note: Ryan, StencilMD, this makes modify tied to force which is super annoying. Right now we are essentially ignoring it.
+#define CheckStyleForOMP(name)                                          \
+  check_hybrid = 0;                                                     \
+  if (force->name) {                                                    \
+    if ( (strcmp(force->name ## _style,"hybrid") == 0) ||               \
+         (strcmp(force->name ## _style,"hybrid/overlay") == 0) )        \
+      check_hybrid=1;                                                   \
+    if (force->name->suffix_flag & Suffix::OMP) {                       \
+      last_force_name = (const char *) #name;                           \
+      last_omp_name = force->name ## _style;                            \
+      last_omp_style = (void *) force->name;                            \
+    }                                                                   \
+  }
+
+#define CheckHybridForOMP(name,Class) \
+  if (check_hybrid) {                                         \
+    Class ## Hybrid *style = (Class ## Hybrid *) force->name; \
+    for (int i=0; i < style->nstyles; i++) {                  \
+      if (style->styles[i]->suffix_flag & Suffix::OMP) {      \
+        last_force_name = (const char *) #name;               \
+        last_omp_name = style->keywords[i];                   \
+        last_omp_style = style->styles[i];                    \
+      }                                                       \
+    }                                                         \
+  }
+
+    if (_pair_compute_flag && (kspace_split <= 0)) {
+        CheckStyleForOMP(pair);
+        CheckHybridForOMP(pair,Pair);
+        if (check_hybrid) {
+            last_pair_hybrid = last_omp_style;
+            last_hybrid_name = last_omp_name;
+        }
+
+        CheckStyleForOMP(bond);
+        CheckHybridForOMP(bond,Bond);
+
+        CheckStyleForOMP(angle);
+        CheckHybridForOMP(angle,Angle);
+
+        CheckStyleForOMP(dihedral);
+        CheckHybridForOMP(dihedral,Dihedral);
+
+        CheckStyleForOMP(improper);
+        CheckHybridForOMP(improper,Improper);
+    }
+
+    if (_kspace_compute_flag && (kspace_split >= 0)) {
+        CheckStyleForOMP(kspace);
+    }
+
+#undef CheckStyleForOMP
+#undef CheckHybridForOMP
+    neighbor->set_omp_neighbor(_neighbor ? 1 : 0);
+
+    // diagnostic output
+    if (comm->me == 0) {
+        if (last_omp_style) {
+            if (last_pair_hybrid)
+                utils::logmesg(lmp,"Hybrid pair style last /omp style {}\n",last_hybrid_name);
+            utils::logmesg(lmp,"Last active /omp style is {}_style {}\n",last_force_name,last_omp_name);
+        } else {
+            utils::logmesg(lmp,"No /omp style for force computation currently active\n");
+        }
+    }
+}
+
 /* ---------------------------------------------------------------------- */
 
 void FixOMP::setup(int)
@@ -296,6 +431,10 @@ void FixOMP::setup(int)
   // we are post the force compute in setup. turn on timers
   for (int i=0; i < _nthr; ++i)
     thr[i]->_timer_active=0;
+}
+
+void FixOMP::setup_stencil_md(int dummy, Atom*) {
+    setup(dummy);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -321,6 +460,27 @@ void FixOMP::pre_force(int)
   } // end of omp parallel region
 
   _reduced = false;
+}
+
+void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
+    const int nall = atom_->nlocal + atom_->nghost;
+
+    double **f = atom_->eval_f_stencil_md;
+    double **torque = atom_->torque;
+    double *erforce = atom_->erforce;
+    double *desph = atom_->desph;
+    double *drho = atom_->drho;
+
+#if defined(_OPENMP)
+#pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(f,torque,erforce,desph,drho)
+#endif
+    {
+        const int tid = get_tid();
+        thr[tid]->check_tid(tid);
+        thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
+    } // end of omp parallel region
+
+    _reduced = false;
 }
 
 /* ---------------------------------------------------------------------- */

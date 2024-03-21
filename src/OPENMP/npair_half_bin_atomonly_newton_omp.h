@@ -23,6 +23,7 @@ NPairStyle(half/bin/atomonly/newton/omp,
 #define LMP_NPAIR_HALF_BIN_ATOMONLY_NEWTON_OMP_H
 
 #include "npair.h"
+#include "npair_half_bin_atomonly_newton.h"
 
 namespace LAMMPS_NS {
 
@@ -30,6 +31,8 @@ class NPairHalfBinAtomonlyNewtonOmp : public NPair {
  public:
   NPairHalfBinAtomonlyNewtonOmp(class LAMMPS *);
   void build(class NeighList *) override;
+  // TODO: one day I will have to implement the parallel version of this
+  void build_stencil_md(class NeighList *, class Atom*, class Domain*, queue_info&) override;
 };
 
 }    // namespace LAMMPS_NS

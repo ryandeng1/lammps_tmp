@@ -251,8 +251,21 @@ class Fix : protected Pointers {
 
   virtual double memory_usage() { return 0.0; }
 
-  virtual void setup_stencil_md(double*, Atom*) {assert(false);}
-  virtual void init_stencil_md(Atom*, Modify*) { assert(false); }
+  virtual void setup_pre_force_stencil_md(int, Atom*) {
+      assert(false);
+  }
+
+  virtual void pre_force_stencil_md(int, Atom*) {
+      assert(false);
+  }
+
+  virtual void setup_stencil_md(int, Atom*) {
+      assert(false);
+  }
+
+  virtual void init_stencil_md(Atom*, Modify*) {
+      assert(false);
+  }
   virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) {assert(false);}
   virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) {assert(false);}
 

@@ -102,7 +102,7 @@ class Modify : protected Pointers {
   virtual int min_reset_ref();
 
   Fix *add_fix(int, char **, int trysuffix = 1, bool use_stencil_md = false);
-  Fix *add_fix(const std::string &, int trysuffix = 1);
+  Fix *add_fix(const std::string &, int trysuffix = 1, bool use_stencil_md = false);
   Fix *replace_fix(const char *, int, char **, int trysuffix = 1);
   Fix *replace_fix(const std::string &, const std::string &, int trysuffix = 1);
   void modify_fix(int, char **);
@@ -149,8 +149,10 @@ class Modify : protected Pointers {
 
   double memory_usage();
 
+  virtual void pre_force_stencil_md(int, Atom*);
   virtual void init_stencil_md(Atom*);
-  virtual void setup_stencil_md(double*, Atom*) { assert(false); }
+  virtual void setup_stencil_md(int, Atom*);
+  virtual void setup_pre_force_stencil_md(int, Atom*);
   virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*);
   virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*);
 

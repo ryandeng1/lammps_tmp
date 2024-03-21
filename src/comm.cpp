@@ -104,7 +104,9 @@ Comm::Comm(LAMMPS *lmp) : Pointers(lmp)
   // enforce consistent number of threads across all MPI tasks
 
   MPI_Bcast(&nthreads,1,MPI_INT,0,world);
-  if (!lmp->kokkos) omp_set_num_threads(nthreads);
+  if (!lmp->kokkos) {
+      omp_set_num_threads(nthreads);
+  }
 
   if (me == 0)
     utils::logmesg(lmp,"  using {} OpenMP thread(s) per MPI task\n",nthreads);

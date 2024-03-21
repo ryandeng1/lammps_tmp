@@ -81,8 +81,6 @@ class FixNHKokkos : public FixNH {
   KOKKOS_INLINE_FUNCTION
   void operator()(TagFixNH_nh_v_temp_stencil_md, const int&) const;
 
-  void setup_stencil_md(double*, Atom*) override;
-
   void init_stencil_md(Atom*, Modify*) override;
   void nve_v_stencil_md(Atom*, Atom*, bool, bool*) override;
   void nve_x_stencil_md(Atom*, Atom*, bool*) override;
@@ -110,7 +108,6 @@ protected:
   int* atom_idx_mapping;
   bool* atom_can_eval;
   typename ArrayTypes<DeviceType>::t_f_array_const eval_f_stencil_md;
-  typename ArrayTypes<DeviceType>::t_int_1d actually_eval_mask_stencil_md;
 
   typename ArrayTypes<DeviceType>::t_x_array x;
   typename ArrayTypes<DeviceType>::t_v_array v;

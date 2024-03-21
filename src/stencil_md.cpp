@@ -7,29 +7,73 @@
 #include "comm.h"
 #include "comm_brick.h"
 #include "domain.h"
+#include "accelerator_omp.h"
 #include "neigh_list.h"
 #include "modify.h"
 
 using namespace LAMMPS_NS;
 
 void StencilMD::MODIFY_ADD_FIX_STENCIL_MD(int narg, char **arg) {
+#ifdef LMP_OPENMP
     for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
-        lmp->modify_stencil_md[i]->add_fix(narg, arg, 1, true);
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->modify_stencil_md_omp[i].size(); j++) {
+                lmp->modify_stencil_md_omp[i][j]->add_fix(narg, arg, 1, true);
+            }
+        }
     }
+#else
+    for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            lmp->modify_stencil_md[i]->add_fix(narg, arg, 1, true);
+        }
+    }
+#endif
+}
+
+void StencilMD::MODIFY_ADD_FIX_PACKAGE_STENCIL_MD(const std::string& fixcmd) {
+#ifdef LMP_OPENMP
+    for (int i = 0; i < lmp->modify_stencil_md_omp.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->modify_stencil_md_omp[i].size(); j++) {
+                lmp->modify_stencil_md_omp[i][j]->add_fix(fixcmd, 1, true);
+            }
+        }
+    }
+#else
+    for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            lmp->modify_stencil_md[i]->add_fix(fixcmd, 1, true);
+        }
+    }
+#endif
 }
 
 void StencilMD::MODIFY_ADD_COMPUTE_STENCIL_MD(int narg, char **arg) {
-    std::cout << "modify add compute stencil md" << std::endl;
+#ifdef LMP_OPENMP
     for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
-        lmp->modify_stencil_md[i]->add_compute(narg, arg, 1, true);
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->modify_stencil_md_omp[i].size(); j++) {
+                lmp->modify_stencil_md_omp[i][j]->add_compute(narg, arg, 1, true);
+            }
+        }
     }
+#else
+    for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            lmp->modify_stencil_md[i]->add_compute(narg, arg, 1, true);
+        }
+    }
+#endif
 }
 
 void StencilMD::FORCE_PAIR_COEFF(int narg, char **arg) {
     for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
-        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-            lmp->force_stencil_md[i][j]->pair->coeff(narg, arg);
-            lmp->force_stencil_md_next_dt[i][j]->pair->coeff(narg, arg);
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                lmp->force_stencil_md[i][j]->pair->coeff(narg, arg);
+                lmp->force_stencil_md_next_dt[i][j]->pair->coeff(narg, arg);
+            }
         }
     }
 }
@@ -45,19 +89,29 @@ void StencilMD::FORCE_MODIFY_PARAMS(int narg, char **arg) {
 
 void StencilMD::FORCE_CREATE_PAIR(const std::string& style, int trysuffix) {
     for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
-        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-            lmp->force_stencil_md[i][j]->create_pair(style, trysuffix);
-            lmp->force_stencil_md_next_dt[i][j]->create_pair(style, trysuffix);
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                // curr-dt and next-dt force use the same modify. Will there be issues? Hopefully not?
+#ifdef LMP_OPENMP
+                lmp->force_stencil_md[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md_omp[i][j]);
+                lmp->force_stencil_md_next_dt[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md_omp[i][j]);
+#else
+                lmp->force_stencil_md[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md[i]);
+                lmp->force_stencil_md_next_dt[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md[i]);
+#endif
+            }
         }
     }
 }
 
 void StencilMD::FORCE_PAIR_SETTINGS(int narg, char **arg) {
     for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
-        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-            assert(lmp->force_stencil_md[i][j]->pair != NULL);
-            lmp->force_stencil_md[i][j]->pair->settings(narg, arg);
-            lmp->force_stencil_md_next_dt[i][j]->pair->settings(narg, arg);
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                assert(lmp->force_stencil_md[i][j]->pair != NULL);
+                lmp->force_stencil_md[i][j]->pair->settings(narg, arg);
+                lmp->force_stencil_md_next_dt[i][j]->pair->settings(narg, arg);
+            }
         }
     }
 }
@@ -76,6 +130,11 @@ void StencilMD::CREATE() {
 
         std::array<Force *, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_force;
         lmp->force_stencil_md.push_back(arr_force);
+
+#ifdef LMP_OPENMP
+        std::array<Modify*, NUM_TIMESTEPS_IN_PARALLEL + 1> arr_modify_omp;
+        lmp->modify_stencil_md_omp.push_back(arr_modify_omp);
+#endif
     }
 
     for (int i = 0; i < NUM_ZOIDS; i++) {
@@ -84,6 +143,12 @@ void StencilMD::CREATE() {
             lmp->force_stencil_md[i][j] = force_;
         }
 
+#ifdef LMP_OPENMP
+        for (int j = 0; j < lmp->modify_stencil_md_omp[i].size(); j++) {
+            Modify* modify_ = new Modify(lmp);
+            lmp->modify_stencil_md_omp[i][j] = modify_;
+        }
+#else
         Modify* modify_;
         if (lmp->kokkos) {
             // modify_ = new ModifyKokkos(lmp);
@@ -92,6 +157,7 @@ void StencilMD::CREATE() {
             modify_ = new Modify(lmp);
         }
         lmp->modify_stencil_md.push_back(modify_);
+#endif
 
         for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
             Atom* atom_;
@@ -126,7 +192,7 @@ void StencilMD::CREATE() {
             }
 #ifdef LMP_OPENMP
                 else {
-            domain_ = new DomainOMP(this);
+            domain_ = new DomainOMP(lmp);
         }
 #else
             else {
@@ -177,7 +243,7 @@ void StencilMD::CREATE_NEXT_DT() {
             }
 #ifdef LMP_OPENMP
                 else {
-            domain_ = new DomainOMP(this);
+            domain_ = new DomainOMP(lmp);
         }
 #else
             else {
@@ -711,7 +777,6 @@ void StencilMD::INIT_ALL() {
                 domain_->init();
             }
 
-            Modify *modify_ = lmp->modify_stencil_md[i];
             Comm *comm_ = lmp->comm_stencil_md[i];
 
             for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
@@ -719,7 +784,15 @@ void StencilMD::INIT_ALL() {
                 atom_->init();
             }
 
+#ifdef LMP_OPENMP
+            for (int j = 0; j < lmp->modify_stencil_md_omp[i].size(); j++) {
+                Modify* modify_ = lmp->modify_stencil_md_omp[i][j];
+                modify_->init_stencil_md(lmp->atom_stencil_md[i][j]);
+            }
+#else
+            Modify *modify_ = lmp->modify_stencil_md[i];
             modify_->init_stencil_md(lmp->atom_stencil_md[i][0]);
+#endif
 
             for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
                 Neighbor *neighbor_ = lmp->neighbor_stencil_md[i][j];
@@ -761,6 +834,31 @@ void StencilMD::SETUP() {
                     lmp->atom_stencil_md[zoid_num][k]->setup_stencil_md(
                             lmp->domain_stencil_md[zoid_num][k]);
                 }
+            }
+        }
+    }
+}
+
+void StencilMD::MODIFY_PRE_FORCE_SETUP(int vflag) {
+    // atom setup
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                Modify* modify_ = lmp->modify_stencil_md_omp[zoid_num][t];
+                Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
+                modify_->setup_pre_force_stencil_md(vflag, atom_);
+            }
+        }
+    }
+}
+
+void StencilMD::MODIFY_SETUP(int vflag) {
+    // atom setup
+    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+        if (zoid_num % comm->nprocs == comm->me) {
+            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                Modify* modify_ = lmp->modify_stencil_md_omp[zoid_num][t];
+                modify_->setup(vflag);
             }
         }
     }

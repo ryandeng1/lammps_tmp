@@ -21,6 +21,8 @@ public:
 
     void MODIFY_ADD_FIX_STENCIL_MD(int narg, char **arg);
 
+    void MODIFY_ADD_FIX_PACKAGE_STENCIL_MD(const std::string& fixcmd);
+
     void MODIFY_ADD_COMPUTE_STENCIL_MD(int narg, char **arg);
 
     void FORCE_PAIR_COEFF(int narg, char **arg);
@@ -46,6 +48,10 @@ public:
     void INIT_ALL();
 
     void SETUP();
+
+    void MODIFY_PRE_FORCE_SETUP(int);
+
+    void MODIFY_SETUP(int);
 
     void GET_LOCAL_ATOMS_ZOID();
 

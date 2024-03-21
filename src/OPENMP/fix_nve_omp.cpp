@@ -26,6 +26,9 @@ typedef struct { double x,y,z; } dbl3_t;
 FixNVEOMP::FixNVEOMP(LAMMPS *lmp, int narg, char **arg) :
   FixNVE(lmp, narg, arg) { }
 
+FixNVEOMP::FixNVEOMP(LAMMPS *lmp, Modify* modify_, int narg, char **arg) :
+        FixNVEOMP(lmp, narg, arg) { }
+
 /* ----------------------------------------------------------------------
    allow for both per-type and per-atom mass
 ------------------------------------------------------------------------- */
@@ -75,6 +78,59 @@ void FixNVEOMP::initial_integrate(int /* vflag */)
   }
 }
 
+void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
+    // update v and x of atoms in group
+
+    auto * _noalias const x = (dbl3_t *) atom_->x[0];
+    auto * _noalias const next_x = (dbl3_t *) next->x[0];
+    auto * _noalias const v = (dbl3_t *) atom_->v[0];
+    const auto * _noalias const f = (dbl3_t *) atom_->f[0];
+    const auto * _noalias const eval_f = (dbl3_t *) atom_->eval_f_stencil_md[0];
+
+    const int * const mask = atom_->mask;
+    const int nlocal = (igroup == atom_->firstgroup) ? atom_->nfirst : atom_->nlocal;
+
+    if (atom->rmass) {
+        assert(false);
+        const double * const rmass = atom->rmass;
+#if defined (_OPENMP)
+#pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
+#endif
+        for (int i = 0; i < nlocal; i++)
+            if (mask[i] & groupbit) {
+                const double dtfm = dtf / rmass[i];
+                v[i].x += dtfm * f[i].x;
+                v[i].y += dtfm * f[i].y;
+                v[i].z += dtfm * f[i].z;
+                x[i].x += dtv * v[i].x;
+                x[i].y += dtv * v[i].y;
+                x[i].z += dtv * v[i].z;
+            }
+
+    } else {
+        const double * const mass = atom->mass;
+        const int * const type = atom_->type;
+#if defined (_OPENMP)
+#pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
+#endif
+        for (int i = 0; i < nlocal; i++) {
+            if (mask[i] & groupbit) {
+                const double dtfm = dtf / mass[type[i]];
+
+                v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                v[i].z += dtfm * (f[i].z + eval_f[i].z);
+
+                int next_idx = atom_idx_mapping[i];
+                next_x[next_idx].x = x[i].x + dtv * v[i].x;
+                next_x[next_idx].y = x[i].y + dtv * v[i].y;
+                next_x[next_idx].z = x[i].z + dtv * v[i].z;
+                assert(atom_->tag[i] == next->tag[next_idx]);
+            }
+        }
+    }
+}
+
 /* ---------------------------------------------------------------------- */
 
 void FixNVEOMP::final_integrate()
@@ -113,5 +169,63 @@ void FixNVEOMP::final_integrate()
         v[i].z += dtfm * f[i].z;
       }
   }
+}
+
+void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping, bool* can_eval) {
+    // update v of atoms in group
+
+    auto * _noalias const v = (dbl3_t *) atom_->v[0];
+    auto * _noalias const next_v = (dbl3_t *) next->v[0];
+
+    const auto * _noalias const f = (dbl3_t *) next->f[0];
+    const auto * _noalias const eval_f = (dbl3_t *) next->eval_f_stencil_md[0];
+    const int * const mask = atom_->mask;
+    const int nlocal = (igroup == atom_->firstgroup) ? atom_->nfirst : atom_->nlocal;
+    const int next_nlocal = next->nlocal;
+
+    if (atom->rmass) {
+        assert(false);
+        const double * const rmass = atom->rmass;
+#if defined (_OPENMP)
+#pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
+#endif
+        for (int i = 0; i < nlocal; i++)
+            if (mask[i] & groupbit) {
+                const double dtfm = dtf / rmass[i];
+                v[i].x += dtfm * f[i].x;
+                v[i].y += dtfm * f[i].y;
+                v[i].z += dtfm * f[i].z;
+            }
+
+    } else {
+        const double * const mass = atom->mass;
+        const int * const type = next->type;
+
+#if defined (_OPENMP)
+#pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
+#endif
+        for (int i = 0; i < nlocal; i++) {
+            if (mask[i] & groupbit) {
+                const double dtfm = dtf / mass[type[i]];
+                int next_idx = atom_idx_mapping[i];
+                assert(next_idx != -1);
+                next_v[next_idx].x = v[i].x;
+                next_v[next_idx].y = v[i].y;
+                next_v[next_idx].z = v[i].z;
+            }
+        }
+
+#if defined (_OPENMP)
+#pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
+#endif
+        for (int i = 0; i < next_nlocal; i++) {
+            if (mask[i] & groupbit) {
+                const double dtfm = dtf / mass[type[i]];
+                next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+            }
+        }
+    }
 }
 

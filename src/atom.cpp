@@ -39,6 +39,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <unistd.h>
 
 #ifdef LMP_GPU
 #include "fix_gpu.h"
@@ -114,11 +115,7 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   image = nullptr;
   x = v = f = nullptr;
 
-  eval_mask_stencil_md = nullptr;
-
   eval_f_stencil_md = nullptr;
-
-  actually_eval_mask_stencil_md = nullptr;
 
   // charged and dipolar particles
 
@@ -305,10 +302,6 @@ Atom::~Atom()
   memory->destroy(v);
   memory->destroy(f);
 
-  memory->destroy(eval_mask_stencil_md);
-
-  memory->destroy(actually_eval_mask_stencil_md);
-
   // delete custom atom arrays
 
   for (int i = 0; i < nivector; i++) {
@@ -362,6 +355,9 @@ Atom::~Atom()
   Atom::map_delete();
 
   delete unique_tags;
+
+  // start stencilmd
+  memory->destroy(eval_f_stencil_md);
 }
 
 /* ----------------------------------------------------------------------

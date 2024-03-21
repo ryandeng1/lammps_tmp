@@ -72,9 +72,7 @@ AtomVec::AtomVec(LAMMPS *lmp) : Pointers(lmp)
   image = nullptr;
   x = v = f = nullptr;
 
-  // stencil_md
-  eval_mask_stencil_md = nullptr;
-  actually_eval_mask_stencil_md = nullptr;
+  eval_f_stencil_md = nullptr;
 
   threads = nullptr;
 }
@@ -285,9 +283,7 @@ void AtomVec::grow_stencil_md(int n, Atom* atom_)
     v = memory->grow(atom_->v, nmax, 3, "atom:v");
     f = memory->grow(atom_->f, nmax * comm->nthreads, 3, "atom:f");
 
-    eval_mask_stencil_md = memory->grow(atom_->eval_mask_stencil_md, nmax, "atom:eval_mask_stencil_md");
-    eval_f_stencil_md = memory->grow(atom_->eval_f_stencil_md, nmax, 3, "atom:eval_f_stencil_md");
-    actually_eval_mask_stencil_md = memory->grow(atom_->actually_eval_mask_stencil_md, nmax, "atom:eval_mask_stencil_md");
+    eval_f_stencil_md = memory->grow(atom_->eval_f_stencil_md, nmax * comm->nthreads, 3, "atom:eval_f_stencil_md");
 
     for (int i = 0; i < ngrow; i++) {
         pdata = mgrow.pdata[i];

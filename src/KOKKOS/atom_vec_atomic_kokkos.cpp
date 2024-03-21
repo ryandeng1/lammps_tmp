@@ -110,11 +110,6 @@ void AtomVecAtomicKokkos::grow_stencil_md(int n, Atom *atom_)
   memoryKK->grow_kokkos(atomKK_->k_v, atomKK_->v, nmax, "atom:v");
   memoryKK->grow_kokkos(atomKK_->k_f, atomKK_->f, nmax, "atom:f");
 
-  memoryKK->grow_kokkos(atomKK_->k_eval_mask_stencil_md, atomKK_->eval_mask_stencil_md, nmax,
-                        "atom:eval_mask_stencil_md");
-
-  memoryKK->grow_kokkos(atomKK_->k_actually_eval_mask_stencil_md, atomKK_->actually_eval_mask_stencil_md, nmax,
-                          "atom:actually_eval_mask_stencil_md");
   memoryKK->grow_kokkos(atomKK_->k_eval_f_stencil_md, atomKK_->eval_f_stencil_md, nmax,
                           "atom:k_eval_f_stencil_md");
 
@@ -188,9 +183,6 @@ void AtomVecAtomicKokkos::grow_pointers_stencil_md(Atom *atom_)
   eval_f_stencil_md = atomKK_->eval_f_stencil_md;
   h_eval_f_stencil_md = atomKK_->k_eval_f_stencil_md.h_view;
   d_eval_f_stencil_md = atomKK_->k_eval_f_stencil_md.d_view;
-
-  eval_mask_stencil_md = atomKK_->eval_mask_stencil_md;
-  actually_eval_mask_stencil_md = atomKK_->actually_eval_mask_stencil_md;
 }
 
 /* ----------------------------------------------------------------------
@@ -1803,8 +1795,6 @@ void AtomVecAtomicKokkos::sync_stencil_md(ExecutionSpace space, unsigned int mas
     if (mask & TYPE_MASK) atomKK_->k_type.sync<LMPDeviceType>();
     if (mask & MASK_MASK) atomKK_->k_mask.sync<LMPDeviceType>();
     if (mask & IMAGE_MASK) atomKK_->k_image.sync<LMPDeviceType>();
-    atomKK_->k_eval_mask_stencil_md.sync<LMPDeviceType>();
-    atomKK_->k_actually_eval_mask_stencil_md.sync<LMPDeviceType>();
     atomKK_->k_eval_f_stencil_md.sync<LMPDeviceType>();
   } else {
     if (mask & X_MASK) atomKK_->k_x.sync<LMPHostType>();
@@ -1814,8 +1804,6 @@ void AtomVecAtomicKokkos::sync_stencil_md(ExecutionSpace space, unsigned int mas
     if (mask & TYPE_MASK) atomKK_->k_type.sync<LMPHostType>();
     if (mask & MASK_MASK) atomKK_->k_mask.sync<LMPHostType>();
     if (mask & IMAGE_MASK) atomKK_->k_image.sync<LMPHostType>();
-    atomKK_->k_eval_mask_stencil_md.sync<LMPHostType>();
-    atomKK_->k_actually_eval_mask_stencil_md.sync<LMPHostType>();
     atomKK_->k_eval_f_stencil_md.sync<LMPHostType>();
   }
 }

@@ -101,7 +101,6 @@ int main(int argc, char **argv)
   }
 #else
   try {
-    sleep(10);
     auto lammps = new LAMMPS(argc, argv, lammps_comm);
     lammps->input->file();
     delete lammps;

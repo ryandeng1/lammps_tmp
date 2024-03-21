@@ -476,6 +476,33 @@ void Modify::setup(int vflag)
     for (int i = 0; i < nfix; i++) fix[i]->min_setup(vflag);
 }
 
+void Modify::setup_stencil_md(int vflag, Atom* atom_) {
+    /*
+    // compute setup needs to come before fix setup
+    //   b/c NH fixes need DOF of temperature computes
+    // fix group setup() is special case since populates a dynamic group
+    //   needs to be done before temperature compute setup
+
+    for (int i = 0; i < nfix; i++)
+        if (strcmp(fix[i]->style, "GROUP") == 0) {
+            fix[i]->setup_stencil_md(vflag, atom_);
+        }
+
+    for (int i = 0; i < ncompute; i++) {
+        compute[i]->setup();
+    }
+
+    if (update->whichflag == 1) {
+        for (int i = 0; i < nfix; i++) {
+            fix[i]->setup_stencil_md(vflag, atom_);
+        }
+    } else if (update->whichflag == 2) {
+        assert(false);
+        for (int i = 0; i < nfix; i++) fix[i]->min_setup(vflag);
+    }
+    */
+}
+
 /* ----------------------------------------------------------------------
    setup pre_exchange call, only for fixes that define pre_exchange
    called from Verlet, RESPA, Min, and WriteRestart with whichflag = 0
@@ -529,6 +556,18 @@ void Modify::setup_pre_force(int vflag)
     for (int i = 0; i < n_pre_force; i++) fix[list_pre_force[i]]->setup_pre_force(vflag);
   else if (update->whichflag == 2)
     for (int i = 0; i < n_min_pre_force; i++) fix[list_min_pre_force[i]]->setup_pre_force(vflag);
+}
+
+void Modify::setup_pre_force_stencil_md(int vflag, Atom* atom_) {
+    if (update->whichflag == 1) {
+        for (int i = 0; i < n_pre_force; i++) {
+            fix[list_pre_force[i]]->setup_pre_force_stencil_md(vflag, atom_);
+        }
+    } else if (update->whichflag == 2) {
+        for (int i = 0; i < n_min_pre_force; i++) {
+            fix[list_min_pre_force[i]]->setup_pre_force_stencil_md(vflag, atom_);
+        }
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -604,6 +643,12 @@ void Modify::post_neighbor()
 void Modify::pre_force(int vflag)
 {
   for (int i = 0; i < n_pre_force; i++) fix[list_pre_force[i]]->pre_force(vflag);
+}
+
+void Modify::pre_force_stencil_md(int vflag, Atom* atom_) {
+    for (int i = 0; i < n_pre_force; i++) {
+        fix[list_pre_force[i]]->pre_force_stencil_md(vflag, atom_);
+    }
 }
 /* ----------------------------------------------------------------------
    pre_reverse call, only for relevant fixes
@@ -1059,11 +1104,6 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix, bool use_stencil_md)
 
         delete[] fix[ifix]->style;
         fix[ifix]->style = utils::strdup(estyle);
-      } else {
-          if (use_stencil_md) {
-              error->message(FLERR," stencil md cannot find style: { }", estyle);
-              assert(false);
-          }
       }
     }
 
@@ -1157,13 +1197,13 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix, bool use_stencil_md)
    convenience function to allow adding a fix from a single string
 ------------------------------------------------------------------------- */
 
-Fix *Modify::add_fix(const std::string &fixcmd, int trysuffix)
+Fix *Modify::add_fix(const std::string &fixcmd, int trysuffix, bool use_stencil_md)
 {
   auto args = utils::split_words(fixcmd);
   std::vector<char *> newarg(args.size());
   int i = 0;
   for (const auto &arg : args) { newarg[i++] = (char *) arg.c_str(); }
-  return add_fix(args.size(), newarg.data(), trysuffix);
+  return add_fix(args.size(), newarg.data(), trysuffix, use_stencil_md);
 }
 
 /* ----------------------------------------------------------------------

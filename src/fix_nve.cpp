@@ -106,6 +106,10 @@ void FixNVE::initial_integrate(int /*vflag*/)
       if (mask[i] & groupbit) {
         dtfm = dtf / mass[type[i]];
 
+        double x0 = x[i][0];
+        double x1 = x[i][1];
+        double x2 = x[i][2];
+
         v[i][0] += dtfm * f[i][0];
         v[i][1] += dtfm * f[i][1];
         v[i][2] += dtfm * f[i][2];
@@ -113,9 +117,14 @@ void FixNVE::initial_integrate(int /*vflag*/)
         x[i][1] += dtv * v[i][1];
         x[i][2] += dtv * v[i][2];
 
-        // assert(fabs(x0 - x[i][0]) <= ADDITIONAL_CUTOFF);
-        // assert(fabs(x1 - x[i][1]) <= ADDITIONAL_CUTOFF);
-        // assert(fabs(x2 - x[i][2]) <= ADDITIONAL_CUTOFF);
+        if (fabs(x0 - x[i][0]) > ADDITIONAL_CUTOFF) {
+            std::cout << "diff? " << fabs(x0 - x[i][0]) << " " << fabs(x1 - x[i][1]) << " " << fabs(x2 - x[i][2]) << std::endl;
+            std::cout << "force? " << f[i][0] << " " << f[i][1] << " " << f[i][2] << std::endl;
+        }
+
+        assert(fabs(x0 - x[i][0]) <= ADDITIONAL_CUTOFF);
+        assert(fabs(x1 - x[i][1]) <= ADDITIONAL_CUTOFF);
+        assert(fabs(x2 - x[i][2]) <= ADDITIONAL_CUTOFF);
       }
   }
 }

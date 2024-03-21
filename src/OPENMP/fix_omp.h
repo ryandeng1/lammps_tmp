@@ -15,6 +15,10 @@
 // clang-format off
 FixStyle(OMP,FixOMP);
 // clang-format on
+#elifdef FIX_CLASS_STENCIL_MD
+// clang-format off
+FixStyleStencilMD(OMP,FixOMP);
+// clang-format on
 #else
 
 #ifndef LMP_FIX_OMP_H
@@ -32,6 +36,7 @@ class FixOMP : public Fix {
 
  public:
   FixOMP(class LAMMPS *, int, char **);
+  FixOMP(class LAMMPS *, class Modify *, int, char **);
   ~FixOMP() override;
   int setmask() override;
   void init() override;
@@ -46,6 +51,11 @@ class FixOMP : public Fix {
   void pre_force_respa(int vflag, int, int) override { pre_force(vflag); }
 
   double memory_usage() override;
+
+  void init_stencil_md(Atom*, Modify*) override;
+  void setup_pre_force_stencil_md(int vflag, Atom* atom_) override { pre_force_stencil_md(vflag, atom_); }
+  void pre_force_stencil_md(int, Atom*) override;
+  void setup_stencil_md(int, Atom*) override;
 
  protected:
   ThrData **thr;

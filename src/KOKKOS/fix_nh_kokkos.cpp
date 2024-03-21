@@ -181,103 +181,6 @@ void FixNHKokkos<DeviceType>::setup(int /*vflag*/)
   }
 }
 
-template<class DeviceType>
-void FixNHKokkos<DeviceType>::setup_stencil_md(double* x, Atom* atom_)
-{
-    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
-    // tdof needed by compute_temp_target()
-    t_current = temperature->compute_scalar_stencil_md(atom_);
-    *x += t_current;
-    // std::cout << "T_curre  nt: " << t_current << " atom nlocal: " << atom_->nlocal << " me: " << comm->me << std::endl;
-    tdof = temperature->dof;
-
-    // t_target is needed by NPH and NPT in compute_scalar()
-    // If no thermostat or using fix nphug,
-    // t_target must be defined by other means.
-
-    if (tstat_flag && strcmp(style,"nphug") != 0) {
-        compute_temp_target();
-    } else if (pstat_flag) {
-        assert(false);
-        // t0 = reference temperature for masses
-        // cannot be done in init() b/c temperature cannot be called there
-        // is b/c Modify::init() inits computes after fixes due to dof dependence
-        // guesstimate a unit-dependent t0 if actual T = 0.0
-        // if it was read in from a restart file, leave it be
-
-        if (t0 == 0.0) {
-            atomKK_->sync_stencil_md(temperature->execution_space,temperature->datamask_read, atom_);
-            t0 = temperature->compute_scalar();
-            atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
-            if (t0 == 0.0) {
-                if (strcmp(update->unit_style,"lj") == 0) t0 = 1.0;
-                else t0 = 300.0;
-            }
-        }
-        t_target = t0;
-    }
-
-    if (pstat_flag) {
-        assert(false);
-        compute_press_target();
-    }
-
-    atomKK_->sync_stencil_md(temperature->execution_space,temperature->datamask_read, atom_);
-    t_current = temperature->compute_scalar_stencil_md(atom_);
-    atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
-    tdof = temperature->dof;
-
-    if (pstat_flag) {
-        assert(false);
-        //atomKK->sync(pressure->execution_space,pressure->datamask_read);
-        //atomKK->modified(pressure->execution_space,pressure->datamask_modify);
-        if (pstyle == ISO) pressure->compute_scalar();
-        else pressure->compute_vector();
-        couple();
-        pressure->addstep(update->ntimestep+1);
-    }
-
-    // masses and initial forces on thermostat variables
-
-    if (tstat_flag) {
-        eta_mass[0] = tdof * boltz * t_target / (t_freq*t_freq);
-        for (int ich = 1; ich < mtchain; ich++)
-            eta_mass[ich] = boltz * t_target / (t_freq*t_freq);
-        for (int ich = 1; ich < mtchain; ich++) {
-            eta_dotdot[ich] = (eta_mass[ich-1]*eta_dot[ich-1]*eta_dot[ich-1] -
-                               boltz * t_target) / eta_mass[ich];
-        }
-    }
-
-    // masses and initial forces on barostat variables
-
-    if (pstat_flag) {
-        double kt = boltz * t_target;
-        double nkt = (atom->natoms + 1) * kt;
-
-        for (int i = 0; i < 3; i++)
-            if (p_flag[i])
-                omega_mass[i] = nkt/(p_freq[i]*p_freq[i]);
-
-        if (pstyle == TRICLINIC) {
-            for (int i = 3; i < 6; i++)
-                if (p_flag[i]) omega_mass[i] = nkt/(p_freq[i]*p_freq[i]);
-        }
-
-        // masses and initial forces on barostat thermostat variables
-
-        if (mpchain) {
-            etap_mass[0] = boltz * t_target / (p_freq_max*p_freq_max);
-            for (int ich = 1; ich < mpchain; ich++)
-                etap_mass[ich] = boltz * t_target / (p_freq_max*p_freq_max);
-            for (int ich = 1; ich < mpchain; ich++)
-                etap_dotdot[ich] =
-                        (etap_mass[ich-1]*etap_dot[ich-1]*etap_dot[ich-1] -
-                         boltz * t_target) / etap_mass[ich];
-        }
-    }
-}
-
 /* ----------------------------------------------------------------------
    1st half of Verlet update
 ------------------------------------------------------------------------- */
@@ -839,7 +742,6 @@ void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_
         rmass = atomKK_->k_rmass.view<DeviceType>();
         mass = atomKK_->k_mass.view<DeviceType>();
         mask = atomKK_->k_mask.view<DeviceType>();
-        actually_eval_mask_stencil_md = atomKK_->k_actually_eval_mask_stencil_md.view<DeviceType>();
         /*
         for (int i = 0; i < atom_->nlocal; i++) {
             if (PRINT && atom_->tag[i] == 70974) {
@@ -857,7 +759,6 @@ void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_
         rmass = atomKK_next->k_rmass.view<DeviceType>();
         mass = atomKK_next->k_mass.view<DeviceType>();
         mask = atomKK_next->k_mask.view<DeviceType>();
-        actually_eval_mask_stencil_md = atomKK_next->k_actually_eval_mask_stencil_md.view<DeviceType>();
 
         // update next_v based on curr_v
         for (int i = 0; i < atom_->nlocal; i++) {

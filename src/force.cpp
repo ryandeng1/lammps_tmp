@@ -32,6 +32,7 @@
 #include "error.h"
 
 #include <cstring>
+#include <unistd.h>
 
 using namespace LAMMPS_NS;
 
@@ -41,6 +42,10 @@ using namespace LAMMPS_NS;
 template <typename S, typename T> static S *style_creator(LAMMPS *lmp)
 {
   return new T(lmp);
+}
+
+template <typename S, typename T> static S *style_creator_stencil_md(LAMMPS *lmp, Modify* modify_) {
+    return new T(lmp, modify_);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -75,6 +80,8 @@ Force::Force(LAMMPS *lmp) : Pointers(lmp)
 
   pair_restart = nullptr;
   create_factories();
+
+  create_factories_stencil_md();
 }
 
 void _noopt Force::create_factories()
@@ -130,6 +137,18 @@ void _noopt Force::create_factories()
 #undef KSPACE_CLASS
 }
 
+void _noopt Force::create_factories_stencil_md() {
+    // fill pair map with pair styles listed in style_pair.h
+
+    pair_map_stencil_md = new PairCreatorMapStencilMD();
+
+#define PAIR_CLASS_STENCIL_MD
+#define PairStyleStencilMD(key, Class) (*pair_map_stencil_md)[#key] = &style_creator_stencil_md<Pair, Class>;
+#include "stencil_md_style_pair.h"    // IWYU pragma: keep
+#undef PairStyleStencilMD
+#undef PAIR_CLASS_STENCIL_MD
+}
+
 /* ---------------------------------------------------------------------- */
 
 Force::~Force()
@@ -163,6 +182,8 @@ Force::~Force()
   delete dihedral_map;
   delete improper_map;
   delete kspace_map;
+
+  delete pair_map_stencil_md;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -276,7 +297,7 @@ void Force::setup()
    create a pair style, called from input script or restart file
 ------------------------------------------------------------------------- */
 
-void Force::create_pair(const std::string &style, int trysuffix)
+void Force::create_pair(const std::string &style, int trysuffix, bool use_stencil_md, Modify* modify_)
 {
   delete[] pair_style;
   if (pair) delete pair;
@@ -286,7 +307,7 @@ void Force::create_pair(const std::string &style, int trysuffix)
   pair_restart = nullptr;
 
   int sflag;
-  pair = new_pair(style, trysuffix, sflag);
+  pair = new_pair(style, trysuffix, sflag, use_stencil_md, modify_);
   pair_style = store_style(style, sflag);
 }
 
@@ -297,13 +318,18 @@ void Force::create_pair(const std::string &style, int trysuffix)
    special case: if suffixp exists only try suffixp, not suffix
 ------------------------------------------------------------------------- */
 
-Pair *Force::new_pair(const std::string &style, int trysuffix, int &sflag)
+Pair *Force::new_pair(const std::string &style, int trysuffix, int &sflag, bool use_stencil_md, Modify* modify_)
 {
   if (trysuffix && lmp->suffix_enable) {
     if (lmp->suffixp) {
       sflag = 3;
       std::string estyle = style + "/" + lmp->suffixp;
       if (pair_map->find(estyle) != pair_map->end()) {
+        if (use_stencil_md) {
+            PairCreatorStencilMD &pair_creator_stencil_md = (*pair_map_stencil_md)[estyle];
+            assert(modify_ != nullptr);
+            return pair_creator_stencil_md(lmp, modify_);
+        }
         PairCreator &pair_creator = (*pair_map)[estyle];
         return pair_creator(lmp);
       }
@@ -312,6 +338,11 @@ Pair *Force::new_pair(const std::string &style, int trysuffix, int &sflag)
       sflag = 1;
       std::string estyle = style + "/" + lmp->suffix;
       if (pair_map->find(estyle) != pair_map->end()) {
+        if (use_stencil_md) {
+          PairCreatorStencilMD &pair_creator_stencil_md = (*pair_map_stencil_md)[estyle];
+          assert(modify_ != nullptr);
+          return pair_creator_stencil_md(lmp, modify_);
+        }
         PairCreator &pair_creator = (*pair_map)[estyle];
         return pair_creator(lmp);
       }
@@ -320,6 +351,11 @@ Pair *Force::new_pair(const std::string &style, int trysuffix, int &sflag)
       sflag = 2;
       std::string estyle = style + "/" + lmp->suffix2;
       if (pair_map->find(estyle) != pair_map->end()) {
+        if (use_stencil_md) {
+          PairCreatorStencilMD &pair_creator_stencil_md = (*pair_map_stencil_md)[estyle];
+          assert(modify_ != nullptr);
+          return pair_creator_stencil_md(lmp, modify_);
+        }
         PairCreator &pair_creator = (*pair_map)[estyle];
         return pair_creator(lmp);
       }
@@ -329,6 +365,11 @@ Pair *Force::new_pair(const std::string &style, int trysuffix, int &sflag)
   sflag = 0;
   if (style == "none") return nullptr;
   if (pair_map->find(style) != pair_map->end()) {
+    if (use_stencil_md) {
+      PairCreatorStencilMD &pair_creator_stencil_md = (*pair_map_stencil_md)[style];
+      assert(modify_ != nullptr);
+      return pair_creator_stencil_md(lmp, modify_);
+    }
     PairCreator &pair_creator = (*pair_map)[style];
     return pair_creator(lmp);
   }

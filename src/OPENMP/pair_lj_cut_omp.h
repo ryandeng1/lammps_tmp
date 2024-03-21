@@ -19,6 +19,10 @@
 // clang-format off
 PairStyle(lj/cut/omp,PairLJCutOMP);
 // clang-format on
+#elifdef PAIR_CLASS_STENCIL_MD
+// clang-format off
+PairStyleStencilMD(lj/cut/omp, PairLJCutOMP);
+// clang-format on
 #else
 
 #ifndef LMP_PAIR_LJ_CUT_OMP_H
@@ -33,13 +37,19 @@ class PairLJCutOMP : public PairLJCut, public ThrOMP {
 
  public:
   PairLJCutOMP(class LAMMPS *);
+  PairLJCutOMP(class LAMMPS *, class Modify *);
 
   void compute(int, int) override;
   double memory_usage() override;
 
+  void compute_stencil_md(int, int, Atom*, bool*, queue_info&, int*) override;
+
  private:
   template <int EVFLAG, int EFLAG, int NEWTON_PAIR>
   void eval(int ifrom, int ito, ThrData *const thr);
+
+  template <int EVFLAG, int EFLAG, int NEWTON_PAIR>
+  void eval_stencil_md(int ifrom, int ito, ThrData *const thr, Atom* atom_);
 };
 
 }    // namespace LAMMPS_NS

@@ -188,8 +188,8 @@ void Verlet::setup(int flag) {
     modify->setup_pre_force(vflag);
 
     if (pair_compute_flag) {
-        // force->pair->compute(eflag, vflag);
-        force->pair->compute(-1, -1);
+        force->pair->compute(eflag, vflag);
+        // force->pair->compute(-1, -1);
     } else if (force->pair) {
         force->pair->compute_dummy(eflag, vflag);
     }
@@ -225,6 +225,7 @@ void Verlet::setup(int flag) {
     output->setup(flag);
     update->setupflag = 0;
 
+    std::cout << GREEN << "------------------- LAMMPS SETUP DONE -------------------------" << RESET_COLOR << std::endl;
     setup_stencil_md();
 }
 
@@ -1698,6 +1699,9 @@ void Verlet::setup_stencil_md() {
                   << RESET_COLOR << std::endl;
     }
 
+#ifdef LMP_OPENMP
+    stencilMD->MODIFY_SETUP(vflag);
+#endif
     stencilMD->BUILD_NEIGHBOR_LIST();
     stencilMD->BUILD_NEIGHBOR_LIST_NEXT_DT();
 
@@ -1830,6 +1834,7 @@ void Verlet::setup_stencil_md() {
                     lmp->atom_stencil_md[zoid_num],
                     lmp->force_stencil_md[zoid_num], zoid);
 
+                /*
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
                     std::cout
@@ -1840,6 +1845,7 @@ void Verlet::setup_stencil_md() {
                         << " nlocal, and: " << atom_->nlocal + atom_->nghost
                         << " total. " << RESET_COLOR << std::endl;
                 }
+                */
 
                 /*
                 int count = 0;
@@ -1909,14 +1915,6 @@ void Verlet::setup_stencil_md() {
                     zoid.recv_ghost_sizes[t] = new int*[num_recv_from];
                     zoid.recv_ghost_num_segments[t] = new int[num_recv_from];
                     group_ghost_atoms_stencil_md(atom_, NULL, zoid, t);
-
-                    for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
-                        atom_->eval_mask_stencil_md[k] = 1;
-                    }
-
-                    for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
-                        atom_->actually_eval_mask_stencil_md[k] = 0;
-                    }
 
                     zoid.recv_list_local[t] = new int*[num_recv_from];
                     zoid.recv_list_local_size[t] = new int[num_recv_from];
@@ -2265,8 +2263,6 @@ void Verlet::setup_stencil_md() {
             }
         }
     }
-
-    // std::cout << CYAN << "Me total recv: " << total_recv << " not accounting for tag: " << total_recv * 0.75 << RESET_COLOR << std::endl;
 
     // compute number of elements recv, used just to get a sense of the communication volume induced by stencil md
     for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -4311,6 +4307,8 @@ void Verlet::setup_stencil_md() {
         }
     }
 
+    stencilMD->MODIFY_PRE_FORCE_SETUP(vflag);
+
     // start compute
     std::vector<MPI_Request> send_requests_next_dt[NUM_ZOIDS];
     std::vector<std::future<void>> send_request_threads_next_dt;
@@ -4666,19 +4664,19 @@ void Verlet::setup_stencil_md() {
     delete[] recv_f;
 
     double total_temp_for_me = 0;
+
+    stencilMD->MODIFY_SETUP(vflag);
+    /*
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs == comm->me) {
-                /*
-                lmp->modify_stencil_md[zoid_num]->setup_stencil_md(
-                    &total_temp_for_me, lmp->atom_stencil_md[zoid_num][0]);
-                */
                 lmp->modify_stencil_md[zoid_num]->setup(vflag);
             }
         }
     }
+    */
 
 
     std::cout << GREEN << "-------- SETUP STENCIL MD PASSED ---------"
@@ -5441,7 +5439,11 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 queue_info& zoid = lmp->queues[dep][j];
                 Atom* atom_ = atom_arr[t];
                 Atom* atom_next_timestep = atom_arr[t + 1];
+#ifdef LMP_OPENMP
+                Modify* modify_ = lmp->modify_stencil_md_omp[zoid_num][t + 1];
+#else
                 Modify* modify_ = lmp->modify_stencil_md[zoid_num];
+#endif
 
                 if (TEST_AGAINST_LAMMPS_LOCAL) {
                     int timestep_to_compare_against = t + starting_timestep;
@@ -5682,8 +5684,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 }
 
                 if (n_pre_force) {
-                    assert(false);
-                    modify->pre_force(vflag);
+                    modify_->pre_force_stencil_md(vflag, atom_next_timestep);
                     timer->stamp(Timer::MODIFY);
                 }
 
@@ -5968,7 +5969,12 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
 
                 Atom* atom_ = atom_arr[idx_obj_timestep];
                 Atom* atom_next_timestep = atom_arr[idx_obj_timestep_next];
+
+#ifdef LMP_OPENMP
+                Modify* modify_ = lmp->modify_stencil_md_omp[zoid_num][idx_obj_timestep_next];
+#else
                 Modify* modify_ = lmp->modify_stencil_md[zoid_num];
+#endif
 
                 if (TEST_AGAINST_LAMMPS_LOCAL) {
                     for (int k = 0; k < atom_->nlocal; k++) {
@@ -6237,8 +6243,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 }
 
                 if (n_pre_force) {
-                    assert(false);
-                    modify->pre_force(vflag);
+                    modify_->pre_force_stencil_md(vflag, atom_next_timestep);
                     timer->stamp(Timer::MODIFY);
                 }
 
