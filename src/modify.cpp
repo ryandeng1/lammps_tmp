@@ -331,7 +331,7 @@ void Modify::init()
     error->warning(FLERR, "One or more atoms are time integrated more than once");
 }
 
-void Modify::init_stencil_md(Atom* atom_) {
+void Modify::init_stencil_md(Atom* atom_, Neighbor* neighbor_) {
     int i, j;
 
     // delete storage of restart info since it is not valid after 1st run
@@ -363,7 +363,7 @@ void Modify::init_stencil_md(Atom* atom_) {
     //   but computes now do their DOF in setup()
 
     for (i = 0; i < nfix; i++) {
-        fix[i]->init_stencil_md(atom_, this);
+        fix[i]->init_stencil_md(atom_, this, neighbor_);
     }
 
     // set global flag if any fix has its restart_pbc flag set

@@ -150,7 +150,7 @@ class Modify : protected Pointers {
   double memory_usage();
 
   virtual void pre_force_stencil_md(int, Atom*);
-  virtual void init_stencil_md(Atom*);
+  virtual void init_stencil_md(Atom*, Neighbor*);
   virtual void setup_stencil_md(int, Atom*);
   virtual void setup_pre_force_stencil_md(int, Atom*);
   virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*);

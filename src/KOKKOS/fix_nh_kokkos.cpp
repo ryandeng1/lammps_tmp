@@ -73,6 +73,7 @@ void FixNHKokkos<DeviceType>::init()
   atomKK->k_mass.sync<DeviceType>();
 }
 
+/*
 template<class DeviceType>
 void FixNHKokkos<DeviceType>::init_stencil_md(Atom* atom_, Modify* modify_)
 {
@@ -84,6 +85,7 @@ void FixNHKokkos<DeviceType>::init_stencil_md(Atom* atom_, Modify* modify_)
     // atomKK_->k_mass.modify<LMPHostType>();
     // atomKK_->k_mass.sync<DeviceType>();
 }
+*/
 
 /* ----------------------------------------------------------------------
    compute T,P before integrator starts
@@ -244,8 +246,9 @@ void FixNHKokkos<DeviceType>::initial_integrate(int /*vflag*/)
   }
 }
 
+/*
 template<class DeviceType>
-void FixNHKokkos<DeviceType>::initial_integrate_stencil_md(int /*vflag*/, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
+void FixNHKokkos<DeviceType>::initial_integrate_stencil_md(int , Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
     this->atom_idx_mapping = atom_idx_mapping;
     // copy atom_ velocities into next velocities, have to vix for inverted zoids
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
@@ -255,19 +258,6 @@ void FixNHKokkos<DeviceType>::initial_integrate_stencil_md(int /*vflag*/, Atom* 
     next_v = atomKK_next->k_v.view<DeviceType>();
     tag = atom_->tag;
     next_tag = next->tag;
-
-    /*
-    for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
-        if (atom_idx_mapping[i] != -1) {
-            for (int j = 0; j < 3; j++) {
-                // next_v(atom_idx_mapping[i], j) = v(i, j);
-            }
-        } else {
-            // std::cout << "ATOM IDX MAPPING -1 for idx: " << i << " out of: " << atom_->nlocal << std::endl;
-            // assert(false);
-        }
-    }
-    */
 
     // update eta_press_dot
     if (pstat_flag && mpchain) {
@@ -332,6 +322,7 @@ void FixNHKokkos<DeviceType>::initial_integrate_stencil_md(int /*vflag*/, Atom* 
 
     this->atom_idx_mapping = NULL;
 }
+*/
 
 /* ----------------------------------------------------------------------
    2nd half of Verlet update
@@ -385,6 +376,7 @@ void FixNHKokkos<DeviceType>::final_integrate()
   if (pstat_flag && mpchain) nhc_press_integrate();
 }
 
+/*
 template<class DeviceType>
 void FixNHKokkos<DeviceType>::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping_, bool* can_eval) {
     atom_idx_mapping = atom_idx_mapping_;
@@ -449,6 +441,7 @@ void FixNHKokkos<DeviceType>::final_integrate_stencil_md(Atom* atom_, Atom* next
     }
     atom_idx_mapping = NULL;
 }
+*/
 
 /* ----------------------------------------------------------------------
    change box size
@@ -720,6 +713,7 @@ void FixNHKokkos<DeviceType>::nve_v()
 
 }
 
+/*
 template<class DeviceType>
 void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_initial_integrate, bool* can_eval) {
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
@@ -742,13 +736,6 @@ void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_
         rmass = atomKK_->k_rmass.view<DeviceType>();
         mass = atomKK_->k_mass.view<DeviceType>();
         mask = atomKK_->k_mask.view<DeviceType>();
-        /*
-        for (int i = 0; i < atom_->nlocal; i++) {
-            if (PRINT && atom_->tag[i] == 70974) {
-                std::cout << "initial integrate idx: " << i << " out of: " << atom_->nlocal << " copying over vel. curr vel: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2) << std::endl;
-            }
-        }
-        */
     } else {
         f = atomKK_next->k_f.view<DeviceType>();
         eval_f_stencil_md = atomKK_next->k_eval_f_stencil_md.view<DeviceType>();
@@ -764,27 +751,11 @@ void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_
         for (int i = 0; i < atom_->nlocal; i++) {
             int next_idx = atom_idx_mapping[i];
             assert(next_idx != -1);
-            /*
-            if (atom_->tag[i] == 70974 && PRINT) {
-                std::cout << "final integrate idx: " << i << " out of: " << atom_->nlocal << " copying over vel. curr vel: " << v(i, 0) << " " << v(i, 1) << " " << v(i, 2)
-                << " next v that I am replacing: " << next_v(next_idx, 0) << " " << next_v(next_idx, 1) << " " << next_v(next_idx, 2)
-                << " next idx? " << next_idx << std::endl;
-            }
-            */
 
             next_v(next_idx, 0) = v(i, 0);
             next_v(next_idx, 1) = v(i, 1);
             next_v(next_idx, 2) = v(i, 2);
         }
-
-        /*
-        for (int i = 0; i < next->nlocal; i++) {
-            if (next->tag[i] == 70974 && PRINT) {
-                std::cout << "next atom, final integrate idx: " << i << " out of: " << atom_->nlocal <<
-                    " copying over vel. curr vel: " << next_v(i, 0) << " " << next_v(i, 1) << " " << next_v(i, 2) << std::endl;
-            }
-        }
-        */
     }
 
     atom_can_eval = can_eval;
@@ -810,6 +781,7 @@ void FixNHKokkos<DeviceType>::nve_v_stencil_md(Atom* atom_, Atom* next, bool is_
     atomKK_->modified_stencil_md(execution_space,V_MASK, atom_);
     atomKK_next->modified_stencil_md(execution_space,V_MASK, next);
 }
+*/
 
 template<class DeviceType>
 template<int RMASS>
@@ -946,6 +918,7 @@ void FixNHKokkos<DeviceType>::nve_x()
   copymode = 0;
 }
 
+/*
 template<class DeviceType>
 void FixNHKokkos<DeviceType>::nve_x_stencil_md(Atom* atom_, Atom* next, bool* can_eval) {
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
@@ -976,6 +949,7 @@ void FixNHKokkos<DeviceType>::nve_x_stencil_md(Atom* atom_, Atom* next, bool* ca
     // Kokkos::parallel_for(Kokkos::RangePolicy<DeviceType, TagFixNH_nve_x_stencil_md>(0,total),*this);
     copymode = 0;
 }
+*/
 
 template<class DeviceType>
 KOKKOS_INLINE_FUNCTION
@@ -1067,6 +1041,7 @@ void FixNHKokkos<DeviceType>::operator()(TagFixNH_nh_v_temp, const int &i) const
   }
 }
 
+/*
 template<class DeviceType>
 void FixNHKokkos<DeviceType>::nh_v_temp_stencil_md(Atom* atom_, Atom* next) {
     // TODO: check sync
@@ -1107,6 +1082,7 @@ void FixNHKokkos<DeviceType>::nh_v_temp_stencil_md(Atom* atom_, Atom* next) {
         atomKK_->modified_stencil_md(temperature->execution_space,temperature->datamask_modify, atom_);
     }
 }
+*/
 
 template<class DeviceType>
 KOKKOS_INLINE_FUNCTION

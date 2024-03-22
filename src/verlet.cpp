@@ -1698,9 +1698,7 @@ void Verlet::setup_stencil_md() {
                   << RESET_COLOR << std::endl;
     }
 
-#ifdef LMP_OPENMP
     stencilMD->MODIFY_SETUP(vflag);
-#endif
     stencilMD->BUILD_NEIGHBOR_LIST();
     stencilMD->BUILD_NEIGHBOR_LIST_NEXT_DT();
 

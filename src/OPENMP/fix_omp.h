@@ -52,7 +52,7 @@ class FixOMP : public Fix {
 
   double memory_usage() override;
 
-  void init_stencil_md(Atom*, Modify*) override;
+  void init_stencil_md(Atom*, Modify*, Neighbor*) override;
   void setup_pre_force_stencil_md(int vflag, Atom* atom_) override { pre_force_stencil_md(vflag, atom_); }
   void pre_force_stencil_md(int, Atom*) override;
   void setup_stencil_md(int, Atom*) override;

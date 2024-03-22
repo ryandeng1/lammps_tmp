@@ -81,12 +81,14 @@ class FixNHKokkos : public FixNH {
   KOKKOS_INLINE_FUNCTION
   void operator()(TagFixNH_nh_v_temp_stencil_md, const int&) const;
 
+  /*
   void init_stencil_md(Atom*, Modify*) override;
   void nve_v_stencil_md(Atom*, Atom*, bool, bool*) override;
   void nve_x_stencil_md(Atom*, Atom*, bool*) override;
   void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;
   void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
   void nh_v_temp_stencil_md(Atom*, Atom*) override;
+  */
 
 protected:
   void remap() override;

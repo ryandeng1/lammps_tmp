@@ -263,7 +263,7 @@ class Fix : protected Pointers {
       assert(false);
   }
 
-  virtual void init_stencil_md(Atom*, Modify*) {
+  virtual void init_stencil_md(Atom*, Modify*, Neighbor*) {
       assert(false);
   }
   virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) {assert(false);}

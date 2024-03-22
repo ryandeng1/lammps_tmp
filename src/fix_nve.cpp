@@ -61,7 +61,7 @@ void FixNVE::init()
     step_respa = (dynamic_cast<Respa *>(update->integrate))->step;
 }
 
-void FixNVE::init_stencil_md(Atom* atom_, Modify* modify_) {
+void FixNVE::init_stencil_md(Atom* atom_, Modify* modify_, Neighbor* neighbor_) {
     init();
 }
 

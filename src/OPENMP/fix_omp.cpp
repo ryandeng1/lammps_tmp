@@ -291,7 +291,7 @@ void FixOMP::init()
   }
 }
 
-void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_) {
+void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_, Neighbor* neighbor_) {
     // OPENMP package cannot be used with atom_style template
     if (atom->molecular == Atom::TEMPLATE)
         error->all(FLERR,"OPENMP package does not (yet) work with "
@@ -408,7 +408,7 @@ void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_) {
 
 #undef CheckStyleForOMP
 #undef CheckHybridForOMP
-    neighbor->set_omp_neighbor(_neighbor ? 1 : 0);
+    neighbor_->set_omp_neighbor(_neighbor ? 1 : 0);
 
     // diagnostic output
     if (comm->me == 0) {

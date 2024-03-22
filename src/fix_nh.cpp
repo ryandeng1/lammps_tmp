@@ -743,7 +743,7 @@ void FixNH::init()
   }
 }
 
-void FixNH::init_stencil_md(Atom* atom_, Modify* modify_) {
+void FixNH::init_stencil_md(Atom* atom_, Modify* modify_, Neighbor* neighbor_) {
     // recheck that dilate group has not been deleted
 
     if (allremap == 0) {

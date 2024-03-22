@@ -41,7 +41,7 @@ class FixNVE : public Fix {
   void final_integrate_respa(int, int) override;
   void reset_dt() override;
 
-  void init_stencil_md(Atom*, Modify*) override;
+  void init_stencil_md(Atom*, Modify*, Neighbor*) override;
   void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
   void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;
 

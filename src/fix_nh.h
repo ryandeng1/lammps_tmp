@@ -48,7 +48,7 @@ class FixNH : public Fix {
   virtual void nh_v_temp_stencil_md(Atom*, Atom*);
   void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;
   void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
-  void init_stencil_md(Atom*, Modify*) override;
+  void init_stencil_md(Atom*, Modify*, Neighbor*) override;
 
  protected:
   int dimension, which;

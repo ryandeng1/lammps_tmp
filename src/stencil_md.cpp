@@ -789,7 +789,9 @@ void StencilMD::INIT_ALL() {
 #ifdef LMP_OPENMP
             for (int j = 0; j < lmp->modify_stencil_md_omp[i].size(); j++) {
                 Modify* modify_ = lmp->modify_stencil_md_omp[i][j];
-                modify_->init_stencil_md(lmp->atom_stencil_md[i][j]);
+                // TODO: watch out. neighbor has a next_dt as well. This right now is only meant to propagate the npair-omp'ness over
+                // so that the neighbor list will call the omp-version of the build method
+                modify_->init_stencil_md(lmp->atom_stencil_md[i][j], lmp->neighbor_stencil_md[i][j]);
             }
 #else
             Modify *modify_ = lmp->modify_stencil_md[i];
@@ -857,7 +859,6 @@ void StencilMD::MODIFY_PRE_FORCE_SETUP(int vflag) {
 }
 
 void StencilMD::MODIFY_SETUP(int vflag) {
-    // atom setup
 #ifdef LMP_OPENMP
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
