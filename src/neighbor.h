@@ -135,6 +135,7 @@ class Neighbor : protected Pointers {
 
   // set neighbor list request OpenMP flag
   void set_omp_neighbor(int);
+  int get_omp_neighbor();
 
   // report if we have INTEL package neighbor lists
   bool has_intel_request() const;

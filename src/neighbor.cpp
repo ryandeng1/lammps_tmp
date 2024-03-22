@@ -2540,6 +2540,17 @@ void Neighbor::set_omp_neighbor(int flag)
     if (!requests[i]->intel) requests[i]->omp = flag;
 }
 
+int Neighbor::get_omp_neighbor() {
+    // flag *all* neighbor list requests as OPENMP threaded,
+    // but skip lists already flagged as INTEL threaded
+    for (int i = 0; i < nrequest; ++i) {
+        if (!requests[i]->intel) {
+            return requests[i]->omp;
+        }
+    }
+    return 0;
+}
+
 /* report if there is a neighbor list with the intel flag set */
 
 bool Neighbor::has_intel_request() const
