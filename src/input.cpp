@@ -1334,7 +1334,7 @@ void Input::atom_style()
   if (narg < 1) error->all(FLERR,"Illegal atom_style command");
   if (domain->box_exist)
     error->all(FLERR,"Atom_style command after simulation box is defined");
-  std::cout << "Atom style: " << arg[0] << std::endl;
+
   atom->create_avec(arg[0],narg-1,&arg[1],1);
 
   atom_style_args = (char **) memory->smalloc(narg*sizeof(char *),"input:atom_style_args");

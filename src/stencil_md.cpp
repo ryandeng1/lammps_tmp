@@ -843,6 +843,7 @@ void StencilMD::SETUP() {
 
 void StencilMD::MODIFY_PRE_FORCE_SETUP(int vflag) {
     // atom setup
+#ifdef LMP_OPENMP
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
@@ -852,18 +853,21 @@ void StencilMD::MODIFY_PRE_FORCE_SETUP(int vflag) {
             }
         }
     }
+#endif
 }
 
 void StencilMD::MODIFY_SETUP(int vflag) {
     // atom setup
+#ifdef LMP_OPENMP
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 Modify* modify_ = lmp->modify_stencil_md_omp[zoid_num][t];
-                modify_->setup(vflag);
+                modify_->setup_stencil_md(vflag, lmp->atom_stencil_md[zoid_num][t]);
             }
         }
     }
+#endif
 }
 
 void StencilMD::GET_LOCAL_ATOMS_ZOID() {

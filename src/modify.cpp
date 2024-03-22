@@ -477,7 +477,6 @@ void Modify::setup(int vflag)
 }
 
 void Modify::setup_stencil_md(int vflag, Atom* atom_) {
-    /*
     // compute setup needs to come before fix setup
     //   b/c NH fixes need DOF of temperature computes
     // fix group setup() is special case since populates a dynamic group
@@ -500,7 +499,6 @@ void Modify::setup_stencil_md(int vflag, Atom* atom_) {
         assert(false);
         for (int i = 0; i < nfix; i++) fix[i]->min_setup(vflag);
     }
-    */
 }
 
 /* ----------------------------------------------------------------------
