@@ -863,7 +863,8 @@ void StencilMD::MODIFY_SETUP(int vflag) {
         if (zoid_num % comm->nprocs == comm->me) {
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 Modify* modify_ = lmp->modify_stencil_md_omp[zoid_num][t];
-                modify_->setup_stencil_md(vflag, lmp->atom_stencil_md[zoid_num][t]);
+                modify_->setup(vflag);
+                // modify_->setup_stencil_md(vflag, lmp->atom_stencil_md[zoid_num][t]);
             }
         }
     }
