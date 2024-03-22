@@ -65,9 +65,7 @@ class LAMMPS {
   std::vector<std::array<class Neighbor*, NUM_TIMESTEPS_IN_PARALLEL + 1>> neighbor_stencil_md_next_dt;
   std::vector<std::array<class Force*, NUM_TIMESTEPS_IN_PARALLEL + 1>> force_stencil_md_next_dt;
 
-#ifdef LMP_OPENMP
   std::vector<std::array<class Modify*, NUM_TIMESTEPS_IN_PARALLEL + 1>> modify_stencil_md_omp;
-#endif
 
   // need a separate comm, but can reuse neighbor lists
   // need a separate comm for the send_lists, as sending to "next" zoid is different compared to sending to "prev" zoid as I walk down the
