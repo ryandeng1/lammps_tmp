@@ -189,7 +189,6 @@ void Verlet::setup(int flag) {
 
     if (pair_compute_flag) {
         force->pair->compute(eflag, vflag);
-        // force->pair->compute(-1, -1);
     } else if (force->pair) {
         force->pair->compute_dummy(eflag, vflag);
     }
@@ -4767,6 +4766,9 @@ void Verlet::setup_minimal(int flag) {
 ------------------------------------------------------------------------- */
 
 void Verlet::run(int n) {
+    // TODO: This is meant to maximize spending time ONLY on what I am tracking
+    eflag = 0; vflag = 0;
+
     bigint ntimestep;
     int nflag, sortflag;
 
@@ -4785,7 +4787,6 @@ void Verlet::run(int n) {
         sortflag = 0;
 
     int test_num_timesteps = n + 1;
-    // int test_num_timesteps = 2 * NUM_TIMESTEPS_IN_PARALLEL + 1;
     double* test_f[test_num_timesteps];
     double* test_x[test_num_timesteps];
 
@@ -4814,14 +4815,15 @@ void Verlet::run(int n) {
 
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < test_num_timesteps; i++) {
+    for (int i = 0; i < n + 1; i++) {
         if (timer->check_timeout(i)) {
+            assert(false);
             update->nsteps = i;
             break;
         }
 
-        ntimestep = ++update->ntimestep;
-        ev_set(ntimestep);
+        // ntimestep = ++update->ntimestep;
+        // ev_set(ntimestep);
 
         // initial time integration
 
@@ -4855,6 +4857,10 @@ void Verlet::run(int n) {
             MPI_Allreduce(send_x, test_x[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
                           MPI_SUM, world);
         }
+
+        if (i == n) {
+            break;
+        }
         // end stencil md code
 
         auto begin_m = std::chrono::high_resolution_clock::now();
@@ -4879,7 +4885,6 @@ void Verlet::run(int n) {
             lammps_comm_duration += duration;
             timer->stamp(Timer::COMM);
         } else {
-            std::cout << "timestep: " << i << " reneighboring " << std::endl;
             assert(false);
             if (n_pre_exchange) {
                 timer->stamp();
@@ -4933,18 +4938,7 @@ void Verlet::run(int n) {
             auto begin = std::chrono::high_resolution_clock::now();
             force->pair->compute(eflag, vflag);
             auto end = std::chrono::high_resolution_clock::now();
-            auto duration =
-                std::chrono::duration_cast<std::chrono::microseconds>(end -
-                                                                      begin)
-                    .count();
-            /*
-            std::cout << BLUE << "Process: " << comm->me
-                      << " lammps compute duration: "
-                      << std::chrono::duration_cast<std::chrono::microseconds>(
-                             end - begin)
-                             .count()
-                      << " microseconds " << RESET_COLOR << std::endl;
-            */
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             lammps_compute_duration += duration;
             timer->stamp(Timer::PAIR);
         }
@@ -4972,7 +4966,6 @@ void Verlet::run(int n) {
         }
 
         // reverse communication of forces
-
         if (force->newton) {
             auto begin = std::chrono::high_resolution_clock::now();
             comm->reverse_comm();
@@ -5332,7 +5325,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
     }
 
     // start compute
-    // TODO: move out
     std::vector<MPI_Request> send_requests[NUM_ZOIDS];
     std::vector<std::future<void>> send_request_threads;
 
@@ -5446,7 +5438,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
 #endif
 
                 if (TEST_AGAINST_LAMMPS_LOCAL) {
-                    int timestep_to_compare_against = t + starting_timestep;
+                    int timestep_to_compare_against = starting_timestep + t;
                     for (int k = 0; k < atom_->nlocal; k++) {
                         int tag = atom_->tag[k];
                         double* x_ = atom_->x[k];
@@ -6004,7 +5996,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                                           << " out of: " << atom_->nlocal
                                           << std::endl;
                                 std::cout << "Dim: " << dim << " Zoid: " << zoid_num
-                                          << " timestep: " << t << " tag: " << tag
+                                          << " timestep: " << timestep_to_compare << " tag: " << tag
                                           << " different. " << std::endl;
                                 std::cout << "What I have: " << x_[0] << " "
                                           << x_[1] << " " << x_[2] << std::endl;
@@ -6074,7 +6066,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                                           << " out of: " << atom_->nlocal
                                           << std::endl;
                                 std::cout << "Dim: " << dim << " Zoid: " << zoid_num
-                                          << " timestep: " << t << " tag: " << tag
+                                          << " timestep: " << timestep_to_compare << " tag: " << tag
                                           << " different. " << std::endl;
                                 std::cout << "what I have f: " << atom_->f[k][0]
                                           << " " << atom_->f[k][1] << " "
@@ -6175,7 +6167,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                                     << std::endl;
                                 std::cout
                                     << "Dim: " << dim << " Zoid: " << zoid_num
-                                    << " timestep: " << t + 1 << " tag: " << tag
+                                    << " timestep: " << timestep_to_compare << " tag: " << tag
                                     << " different. " << std::endl;
                                 std::cout << "What I have: " << x_[0] << " "
                                           << x_[1] << " " << x_[2] << std::endl;

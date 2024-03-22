@@ -80,7 +80,6 @@ void FixNVEOMP::initial_integrate(int /* vflag */)
 
 void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
     // update v and x of atoms in group
-
     auto * _noalias const x = (dbl3_t *) atom_->x[0];
     auto * _noalias const next_x = (dbl3_t *) next->x[0];
     auto * _noalias const v = (dbl3_t *) atom_->v[0];
@@ -110,9 +109,9 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
     } else {
         const double * const mass = atom->mass;
         const int * const type = atom_->type;
+
 #if defined (_OPENMP)
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
-#endif
         for (int i = 0; i < nlocal; i++) {
             if (mask[i] & groupbit) {
                 const double dtfm = dtf / mass[type[i]];
@@ -128,6 +127,7 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
                 assert(atom_->tag[i] == next->tag[next_idx]);
             }
         }
+#endif
     }
 }
 
@@ -179,7 +179,7 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
 
     const auto * _noalias const f = (dbl3_t *) next->f[0];
     const auto * _noalias const eval_f = (dbl3_t *) next->eval_f_stencil_md[0];
-    const int * const mask = atom_->mask;
+    const int * const mask = next->mask;
     const int nlocal = (igroup == atom_->firstgroup) ? atom_->nfirst : atom_->nlocal;
     const int next_nlocal = next->nlocal;
 
@@ -205,14 +205,11 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif
         for (int i = 0; i < nlocal; i++) {
-            if (mask[i] & groupbit) {
-                const double dtfm = dtf / mass[type[i]];
-                int next_idx = atom_idx_mapping[i];
-                assert(next_idx != -1);
-                next_v[next_idx].x = v[i].x;
-                next_v[next_idx].y = v[i].y;
-                next_v[next_idx].z = v[i].z;
-            }
+            int next_idx = atom_idx_mapping[i];
+            assert(next_idx != -1);
+            next_v[next_idx].x = v[i].x;
+            next_v[next_idx].y = v[i].y;
+            next_v[next_idx].z = v[i].z;
         }
 
 #if defined (_OPENMP)

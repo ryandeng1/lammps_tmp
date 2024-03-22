@@ -15,7 +15,7 @@ using namespace LAMMPS_NS;
 
 void StencilMD::MODIFY_ADD_FIX_STENCIL_MD(int narg, char **arg) {
 #ifdef LMP_OPENMP
-    for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
+    for (int i = 0; i < lmp->modify_stencil_md_omp.size(); i++) {
         if (i % comm->nprocs == comm->me) {
             for (int j = 0; j < lmp->modify_stencil_md_omp[i].size(); j++) {
                 lmp->modify_stencil_md_omp[i][j]->add_fix(narg, arg, 1, true);
@@ -51,7 +51,7 @@ void StencilMD::MODIFY_ADD_FIX_PACKAGE_STENCIL_MD(const std::string& fixcmd) {
 
 void StencilMD::MODIFY_ADD_COMPUTE_STENCIL_MD(int narg, char **arg) {
 #ifdef LMP_OPENMP
-    for (int i = 0; i < lmp->modify_stencil_md.size(); i++) {
+    for (int i = 0; i < lmp->modify_stencil_md_omp.size(); i++) {
         if (i % comm->nprocs == comm->me) {
             for (int j = 0; j < lmp->modify_stencil_md_omp[i].size(); j++) {
                 lmp->modify_stencil_md_omp[i][j]->add_compute(narg, arg, 1, true);
@@ -94,7 +94,9 @@ void StencilMD::FORCE_CREATE_PAIR(const std::string& style, int trysuffix) {
                 // curr-dt and next-dt force use the same modify. Will there be issues? Hopefully not?
 #ifdef LMP_OPENMP
                 lmp->force_stencil_md[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md_omp[i][j]);
-                lmp->force_stencil_md_next_dt[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md_omp[i][j]);
+
+                // TODO RYAN: force_stencil_md_next_dt does not behave the same as the other stuff. Since there is no modify_next_dt, we gotta do something about it.
+                lmp->force_stencil_md_next_dt[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md_omp[i][NUM_TIMESTEPS_IN_PARALLEL - j]);
 #else
                 lmp->force_stencil_md[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md[i]);
                 lmp->force_stencil_md_next_dt[i][j]->create_pair(style, trysuffix, true, lmp->modify_stencil_md[i]);
