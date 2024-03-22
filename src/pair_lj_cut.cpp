@@ -46,6 +46,8 @@ PairLJCut::PairLJCut(LAMMPS *lmp) : Pair(lmp)
   writedata = 1;
 }
 
+PairLJCut::PairLJCut(LAMMPS *lmp, Modify *modify_) : PairLJCut(lmp) {}
+
 /* ---------------------------------------------------------------------- */
 
 PairLJCut::~PairLJCut()

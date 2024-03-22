@@ -15,6 +15,10 @@
 // clang-format off
 PairStyle(lj/cut,PairLJCut);
 // clang-format on
+#elifdef PAIR_CLASS_STENCIL_MD
+// clang-format off
+PairStyleStencilMD(lj/cut, PairLJCut);
+// clang-format on
 #else
 
 #ifndef LMP_PAIR_LJ_CUT_H
@@ -27,6 +31,7 @@ namespace LAMMPS_NS {
 class PairLJCut : public Pair {
  public:
   PairLJCut(class LAMMPS *);
+  PairLJCut(class LAMMPS *, class Modify *);
   ~PairLJCut() override;
   void compute(int, int) override;
   void settings(int, char **) override;

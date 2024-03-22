@@ -37,7 +37,6 @@
 #include "kspace.h"
 
 #include <cstring>
-#include <unistd.h>
 
 #include "omp_compat.h"
 #if defined(_OPENMP)
@@ -86,7 +85,6 @@ FixOMP::FixOMP(LAMMPS *lmp, int narg, char **arg)
 
   int reset_thr = 0;
 #endif
-  std::cout << "LAMMPS FIXOMP nthreads: " << nthreads << " comm nthreads: " << comm->nthreads << std::endl;
   if (nthreads != comm->nthreads) {
 #if defined(_OPENMP)
     reset_thr = 1;
