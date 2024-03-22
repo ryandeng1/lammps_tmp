@@ -5083,9 +5083,10 @@ void Verlet::run(int n) {
             }
         }
 
-        std::cout << "me: " << comm->me << " dep: " << dep << " num wait on: " << dep_to_wait_idxs[dep].size() << " num directly wait on: " << num_directly_wait_on << " num wait on normally: " << num_wait_on_normally << std::endl;
+        // std::cout << "me: " << comm->me << " dep: " << dep << " num wait on: " << dep_to_wait_idxs[dep].size() << " num directly wait on: " << num_directly_wait_on << " num wait on normally: " << num_wait_on_normally << std::endl;
     }
 
+    /*
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             if (dep_to_wait_idxs[get_zoid_dep(zoid_num)].size() >= 9) {
@@ -5105,6 +5106,7 @@ void Verlet::run(int n) {
             }
         }
     }
+    */
 
     MPI_Barrier(world);
 
