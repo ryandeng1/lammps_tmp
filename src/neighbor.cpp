@@ -2548,7 +2548,7 @@ int Neighbor::get_omp_neighbor() {
             return requests[i]->omp;
         }
     }
-    return 0;
+    return -1;
 }
 
 /* report if there is a neighbor list with the intel flag set */

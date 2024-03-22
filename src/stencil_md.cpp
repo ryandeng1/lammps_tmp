@@ -769,6 +769,7 @@ void StencilMD::INIT_DOMAIN_BOUNDS() {
 
 void StencilMD::INIT_ALL() {
     // init
+    int use_omp = 0;
     for (int i = 0; i < NUM_ZOIDS; i++) {
         if (i % comm->nprocs == comm->me) {
             for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
@@ -792,10 +793,7 @@ void StencilMD::INIT_ALL() {
                 // TODO: watch out. neighbor has a next_dt as well. This right now is only meant to propagate the npair-omp'ness over
                 // so that the neighbor list will call the omp-version of the build method
                 modify_->init_stencil_md(lmp->atom_stencil_md[i][j], lmp->neighbor_stencil_md[i][j]);
-                if (lmp->neighbor_stencil_md[i][j]->get_omp_neighbor()) {
-                    int use_omp = 1;
-                    lmp->neighbor_stencil_md_next_dt[i][j]->set_omp_neighbor(use_omp);
-                }
+                use_omp = lmp->neighbor_stencil_md[i][j]->get_omp_neighbor();
             }
 #else
             Modify *modify_ = lmp->modify_stencil_md[i];
@@ -824,6 +822,9 @@ void StencilMD::INIT_ALL() {
             for (int j = 0; j < lmp->force_stencil_md_next_dt[i].size(); j++) {
                 Neighbor *neighbor_next_dt = lmp->neighbor_stencil_md_next_dt[i][j];
                 Domain *domain_ = lmp->domain_stencil_md_next_dt[i][j];
+                if (use_omp) {
+                    neighbor_next_dt->set_omp_neighbor(use_omp);
+                }
                 neighbor_next_dt->init_stencil_md(domain_);
             }
         }
