@@ -4928,7 +4928,11 @@ void Verlet::run(int n) {
         timer->stamp();
 
         if (n_pre_force) {
+            auto begin = std::chrono::high_resolution_clock::now();
             modify->pre_force(vflag);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            lammps_modify_duration += duration;
             timer->stamp(Timer::MODIFY);
         }
 
@@ -5683,7 +5687,11 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 }
 
                 if (n_pre_force) {
+                    auto begin_m = std::chrono::high_resolution_clock::now();
                     modify_->pre_force_stencil_md(vflag, atom_next_timestep);
+                    auto end_m = std::chrono::high_resolution_clock::now();
+                    auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
+                    modify_duration += duration_m;
                     timer->stamp(Timer::MODIFY);
                 }
 
@@ -6242,7 +6250,11 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 }
 
                 if (n_pre_force) {
+                    auto begin_m = std::chrono::high_resolution_clock::now();
                     modify_->pre_force_stencil_md(vflag, atom_next_timestep);
+                    auto end_m = std::chrono::high_resolution_clock::now();
+                    auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
+                    modify_duration += duration_m;
                     timer->stamp(Timer::MODIFY);
                 }
 
