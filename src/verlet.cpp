@@ -5000,8 +5000,11 @@ void Verlet::run(int n) {
 
     auto end_lammps = std::chrono::high_resolution_clock::now();
     auto duration_lammps = std::chrono::duration_cast<std::chrono::microseconds>(end_lammps - begin_lammps).count();
-    std::cout << "lammps total just running the thing: " << duration_lammps << " microseconds. " << std::endl;
 
+    int64_t total_duration_lammps = 0;
+    MPI_Allreduce(&duration_lammps, &total_duration_lammps, 1, MPI_INT64_T, MPI_SUM, world);
+
+    std::cout << "lammps total just running the thing: " << duration_lammps << " microseconds. " << " total duration: " << total_duration_lammps << std::endl;
 
     int64_t total_comm_duration = 0;
     int64_t total_compute_duration = 0;
@@ -5204,7 +5207,11 @@ void Verlet::run(int n) {
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-    std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << std::endl;
+    int64_t total_duration_stencil_md = 0;
+    MPI_Allreduce(&duration, &total_duration_stencil_md, 1, MPI_INT64_T, MPI_SUM, world);
+
+    std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << " total duration: " << total_duration_stencil_md << std::endl;
+
     std::cout << YELLOW << "me: " << comm->me << " dep times curr dt: " << curr_dt_dep_time[0] << " " << curr_dt_dep_time[1] << " " << curr_dt_dep_time[2] << " " << curr_dt_dep_time[3] << RESET_COLOR << std::endl;
     std::cout << YELLOW << "me: " << comm->me << " dep times next dt: " << next_dt_dep_time[0] << " " << next_dt_dep_time[1] << " " << next_dt_dep_time[2] << " " << next_dt_dep_time[3] << RESET_COLOR << std::endl;
 
