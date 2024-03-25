@@ -63,6 +63,7 @@ static int64_t next_dt_compute_duration = 0;
 static int64_t send_comm_duration = 0;
 static int64_t recv_comm_duration = 0;
 static int64_t modify_duration = 0;
+static int64_t modify_pre_force_duration = 0;
 static int64_t mpi_duration = 0;
 static int64_t curr_dt_comm_duration = 0;
 static int64_t next_dt_comm_duration = 0;
@@ -4810,6 +4811,7 @@ void Verlet::run(int n) {
     int64_t lammps_compute_duration = 0;
     int64_t lammps_comm_duration = 0;
     int64_t lammps_modify_duration = 0;
+    int64_t lammps_modify_pre_force_duration = 0;
 
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
@@ -4932,7 +4934,8 @@ void Verlet::run(int n) {
             modify->pre_force(vflag);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            lammps_modify_duration += duration;
+            // lammps_modify_duration += duration;
+            lammps_modify_pre_force_duration += duration;
             timer->stamp(Timer::MODIFY);
         }
 
@@ -5026,7 +5029,7 @@ void Verlet::run(int n) {
               << " microseconds. " << " total compute duration: " << total_compute_duration << RESET_COLOR << std::endl;
 
     std::cout << YELLOW
-              << "lammps modify duration: " << lammps_modify_duration
+              << "lammps modify duration: " << lammps_modify_duration << " pre force duration: " << lammps_modify_pre_force_duration
               << " microseconds. " << " total modify duration: " << total_modify_duration << RESET_COLOR << std::endl;
 
     delete[] send_f;
@@ -5226,6 +5229,7 @@ void Verlet::run(int n) {
     int64_t stencil_md_total_recv_comm_duration = 0;
     int64_t stencil_md_total_compute_duration = 0;
     int64_t stencil_md_total_modify_duration = 0;
+    int64_t stencil_md_total_modify_pre_force_duration = 0;
     int64_t stencil_md_total_mpi_duration = 0;
     int64_t stencil_md_total_curr_dt_comm_duration = 0;
     int64_t stencil_md_total_next_dt_comm_duration = 0;
@@ -5235,6 +5239,7 @@ void Verlet::run(int n) {
 
     MPI_Allreduce(&my_compute_duration, &stencil_md_total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&modify_pre_force_duration, &stencil_md_total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&mpi_duration, &stencil_md_total_mpi_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&curr_dt_comm_duration, &stencil_md_total_curr_dt_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&next_dt_comm_duration, &stencil_md_total_next_dt_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
@@ -5249,7 +5254,7 @@ void Verlet::run(int n) {
         << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
         << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
         << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
-        << " TOTAL MODIFY: " << stencil_md_total_modify_duration
+        << " TOTAL MODIFY: " << stencil_md_total_modify_duration << " TOTAL MODIFY PRE FORCE: " << stencil_md_total_modify_pre_force_duration
         << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration
         << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration << RESET_COLOR << std::endl;
 
@@ -5691,7 +5696,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                     modify_->pre_force_stencil_md(vflag, atom_next_timestep);
                     auto end_m = std::chrono::high_resolution_clock::now();
                     auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-                    modify_duration += duration_m;
+                    modify_pre_force_duration += duration_m;
+                    // modify_duration += duration_m;
                     timer->stamp(Timer::MODIFY);
                 }
 
@@ -6254,7 +6260,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                     modify_->pre_force_stencil_md(vflag, atom_next_timestep);
                     auto end_m = std::chrono::high_resolution_clock::now();
                     auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-                    modify_duration += duration_m;
+                    // modify_duration += duration_m;
+                    modify_pre_force_duration += duration_m;
                     timer->stamp(Timer::MODIFY);
                 }
 
