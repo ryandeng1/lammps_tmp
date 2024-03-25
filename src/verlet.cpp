@@ -5016,9 +5016,12 @@ void Verlet::run(int n) {
     int64_t total_comm_duration = 0;
     int64_t total_compute_duration = 0;
     int64_t total_modify_duration = 0;
+    int64_t total_modify_pre_force_duration = 0;
+
     MPI_Allreduce(&lammps_comm_duration, &total_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&lammps_compute_duration, &total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&lammps_modify_duration, &total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&lammps_modify_pre_force_duration, &total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     std::cout << GREEN << "process: " << comm->me
               << " LAMMPS COMM DURATION: " << lammps_comm_duration
@@ -5030,7 +5033,7 @@ void Verlet::run(int n) {
 
     std::cout << YELLOW
               << "lammps modify duration: " << lammps_modify_duration << " pre force duration: " << lammps_modify_pre_force_duration
-              << " microseconds. " << " total modify duration: " << total_modify_duration << RESET_COLOR << std::endl;
+              << " microseconds. " << " total modify duration: " << total_modify_duration << " total modify pre force duration: " << total_modify_pre_force_duration << RESET_COLOR << std::endl;
 
     delete[] send_f;
     delete[] send_x;
