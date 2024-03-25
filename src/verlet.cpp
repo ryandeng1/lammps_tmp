@@ -4810,6 +4810,8 @@ void Verlet::run(int n) {
 
     int64_t lammps_compute_duration = 0;
     int64_t lammps_comm_duration = 0;
+    int64_t lammps_forward_comm_duration = 0;
+    int64_t lammps_reverse_comm_duration = 0;
     int64_t lammps_modify_duration = 0;
     int64_t lammps_modify_pre_force_duration = 0;
 
@@ -4883,6 +4885,7 @@ void Verlet::run(int n) {
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             lammps_comm_duration += duration;
+            lammps_forward_comm_duration += duration;
             timer->stamp(Timer::COMM);
         } else {
             assert(false);
@@ -4977,6 +4980,7 @@ void Verlet::run(int n) {
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             lammps_comm_duration += duration;
+            lammps_reverse_comm_duration += duration;
             timer->stamp(Timer::COMM);
         }
 
@@ -5014,18 +5018,26 @@ void Verlet::run(int n) {
     std::cout << "lammps total just running the thing: " << duration_lammps << " microseconds. " << " total duration: " << total_duration_lammps << std::endl;
 
     int64_t total_comm_duration = 0;
+    int64_t total_forward_comm_duration = 0;
+    int64_t total_reverse_comm_duration = 0;
+
     int64_t total_compute_duration = 0;
     int64_t total_modify_duration = 0;
     int64_t total_modify_pre_force_duration = 0;
 
+
     MPI_Allreduce(&lammps_comm_duration, &total_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&lammps_forward_comm_duration, &total_forward_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&lammps_reverse_comm_duration, &total_reverse_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
+
     MPI_Allreduce(&lammps_compute_duration, &total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&lammps_modify_duration, &total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&lammps_modify_pre_force_duration, &total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     std::cout << GREEN << "process: " << comm->me
-              << " LAMMPS COMM DURATION: " << lammps_comm_duration
-              << " microseconds. " << " total comm duration: " << total_comm_duration << RESET_COLOR << std::endl;
+              << " LAMMPS COMM DURATION: " << lammps_comm_duration << " forward: " << lammps_forward_comm_duration << " reverse: " << lammps_reverse_comm_duration
+              << " microseconds. " << " total comm duration: " << total_comm_duration
+              << " total forward comm: " << total_forward_comm_duration << " total reverse comm: " << total_reverse_comm_duration << RESET_COLOR << std::endl;
 
     std::cout << YELLOW
               << "lammps compute duration: " << lammps_compute_duration
