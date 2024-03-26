@@ -232,7 +232,7 @@ void Verlet::setup(int flag) {
     update->setupflag = 0;
 
     std::cout << GREEN << "------------------- LAMMPS SETUP DONE -------------------------" << RESET_COLOR << std::endl;
-    setup_stencil_md();
+    // setup_stencil_md();
 }
 
 void atom_reorder_stencil_md(Atom* atom_, int* current, int* permute, int start,
@@ -5247,6 +5247,7 @@ void Verlet::run(int n) {
     }
 
     MPI_Barrier(world);
+    return;
 
     auto begin = std::chrono::high_resolution_clock::now();
     for (int t = 0; t < n; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
