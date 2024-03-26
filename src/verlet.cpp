@@ -51,6 +51,9 @@
 
 #include "stencil_md.h"
 
+#include <fstream>
+#include <iostream>
+
 using namespace LAMMPS_NS;
 
 static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
@@ -76,6 +79,9 @@ static int64_t next_dt_dep_time[NUM_DEPS] = {0};
 // based on dep of zoids I am waiting on
 static int64_t curr_dt_wait_dep[NUM_DEPS] = {0};
 static int64_t next_dt_wait_dep[NUM_DEPS] = {0};
+
+static std::vector<int64_t> lammps_forward_comm_times;
+static std::vector<int64_t> lammps_reverse_comm_times;
 
 /* ---------------------------------------------------------------------- */
 
@@ -4886,6 +4892,7 @@ void Verlet::run(int n) {
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             lammps_comm_duration += duration;
             lammps_forward_comm_duration += duration;
+            lammps_forward_comm_times.push_back(duration);
             timer->stamp(Timer::COMM);
         } else {
             assert(false);
@@ -4981,6 +4988,7 @@ void Verlet::run(int n) {
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             lammps_comm_duration += duration;
             lammps_reverse_comm_duration += duration;
+            lammps_reverse_comm_times.push_back(duration);
             timer->stamp(Timer::COMM);
         }
 
@@ -5046,6 +5054,29 @@ void Verlet::run(int n) {
     std::cout << YELLOW
               << "lammps modify duration: " << lammps_modify_duration << " pre force duration: " << lammps_modify_pre_force_duration
               << " microseconds. " << " total modify duration: " << total_modify_duration << " total modify pre force duration: " << total_modify_pre_force_duration << RESET_COLOR << std::endl;
+
+    if (comm->me == 0) {
+        std::ofstream f("forward_comm_times");
+        for (int k = 0; k < lammps_forward_comm_times.size(); k++) {
+            if (k == lammps_forward_comm_times.size() - 1) {
+                f << lammps_forward_comm_times[k];
+            } else {
+                f << lammps_forward_comm_times[k] << ",";
+            }
+        }
+
+        std::ofstream f2("reverse_comm_times");
+        for (int k = 0; k < lammps_reverse_comm_times.size(); k++) {
+            if (k == lammps_reverse_comm_times.size() - 1) {
+                f2 << lammps_reverse_comm_times[k];
+            } else {
+                f2 << lammps_reverse_comm_times[k] << ",";
+            }
+        }
+
+        f.close();
+        f2.close();
+    }
 
     delete[] send_f;
     delete[] send_x;
