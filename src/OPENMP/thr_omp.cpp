@@ -38,6 +38,10 @@
 
 #include "math_const.h"
 
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
+
 using namespace LAMMPS_NS;
 using namespace MathConst;
 
@@ -51,6 +55,9 @@ ThrOMP::ThrOMP(LAMMPS *ptr, int style)
   if (ifix < 0)
     lmp->error->all(FLERR,"The 'package omp' command is required for /omp styles");
   fix = static_cast<FixOMP *>(lmp->modify->fix[ifix]);
+#if defined(_OPENMP)
+    omp_set_num_threads(lmp->comm->nthreads);
+#endif
 }
 
 ThrOMP::ThrOMP(LAMMPS *ptr, Modify* modify_, int style)
@@ -60,6 +67,9 @@ ThrOMP::ThrOMP(LAMMPS *ptr, Modify* modify_, int style)
     if (ifix < 0)
         lmp->error->all(FLERR,"The 'package omp' command is required for /omp styles");
     fix = static_cast<FixOMP *>(modify_->fix[ifix]);
+#if defined(_OPENMP)
+    omp_set_num_threads(lmp->comm->nthreads);
+#endif
 }
 
 /* ----------------------------------------------------------------------
