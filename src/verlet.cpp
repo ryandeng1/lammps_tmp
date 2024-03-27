@@ -4873,11 +4873,11 @@ void Verlet::run(int n) {
         }
         // end stencil md code
 
-        // auto begin_m = std::chrono::high_resolution_clock::now();
+        auto begin_m = std::chrono::high_resolution_clock::now();
         modify->initial_integrate(vflag);
-        // auto end_m = std::chrono::high_resolution_clock::now();
-        // auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-        // lammps_modify_duration += duration_m;
+        auto end_m = std::chrono::high_resolution_clock::now();
+        auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
+        lammps_modify_duration += duration_m;
         if (n_post_integrate)
             modify->post_integrate();
         timer->stamp(Timer::MODIFY);
@@ -4888,13 +4888,13 @@ void Verlet::run(int n) {
 
         if (nflag == 0) {
             timer->stamp();
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             comm->forward_comm();
-            // auto end = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            // lammps_comm_duration += duration;
-            // lammps_forward_comm_duration += duration;
-            // lammps_forward_comm_times.push_back(duration);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            lammps_comm_duration += duration;
+            lammps_forward_comm_duration += duration;
+            lammps_forward_comm_times.push_back(duration);
             timer->stamp(Timer::COMM);
         } else {
             assert(false);
@@ -4942,21 +4942,21 @@ void Verlet::run(int n) {
         timer->stamp();
 
         if (n_pre_force) {
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             modify->pre_force(vflag);
-            // auto end = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            // lammps_modify_duration += duration;
-            // lammps_modify_pre_force_duration += duration;
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            lammps_modify_duration += duration;
+            lammps_modify_pre_force_duration += duration;
             timer->stamp(Timer::MODIFY);
         }
 
         if (pair_compute_flag) {
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             force->pair->compute(eflag, vflag);
-            // auto end = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            // lammps_compute_duration += duration;
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            lammps_compute_duration += duration;
             timer->stamp(Timer::PAIR);
         }
 
@@ -4984,13 +4984,13 @@ void Verlet::run(int n) {
 
         // reverse communication of forces
         if (force->newton) {
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             comm->reverse_comm();
-            // auto end = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            // lammps_comm_duration += duration;
-            // lammps_reverse_comm_duration += duration;
-            // lammps_reverse_comm_times.push_back(duration);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            lammps_comm_duration += duration;
+            lammps_reverse_comm_duration += duration;
+            lammps_reverse_comm_times.push_back(duration);
             timer->stamp(Timer::COMM);
         }
 
@@ -4998,11 +4998,11 @@ void Verlet::run(int n) {
         if (n_post_force_any)
             modify->post_force(vflag);
 
-        // auto begin_m2 = std::chrono::high_resolution_clock::now();
+        auto begin_m2 = std::chrono::high_resolution_clock::now();
         modify->final_integrate();
-        // auto end_m2 = std::chrono::high_resolution_clock::now();
-        // auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
-        // lammps_modify_duration += duration_m2;
+        auto end_m2 = std::chrono::high_resolution_clock::now();
+        auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
+        lammps_modify_duration += duration_m2;
         if (n_end_of_step) {
             modify->end_of_step();
         }
