@@ -83,6 +83,8 @@ static int64_t next_dt_wait_dep[NUM_DEPS] = {0};
 static std::vector<int64_t> lammps_forward_comm_times;
 static std::vector<int64_t> lammps_reverse_comm_times;
 
+constexpr bool TIME_LAMMPS = false;
+
 /* ---------------------------------------------------------------------- */
 
 Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
@@ -4871,11 +4873,11 @@ void Verlet::run(int n) {
         }
         // end stencil md code
 
-        auto begin_m = std::chrono::high_resolution_clock::now();
+        // auto begin_m = std::chrono::high_resolution_clock::now();
         modify->initial_integrate(vflag);
-        auto end_m = std::chrono::high_resolution_clock::now();
-        auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-        lammps_modify_duration += duration_m;
+        // auto end_m = std::chrono::high_resolution_clock::now();
+        // auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
+        // lammps_modify_duration += duration_m;
         if (n_post_integrate)
             modify->post_integrate();
         timer->stamp(Timer::MODIFY);
@@ -4940,21 +4942,21 @@ void Verlet::run(int n) {
         timer->stamp();
 
         if (n_pre_force) {
-            auto begin = std::chrono::high_resolution_clock::now();
+            // auto begin = std::chrono::high_resolution_clock::now();
             modify->pre_force(vflag);
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            // auto end = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             // lammps_modify_duration += duration;
-            lammps_modify_pre_force_duration += duration;
+            // lammps_modify_pre_force_duration += duration;
             timer->stamp(Timer::MODIFY);
         }
 
         if (pair_compute_flag) {
-            auto begin = std::chrono::high_resolution_clock::now();
+            // auto begin = std::chrono::high_resolution_clock::now();
             force->pair->compute(eflag, vflag);
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            lammps_compute_duration += duration;
+            // auto end = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            // lammps_compute_duration += duration;
             timer->stamp(Timer::PAIR);
         }
 
@@ -4996,11 +4998,11 @@ void Verlet::run(int n) {
         if (n_post_force_any)
             modify->post_force(vflag);
 
-        auto begin_m2 = std::chrono::high_resolution_clock::now();
+        // auto begin_m2 = std::chrono::high_resolution_clock::now();
         modify->final_integrate();
-        auto end_m2 = std::chrono::high_resolution_clock::now();
-        auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
-        lammps_modify_duration += duration_m2;
+        // auto end_m2 = std::chrono::high_resolution_clock::now();
+        // auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
+        // lammps_modify_duration += duration_m2;
         if (n_end_of_step) {
             modify->end_of_step();
         }
