@@ -5082,6 +5082,7 @@ void Verlet::run(int n) {
     delete[] send_x;
 
     MPI_Barrier(world);
+    return;
 
     // setup data structures to run stencil md
     // map dependency levels to number of zoids to wait on
@@ -5247,7 +5248,6 @@ void Verlet::run(int n) {
     }
 
     MPI_Barrier(world);
-    return;
 
     auto begin = std::chrono::high_resolution_clock::now();
     for (int t = 0; t < n; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
