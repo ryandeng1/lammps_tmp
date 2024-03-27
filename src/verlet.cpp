@@ -4772,7 +4772,7 @@ void Verlet::setup_minimal(int flag) {
 
 void Verlet::run(int n) {
     // TODO: This is meant to maximize spending time ONLY on what I am tracking
-    eflag = 0; vflag = 0;
+    // eflag = 0; vflag = 0;
 
     bigint ntimestep;
     int nflag, sortflag;
