@@ -4889,7 +4889,7 @@ void Verlet::run(int n) {
         if (nflag == 0) {
             timer->stamp();
             auto begin = std::chrono::high_resolution_clock::now();
-            // comm->forward_comm();
+            comm->forward_comm();
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             lammps_comm_duration += duration;
@@ -4985,7 +4985,7 @@ void Verlet::run(int n) {
         // reverse communication of forces
         if (force->newton) {
             auto begin = std::chrono::high_resolution_clock::now();
-            // comm->reverse_comm();
+            comm->reverse_comm();
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             lammps_comm_duration += duration;
