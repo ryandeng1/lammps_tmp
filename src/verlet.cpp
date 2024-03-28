@@ -5044,19 +5044,28 @@ void Verlet::run(int n) {
     MPI_Allreduce(&lammps_modify_duration, &total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&lammps_modify_pre_force_duration, &total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
-    std::cout << GREEN << "process: " << comm->me
-              << " LAMMPS COMM DURATION: " << lammps_comm_duration << " forward: " << lammps_forward_comm_duration << " reverse: " << lammps_reverse_comm_duration
-              << " microseconds. " << " total comm duration: " << total_comm_duration
-              << " total forward comm: " << total_forward_comm_duration << " total reverse comm: " << total_reverse_comm_duration << RESET_COLOR << std::endl;
+    if (comm->me == 0) {
+        std::cout << GREEN << "process: " << comm->me
+                  << " LAMMPS COMM DURATION: " << lammps_comm_duration << " forward: " << lammps_forward_comm_duration
+                  << " reverse: " << lammps_reverse_comm_duration
+                  << " microseconds. " << " total comm duration: " << total_comm_duration
+                  << " total forward comm: " << total_forward_comm_duration << " total reverse comm: "
+                  << total_reverse_comm_duration << RESET_COLOR << std::endl;
 
-    std::cout << YELLOW
-              << "lammps compute duration: " << lammps_compute_duration
-              << " microseconds. " << " total compute duration: " << total_compute_duration << RESET_COLOR << std::endl;
+        std::cout << YELLOW
+                  << "lammps compute duration: " << lammps_compute_duration
+                  << " microseconds. " << " total compute duration: " << total_compute_duration << RESET_COLOR
+                  << std::endl;
 
-    std::cout << YELLOW
-              << "lammps modify duration: " << lammps_modify_duration << " pre force duration: " << lammps_modify_pre_force_duration
-              << " microseconds. " << " total modify duration: " << total_modify_duration << " total modify pre force duration: " << total_modify_pre_force_duration << RESET_COLOR << std::endl;
+        std::cout << YELLOW
+                  << "lammps modify duration: " << lammps_modify_duration << " pre force duration: "
+                  << lammps_modify_pre_force_duration
+                  << " microseconds. " << " total modify duration: " << total_modify_duration
+                  << " total modify pre force duration: " << total_modify_pre_force_duration << RESET_COLOR
+                  << std::endl;
+    }
 
+    /*
     if (comm->me == 0) {
         std::ofstream f("forward_comm_times");
         for (int k = 0; k < lammps_forward_comm_times.size(); k++) {
@@ -5079,6 +5088,7 @@ void Verlet::run(int n) {
         f.close();
         f2.close();
     }
+    */
 
     delete[] send_f;
     delete[] send_x;
