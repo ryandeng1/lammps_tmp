@@ -234,7 +234,7 @@ void Verlet::setup(int flag) {
     update->setupflag = 0;
 
     std::cout << GREEN << "------------------- LAMMPS SETUP DONE -------------------------" << RESET_COLOR << std::endl;
-    // setup_stencil_md();
+    setup_stencil_md();
 }
 
 void atom_reorder_stencil_md(Atom* atom_, int* current, int* permute, int start,
