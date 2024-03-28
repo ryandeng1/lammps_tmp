@@ -5084,7 +5084,6 @@ void Verlet::run(int n) {
     delete[] send_x;
 
     MPI_Barrier(world);
-    return;
 
     // setup data structures to run stencil md
     // map dependency levels to number of zoids to wait on
