@@ -5307,17 +5307,19 @@ void Verlet::run(int n) {
 
     MPI_Allreduce(&send_pack_duration, &stencil_md_total_send_pack_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
-    std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
-        << " LOCAL COMPUTE: " << " CURR DT: " << curr_dt_compute_duration << " NEXT DT: " << next_dt_compute_duration
-        << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
-        << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
-        << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
-        << " TOTAL MODIFY: " << stencil_md_total_modify_duration << " TOTAL MODIFY PRE FORCE: " << stencil_md_total_modify_pre_force_duration
-        << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration
-        << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration << RESET_COLOR << std::endl;
+    if (comm->me == 0) {
+        std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
+                  << " LOCAL COMPUTE: " << " CURR DT: " << curr_dt_compute_duration << " NEXT DT: " << next_dt_compute_duration
+                  << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
+                  << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
+                  << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
+                  << " TOTAL MODIFY: " << stencil_md_total_modify_duration << " TOTAL MODIFY PRE FORCE: " << stencil_md_total_modify_pre_force_duration
+                  << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration
+                  << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration << RESET_COLOR << std::endl;
 
-    std::cout << YELLOW << "CURR DT TOTAL COMM DURATION: " << stencil_md_total_curr_dt_comm_duration
-        << " NEXT DT COMM DURATION: " << stencil_md_total_next_dt_comm_duration << RESET_COLOR << std::endl;
+        std::cout << YELLOW << "CURR DT TOTAL COMM DURATION: " << stencil_md_total_curr_dt_comm_duration
+                  << " NEXT DT COMM DURATION: " << stencil_md_total_next_dt_comm_duration << RESET_COLOR << std::endl;
+    }
 
     for (int i = 0; i < test_num_timesteps; i++) {
         delete[] test_f[i];
