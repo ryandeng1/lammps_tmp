@@ -71,6 +71,7 @@ double ThrData::get_time(enum Timer::ttype flag)
 void ThrData::init_force(int nall, double **f, double **torque, double *erforce, double *de,
                          double *drho)
 {
+  /*
   eng_vdwl = eng_coul = eng_bond = eng_angle = eng_dihed = eng_imprp = eng_kspce = 0.0;
   memset(virial_pair, 0, 6 * sizeof(double));
   memset(virial_bond, 0, 6 * sizeof(double));
@@ -81,6 +82,7 @@ void ThrData::init_force(int nall, double **f, double **torque, double *erforce,
 
   eatom_pair = eatom_bond = eatom_angle = eatom_dihed = eatom_imprp = eatom_kspce = nullptr;
   vatom_pair = vatom_bond = vatom_angle = vatom_dihed = vatom_imprp = vatom_kspce = nullptr;
+  */
 
   if (nall >= 0 && f) {
     _f = f + _tid * nall;
@@ -88,6 +90,7 @@ void ThrData::init_force(int nall, double **f, double **torque, double *erforce,
   } else
     _f = nullptr;
 
+  /*
   if (nall >= 0 && torque) {
     _torque = torque + _tid * nall;
     memset(&(_torque[0][0]), 0, nall * 3 * sizeof(double));
@@ -111,6 +114,7 @@ void ThrData::init_force(int nall, double **f, double **torque, double *erforce,
     memset(&(_drho[0]), 0, nall * sizeof(double));
   } else
     _drho = nullptr;
+  */
 }
 
 /* ----------------------------------------------------------------------
