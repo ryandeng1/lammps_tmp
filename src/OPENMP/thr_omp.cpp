@@ -202,8 +202,9 @@ void ThrOMP::reduce_thr(void *style, const int eflag, const int vflag,
 
   int need_force_reduce = 1;
 
-  if (evflag)
-    sync_threads();
+  if (evflag) {
+      sync_threads();
+  }
 
   switch (thr_style) {
 

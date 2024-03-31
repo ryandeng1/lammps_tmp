@@ -42,6 +42,7 @@ class ThrData {
 
   // inline wrapper, to make this more efficient
   // when per-thread timers are off
+  // TODO: ryan disabled this to help debug.
   void timer(enum Timer::ttype flag)
   {
     // if (_timer) _stamp(flag);
