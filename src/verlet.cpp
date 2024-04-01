@@ -5753,7 +5753,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
 
                 if (n_pre_force) {
                     auto begin_m = std::chrono::high_resolution_clock::now();
-                    modify_->pre_force_stencil_md(vflag, atom_next_timestep);
+                    // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
                     auto end_m = std::chrono::high_resolution_clock::now();
                     auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
                     modify_pre_force_duration += duration_m;
@@ -6317,7 +6317,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
 
                 if (n_pre_force) {
                     auto begin_m = std::chrono::high_resolution_clock::now();
-                    modify_->pre_force_stencil_md(vflag, atom_next_timestep);
+                    // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
                     auto end_m = std::chrono::high_resolution_clock::now();
                     auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
                     // modify_duration += duration_m;
@@ -6576,10 +6576,14 @@ void Verlet::force_clear_stencil_md(Atom* atom_, Force* force_,
     */
 
     for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+        /*
         for (int j = 0; j < 3; j++) {
             atom_->f[i][j] = 0.0;
             atom_->eval_f_stencil_md[i][j] = 0.0;
         }
+        */
+        memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * comm->nthreads * sizeof(double));
+        memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * comm->nthreads * sizeof(double));
     }
 }
 
