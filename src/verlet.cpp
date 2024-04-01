@@ -5094,6 +5094,7 @@ void Verlet::run(int n) {
     delete[] send_x;
 
     MPI_Barrier(world);
+    return;
 
     // setup data structures to run stencil md
     // map dependency levels to number of zoids to wait on
@@ -6582,8 +6583,8 @@ void Verlet::force_clear_stencil_md(Atom* atom_, Force* force_,
             atom_->eval_f_stencil_md[i][j] = 0.0;
         }
         */
-        memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * comm->nthreads * sizeof(double));
-        memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * comm->nthreads * sizeof(double));
+        memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * comm->nthreads * sizeof(double) * 3);
+        memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * comm->nthreads * sizeof(double) * 3);
     }
 }
 
