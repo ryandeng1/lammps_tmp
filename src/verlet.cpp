@@ -54,6 +54,7 @@
 #include <fstream>
 #include <iostream>
 #include <cilk/cilk.h>
+#include <cilk/cilk_api.h>
 
 using namespace LAMMPS_NS;
 
@@ -70,6 +71,7 @@ static int64_t mpi_duration = 0;
 static int64_t curr_dt_comm_duration = 0;
 static int64_t next_dt_comm_duration = 0;
 static int64_t send_pack_duration = 0;
+static int64_t misc_time = 0;
 
 // based on dep of zoids I want to eval
 static int64_t curr_dt_dep_time[NUM_DEPS] = {0};
@@ -78,6 +80,12 @@ static int64_t next_dt_dep_time[NUM_DEPS] = {0};
 // based on dep of zoids I am waiting on
 static int64_t curr_dt_wait_dep[NUM_DEPS] = {0};
 static int64_t next_dt_wait_dep[NUM_DEPS] = {0};
+
+constexpr int CILK_ARR_SIZE = 100;
+static int64_t compute_duration_cilk[CILK_ARR_SIZE] = {0};
+static int64_t modify_duration_cilk[CILK_ARR_SIZE] = {0};
+static int64_t modify_pre_force_duration_cilk[CILK_ARR_SIZE] = {0};
+static int64_t send_pack_duration_cilk[CILK_ARR_SIZE] = {0};
 
 static std::vector<int64_t> lammps_forward_comm_times;
 static std::vector<int64_t> lammps_reverse_comm_times;
@@ -5232,11 +5240,13 @@ void Verlet::run(int n) {
 
     std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << " total duration: " << total_duration_stencil_md << std::endl;
 
+    /*
     std::cout << YELLOW << "me: " << comm->me << " dep times curr dt: " << curr_dt_dep_time[0] << " " << curr_dt_dep_time[1] << " " << curr_dt_dep_time[2] << " " << curr_dt_dep_time[3] << RESET_COLOR << std::endl;
     std::cout << YELLOW << "me: " << comm->me << " dep times next dt: " << next_dt_dep_time[0] << " " << next_dt_dep_time[1] << " " << next_dt_dep_time[2] << " " << next_dt_dep_time[3] << RESET_COLOR << std::endl;
 
     std::cout << YELLOW << "me: " << comm->me << " wait?? dep times curr dt: " << curr_dt_wait_dep[0] << " " << curr_dt_wait_dep[1] << " " << curr_dt_wait_dep[2] << " " << curr_dt_wait_dep[3] << RESET_COLOR << std::endl;
     std::cout << YELLOW << "me: " << comm->me << " wait?? dep times next dt: " << next_dt_wait_dep[0] << " " << next_dt_wait_dep[1] << " " << next_dt_wait_dep[2] << " " << next_dt_wait_dep[3] << RESET_COLOR << std::endl;
+    */
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
@@ -5247,20 +5257,35 @@ void Verlet::run(int n) {
     int64_t stencil_md_total_curr_dt_comm_duration = 0;
     int64_t stencil_md_total_next_dt_comm_duration = 0;
     int64_t stencil_md_total_send_pack_duration = 0;
+    int64_t stencil_md_total_misc_duration = 0;
 
-    int64_t my_compute_duration = curr_dt_compute_duration + next_dt_compute_duration;
+    // int64_t my_compute_duration = curr_dt_compute_duration + next_dt_compute_duration;
+
+    int64_t my_modify_duration = 0;
+    int64_t my_compute_duration = 0;
+    int64_t my_modify_pre_force_duration = 0;
+    int64_t my_send_pack_duration = 0;
+
+    for (int i = 0; i < CILK_ARR_SIZE; i++) {
+        my_modify_duration += modify_duration_cilk[i];
+        my_modify_pre_force_duration += modify_pre_force_duration_cilk[i];
+        my_compute_duration += compute_duration_cilk[i];
+        my_send_pack_duration += send_pack_duration_cilk[i];
+    }
 
     MPI_Allreduce(&my_compute_duration, &stencil_md_total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
-    MPI_Allreduce(&modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
-    MPI_Allreduce(&modify_pre_force_duration, &stencil_md_total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&my_modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&my_modify_pre_force_duration, &stencil_md_total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
+
     MPI_Allreduce(&mpi_duration, &stencil_md_total_mpi_duration, 1, MPI_INT64_T, MPI_SUM, world);
-    MPI_Allreduce(&curr_dt_comm_duration, &stencil_md_total_curr_dt_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
-    MPI_Allreduce(&next_dt_comm_duration, &stencil_md_total_next_dt_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&misc_time, &stencil_md_total_misc_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    // MPI_Allreduce(&curr_dt_comm_duration, &stencil_md_total_curr_dt_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    // MPI_Allreduce(&next_dt_comm_duration, &stencil_md_total_next_dt_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     MPI_Allreduce(&send_comm_duration, &stencil_md_total_send_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&recv_comm_duration, &stencil_md_total_recv_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
-    MPI_Allreduce(&send_pack_duration, &stencil_md_total_send_pack_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&my_send_pack_duration, &stencil_md_total_send_pack_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     if (comm->me == 0) {
         std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
@@ -5270,7 +5295,8 @@ void Verlet::run(int n) {
                   << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
                   << " TOTAL MODIFY: " << stencil_md_total_modify_duration << " TOTAL MODIFY PRE FORCE: " << stencil_md_total_modify_pre_force_duration
                   << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration
-                  << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration << RESET_COLOR << std::endl;
+                  << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration
+                  << " TOTAL MISC DURATION: " << stencil_md_total_misc_duration << RESET_COLOR << std::endl;
 
         std::cout << YELLOW << "CURR DT TOTAL COMM DURATION: " << stencil_md_total_curr_dt_comm_duration
                   << " NEXT DT COMM DURATION: " << stencil_md_total_next_dt_comm_duration << RESET_COLOR << std::endl;
@@ -5451,6 +5477,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
                 zoid.can_eval_pos[t]);
         auto end_m = std::chrono::high_resolution_clock::now();
         auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
+        modify_duration_cilk[__cilkrts_get_worker_number()] += duration_m;
         // modify_duration += duration_m;
 
         if (TEST_AGAINST_LAMMPS_LOCAL) {
@@ -5553,7 +5580,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
             // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
             auto end_m = std::chrono::high_resolution_clock::now();
             auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-            // modify_pre_force_duration += duration_m;
+            modify_pre_force_duration_cilk[__cilkrts_get_worker_number()] += duration_m;
             // modify_duration += duration_m;
             // timer->stamp(Timer::MODIFY);
         }
@@ -5577,7 +5604,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
                     std::chrono::duration_cast<std::chrono::microseconds>(
                             end - begin)
                             .count();
-            // curr_dt_compute_duration += duration;
+            compute_duration_cilk[__cilkrts_get_worker_number()] += duration;
         }
 
         // reverse communication of forces
@@ -5706,7 +5733,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                     auto end_mpi = std::chrono::high_resolution_clock::now();
                     auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
                             end_mpi - begin_mpi).count();
-                    // mpi_duration += duration_mpi;
+                    mpi_duration += duration_mpi;
                     auto begin_unpack = std::chrono::high_resolution_clock::now();
                     comm->unpack_data_process_stencil_md(true, recv_zoid_num, false);
                     auto end_unpack = std::chrono::high_resolution_clock::now();
@@ -5719,9 +5746,9 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration =
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                // recv_comm_duration += duration;
+                recv_comm_duration += duration;
                 // curr_dt_comm_duration += duration;
-                curr_dt_dep_time[dep] += duration;
+                // curr_dt_dep_time[dep] += duration;
             }
         }
 
@@ -5732,6 +5759,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 continue;
             }
 
+            /*
             if (!USE_DEP_TO_WAIT_IDXS) {
                 auto begin = std::chrono::high_resolution_clock::now();
                 for (int idx: dep_to_wait_idxs[zoid_num]) {
@@ -5758,6 +5786,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 // curr_dt_comm_duration += duration;
                 // curr_dt_dep_time[dep] += duration;
             }
+            */
 
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
             int** atom_idx_mapping = lmp->queues[dep][j].atom_idx_mapping;
@@ -5785,36 +5814,44 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration =
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                // send_comm_duration += duration;
+                send_pack_duration_cilk[__cilkrts_get_worker_number()] += duration;
             }
         }
 
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
-            queue_info& zoid = lmp->queues[dep][j];
-            int zoid_num = zoid.num;
-            if (zoid_num % comm->nprocs != comm->me) {
-                continue;
-            }
+        if (dep < NUM_DEPS - 1) {
+            auto begin = std::chrono::high_resolution_clock::now();
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs != comm->me) {
+                    continue;
+                }
 
-            Comm* comm_ = lmp->comm_stencil_md[zoid_num];
-            int vec_idx = 0;
-            for (int proc = 0; proc < comm->nprocs; proc++) {
-                if (proc % comm->nprocs != comm->me
+                Comm* comm_ = lmp->comm_stencil_md[zoid_num];
+                int vec_idx = 0;
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    if (proc % comm->nprocs != comm->me
                         && lmp->send_to_neighbors_procs[zoid_num].find(proc) != lmp->send_to_neighbors_procs[zoid_num].end()) {
-                    bool sent = comm_->send_packed_data_to_process_stencil_md(true, zoid, &send_requests[zoid_num][vec_idx], proc);
-                    assert(sent);
-                    if (sent) {
-                        vec_idx++;
+                        bool sent = comm_->send_packed_data_to_process_stencil_md(true, zoid, &send_requests[zoid_num][vec_idx], proc);
+                        assert(sent);
+                        if (sent) {
+                            vec_idx++;
+                        }
                     }
                 }
+                if (lmp->send_to_neighbors_procs[zoid_num].find(comm->me) != lmp->send_to_neighbors_procs[zoid_num].end()) {
+                    comm_->send_packed_data_to_process_stencil_md(true, zoid, &send_requests[zoid_num][vec_idx], comm->me);
+                }
             }
-            if (lmp->send_to_neighbors_procs[zoid_num].find(comm->me) != lmp->send_to_neighbors_procs[zoid_num].end()) {
-                comm_->send_packed_data_to_process_stencil_md(true, zoid, &send_requests[zoid_num][vec_idx], comm->me);
-            }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            send_comm_duration += duration;
         }
     }
 
     // clear force on everything except last timestep of initial,
+    auto begin_misc = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < NUM_ZOIDS; i++) {
         if (i % comm->nprocs == comm->me) {
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
@@ -5832,6 +5869,10 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             }
         }
     }
+    auto end_misc = std::chrono::high_resolution_clock::now();
+    auto duration_misc =
+            std::chrono::duration_cast<std::chrono::microseconds>(end_misc - begin_misc).count();
+    misc_time += duration_misc;
 
     /*
     if (TEST_AGAINST_LAMMPS_LOCAL) {
@@ -5895,7 +5936,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                     auto end_mpi = std::chrono::high_resolution_clock::now();
                     auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
                             end_mpi - begin_mpi).count();
-                    // mpi_duration += duration_mpi;
+                    mpi_duration += duration_mpi;
                     auto begin_unpack = std::chrono::high_resolution_clock::now();
                     comm->unpack_data_process_stencil_md(false, recv_zoid_num, false);
                     auto end_unpack = std::chrono::high_resolution_clock::now();
@@ -5906,8 +5947,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 }
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                // recv_comm_duration += duration;
-                // next_dt_comm_duration += duration;
+                recv_comm_duration += duration;
+                next_dt_comm_duration += duration;
                 next_dt_dep_time[dep] += duration;
             }
         }
@@ -5975,12 +6016,14 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                                                            proc, false);
                 }
                 auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                // send_comm_duration += duration;
+                auto duration =
+                        std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                send_pack_duration_cilk[__cilkrts_get_worker_number()] += duration;
             }
         }
 
         if (dep < NUM_DEPS - 1) {
+            auto begin = std::chrono::high_resolution_clock::now();
             for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
                 queue_info& zoid = lmp->queues_next_dt[dep][j];
                 int zoid_num = zoid.num;
@@ -6005,11 +6048,15 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                                                                   &send_requests_next_dt[zoid_num][vec_idx], comm->me);
                 }
             }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            send_comm_duration += duration;
         }
     }
 
     // clear force on everything except first timestep
     // this should get optimized to be `memset` with -O3
+    begin_misc = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < NUM_ZOIDS; i++) {
         if (i % comm->nprocs == comm->me) {
             for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
@@ -6027,6 +6074,10 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             }
         }
     }
+    end_misc = std::chrono::high_resolution_clock::now();
+    duration_misc =
+            std::chrono::duration_cast<std::chrono::microseconds>(end_misc - begin_misc).count();
+    misc_time += duration_misc;
 
     // cleanup MPI_Isend objects
     for (int i = 0; i < NUM_ZOIDS; i++) {
