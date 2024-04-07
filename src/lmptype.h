@@ -229,6 +229,7 @@ union ubuf {
   ubuf(const int64_t &arg) : i(arg) {}
   ubuf(const int &arg) : i(arg) {}
 };
+
 }    // namespace LAMMPS_NS
 
 // preprocessor macros for compiler specific settings

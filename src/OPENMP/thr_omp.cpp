@@ -37,6 +37,7 @@
 #include "compute.h"
 
 #include "math_const.h"
+#include <cilk/cilk.h>
 
 #if defined(_OPENMP)
 #include <omp.h>
@@ -491,13 +492,14 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
 
     int need_force_reduce = 1;
 
-    if (evflag)
-        sync_threads();
+    if (evflag) {
+        // cilk_sync;
+        // sync_threads();
+    }
 
     switch (thr_style) {
 
         case THR_PAIR: {
-
             if (lmp->force->pair->vflag_fdotr) {
                 // this is a non-hybrid pair style. compute per thread fdotr
                 if (fix->last_pair_hybrid == nullptr) {
@@ -517,7 +519,9 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
                 }
             }
 
+            // TODO: implement cilk reducers?
             if (evflag) {
+                /*
                 auto  const pair = (Pair *)style;
 
 #if defined(_OPENMP)
@@ -549,11 +553,13 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
                 if ((vflag & VIRIAL_CENTROID) && thr->cvatom_pair) {
                     data_reduce_thr(&(pair->cvatom[0][0]), nall, nthreads, 9, tid);
                 }
+                */
             }
         }
             break;
 
         case THR_BOND:
+            assert(false);
 
             if (evflag) {
                 Bond * const bond = lmp->force->bond;
@@ -586,6 +592,7 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
             break;
 
         case THR_ANGLE:
+            assert(false);
 
             if (evflag) {
                 Angle * const angle = lmp->force->angle;
@@ -620,6 +627,7 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
             break;
 
         case THR_DIHEDRAL:
+            assert(false);
 
             if (evflag) {
                 Dihedral * const dihedral = lmp->force->dihedral;
@@ -654,6 +662,7 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
             break;
 
         case THR_DIHEDRAL|THR_CHARMM: // special case for CHARMM dihedrals
+            assert(false);
 
             if (evflag) {
                 Dihedral * const dihedral = lmp->force->dihedral;
@@ -704,6 +713,7 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
             break;
 
         case THR_IMPROPER:
+            assert(false);
 
             if (evflag) {
                 Improper *improper = lmp->force->improper;
@@ -738,10 +748,12 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
             break;
 
         case THR_KSPACE:
+            assert(false);
             // nothing to do. XXX may need to add support for per-atom info
             break;
 
         case THR_INTGR:
+            assert(false);
             // nothing to do
             break;
 
@@ -753,12 +765,12 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
     // TODO: RYAN, if anything goes wrong, check back on this. This might assume that there are multiple computations happening at once and then reduce at the end?
     if (style == fix->last_omp_style || true) {
         if (need_force_reduce) {
-            data_reduce_thr(&(f[0][0]), nall, nthreads, 3, tid);
+            data_reduce_thr_stencil_md(&(f[0][0]), nall, nthreads, 3, tid);
             fix->did_reduce();
         }
 
         if (lmp->atom->torque)
-            data_reduce_thr(&(lmp->atom->torque[0][0]), nall, nthreads, 3, tid);
+            data_reduce_thr_stencil_md(&(lmp->atom->torque[0][0]), nall, nthreads, 3, tid);
     }
     thr->timer(Timer::COMM);
 }

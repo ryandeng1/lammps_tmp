@@ -22,6 +22,7 @@
 #include "suffix.h"
 
 #include "omp_compat.h"
+#include <cilk/cilk.h>
 using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
@@ -86,13 +87,21 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     const int nthreads = comm->nthreads;
     const int inum = list->inum;
 
+/*
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(eflag,vflag)
 #endif
-    {
-        int ifrom, ito, tid;
+*/
 
-        loop_setup_thr(ifrom, ito, tid, inum, nthreads);
+    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
+        // int ifrom, ito, tid;
+        int ifrom, ito;
+        // each thread works on a fixed chunk of atoms.
+        const int idelta = 1 + inum / nthreads;
+        ifrom = tid * idelta;
+        ito = ((ifrom + idelta) > inum) ? inum : ifrom + idelta;
+
+        // loop_setup_thr(ifrom, ito, tid, inum, nthreads);
         ThrData *thr = fix->get_thr(tid);
         thr->timer(Timer::START);
         ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
@@ -119,6 +128,11 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
         }
         thr->timer(Timer::PAIR);
+        // reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
+    } // end of omp parallel region
+
+    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
+        ThrData *thr = fix->get_thr(tid);
         reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
     } // end of omp parallel region
 }

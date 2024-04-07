@@ -15,6 +15,7 @@
 #include "omp_compat.h"
 #include "fix_nve_omp.h"
 #include "atom.h"
+#include <cilk/cilk.h>
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -110,10 +111,12 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
         const double * const mass = atom->mass;
         const int * const type = atom_->type;
 
+/*
 #if defined (_OPENMP)
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif
-        for (int i = 0; i < nlocal; i++) {
+*/
+        cilk_for (int i = 0; i < nlocal; i++) {
             if (mask[i] & groupbit) {
                 const double dtfm = dtf / mass[type[i]];
 
@@ -200,11 +203,12 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
     } else {
         const double * const mass = atom->mass;
         const int * const type = next->type;
-
+/*
 #if defined (_OPENMP)
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif
-        for (int i = 0; i < nlocal; i++) {
+*/
+        cilk_for (int i = 0; i < nlocal; i++) {
             int next_idx = atom_idx_mapping[i];
             assert(next_idx != -1);
             next_v[next_idx].x = v[i].x;
@@ -212,10 +216,12 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
             next_v[next_idx].z = v[i].z;
         }
 
+/*
 #if defined (_OPENMP)
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif
-        for (int i = 0; i < next_nlocal; i++) {
+*/
+        cilk_for (int i = 0; i < next_nlocal; i++) {
             if (mask[i] & groupbit) {
                 const double dtfm = dtf / mass[type[i]];
                 next_v[i].x += dtfm * (f[i].x + eval_f[i].x);

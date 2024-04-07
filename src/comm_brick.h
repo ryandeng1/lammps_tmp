@@ -56,6 +56,9 @@ class CommBrick : public Comm {
   bool send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*, int, bool is_initial, int64_t* pack_duration) override;
   void receive_data_process_stencil_md(bool curr_dt, MPI_Request*, int, bool is_initial) override;
 
+  void pack_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, int, bool is_initial) override;
+  bool send_packed_data_to_process_stencil_md(bool curr_dt, queue_info& zoid, MPI_Request* request, int proc) override;
+
   void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
 

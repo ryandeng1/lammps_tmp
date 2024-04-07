@@ -155,5 +155,7 @@ class ThrData {
 ////////////////////////////////////////////////////////////////////////
 // generic per thread data reduction for continuous arrays of nthreads*nmax size
 void data_reduce_thr(double *, int, int, int, int);
+
+void data_reduce_thr_stencil_md(double *, int, int, int, int);
 }    // namespace LAMMPS_NS
 #endif

@@ -71,7 +71,6 @@ double ThrData::get_time(enum Timer::ttype flag)
 void ThrData::init_force(int nall, double **f, double **torque, double *erforce, double *de,
                          double *drho)
 {
-  /*
   eng_vdwl = eng_coul = eng_bond = eng_angle = eng_dihed = eng_imprp = eng_kspce = 0.0;
   memset(virial_pair, 0, 6 * sizeof(double));
   memset(virial_bond, 0, 6 * sizeof(double));
@@ -82,7 +81,6 @@ void ThrData::init_force(int nall, double **f, double **torque, double *erforce,
 
   eatom_pair = eatom_bond = eatom_angle = eatom_dihed = eatom_imprp = eatom_kspce = nullptr;
   vatom_pair = vatom_bond = vatom_angle = vatom_dihed = vatom_imprp = vatom_kspce = nullptr;
-  */
 
   if (nall >= 0 && f) {
     _f = f + _tid * nall;
@@ -90,7 +88,6 @@ void ThrData::init_force(int nall, double **f, double **torque, double *erforce,
   } else
     _f = nullptr;
 
-  /*
   if (nall >= 0 && torque) {
     _torque = torque + _tid * nall;
     memset(&(_torque[0][0]), 0, nall * 3 * sizeof(double));
@@ -114,7 +111,6 @@ void ThrData::init_force(int nall, double **f, double **torque, double *erforce,
     memset(&(_drho[0]), 0, nall * sizeof(double));
   } else
     _drho = nullptr;
-  */
 }
 
 /* ----------------------------------------------------------------------
@@ -368,4 +364,68 @@ void LAMMPS_NS::data_reduce_thr(double *dall, int nall, int nthreads, int ndim, 
   // NOOP in non-threaded execution.
   return;
 #endif
+}
+
+void LAMMPS_NS::data_reduce_thr_stencil_md(double *dall, int nall, int nthreads, int ndim, int tid) {
+    // NOOP in single-threaded execution.
+    if (nthreads == 1) return;
+
+    const int nvals = ndim * nall;
+    const int idelta = nvals / nthreads + 1;
+    const int ifrom = tid * idelta;
+    const int ito = ((ifrom + idelta) > nvals) ? nvals : (ifrom + idelta);
+
+    // this if protects against having more threads than atoms
+    if (ifrom < nvals) {
+        int m = 0;
+
+        // for architectures that have L1 D-cache line sizes of 64 bytes
+        // (8 doubles) wide, explicitly unroll this loop to  compute 8
+        // contiguous values in the array at a time
+        // -- modify this code based on the size of the cache line
+        double t0, t1, t2, t3, t4, t5, t6, t7;
+        for (m = ifrom; m < (ito - 7); m += 8) {
+            t0 = dall[m];
+            t1 = dall[m + 1];
+            t2 = dall[m + 2];
+            t3 = dall[m + 3];
+            t4 = dall[m + 4];
+            t5 = dall[m + 5];
+            t6 = dall[m + 6];
+            t7 = dall[m + 7];
+            for (int n = 1; n < nthreads; ++n) {
+                t0 += dall[n * nvals + m];
+                t1 += dall[n * nvals + m + 1];
+                t2 += dall[n * nvals + m + 2];
+                t3 += dall[n * nvals + m + 3];
+                t4 += dall[n * nvals + m + 4];
+                t5 += dall[n * nvals + m + 5];
+                t6 += dall[n * nvals + m + 6];
+                t7 += dall[n * nvals + m + 7];
+                dall[n * nvals + m] = 0.0;
+                dall[n * nvals + m + 1] = 0.0;
+                dall[n * nvals + m + 2] = 0.0;
+                dall[n * nvals + m + 3] = 0.0;
+                dall[n * nvals + m + 4] = 0.0;
+                dall[n * nvals + m + 5] = 0.0;
+                dall[n * nvals + m + 6] = 0.0;
+                dall[n * nvals + m + 7] = 0.0;
+            }
+            dall[m] = t0;
+            dall[m + 1] = t1;
+            dall[m + 2] = t2;
+            dall[m + 3] = t3;
+            dall[m + 4] = t4;
+            dall[m + 5] = t5;
+            dall[m + 6] = t6;
+            dall[m + 7] = t7;
+        }
+        // do the last < 8 values
+        for (; m < ito; m++) {
+            for (int n = 1; n < nthreads; ++n) {
+                dall[m] += dall[n * nvals + m];
+                dall[n * nvals + m] = 0.0;
+            }
+        }
+    }
 }

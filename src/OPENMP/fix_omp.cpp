@@ -43,7 +43,7 @@
 #include <omp.h>
 #endif
 
-
+#include <cilk/cilk.h>
 #include "suffix.h"
 
 using namespace LAMMPS_NS;
@@ -477,6 +477,12 @@ void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
     double *desph = atom_->desph;
     double *drho = atom_->drho;
 
+    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
+        // thr[tid]->check_tid(tid);
+        thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
+    }
+
+/*
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(f,torque,erforce,desph,drho)
 #endif
@@ -485,6 +491,7 @@ void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
         thr[tid]->check_tid(tid);
         thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
     } // end of omp parallel region
+*/
 
     _reduced = false;
 }
