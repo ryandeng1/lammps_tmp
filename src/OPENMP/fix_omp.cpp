@@ -477,7 +477,6 @@ void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
     double *desph = atom_->desph;
     double *drho = atom_->drho;
 
-    #pragma cilk grainsize 1
     cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
         // thr[tid]->check_tid(tid);
         thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
