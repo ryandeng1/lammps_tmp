@@ -5289,7 +5289,7 @@ void Verlet::run(int n) {
 
     if (comm->me == 0) {
         std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
-                  << " LOCAL COMPUTE: " << " CURR DT: " << curr_dt_compute_duration << " NEXT DT: " << next_dt_compute_duration
+                  << " LOCAL COMPUTE: " << my_compute_duration
                   << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
                   << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
                   << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
