@@ -5752,6 +5752,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             }
         }
 
+        #pragma cilk grainsize 1
         cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             int zoid_num = zoid.num;
@@ -5798,6 +5799,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
 
                 int vec_idx = 0;
+                #pragma cilk grainsize 1
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     /*
                     bool sent = comm_->send_data_to_process_stencil_md(true,
@@ -5953,6 +5955,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             }
         }
 
+        #pragma cilk grainsize 1
         cilk_for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info &zoid = lmp->queues_next_dt[dep][j];
             int zoid_num = zoid.num;
@@ -5998,6 +6001,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 Comm *comm_ = lmp->comm_stencil_md[zoid_num];
 
                 int vec_idx = 0;
+                #pragma cilk grainsize 1
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     /*
                     bool sent = comm_->send_data_to_process_stencil_md(false,

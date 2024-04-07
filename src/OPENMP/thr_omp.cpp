@@ -509,7 +509,7 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
                         thr->virial_fdotr_compute(x, nlocal, nghost, nfirst);
                 } else {
                     if (style == fix->last_pair_hybrid) {
-                        std::cout << "stencilmd style is fix last pair hybrid? " << std::endl;
+                        assert(false);
                         // pair_style hybrid will compute fdotr for us
                         // but we first need to reduce the forces
                         data_reduce_thr(&(f[0][0]), nall, nthreads, 3, tid);
