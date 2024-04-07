@@ -4789,11 +4789,13 @@ void Verlet::run(int n) {
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < n + 1; i++) {
+        /*
         if (timer->check_timeout(i)) {
             assert(false);
             update->nsteps = i;
             break;
         }
+        */
 
         // ntimestep = ++update->ntimestep;
         // ev_set(ntimestep);
@@ -5577,7 +5579,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
 
         if (n_pre_force) {
             auto begin_m = std::chrono::high_resolution_clock::now();
-            // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
+            modify_->pre_force_stencil_md(vflag, atom_next_timestep);
             auto end_m = std::chrono::high_resolution_clock::now();
             auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
             modify_pre_force_duration_cilk[__cilkrts_get_worker_number()] += duration_m;
@@ -5857,10 +5859,14 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             cilk_for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
                 Atom* atom_ = lmp->atom_stencil_md[i][t];
                 int nall = atom_->nlocal + atom_->nghost;
+                memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
+                memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
+                /*
                 cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
                      memset(&atom_->f[tid * nall][0], 0, (nall) * 3 * sizeof(double));
                      memset(&atom_->eval_f_stencil_md[tid * nall][0], 0, (nall) * 3 * sizeof(double));
                 }
+                */
                 // memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double) * comm->nthreads);
                 // memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double) * comm->nthreads);
             }
@@ -6059,10 +6065,14 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             cilk_for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 Atom* atom_ = lmp->atom_stencil_md[i][t];
                 int nall = atom_->nlocal + atom_->nghost;
+                memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
+                memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
+                /*
                 cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
                     memset(&atom_->f[tid * nall][0], 0, (nall) * 3 * sizeof(double));
                     memset(&atom_->eval_f_stencil_md[tid * nall][0], 0, (nall) * 3 * sizeof(double));
                 }
+                */
                 // memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double) * comm->nthreads);
                 // memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double) * comm->nthreads);
                 /*
