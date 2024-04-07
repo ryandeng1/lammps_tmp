@@ -2,6 +2,7 @@
 // Created by Ryan Deng on 3/7/24.
 //
 #include <algorithm>
+#include <set>
 
 #include "stencil_md.h"
 #include "comm.h"
@@ -10,6 +11,7 @@
 #include "accelerator_omp.h"
 #include "neigh_list.h"
 #include "modify.h"
+#include <unordered_set>
 
 using namespace LAMMPS_NS;
 
@@ -676,7 +678,7 @@ void StencilMD::INIT_ZOID_NEIGHBORS() {
         }
     }
 
-    lmp->send_to_neighbors_procs = new std::vector<int>[NUM_ZOIDS];
+    lmp->send_to_neighbors_procs = new std::unordered_set<int>[NUM_ZOIDS];
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             int zoid_num = lmp->queues[dep][j].num;
@@ -688,7 +690,7 @@ void StencilMD::INIT_ZOID_NEIGHBORS() {
             }
 
             for (int proc : send_procs) {
-                lmp->send_to_neighbors_procs[zoid_num].push_back(proc);
+                lmp->send_to_neighbors_procs[zoid_num].insert(proc);
 
                 if (proc == comm->me &&
                     std::find(lmp->recv_from_neighbors_procs.begin(),
@@ -700,7 +702,7 @@ void StencilMD::INIT_ZOID_NEIGHBORS() {
         }
     }
 
-    lmp->send_to_neighbors_procs_next_dt = new std::vector<int>[NUM_ZOIDS];
+    lmp->send_to_neighbors_procs_next_dt = new std::unordered_set<int>[NUM_ZOIDS];
     for (int i = 0; i < NUM_ZOIDS; i++) {
         auto& send_to = lmp->send_to_neighbors_next_dt[i];
         std::set<int> send_procs;
@@ -709,7 +711,7 @@ void StencilMD::INIT_ZOID_NEIGHBORS() {
         }
 
         for (int proc : send_procs) {
-            lmp->send_to_neighbors_procs_next_dt[i].push_back(proc);
+            lmp->send_to_neighbors_procs_next_dt[i].insert(proc);
 
             if (proc == comm->me &&
                 std::find(lmp->recv_from_neighbors_procs_next_dt.begin(),

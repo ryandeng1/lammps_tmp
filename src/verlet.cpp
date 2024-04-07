@@ -5799,14 +5799,18 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             Comm* comm_ = lmp->comm_stencil_md[zoid_num];
             int vec_idx = 0;
             for (int proc = 0; proc < comm->nprocs; proc++) {
-                if (proc % comm->nprocs != comm->me) {
+                if (proc % comm->nprocs != comm->me
+                        && lmp->send_to_neighbors_procs[zoid_num].find(proc) != lmp->send_to_neighbors_procs[zoid_num].end()) {
                     bool sent = comm_->send_packed_data_to_process_stencil_md(true, zoid, &send_requests[zoid_num][vec_idx], proc);
+                    assert(sent);
                     if (sent) {
                         vec_idx++;
                     }
                 }
             }
-            comm_->send_packed_data_to_process_stencil_md(true, zoid, &send_requests[zoid_num][vec_idx], comm->me);
+            if (lmp->send_to_neighbors_procs[zoid_num].find(comm->me) != lmp->send_to_neighbors_procs[zoid_num].end()) {
+                comm_->send_packed_data_to_process_stencil_md(true, zoid, &send_requests[zoid_num][vec_idx], comm->me);
+            }
         }
     }
 
@@ -5987,14 +5991,19 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
                 int vec_idx = 0;
                 for (int proc = 0; proc < comm->nprocs; proc++) {
-                    if (proc % comm->nprocs != comm->me) {
+                    if (proc % comm->nprocs != comm->me
+                            && lmp->send_to_neighbors_procs_next_dt[zoid_num].find(proc) != lmp->send_to_neighbors_procs_next_dt[zoid_num].end()) {
                         bool sent = comm_->send_packed_data_to_process_stencil_md(false, zoid, &send_requests_next_dt[zoid_num][vec_idx], proc);
+                        assert(sent);
                         if (sent) {
                             vec_idx++;
                         }
                     }
                 }
-                comm_->send_packed_data_to_process_stencil_md(false, zoid, &send_requests_next_dt[zoid_num][vec_idx], comm->me);
+                if (lmp->send_to_neighbors_procs_next_dt[zoid_num].find(comm->me) != lmp->send_to_neighbors_procs_next_dt[zoid_num].end()) {
+                    comm_->send_packed_data_to_process_stencil_md(false, zoid,
+                                                                  &send_requests_next_dt[zoid_num][vec_idx], comm->me);
+                }
             }
         }
     }

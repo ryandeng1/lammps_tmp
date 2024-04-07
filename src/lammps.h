@@ -18,6 +18,8 @@
 #include <mpi.h>
 #include <vector>
 #include <array>
+#include <set>
+#include <unordered_set>
 #include "stencil_md_utils.h"
 // #include <torch/torch.h>
 
@@ -88,10 +90,10 @@ class LAMMPS {
   std::vector<int>* send_to_neighbors_next_dt;
   std::vector<int>* recv_from_neighbors_next_dt;
 
-  std::vector<int>* send_to_neighbors_procs;
+  std::unordered_set<int>* send_to_neighbors_procs;
   std::vector<int> recv_from_neighbors_procs;
 
-  std::vector<int>* send_to_neighbors_procs_next_dt;
+  std::unordered_set<int>* send_to_neighbors_procs_next_dt;
   std::vector<int> recv_from_neighbors_procs_next_dt;
 
   int* num_recv_force_from_zoid[NUM_TIMESTEPS_IN_PARALLEL + 1];

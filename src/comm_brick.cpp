@@ -3068,6 +3068,7 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
     int num_elems_send = zoid.num_send_process[proc];
 
     auto &send_to_neighbors = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+    /*
     std::vector<int> neighbors_in_proc;
     for (int i = 0; i < send_to_neighbors.size(); i++) {
         int neighbor = send_to_neighbors[i];
@@ -3079,6 +3080,7 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
     if (neighbors_in_proc.size() == 0) {
         return false;
     }
+    */
 
     if (proc != comm->me) {
         int mpi_tag = (proc << 16 | zoid_num);
@@ -3091,9 +3093,6 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
         int receive_request_idx = -1;
         auto& recv_from_neighbor_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
         auto it = std::find(recv_from_neighbor_procs.begin(), recv_from_neighbor_procs.end(), zoid_num);
-        if (it == recv_from_neighbor_procs.end()) {
-            std::cout << "zoid: " << zoid.num << " curr dt: " << curr_dt << " to proc: " << proc << std::endl;
-        }
         assert(it != recv_from_neighbor_procs.end());
         receive_request_idx = std::distance(recv_from_neighbor_procs.begin(), it);
 
