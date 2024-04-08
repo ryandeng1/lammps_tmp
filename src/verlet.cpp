@@ -6091,7 +6091,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
             std::chrono::duration_cast<std::chrono::microseconds>(end_misc - begin_misc).count();
     misc_time += duration_misc;
 
-    // cleanup MPI_Isend objects
+    // cleanup MPI_Request objects
     for (int i = 0; i < NUM_ZOIDS; i++) {
         if (send_requests_next_dt[i].size() > 0) {
             MPI_Waitall(send_requests_next_dt[i].size(), send_requests_next_dt[i].data(), MPI_STATUSES_IGNORE);

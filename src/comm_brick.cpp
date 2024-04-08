@@ -36,6 +36,7 @@
 #include "pair.h"
 #include "stencil_md_utils.h"
 #include "timer.h"
+#include <cilk/cilk.h>
 
 using namespace LAMMPS_NS;
 
@@ -3469,24 +3470,57 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
             if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
         }
 
-        int buf_idx = 0;
+        std::vector<int> idxs;
+        idxs.push_back(0);
         for (int t = start_timestep; t < end_timestep; t++) {
+            if (curr_dt) {
+                int nrecv_force_timestep = lmp->num_recv_force_from_zoid[t][receive_request_idx];
+                int nrecv_pos_timestep = lmp->num_recv_pos_from_zoid[t][receive_request_idx];
+                int nrecv_vel_timestep = lmp->num_recv_vel_from_zoid[t][receive_request_idx];
+
+                int num_elems;
+                if (DEBUG_SEND_RECV_DATA) {
+                    num_elems = nrecv_force_timestep * (3 + 1) + nrecv_pos_timestep * (3 + 1) + nrecv_vel_timestep * (3 + 1);
+                } else {
+                    num_elems = nrecv_force_timestep * (3) + nrecv_pos_timestep * (3) + nrecv_vel_timestep * (3);
+                }
+                idxs.push_back(num_elems + idxs[idxs.size() - 1]);
+            } else {
+                int nrecv_force_timestep = lmp->num_recv_force_from_zoid_next_dt[t][receive_request_idx];
+                int nrecv_pos_timestep = lmp->num_recv_pos_from_zoid_next_dt[t][receive_request_idx];
+                int nrecv_vel_timestep = lmp->num_recv_vel_from_zoid_next_dt[t][receive_request_idx];
+
+                int num_elems;
+                if (DEBUG_SEND_RECV_DATA) {
+                    num_elems = nrecv_force_timestep * (3 + 1) + nrecv_pos_timestep * (3 + 1) + nrecv_vel_timestep * (3 + 1);
+                } else {
+                    num_elems = nrecv_force_timestep * (3) + nrecv_pos_timestep * (3) + nrecv_vel_timestep * (3);
+                }
+                idxs.push_back(num_elems + idxs[idxs.size() - 1]);
+            }
+        }
+
+        int buf_idx = 0;
+        cilk_for (int t = start_timestep; t < end_timestep; t++) {
             // Atom* atom_ = atom_arr[t];
             Atom* atom_;
+
             int nrecv_force;
             int nrecv_pos;
-            int nrecv_vel;
+            // int nrecv_vel;
             if (curr_dt) {
                 atom_ = atom_arr[t];
                 nrecv_force = lmp->num_recv_force_from_zoid[t][receive_request_idx];
                 nrecv_pos = lmp->num_recv_pos_from_zoid[t][receive_request_idx];
-                nrecv_vel = lmp->num_recv_vel_from_zoid[t][receive_request_idx];
+                // nrecv_vel = lmp->num_recv_vel_from_zoid[t][receive_request_idx];
             } else {
                 atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
                 nrecv_force = lmp->num_recv_force_from_zoid_next_dt[t][receive_request_idx];
                 nrecv_pos = lmp->num_recv_pos_from_zoid_next_dt[t][receive_request_idx];
-                nrecv_vel = lmp->num_recv_vel_from_zoid_next_dt[t][receive_request_idx];
+                // nrecv_vel = lmp->num_recv_vel_from_zoid_next_dt[t][receive_request_idx];
             }
+
+            int starting_idx = idxs[t - start_timestep];
 
             atom_->avec->unpack_data_from_process_stencil_md(
                     nrecv_force, nrecv_pos,
@@ -3495,13 +3529,16 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
                     zoid.recv_process_segment_idxs[t][recv_idx], zoid.recv_process_segment_sizes[t][recv_idx],
                     zoid.recv_process_vel_offset[t][recv_idx], zoid.recv_list_local_num_force_pos[t][recv_idx], zoid.recv_list_local_force_pos[t][recv_idx],
                     zoid.recv_ghost_num_segments[t][recv_idx], zoid.recv_ghost_idxs[t][recv_idx], zoid.recv_ghost_sizes[t][recv_idx],
-                    &buf_recv_stencil_md[receive_request_idx][buf_idx], pbc_flag_);
+                    // &buf_recv_stencil_md[receive_request_idx][buf_idx], pbc_flag_);
+                        &buf_recv_stencil_md[receive_request_idx][starting_idx], pbc_flag_);
 
+            /*
             if (DEBUG_SEND_RECV_DATA) {
                 buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
             } else {
                 buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
             }
+            */
         }
     }
 }

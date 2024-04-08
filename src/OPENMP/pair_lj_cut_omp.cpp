@@ -93,7 +93,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 #endif
 */
 
-    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
+    cilk_for (int tid = 0; tid < nthreads; tid++) {
         // int ifrom, ito, tid;
         int ifrom, ito;
         // each thread works on a fixed chunk of atoms.
@@ -131,7 +131,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         // reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
     } // end of omp parallel region
 
-    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
+    cilk_for (int tid = 0; tid < nthreads; tid++) {
         ThrData *thr = fix->get_thr(tid);
         reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
     } // end of omp parallel region
