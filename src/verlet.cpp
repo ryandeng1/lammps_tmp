@@ -78,10 +78,6 @@ static int64_t misc_time = 0;
 static int64_t curr_dt_dep_time[NUM_DEPS] = {0};
 static int64_t next_dt_dep_time[NUM_DEPS] = {0};
 
-// based on dep of zoids I am waiting on
-static int64_t curr_dt_wait_dep[NUM_DEPS] = {0};
-static int64_t next_dt_wait_dep[NUM_DEPS] = {0};
-
 constexpr int CILK_ARR_SIZE = 100;
 static int64_t compute_duration_cilk[CILK_ARR_SIZE] = {0};
 static int64_t modify_duration_cilk[CILK_ARR_SIZE] = {0};
@@ -5732,6 +5728,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 auto begin = std::chrono::high_resolution_clock::now();
 
                 for (int idx: dep_to_wait_idxs[dep]) {
+                // cilk_for (int i = 0 ; i < dep_to_wait_idxs[dep].size(); i++) {
+                    // int idx = dep_to_wait_idxs[dep][i];
                     int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
                     auto begin_mpi = std::chrono::high_resolution_clock::now();
                     MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
@@ -5744,8 +5742,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                     auto end_unpack = std::chrono::high_resolution_clock::now();
                     auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
                             end_unpack - begin_unpack).count();
-                    // unpack_duration += duration_unpack;
-                    curr_dt_wait_dep[get_zoid_dep(recv_zoid_num)] += duration_mpi;
+                    unpack_duration += duration_unpack;
                 }
 
                 auto end = std::chrono::high_resolution_clock::now();
@@ -5930,6 +5927,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             if (USE_DEP_TO_WAIT_IDXS) {
                 auto begin = std::chrono::high_resolution_clock::now();
                 for (int idx: dep_to_wait_idxs_next_dt[dep]) {
+                // cilk_for (int i = 0; i < dep_to_wait_idxs_next_dt[dep].size(); i++) {
+                    // int idx = dep_to_wait_idxs_next_dt[dep][i];
                     int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[idx];
                     auto begin_mpi = std::chrono::high_resolution_clock::now();
                     MPI_Wait(&receive_requests_next_dt[idx], MPI_STATUS_IGNORE);
@@ -5942,8 +5941,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                     auto end_unpack = std::chrono::high_resolution_clock::now();
                     auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
                             end_unpack - begin_unpack).count();
-                    // unpack_duration += duration_unpack;
-                    next_dt_wait_dep[get_zoid_dep_next_dt(recv_zoid_num)] += duration_mpi;
+                    unpack_duration += duration_unpack;
                 }
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();

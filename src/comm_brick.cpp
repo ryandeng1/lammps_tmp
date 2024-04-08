@@ -3147,7 +3147,7 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
                 Atom* atom_;
                 int nrecv_force;
                 int nrecv_pos;
-                int nrecv_vel;
+                // int nrecv_vel;
 
                 if (curr_dt) {
                     atom_ = other_atom_arr[t];
@@ -3493,7 +3493,11 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
     queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[recv_zoid_num] : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
     auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[recv_zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[recv_zoid_num];
 
-    for (auto& [zoid_num, recv_idx] : zoid_num_idxs_recv) {
+    // for (auto& [zoid_num, recv_idx] : zoid_num_idxs_recv) {
+    cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
+        int zoid_num = zoid_num_idxs_recv[i].first;
+        int recv_idx = zoid_num_idxs_recv[i].second;
+
         auto& atom_arr = lmp->atom_stencil_md[zoid_num];
         auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
         queue_info& zoid = curr_dt? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
