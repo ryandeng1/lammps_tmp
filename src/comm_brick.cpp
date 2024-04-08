@@ -3100,7 +3100,10 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
         queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
         auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[zoid_num];
 
-        for (auto& [other_zoid_num, recv_idx] : zoid_num_idxs_recv) {
+        // for (auto& [other_zoid_num, recv_idx] : zoid_num_idxs_recv) {
+        cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
+            int other_zoid_num = zoid_num_idxs_recv[i].first;
+            int recv_idx = zoid_num_idxs_recv[i].second;
             auto& other_atom_arr = lmp->atom_stencil_md[other_zoid_num];
             auto& other_recv_from = curr_dt ? lmp->recv_from_neighbors[other_zoid_num] : lmp->recv_from_neighbors_next_dt[other_zoid_num];
             queue_info& other_zoid = curr_dt ? lmp->zoid_num_to_zoid[other_zoid_num] : lmp->zoid_num_to_zoid_next_dt[other_zoid_num];
