@@ -3143,8 +3143,7 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
             }
 
             int other_buf_idx = 0;
-            // cilk_for (int t = start_timestep; t < end_timestep; t++) {
-            for (int t = start_timestep; t < end_timestep; t++) {
+            cilk_for (int t = start_timestep; t < end_timestep; t++) {
                 Atom* atom_;
                 int nrecv_force;
                 int nrecv_pos;
@@ -3537,8 +3536,7 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
         }
 
         int buf_idx = 0;
-        // cilk_for (int t = start_timestep; t < end_timestep; t++) {
-        for (int t = start_timestep; t < end_timestep; t++) {
+        cilk_for (int t = start_timestep; t < end_timestep; t++) {
             // Atom* atom_ = atom_arr[t];
             Atom* atom_;
 

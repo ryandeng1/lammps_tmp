@@ -49,8 +49,8 @@ class Verlet : public Integrate {
 
   void run_stencil_md_zoid(int start_timestep, int zoid_num, bool curr_dt, int num_procs, double** test_f, double** test_x);
 
-  void run_stencil_md(int start_timestep, std::map<int, std::vector<int>>& dep_to_wait_idxs, std::map<int, std::vector<int>>& dep_to_wait_idxs_next_dt,
-                      std::map<int, int>& zoid_num_to_num_procs, std::map<int, int>& zoid_num_to_num_procs_next_dt,
+  void run_stencil_md(int start_timestep, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
+                      int* zoid_num_to_num_procs, int* zoid_num_to_num_procs_next_dt,
                       double** test_f, double** test_x);
 
 protected:

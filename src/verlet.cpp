@@ -55,6 +55,7 @@
 #include <iostream>
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
+#include <unordered_map>
 
 using namespace LAMMPS_NS;
 
@@ -4262,9 +4263,9 @@ void Verlet::setup_stencil_md() {
     // doing a round of next_dt communication to prep the buffers to have enough size
     std::cout << "prep next dt send" << std::endl;
 
-    std::map<int, std::vector<int>> dep_to_wait_idxs_next_dt;
+    std::unordered_map<int, std::vector<int>> dep_to_wait_idxs_next_dt;
     std::set<int> zoids_already_waiting_on_next_dt;
-    std::map<int, std::vector<int>> zoid_to_wait_idxs_next_dt;
+    std::unordered_map<int, std::vector<int>> zoid_to_wait_idxs_next_dt;
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         int num_zoids = 0;
@@ -4397,7 +4398,7 @@ void Verlet::setup_stencil_md() {
     }
 
     // map dependency levels to number of zoids to wait on
-    std::map<int, std::vector<int>> dep_to_wait_idxs;
+    std::vector<int> dep_to_wait_idxs[NUM_DEPS];
     std::set<int> zoids_already_waiting_on;
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
@@ -5062,7 +5063,7 @@ void Verlet::run(int n) {
 
     // setup data structures to run stencil md
     // map dependency levels to number of zoids to wait on
-    std::map<int, std::vector<int>> dep_to_wait_idxs;
+    std::vector<int> dep_to_wait_idxs[NUM_DEPS];
     std::set<int> zoids_already_waiting_on;
     std::map<int, std::vector<int>> zoid_to_wait_idxs;
 
@@ -5144,7 +5145,7 @@ void Verlet::run(int n) {
     MPI_Barrier(world);
 
     // map dependency levels to number of zoids to wait on
-    std::map<int, std::vector<int>> dep_to_wait_idxs_next_dt;
+    std::vector<int> dep_to_wait_idxs_next_dt[NUM_DEPS];
     std::set<int> zoids_already_waiting_on_next_dt;
     std::map<int, std::vector<int>> zoid_to_wait_idxs_next_dt;
 
@@ -5178,7 +5179,7 @@ void Verlet::run(int n) {
         }
     }
 
-    std::map<int, int> zoid_num_to_num_procs;
+    int zoid_num_to_num_procs[NUM_ZOIDS];
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             int num_procs = 0;
@@ -5200,7 +5201,7 @@ void Verlet::run(int n) {
         }
     }
 
-    std::map<int, int> zoid_num_to_num_procs_next_dt;
+    int zoid_num_to_num_procs_next_dt[NUM_ZOIDS];
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             int num_procs = 0;
@@ -5231,8 +5232,10 @@ void Verlet::run(int n) {
             run_stencil_md(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, zoid_num_to_num_procs, zoid_num_to_num_procs_next_dt,
                            test_f, test_x);
         } else {
+            /*
             run_stencil_md(t, zoid_to_wait_idxs, zoid_to_wait_idxs_next_dt, zoid_num_to_num_procs, zoid_num_to_num_procs_next_dt,
                            test_f, test_x);
+            */
         }
     }
     auto end = std::chrono::high_resolution_clock::now();
@@ -5653,8 +5656,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
     }
 }
 
-void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int>>& dep_to_wait_idxs, std::map<int, std::vector<int>>& dep_to_wait_idxs_next_dt,
-                            std::map<int, int>& zoid_num_to_num_procs, std::map<int, int>& zoid_num_to_num_procs_next_dt,
+void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
+                            int* zoid_num_to_num_procs, int* zoid_num_to_num_procs_next_dt,
                             double** test_f, double** test_x) {
     eflag = 0; vflag = 0;
     bigint ntimestep;
@@ -5800,8 +5803,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
 
                 int vec_idx = 0;
-                // cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
-                for (int proc = 0; proc < comm->nprocs; proc++) {
+                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
+                // for (int proc = 0; proc < comm->nprocs; proc++) {
                     /*
                     bool sent = comm_->send_data_to_process_stencil_md(true,
                         atom_arr, lmp->zoid_num_to_zoid[zoid_num],
@@ -5856,24 +5859,16 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
     // clear force on everything except last timestep of initial,
     auto begin_misc = std::chrono::high_resolution_clock::now();
     cilk_for (int i = 0; i < NUM_ZOIDS; i++) {
-    // for (int i = 0; i < NUM_ZOIDS; i++) {
         if (i % comm->nprocs == comm->me) {
             cilk_for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
                 Atom* atom_ = lmp->atom_stencil_md[i][t];
                 int nall = atom_->nlocal + atom_->nghost;
                 memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
                 memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
-                /*
-                cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
-                     memset(&atom_->f[tid * nall][0], 0, (nall) * 3 * sizeof(double));
-                     memset(&atom_->eval_f_stencil_md[tid * nall][0], 0, (nall) * 3 * sizeof(double));
-                }
-                */
-                // memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double) * comm->nthreads);
-                // memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double) * comm->nthreads);
             }
         }
     }
+
     auto end_misc = std::chrono::high_resolution_clock::now();
     auto duration_misc =
             std::chrono::duration_cast<std::chrono::microseconds>(end_misc - begin_misc).count();
@@ -6003,8 +5998,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 Comm *comm_ = lmp->comm_stencil_md[zoid_num];
 
                 int vec_idx = 0;
-                // cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
-                for (int proc = 0; proc < comm->nprocs; proc++) {
+                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     /*
                     bool sent = comm_->send_data_to_process_stencil_md(false,
                                                                        atom_arr,
@@ -6063,7 +6057,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
     // clear force on everything except first timestep
     // this should get optimized to be `memset` with -O3
     begin_misc = std::chrono::high_resolution_clock::now();
-    // cilk_for (int i = 0; i < NUM_ZOIDS; i++) {
     cilk_for (int i = 0; i < NUM_ZOIDS; i++) {
         if (i % comm->nprocs == comm->me) {
             cilk_for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
@@ -6071,22 +6064,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 int nall = atom_->nlocal + atom_->nghost;
                 memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
                 memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
-                /*
-                cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
-                    memset(&atom_->f[tid * nall][0], 0, (nall) * 3 * sizeof(double));
-                    memset(&atom_->eval_f_stencil_md[tid * nall][0], 0, (nall) * 3 * sizeof(double));
-                }
-                */
-                // memset(&atom_->f[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double) * comm->nthreads);
-                // memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal + atom_->nghost) * 3 * sizeof(double) * comm->nthreads);
-                /*
-                for (int j = 0; j < atom_->nlocal + atom_->nghost; j++) {
-                    for (int dim = 0; dim < 3; dim++) {
-                        atom_->f[j][dim] = 0;
-                        atom_->eval_f_stencil_md[j][dim] = 0;
-                    }
-                }
-                */
             }
         }
     }
