@@ -769,8 +769,10 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
             fix->did_reduce();
         }
 
-        if (lmp->atom->torque)
+        if (lmp->atom->torque) {
+            assert(false);
             data_reduce_thr_stencil_md(&(lmp->atom->torque[0][0]), nall, nthreads, 3, tid);
+        }
     }
     thr->timer(Timer::COMM);
 }
