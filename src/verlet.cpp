@@ -5479,7 +5479,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
                 zoid.can_eval_pos[t]);
         auto end_m = std::chrono::high_resolution_clock::now();
         auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-        modify_duration_cilk[__cilkrts_get_worker_number()] += duration_m;
+        // modify_duration_cilk[__cilkrts_get_worker_number()] += duration_m;
         // modify_duration += duration_m;
 
         if (TEST_AGAINST_LAMMPS_LOCAL) {
@@ -5582,7 +5582,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
             modify_->pre_force_stencil_md(vflag, atom_next_timestep);
             auto end_m = std::chrono::high_resolution_clock::now();
             auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-            modify_pre_force_duration_cilk[__cilkrts_get_worker_number()] += duration_m;
+            // modify_pre_force_duration_cilk[__cilkrts_get_worker_number()] += duration_m;
             // modify_duration += duration_m;
             // timer->stamp(Timer::MODIFY);
         }
@@ -5606,7 +5606,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
                     std::chrono::duration_cast<std::chrono::microseconds>(
                             end - begin)
                             .count();
-            compute_duration_cilk[__cilkrts_get_worker_number()] += duration;
+            // compute_duration_cilk[__cilkrts_get_worker_number()] += duration;
         }
 
         // reverse communication of forces
@@ -5816,7 +5816,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration =
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                send_pack_duration_cilk[__cilkrts_get_worker_number()] += duration;
+                // send_pack_duration_cilk[__cilkrts_get_worker_number()] += duration;
             }
         }
 
@@ -6021,7 +6021,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::map<int, std::vector<int
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration =
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                send_pack_duration_cilk[__cilkrts_get_worker_number()] += duration;
+                // send_pack_duration_cilk[__cilkrts_get_worker_number()] += duration;
             }
         }
 
