@@ -83,6 +83,8 @@ void plus(void *l, void *r) {
 // based on dep of zoids I want to eval
 static int64_t curr_dt_compute_dep_time[NUM_DEPS] = {0};
 static int64_t next_dt_compute_dep_time[NUM_DEPS] = {0};
+static int64_t curr_dt_num_atoms[NUM_DEPS] = {0};
+static int64_t next_dt_num_atoms[NUM_DEPS] = {0};
 
 constexpr int CILK_ARR_SIZE = 100;
 static int64_t compute_duration_cilk[CILK_ARR_SIZE] = {0};
@@ -5242,26 +5244,43 @@ void Verlet::run(int n) {
 
     int64_t stencil_md_total_compute_time_curr_dt_dep[NUM_DEPS] = {0};
     int64_t stencil_md_total_compute_time_next_dt_dep[NUM_DEPS] = {0};
+
+    int64_t stencil_md_total_num_atoms_curr_dt_dep[NUM_DEPS] = {0};
+    int64_t stencil_md_total_num_atoms_next_dt_dep[NUM_DEPS] = {0};
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         int64_t total_compute_time_curr_dt_dep = 0;
         int64_t total_compute_time_next_dt_dep = 0;
+
+        int64_t total_num_atoms_curr_dt_dep = 0;
+        int64_t total_num_atoms_next_dt_dep = 0;
+
         MPI_Allreduce(&curr_dt_compute_dep_time[dep], &total_compute_time_curr_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
         MPI_Allreduce(&next_dt_compute_dep_time[dep], &total_compute_time_next_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
 
+        MPI_Allreduce(&curr_dt_num_atoms[dep], &total_num_atoms_curr_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
+        MPI_Allreduce(&next_dt_num_atoms[dep], &total_num_atoms_next_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
+
         stencil_md_total_compute_time_curr_dt_dep[dep] = total_compute_time_curr_dt_dep;
         stencil_md_total_compute_time_next_dt_dep[dep] = total_compute_time_next_dt_dep;
+
+        stencil_md_total_num_atoms_curr_dt_dep[dep] += total_num_atoms_curr_dt_dep;
+        stencil_md_total_num_atoms_next_dt_dep[dep] += total_num_atoms_next_dt_dep;
     }
 
     if (comm->me == 0) {
         int64_t stencil_md_total_compute_time = 0;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
-            std::cout << CYAN << "CURR DT DEP: " << dep << " total time: " << stencil_md_total_compute_time_curr_dt_dep[dep] << RESET_COLOR << std::endl;
+            std::cout << CYAN << "CURR DT DEP: " << dep << " total time: " << stencil_md_total_compute_time_curr_dt_dep[dep]
+                << " NUM ATOMS: " << stencil_md_total_num_atoms_curr_dt_dep << " ratio: " << (double) stencil_md_total_compute_time_curr_dt_dep[dep] / stencil_md_total_num_atoms_curr_dt_dep[dep] << RESET_COLOR << std::endl;
+
             stencil_md_total_compute_time += stencil_md_total_compute_time_curr_dt_dep[dep];
         }
         for (int dep = 0; dep < NUM_DEPS; dep++) {
-            std::cout << CYAN << "NEXT DT DEP: " << dep << " total time: " << stencil_md_total_compute_time_next_dt_dep[dep] << RESET_COLOR << std::endl;
+            std::cout << CYAN << "NEXT DT DEP: " << dep << " total time: " << stencil_md_total_compute_time_next_dt_dep[dep]
+                << " NUM ATOMS: " << stencil_md_total_num_atoms_next_dt_dep[dep] << " ratio: " << (double) stencil_md_total_compute_time_next_dt_dep[dep] /  stencil_md_total_num_atoms_next_dt_dep[dep] << RESET_COLOR << std::endl;
             stencil_md_total_compute_time += stencil_md_total_compute_time_next_dt_dep[dep];
         }
+
 
         std::cout << CYAN << " TOTAL COMPUTE TIME: " << stencil_md_total_compute_time << RESET_COLOR << std::endl;
     }
@@ -5629,8 +5648,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             if (curr_dt) {
                 curr_dt_compute_dep_time[get_zoid_dep(zoid_num)] += duration;
+                curr_dt_num_atoms[get_zoid_dep(zoid_num)] += atom_next_timestep->nlocal;
             } else {
                 next_dt_compute_dep_time[get_zoid_dep_next_dt(zoid_num)] += duration;
+                next_dt_num_atoms[get_zoid_dep_next_dt(zoid_num)] += atom_next_timestep->nlocal;
             }
             // compute_duration_cilk[__cilkrts_get_worker_number()] += duration;
         }
