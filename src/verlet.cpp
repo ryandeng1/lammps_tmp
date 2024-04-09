@@ -5251,17 +5251,17 @@ void Verlet::run(int n) {
         int64_t total_compute_time_curr_dt_dep = 0;
         int64_t total_compute_time_next_dt_dep = 0;
 
-        int64_t total_num_atoms_curr_dt_dep = 0;
-        int64_t total_num_atoms_next_dt_dep = 0;
-
         MPI_Allreduce(&curr_dt_compute_dep_time[dep], &total_compute_time_curr_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
         MPI_Allreduce(&next_dt_compute_dep_time[dep], &total_compute_time_next_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
 
-        MPI_Allreduce(&curr_dt_num_atoms[dep], &total_num_atoms_curr_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
-        MPI_Allreduce(&next_dt_num_atoms[dep], &total_num_atoms_next_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
-
         stencil_md_total_compute_time_curr_dt_dep[dep] = total_compute_time_curr_dt_dep;
         stencil_md_total_compute_time_next_dt_dep[dep] = total_compute_time_next_dt_dep;
+
+        int64_t total_num_atoms_curr_dt_dep = 0;
+        int64_t total_num_atoms_next_dt_dep = 0;
+
+        MPI_Allreduce(&curr_dt_num_atoms[dep], &total_num_atoms_curr_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
+        MPI_Allreduce(&next_dt_num_atoms[dep], &total_num_atoms_next_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
 
         stencil_md_total_num_atoms_curr_dt_dep[dep] += total_num_atoms_curr_dt_dep;
         stencil_md_total_num_atoms_next_dt_dep[dep] += total_num_atoms_next_dt_dep;
@@ -5353,7 +5353,8 @@ void Verlet::run(int n) {
 }
 
 // assume already have all the data necessary to run the zoid
-void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_dt, int num_procs, double** test_f, double** test_x) {
+template <bool curr_dt>
+void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_procs, double** test_f, double** test_x) {
     int n_pre_force = modify->n_pre_force;
     int n_post_force_any = modify->n_post_force_any;
     int n_end_of_step = modify->n_end_of_step;
@@ -5841,7 +5842,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
             int** atom_idx_mapping = lmp->queues[dep][j].atom_idx_mapping;
 
-            run_stencil_md_zoid(starting_timestep, zoid_num, true, -1, test_f, test_x);
+            run_stencil_md_zoid<true>(starting_timestep, zoid_num, -1, test_f, test_x);
 
             if (dep < NUM_DEPS - 1) {
                 auto begin = std::chrono::high_resolution_clock::now();
@@ -6035,7 +6036,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             auto &atom_arr = lmp->atom_stencil_md[zoid_num];
             int **atom_idx_mapping = zoid.atom_idx_mapping;
 
-            run_stencil_md_zoid(starting_timestep, zoid_num, false, -1, test_f, test_x);
+            run_stencil_md_zoid<false>(starting_timestep, zoid_num, -1, test_f, test_x);
 
             // send data
             if (dep < NUM_DEPS - 1) {
