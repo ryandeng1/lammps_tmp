@@ -88,7 +88,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     const int nthreads = comm->nthreads;
     const int inum = list->inum;
 
-    constexpr int NUM_LOCAL_ATOMS_CUTOFF = 192;
+    constexpr int NUM_LOCAL_ATOMS_CUTOFF = 128;
     if (inum < NUM_LOCAL_ATOMS_CUTOFF) {
         double evdwl = 0.0;
         int nlocal = atom_->nlocal;
