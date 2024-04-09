@@ -478,12 +478,13 @@ void ThrOMP::reduce_thr(void *style, const int eflag, const int vflag,
 }
 
 void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag,
-                        ThrData *const thr, Atom* atom_) {
+                        ThrData *const thr, Atom* atom_, int num_workers) {
     const int nlocal = atom_->nlocal;
     const int nghost = atom_->nghost;
     const int nall = nlocal + nghost;
     const int nfirst = atom_->nfirst;
-    const int nthreads = lmp->comm->nthreads;
+    // const int nthreads = lmp->comm->nthreads;
+    const int nthreads = num_workers;
     const int evflag = eflag | vflag;
 
     const int tid = thr->get_tid();

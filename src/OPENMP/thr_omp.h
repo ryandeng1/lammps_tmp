@@ -84,7 +84,7 @@ class ThrOMP {
 
   // reduce per thread data as needed
   void reduce_thr(void *const style, const int eflag, const int vflag, ThrData *const thr);
-  void reduce_thr_stencil_md(void *const style, const int eflag, const int vflag, ThrData *const thr, Atom* atom_);
+  void reduce_thr_stencil_md(void *const style, const int eflag, const int vflag, ThrData *const thr, Atom* atom_, int num_workers);
 
   // thread safe variant error abort support.
   // signals an error condition in any thread by making

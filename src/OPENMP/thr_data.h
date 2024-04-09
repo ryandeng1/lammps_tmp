@@ -45,7 +45,7 @@ class ThrData {
   // TODO: ryan disabled this to help debug.
   void timer(enum Timer::ttype flag)
   {
-    // if (_timer) _stamp(flag);
+    if (_timer) _stamp(flag);
   };
   double get_time(enum Timer::ttype flag);
 

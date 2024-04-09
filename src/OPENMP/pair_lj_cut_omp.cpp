@@ -283,7 +283,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         ThrData *thr = fix->get_thr(tid);
-        reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
+        reduce_thr_stencil_md(this, eflag, vflag, thr, atom_, nthreads_to_use);
     } // end of omp parallel region
 }
 
