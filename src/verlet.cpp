@@ -72,19 +72,14 @@ static int64_t next_dt_comm_duration = 0;
 static int64_t send_pack_duration = 0;
 static int64_t misc_time = 0;
 
-void zero(void *v) {
-    *(int64_t *)v = 0;
-}
-
-void plus(void *l, void *r) {
-    *(int64_t *)l += *(int64_t *)r;
-}
-
 // based on dep of zoids I want to eval
 static int64_t curr_dt_compute_dep_time[NUM_DEPS] = {0};
 static int64_t next_dt_compute_dep_time[NUM_DEPS] = {0};
 static int64_t curr_dt_num_atoms[NUM_DEPS] = {0};
 static int64_t next_dt_num_atoms[NUM_DEPS] = {0};
+
+static std::vector<int64_t> curr_dt_compute_dep_times_vec[NUM_DEPS];
+static std::vector<int64_t> next_dt_compute_dep_times_vec[NUM_DEPS];
 
 constexpr int CILK_ARR_SIZE = 100;
 static int64_t compute_duration_cilk[CILK_ARR_SIZE] = {0};
@@ -102,6 +97,31 @@ Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
 /* ----------------------------------------------------------------------
    initialization before run
 ------------------------------------------------------------------------- */
+
+double mean(const std::vector<int64_t> &v)
+{
+    int64_t sum = 0;
+
+    for (auto &each: v)
+        sum += each;
+
+    return (double) sum / v.size();
+}
+
+double sd(const std::vector<int64_t> &v)
+{
+    double square_sum_of_difference = 0;
+    double mean_var = mean(v);
+    auto len = v.size();
+
+    double tmp;
+    for (auto &each: v) {
+        tmp = each - mean_var;
+        square_sum_of_difference += tmp * tmp;
+    }
+
+    return std::sqrt(square_sum_of_difference / (len - 1));
+}
 
 void Verlet::init() {
     Integrate::init();
@@ -5284,6 +5304,12 @@ void Verlet::run(int n) {
 
         std::cout << CYAN << " TOTAL COMPUTE TIME: " << stencil_md_total_compute_time << RESET_COLOR << std::endl;
     }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        std::cout << GREEN << "ME: " << comm->me << " curr dt mean: " << mean(curr_dt_compute_dep_times_vec[dep]) << " sd: " << sd(curr_dt_compute_dep_times_vec[dep])
+            << " next dt mean: " << mean(next_dt_compute_dep_times_vec[dep]) << " sd: " << sd(next_dt_compute_dep_times_vec[dep]) << RESET_COLOR << std::endl;
+    }
+
     /*
     std::cout << YELLOW << "me: " << comm->me << " dep times curr dt: " << curr_dt_dep_time[0] << " " << curr_dt_dep_time[1] << " " << curr_dt_dep_time[2] << " " << curr_dt_dep_time[3] << RESET_COLOR << std::endl;
     std::cout << YELLOW << "me: " << comm->me << " dep times next dt: " << next_dt_dep_time[0] << " " << next_dt_dep_time[1] << " " << next_dt_dep_time[2] << " " << next_dt_dep_time[3] << RESET_COLOR << std::endl;
@@ -5650,9 +5676,11 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_pr
             if (curr_dt) {
                 curr_dt_compute_dep_time[get_zoid_dep(zoid_num)] += duration;
                 curr_dt_num_atoms[get_zoid_dep(zoid_num)] += atom_next_timestep->nlocal;
+                curr_dt_compute_dep_times_vec[get_zoid_dep(zoid_num)].push_back(duration);
             } else {
                 next_dt_compute_dep_time[get_zoid_dep_next_dt(zoid_num)] += duration;
                 next_dt_num_atoms[get_zoid_dep_next_dt(zoid_num)] += atom_next_timestep->nlocal;
+                next_dt_compute_dep_times_vec[get_zoid_dep_next_dt(zoid_num)].push_back(duration);
             }
             // compute_duration_cilk[__cilkrts_get_worker_number()] += duration;
         }
