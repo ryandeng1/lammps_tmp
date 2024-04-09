@@ -88,7 +88,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     const int nthreads = comm->nthreads;
     const int inum = list->inum;
 
-    constexpr int NUM_WORKERS_PER_THREAD = 16;
+    constexpr int NUM_WORKERS_PER_THREAD = 32;
     int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
     if (nthreads_to_use < 1) {
         nthreads_to_use = 1;
