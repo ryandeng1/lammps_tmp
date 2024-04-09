@@ -88,6 +88,18 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     const int nthreads = comm->nthreads;
     const int inum = list->inum;
 
+    constexpr int NUM_WORKERS_PER_THREAD = 16;
+    int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
+    if (nthreads_to_use < 1) {
+        nthreads_to_use = 1;
+    }
+    if (nthreads_to_use > nthreads) {
+        nthreads_to_use = nthreads;
+    }
+
+    // std::cout << "zoid: " << zoid.num << " nthreads: " << nthreads << " num workers to use: " << nthreads_to_use << " num local: " << inum << std::endl;
+
+    /*
     constexpr int NUM_LOCAL_ATOMS_CUTOFF = 128;
     if (inum < NUM_LOCAL_ATOMS_CUTOFF) {
         double evdwl = 0.0;
@@ -153,6 +165,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
         return;
     }
+    */
 
 /*
 #if defined(_OPENMP)
@@ -230,11 +243,11 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     }
     */
 
-    cilk_for (int tid = 0; tid < nthreads; tid++) {
+    cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // int ifrom, ito, tid;
         int ifrom, ito;
         // each thread works on a fixed chunk of atoms.
-        const int idelta = 1 + inum / nthreads;
+        const int idelta = 1 + inum / nthreads_to_use;
         ifrom = tid * idelta;
         ito = ((ifrom + idelta) > inum) ? inum : ifrom + idelta;
 
@@ -268,7 +281,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         // reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
     } // end of omp parallel region
 
-    cilk_for (int tid = 0; tid < nthreads; tid++) {
+    cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         ThrData *thr = fix->get_thr(tid);
         reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
     } // end of omp parallel region
