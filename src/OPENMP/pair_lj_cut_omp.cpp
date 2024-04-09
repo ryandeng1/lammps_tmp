@@ -23,6 +23,7 @@
 
 #include "omp_compat.h"
 #include <cilk/cilk.h>
+#include <cilk/cilk_api.h>
 using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
@@ -87,11 +88,147 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     const int nthreads = comm->nthreads;
     const int inum = list->inum;
 
+    constexpr int NUM_LOCAL_ATOMS_CUTOFF = 128;
+    if (inum < NUM_LOCAL_ATOMS_CUTOFF) {
+        double evdwl = 0.0;
+        int nlocal = atom_->nlocal;
+        double** x = atom_->x;
+        double** f = atom_->eval_f_stencil_md;
+        int *type = atom_->type;
+        // these seem like flags
+        double *special_lj = force->special_lj;
+        int newton_pair = force->newton_pair;
+
+        int* ilist = list->ilist;
+        int* numneigh = list->numneigh;
+        int** firstneigh = list->firstneigh;
+
+        // loop over neighbors of my atoms
+        for (int ii = 0; ii < inum; ii++) {
+            int i = ilist[ii];
+            double xtmp = x[i][0];
+            double ytmp = x[i][1];
+            double ztmp = x[i][2];
+            int itype = type[i];
+            int* jlist = firstneigh[i];
+            int jnum = numneigh[i];
+
+            for (int jj = 0; jj < jnum; jj++) {
+                int j = jlist[jj];
+                double factor_lj = special_lj[sbmask(j)];
+                j &= NEIGHMASK;
+
+                double delx = xtmp - x[j][0];
+                double dely = ytmp - x[j][1];
+                double delz = ztmp - x[j][2];
+                double rsq = delx * delx + dely * dely + delz * delz;
+                int jtype = type[j];
+
+                if (rsq < cutsq[itype][jtype]) {
+                    double r2inv = 1.0 / rsq;
+                    double r6inv = r2inv * r2inv * r2inv;
+                    double forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
+                    double fpair = factor_lj * forcelj * r2inv;
+
+                    f[i][0] += delx * fpair;
+                    f[i][1] += dely * fpair;
+                    f[i][2] += delz * fpair;
+                    if (newton_pair || j < nlocal) {
+                        f[j][0] -= delx * fpair;
+                        f[j][1] -= dely * fpair;
+                        f[j][2] -= delz * fpair;
+                    }
+
+                    if (eflag) {
+                        evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
+                        evdwl *= factor_lj;
+                    }
+
+                    if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
+                }
+            }
+        }
+
+        if (vflag_fdotr) virial_fdotr_compute();
+
+        return;
+    }
+
 /*
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(eflag,vflag)
 #endif
 */
+
+    /*
+    cilk_for (int ii = 0; ii < nlocal; ii++) {
+        int tid = __cilkrts_get_worker_number();
+        ThrData *thr = fix->get_thr(tid);
+        auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
+        ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
+
+        const int i = ilist[ii];
+        const int itype = type[i];
+        const int    * _noalias const jlist = firstneigh[i];
+        const double * _noalias const cutsqi = cutsq[itype];
+        const double * _noalias const offseti = offset[itype];
+        const double * _noalias const lj1i = lj1[itype];
+        const double * _noalias const lj2i = lj2[itype];
+        const double * _noalias const lj3i = lj3[itype];
+        const double * _noalias const lj4i = lj4[itype];
+
+        double xtmp = x[i].x;
+        double ytmp = x[i].y;
+        double ztmp = x[i].z;
+        int jnum = numneigh[i];
+        double fxtmp = 0.0;
+        double fytmp = 0.0;
+        double fztmp = 0.0;
+
+        double evdwl = 0.0;
+
+        for (int jj = 0; jj < jnum; jj++) {
+            int j = jlist[jj];
+            double factor_lj = special_lj[sbmask(j)];
+            j &= NEIGHMASK;
+
+            double delx = xtmp - x[j].x;
+            double dely = ytmp - x[j].y;
+            double delz = ztmp - x[j].z;
+            double rsq = delx*delx + dely*dely + delz*delz;
+            int jtype = type[j];
+
+            if (rsq < cutsqi[jtype]) {
+                double r2inv = 1.0/rsq;
+                double r6inv = r2inv*r2inv*r2inv;
+                double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
+                double fpair = factor_lj*forcelj*r2inv;
+
+                fxtmp += delx*fpair;
+                fytmp += dely*fpair;
+                fztmp += delz*fpair;
+                if (force->newton_pair|| j < nlocal) {
+                    f[j].x -= delx*fpair;
+                    f[j].y -= dely*fpair;
+                    f[j].z -= delz*fpair;
+                }
+
+                if (eflag) {
+                    evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+                    evdwl *= factor_lj;
+                }
+
+                if (eflag | vflag) {
+                    ev_tally_thr(this, i, j, nlocal, force->newton_pair,
+                                 evdwl, 0.0, fpair, delx, dely, delz, thr);
+                }
+            }
+        }
+        f[i].x += fxtmp;
+        f[i].y += fytmp;
+        f[i].z += fztmp;
+    }
+    */
 
     cilk_for (int tid = 0; tid < nthreads; tid++) {
         // int ifrom, ito, tid;

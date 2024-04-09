@@ -5596,10 +5596,11 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, bool curr_
 
             int* atom_idx_mapping_ = zoid.atom_idx_mapping[t + 1];
             auto begin = std::chrono::high_resolution_clock::now();
+            int timestep = t + 1;
             next_force->pair->compute_stencil_md(
                     eflag, vflag, atom_next_timestep,
                     zoid.can_eval_center[t + 1],
-                    zoid, nullptr);
+                    zoid, &timestep);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration =
                     std::chrono::duration_cast<std::chrono::microseconds>(
