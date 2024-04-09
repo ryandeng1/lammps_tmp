@@ -6015,6 +6015,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         }
 
         if (dep < NUM_DEPS - 1) {
+            auto begin = std::chrono::high_resolution_clock::now();
             for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
                 queue_info& zoid = lmp->queues_next_dt[dep][j];
                 int zoid_num = zoid.num;
@@ -6034,15 +6035,14 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                         }
                     }
                 }
-                auto begin = std::chrono::high_resolution_clock::now();
                 if (lmp->send_to_neighbors_procs_next_dt[zoid_num].find(comm->me) != lmp->send_to_neighbors_procs_next_dt[zoid_num].end()) {
                     comm_->send_packed_data_to_process_stencil_md(false, zoid,
                                                                   &send_requests_next_dt[zoid_num][vec_idx], comm->me);
                 }
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                send_comm_duration += duration;
             }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            send_comm_duration += duration;
         }
     }
 
