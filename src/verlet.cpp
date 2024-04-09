@@ -4779,7 +4779,6 @@ void Verlet::run(int n) {
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < n + 1; i++) {
-        std::cout << "lammps timestep: " << i << std::endl;
         /*
         if (timer->check_timeout(i)) {
             assert(false);
