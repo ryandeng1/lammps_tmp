@@ -5271,13 +5271,13 @@ void Verlet::run(int n) {
         int64_t stencil_md_total_compute_time = 0;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             std::cout << CYAN << "CURR DT DEP: " << dep << " total time: " << stencil_md_total_compute_time_curr_dt_dep[dep]
-                << " NUM ATOMS: " << stencil_md_total_num_atoms_curr_dt_dep[dep] << " ratio: " << (double) stencil_md_total_compute_time_curr_dt_dep[dep] / stencil_md_total_num_atoms_curr_dt_dep[dep] << RESET_COLOR << std::endl;
+                << " NUM ATOMS: " << stencil_md_total_num_atoms_curr_dt_dep[dep] << " ratio: " << (double) stencil_md_total_num_atoms_curr_dt_dep[dep] / stencil_md_total_compute_time_curr_dt_dep[dep] << RESET_COLOR << std::endl;
 
             stencil_md_total_compute_time += stencil_md_total_compute_time_curr_dt_dep[dep];
         }
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             std::cout << CYAN << "NEXT DT DEP: " << dep << " total time: " << stencil_md_total_compute_time_next_dt_dep[dep]
-                << " NUM ATOMS: " << stencil_md_total_num_atoms_next_dt_dep[dep] << " ratio: " << (double) stencil_md_total_compute_time_next_dt_dep[dep] /  stencil_md_total_num_atoms_next_dt_dep[dep] << RESET_COLOR << std::endl;
+                << " NUM ATOMS: " << stencil_md_total_num_atoms_next_dt_dep[dep] << " ratio: " << (double)  stencil_md_total_num_atoms_next_dt_dep[dep] / stencil_md_total_compute_time_next_dt_dep[dep] << RESET_COLOR << std::endl;
             stencil_md_total_compute_time += stencil_md_total_compute_time_next_dt_dep[dep];
         }
 
