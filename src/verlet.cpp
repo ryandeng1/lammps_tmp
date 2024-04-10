@@ -92,6 +92,8 @@ static cilk::opadd_reducer<int64_t> send_pack_duration_cilk = 0;
 static std::vector<int64_t> lammps_forward_comm_times;
 static std::vector<int64_t> lammps_reverse_comm_times;
 
+static int64_t SIZES = {1, 3, 3, 1};
+
 /* ---------------------------------------------------------------------- */
 
 Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
@@ -5915,11 +5917,10 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
         }
 
-        int64_t num_zoids_in_dep_level = lmp->queues[dep].size();
-        modify_duration += modify_duration_cilk / num_zoids_in_dep_level;
-        compute_duration += compute_duration_cilk / num_zoids_in_dep_level;
-        modify_pre_force_duration += modify_pre_force_duration_cilk / num_zoids_in_dep_level;
-        send_pack_duration += send_pack_duration_cilk / num_zoids_in_dep_level;
+        modify_duration += modify_duration_cilk / SIZES[dep];
+        compute_duration += compute_duration_cilk / SIZES[dep];
+        modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
+        send_pack_duration += send_pack_duration_cilk / SIZES[dep];
 
         if (dep < NUM_DEPS - 1) {
             auto begin = std::chrono::high_resolution_clock::now();
@@ -6095,11 +6096,10 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
             run_stencil_md_zoid<false>(starting_timestep, zoid_num, -1, test_f, test_x);
 
-            int64_t num_zoids_in_dep_level = lmp->queues_next_dt[dep].size();
-            modify_duration += modify_duration_cilk / num_zoids_in_dep_level;
-            compute_duration += compute_duration_cilk / num_zoids_in_dep_level;
-            modify_pre_force_duration += modify_pre_force_duration_cilk / num_zoids_in_dep_level;
-            send_pack_duration += send_pack_duration_cilk / num_zoids_in_dep_level;
+            modify_duration += modify_duration_cilk / SIZES[dep];
+            compute_duration += compute_duration_cilk / SIZES[dep];
+            modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
+            send_pack_duration += send_pack_duration_cilk / SIZES[dep];
 
             // send data
             if (dep < NUM_DEPS - 1) {
