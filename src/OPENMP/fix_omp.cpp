@@ -477,10 +477,26 @@ void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
     double *desph = atom_->desph;
     double *drho = atom_->drho;
 
+    constexpr int NUM_WORKERS_PER_THREAD = 32;
+    int nthreads_to_use = atom_->nlocal / NUM_WORKERS_PER_THREAD;
+    if (nthreads_to_use < 1) {
+        nthreads_to_use = 1;
+    }
+    if (nthreads_to_use > comm->nthreads) {
+        nthreads_to_use = comm->nthreads;
+    }
+
+    cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
+        // thr[tid]->check_tid(tid);
+        thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
+    }
+
+    /*
     cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
         // thr[tid]->check_tid(tid);
         thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
     }
+    */
 
 /*
 #if defined(_OPENMP)
