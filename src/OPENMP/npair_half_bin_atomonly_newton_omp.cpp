@@ -20,6 +20,7 @@
 #include "neigh_list.h"
 #include "npair_omp.h"
 #include "domain.h"
+#include <algorithm>
 
 #include "omp_compat.h"
 
