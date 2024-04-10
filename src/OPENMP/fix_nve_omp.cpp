@@ -116,7 +116,7 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif
 */
-        cilk_for (int i = 0; i < nlocal; i++) {
+        for (int i = 0; i < nlocal; i++) {
             if (mask[i] & groupbit) {
                 const double dtfm = dtf / mass[type[i]];
 
@@ -208,7 +208,7 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif
 */
-        cilk_for (int i = 0; i < nlocal; i++) {
+        for (int i = 0; i < nlocal; i++) {
             int next_idx = atom_idx_mapping[i];
             assert(next_idx != -1);
             next_v[next_idx].x = v[i].x;
@@ -221,7 +221,7 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif
 */
-        cilk_for (int i = 0; i < next_nlocal; i++) {
+        for (int i = 0; i < next_nlocal; i++) {
             if (mask[i] & groupbit) {
                 const double dtfm = dtf / mass[type[i]];
                 next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
