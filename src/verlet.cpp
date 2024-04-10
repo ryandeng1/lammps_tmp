@@ -50,7 +50,6 @@
 #include "pair_lj_cut.h"
 
 #include "stencil_md.h"
-#include <format>
 
 #include <fstream>
 #include <iostream>
