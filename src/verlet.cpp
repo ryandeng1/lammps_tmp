@@ -5303,12 +5303,13 @@ void Verlet::run(int n) {
 
 
         std::cout << CYAN << " TOTAL COMPUTE TIME: " << stencil_md_total_compute_time << RESET_COLOR << std::endl;
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            std::cout << GREEN << "ME: " << comm->me << " curr dt mean: " << mean(curr_dt_compute_dep_times_vec[dep]) << " sd: " << sd(curr_dt_compute_dep_times_vec[dep])
+                      << " next dt mean: " << mean(next_dt_compute_dep_times_vec[dep]) << " sd: " << sd(next_dt_compute_dep_times_vec[dep]) << RESET_COLOR << std::endl;
+        }
     }
 
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        std::cout << GREEN << "ME: " << comm->me << " curr dt mean: " << mean(curr_dt_compute_dep_times_vec[dep]) << " sd: " << sd(curr_dt_compute_dep_times_vec[dep])
-            << " next dt mean: " << mean(next_dt_compute_dep_times_vec[dep]) << " sd: " << sd(next_dt_compute_dep_times_vec[dep]) << RESET_COLOR << std::endl;
-    }
 
     /*
     std::cout << YELLOW << "me: " << comm->me << " dep times curr dt: " << curr_dt_dep_time[0] << " " << curr_dt_dep_time[1] << " " << curr_dt_dep_time[2] << " " << curr_dt_dep_time[3] << RESET_COLOR << std::endl;
