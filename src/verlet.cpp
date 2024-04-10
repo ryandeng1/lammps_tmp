@@ -5686,6 +5686,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_pr
                     zoid, &timestep);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            /*
             if (curr_dt) {
                 curr_dt_compute_dep_time[get_zoid_dep(zoid_num)] += duration;
                 curr_dt_num_atoms[get_zoid_dep(zoid_num)] += atom_next_timestep->nlocal;
@@ -5695,6 +5696,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_pr
                 next_dt_num_atoms[get_zoid_dep_next_dt(zoid_num)] += atom_next_timestep->nlocal;
                 next_dt_compute_dep_times_vec[get_zoid_dep_next_dt(zoid_num)].push_back(duration);
             }
+            */
             // compute_duration_cilk[__cilkrts_get_worker_number()] += duration;
         }
 
@@ -5844,7 +5846,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
         }
 
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+        cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
+        // for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
@@ -6040,7 +6043,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
         }
 
-        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+        cilk_for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info &zoid = lmp->queues_next_dt[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
