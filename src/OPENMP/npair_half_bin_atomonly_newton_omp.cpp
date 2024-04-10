@@ -304,12 +304,10 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
             error->one(FLERR,"Neighbor list overflow, boost neigh_modify one");
 
         // std::cout << "sorting: " << std::is_sorted(neighbors.begin(), neighbors.end()) << std::endl;
-        /*
         std::sort(neighbors.begin(), neighbors.end());
         for (int neigh_idx = 0; neigh_idx < n; neigh_idx++) {
             neighptr[neigh_idx] = neighbors[neigh_idx];
         }
-        */
     }
 
     list->inum = inum;
