@@ -92,7 +92,7 @@ static cilk::opadd_reducer<int64_t> send_pack_duration_cilk = 0;
 static std::vector<int64_t> lammps_forward_comm_times;
 static std::vector<int64_t> lammps_reverse_comm_times;
 
-static int64_t SIZES = {1, 3, 3, 1};
+static int64_t SIZES[NUM_DEPS] = {1, 3, 3, 1};
 
 /* ---------------------------------------------------------------------- */
 
