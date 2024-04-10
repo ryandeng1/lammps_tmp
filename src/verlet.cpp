@@ -50,12 +50,14 @@
 #include "pair_lj_cut.h"
 
 #include "stencil_md.h"
+#include <format>
 
 #include <fstream>
 #include <iostream>
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
 #include <unordered_map>
+#include <sstream>
 
 using namespace LAMMPS_NS;
 
@@ -5048,30 +5050,41 @@ void Verlet::run(int n) {
                   << std::endl;
     }
 
-    /*
     if (comm->me == 0) {
-        std::ofstream f("forward_comm_times");
-        for (int k = 0; k < lammps_forward_comm_times.size(); k++) {
-            if (k == lammps_forward_comm_times.size() - 1) {
-                f << lammps_forward_comm_times[k];
-            } else {
-                f << lammps_forward_comm_times[k] << ",";
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            std::ostringstream stringStream;
+            stringStream << "curr_dt_dep_" << dep;
+            std::string copyOfStr = stringStream.str();
+            std::ofstream f(copyOfStr);
+
+            for (int k = 0; k < curr_dt_compute_dep_times_vec[dep].size(); k++) {
+                if (k == lammps_forward_comm_times.size() - 1) {
+                    f << curr_dt_compute_dep_times_vec[dep][k];
+                } else {
+                    f << curr_dt_compute_dep_times_vec[dep][k] << ",";
+                }
             }
+
+            f.close();
         }
 
-        std::ofstream f2("reverse_comm_times");
-        for (int k = 0; k < lammps_reverse_comm_times.size(); k++) {
-            if (k == lammps_reverse_comm_times.size() - 1) {
-                f2 << lammps_reverse_comm_times[k];
-            } else {
-                f2 << lammps_reverse_comm_times[k] << ",";
-            }
-        }
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            std::ostringstream stringStream;
+            stringStream << "next_dt_dep_" << dep;
+            std::string copyOfStr = stringStream.str();
+            std::ofstream f(copyOfStr);
 
-        f.close();
-        f2.close();
+            for (int k = 0; k < next_dt_compute_dep_times_vec[dep].size(); k++) {
+                if (k == lammps_forward_comm_times.size() - 1) {
+                    f << next_dt_compute_dep_times_vec[dep][k];
+                } else {
+                    f << next_dt_compute_dep_times_vec[dep][k] << ",";
+                }
+            }
+
+            f.close();
+        }
     }
-    */
 
     delete[] send_f;
     delete[] send_x;
