@@ -162,6 +162,8 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
 
         std::set<int> neighbor_idxs;
 
+        std::vector<int> neighbors;
+
         // loop over rest of atoms in i's bin, ghosts are at end of linked list
         // if j is owned atom, store it, since j is beyond i in linked list
         // if j is ghost, only store if j coords are "above and to the right" of i
@@ -170,15 +172,6 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
             if (i == j) {
                 continue;
             }
-            /*
-            if (j >= nlocal) {
-                if (x[j][2] < ztmp) continue;
-                if (x[j][2] == ztmp) {
-                    if (x[j][1] < ytmp) continue;
-                    if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
-                }
-            }
-            */
 
             if (j < nlocal) {
                 if (x[j][2] < ztmp) continue;
@@ -215,14 +208,6 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
 
                 bool add_ghost_edge = shrinking_out_of_bounds;
 
-                if (debug) {
-                    std::cout << "zoid: " << zoid.num << " my bin my pos: " << x[i][0] << " " << x[i][1] << " " << x[i][2] << " other pos: " << x[j][0] << " " << x[j][1] << " " << x[j][2]
-                              << " lo: " << debug_lo[0] << " " << debug_lo[1] << " " << debug_lo[2]
-                              << " hi: " << debug_hi[0] << " " << debug_hi[1] << " " << debug_hi[2]
-                              << " add ghost edge? " << debug_ghost_edge[0] << " " << debug_ghost_edge[1] << " " << debug_ghost_edge[2]
-                              << std::endl;
-                }
-
                 if (!add_ghost_edge) {
                     continue;
                 }
@@ -240,6 +225,7 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                 assert(neighbor_idxs.find(j) == neighbor_idxs.end());
                 neighbor_idxs.insert(j);
                 neighptr[n++] = j;
+                neighbors.push_back(j);
             }
         }
 
@@ -249,13 +235,6 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
 
         for (k = 0; k < nstencil; k++) {
             for (j = binhead[ibin+stencil[k]]; j >= 0; j = bins[j]) {
-                bool debug2 = false;
-                if (debug2) {
-                    std::cout << "FOUND TARGET ATOM in stencil? idx i: "
-                              << i << " tag i: " << atom_->tag[i] << " idx j: " << j << " tag j: " << atom_->tag[j] << " nlocal? " << nlocal
-                              << " cut neigh sq? " << cutneighsq[itype][jtype]
-                              << std::endl;
-                }
                 if (i == j) {
                     continue;
                 }
@@ -270,18 +249,11 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                         if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
                     }
                 }
-                if (debug2) {
-                    std::cout << "PASSED THE GAUNTLET FOUND TARGET ATOM in stencil? idx i: "
-                              << i << " tag i: " << atom_->tag[i] << " idx j: " << j << " tag j: " << atom_->tag[j] << " nlocal? " << nlocal
-                              << " rsq? " << rsq << " cut neigh sq? " << cutneighsq[itype][jtype]
-                              << std::endl;
-                }
 
                 if (j >= nlocal) {
                     bool debug = false;
                     double debug_lo[3] = {0};
                     double debug_hi[3] = {0};
-                    bool debug_ghost_edge[3] = {false, false, false};
                     bool shrinking_out_of_bounds = false;
                     bool expanding_out_of_bounds = false;
 
@@ -301,14 +273,6 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
 
                     bool add_ghost_edge = shrinking_out_of_bounds;
 
-                    if (debug) {
-                        std::cout << GREEN << "zoid: " << zoid.num << " other bin my tag: " << atom_->tag[i] << " other tag: " << atom_->tag[j] << " my pos: " << x[i][0] << " " << x[i][1] << " " << x[i][2] << " other pos: " << x[j][0] << " " << x[j][1] << " " << x[j][2]
-                                  << " lo: " << debug_lo[0] << " " << debug_lo[1] << " " << debug_lo[2]
-                                  << " hi: " << debug_hi[0] << " " << debug_hi[1] << " " << debug_hi[2]
-                                  << " add ghost edge? " << debug_ghost_edge[0] << " " << debug_ghost_edge[1] << " " << debug_ghost_edge[2]
-                                  << " final res? " << add_ghost_edge << RESET_COLOR << std::endl;
-                    }
-
                     if (!add_ghost_edge) {
                         continue;
                     }
@@ -317,31 +281,16 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                 jtype = type[j];
                 if (exclude && exclusion(i,j,itype,jtype,mask,molecule)) continue;
 
-                if (debug2) {
-                    std::cout << "PASSED YET ANOTHER TEST FOUND TARGET ATOM in stencil? idx i: "
-                              << i << " tag i: " << atom_->tag[i] << " idx j: " << j << " tag j: " << atom_->tag[j] << " nlocal? " << nlocal
-                              << " rsq? " << rsq << " cut neigh sq? " << cutneighsq[itype][jtype]
-                              << std::endl;
-                }
-
                 delx = xtmp - x[j][0];
                 dely = ytmp - x[j][1];
                 delz = ztmp - x[j][2];
                 rsq = delx*delx + dely*dely + delz*delz;
 
                 if (rsq <= cutneighsq[itype][jtype]) {
-                    if (neighbor_idxs.find(j) != neighbor_idxs.end()) {
-                        std::cout << RED << "zoid: " << zoid.num << " src idx: " << i << " repeated idx: " << j << RESET_COLOR << std::endl;
-                    }
                     assert(neighbor_idxs.find(j) == neighbor_idxs.end());
                     neighbor_idxs.insert(j);
                     neighptr[n++] = j;
-                    if (debug2) {
-                        std::cout << "GOTTEM TARGET ATOM in stencil? idx i: "
-                                  << i << " tag i: " << atom_->tag[i] << " idx j: " << j << " tag j: " << atom_->tag[j] << " nlocal? " << nlocal
-                                  << " rsq? " << rsq << " cut neigh sq? " << cutneighsq[itype][jtype]
-                                  << " list? " << list << std::endl;
-                    }
+                    neighbors.push_back(j);
                 }
             }
         }
@@ -352,10 +301,24 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
         ipage->vgot(n);
         if (ipage->status())
             error->one(FLERR,"Neighbor list overflow, boost neigh_modify one");
-    }
 
-    if (zoid.num == 24) {
-        // assert(false);
+        std::sort(neighbors.begin(), neighbors.end());
+        for (int neigh_idx = 0; neigh_idx < n; neigh_idx++) {
+            neighptr[neigh_idx] = neighbors[neigh_idx];
+        }
+
+        /*
+        if (zoid.num == 35) {
+            for (int neigh_idx = 0; neigh_idx < neighbors.size(); neigh_idx++) {
+                std::cout << YELLOW << "UNSORTED local idx: " << i << " neighbor idx: " <<  neigh_idx << " neighbor: " << neighbors[neigh_idx] << RESET_COLOR << std::endl;
+            }
+            std::sort(neighbors.begin(), neighbors.end());
+            for (int neigh_idx = 0; neigh_idx < neighbors.size(); neigh_idx++) {
+                std::cout << GREEN << "SORTED local idx: " << i << " neighbor idx: " <<  neigh_idx << " neighbor: " << neighbors[neigh_idx] << RESET_COLOR << std::endl;
+            }
+
+        }
+        */
     }
 
     list->inum = inum;

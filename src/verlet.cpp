@@ -6040,7 +6040,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
         }
 
-        cilk_for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info &zoid = lmp->queues_next_dt[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
