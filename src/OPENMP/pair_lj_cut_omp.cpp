@@ -53,6 +53,29 @@ void PairLJCutOMP::compute(int eflag, int vflag)
   const int nthreads = comm->nthreads;
   const int inum = list->inum;
 
+  /*
+  if (comm->me == 0) {
+      int* ilist = list->ilist;
+      int* numneigh = list->numneigh;
+      int** firstneigh = list->firstneigh;
+
+      // loop over neighbors of my atoms
+      for (int ii = 0; ii < inum; ii++) {
+          int i = ilist[ii];
+          int* jlist = firstneigh[i];
+          int jnum = numneigh[i];
+
+          for (int jj = 0; jj < jnum; jj++) {
+              int j = jlist[jj];
+
+              std::cout << "me: " << comm->me << " i: " << i << " neighbor j: " << j << std::endl;
+          }
+      }
+
+      assert(false);
+  }
+  */
+
 
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(eflag,vflag)
@@ -88,7 +111,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     const int nthreads = comm->nthreads;
     const int inum = list->inum;
 
-    constexpr int NUM_WORKERS_PER_THREAD = 32;
     int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
     if (nthreads_to_use < 1) {
         nthreads_to_use = 1;
@@ -100,16 +122,8 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     // std::cout << "zoid: " << zoid.num << " nthreads: " << nthreads << " num workers to use: " << nthreads_to_use << " num local: " << inum << std::endl;
 
     /*
-    constexpr int NUM_LOCAL_ATOMS_CUTOFF = 128;
-    if (inum < NUM_LOCAL_ATOMS_CUTOFF) {
-        double evdwl = 0.0;
+    if (true) {
         int nlocal = atom_->nlocal;
-        double** x = atom_->x;
-        double** f = atom_->eval_f_stencil_md;
-        int *type = atom_->type;
-        // these seem like flags
-        double *special_lj = force->special_lj;
-        int newton_pair = force->newton_pair;
 
         int* ilist = list->ilist;
         int* numneigh = list->numneigh;
@@ -118,52 +132,19 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         // loop over neighbors of my atoms
         for (int ii = 0; ii < inum; ii++) {
             int i = ilist[ii];
-            double xtmp = x[i][0];
-            double ytmp = x[i][1];
-            double ztmp = x[i][2];
-            int itype = type[i];
             int* jlist = firstneigh[i];
             int jnum = numneigh[i];
 
             for (int jj = 0; jj < jnum; jj++) {
                 int j = jlist[jj];
-                double factor_lj = special_lj[sbmask(j)];
-                j &= NEIGHMASK;
 
-                double delx = xtmp - x[j][0];
-                double dely = ytmp - x[j][1];
-                double delz = ztmp - x[j][2];
-                double rsq = delx * delx + dely * dely + delz * delz;
-                int jtype = type[j];
-
-                if (rsq < cutsq[itype][jtype]) {
-                    double r2inv = 1.0 / rsq;
-                    double r6inv = r2inv * r2inv * r2inv;
-                    double forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
-                    double fpair = factor_lj * forcelj * r2inv;
-
-                    f[i][0] += delx * fpair;
-                    f[i][1] += dely * fpair;
-                    f[i][2] += delz * fpair;
-                    if (newton_pair || j < nlocal) {
-                        f[j][0] -= delx * fpair;
-                        f[j][1] -= dely * fpair;
-                        f[j][2] -= delz * fpair;
-                    }
-
-                    if (eflag) {
-                        evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
-                        evdwl *= factor_lj;
-                    }
-
-                    if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
+                if (num_eval != nullptr && ((zoid.num == 63 && *num_eval == 1))) {
+                    std::cout << YELLOW << "zoid: " << zoid.num << " time: " << *num_eval << " i: " << i << " neighbor: " << j << " nlocal: " << atom_->nlocal << " nghost: " << atom_->nlocal + atom_->nghost
+                        << " tag i: " << atom_->tag[i] << " tag j: " << atom_->tag[j] << " pos i: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2]
+                        << " pos j: " << atom_->x[j][0] << " " << atom_->x[j][1] << " " << atom_->x[j][2] << RESET_COLOR << std::endl;
                 }
             }
         }
-
-        if (vflag_fdotr) virial_fdotr_compute();
-
-        return;
     }
     */
 

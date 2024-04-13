@@ -477,7 +477,6 @@ void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
     double *desph = atom_->desph;
     double *drho = atom_->drho;
 
-    constexpr int NUM_WORKERS_PER_THREAD = 32;
     int nthreads_to_use = atom_->nlocal / NUM_WORKERS_PER_THREAD;
     if (nthreads_to_use < 1) {
         nthreads_to_use = 1;

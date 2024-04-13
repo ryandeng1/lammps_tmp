@@ -1625,55 +1625,9 @@ void CommBrick::construct_send_list_stencil_md_send(
                     */
                 }
 
-                /*
-                if (in_zoid && (zoid.relevant_atom_idxs[t].find(j) == zoid.relevant_atom_idxs[t].end()) && send_zoid_num == 17 && t == 0) {
-                    std::cout << RED << "zoid: " << zoid.num << " send to: " << send_zoid_num << " time: " << t << " affected " << " can eval center? " << zoid.can_eval_center[t][j]
-                              << "idx: " << j << " pos: " << atom_->x[j][0] << " " << atom_->x[j][1] << " " << atom_->x[j][2]
-                              << " tag: " << atom_->tag[j] << " size relevant? " << zoid.relevant_atom_idxs[t].size() << RESET_COLOR << std::endl;
-                }
-                */
-
-                /*
-                bool at_least_one_shrinking_expanding_pair = false;
-                for (int dim = 0; dim < 3; dim++) {
-                    double value = pos[dim];
-                    bool my_zoid_shrinking_dim = zoid.zoid.cuts[dim].slope_lower > 0;
-                    bool send_zoid_shrinking_dim = send_zoid.zoid.cuts[dim].slope_lower > 0;
-                    if (my_zoid_shrinking_dim && !send_zoid_shrinking_dim) {
-                        at_least_one_shrinking_expanding_pair = true;
-                    }
-                }
-
-                if (!at_least_one_shrinking_expanding_pair && in_zoid && send_zoid_num == 57) {
-                    std::cout << RED << "zoid: " << zoid.num << " send to: " << send_zoid_num << " time: " << t << " affected "
-                        << " pos: " << atom_->x[j][0] << " " << atom_->x[j][1] << " " << atom_->x[j][2]
-                        << " tag: " << atom_->tag[j] << RESET_COLOR << std::endl;
-                }
-                */
-
                 // atoms that are neighbors of neighbors also need to be send
                 // technically always send force?
-                /*
-                if (in_zoid && zoid.relevant_atom_idxs[t].find(j) != zoid.relevant_atom_idxs[t].end()) {
-                // if (in_zoid) {
-                  if (nsend_stencil_md == maxsendlist_stencil_md[t][i]) {
-                    grow_list_stencil_md(i, nsend_stencil_md, t);
-                  }
-                  sendlist_stencil_md[t][i][nsend_stencil_md] = j;
-                  send_force_stencil_md[t][i][nsend_stencil_md] = in_zoid;
-                  send_pos_stencil_md[t][i][nsend_stencil_md] = can_send[t][j];
-                  send_vel_stencil_md[t][i][nsend_stencil_md] = can_send[t][j];
 
-                  // buf_send_stencil_md[i][buf_idx++] = ubuf(atom_->tag[j]).d;
-
-                  nsend_stencil_md++;
-
-                  idx_vec_force[t].push_back(j);
-                  if (can_send[t][j]) {
-                      idx_vec_pos[t].push_back(j);
-                  }
-                }
-                */
                 if (in_zoid) {
                     if (can_send[t][j]) {
                         idx_vec_pos[t].push_back(j);

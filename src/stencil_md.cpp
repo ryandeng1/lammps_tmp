@@ -273,6 +273,7 @@ void StencilMD::CREATE_NEXT_DT() {
 void StencilMD::INIT_ZOIDS() {
     get_zoids(ALLEGRO_SLOPE, domain->boxlo, domain->boxhi, lmp->queues);
 
+    std::cout << "map size: " << zoid_to_num_map.size() << std::endl;
     assert(zoid_to_num_map.size() == NUM_ZOIDS);
     std::set<int> zoid_nums;
     for (auto& [k, v] : zoid_to_num_map) {

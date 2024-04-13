@@ -74,6 +74,8 @@ constexpr bool TRY_PRECOMPUTE_RELEVANT_ATOM_IDX = false;
 
 constexpr bool DEBUG = true;
 
+constexpr int NUM_WORKERS_PER_THREAD = 64;
+
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
         {std::make_tuple(RIGHT, RIGHT, RIGHT), 1},

@@ -43,14 +43,16 @@ using namespace LAMMPS_NS;
 
 int main(int argc, char **argv)
 {
-  MPI_Init(&argc, &argv);
-  /*
+  // MPI_Init(&argc, &argv);
   // TODO: Ryan stencil md, change this back if needed?
   int provided;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
   assert(provided >= MPI_THREAD_MULTIPLE);
+  if (provided < MPI_THREAD_MULTIPLE) {
+    std::cout << "COULD NOT PROVIDE MPI_THREAD_MULTIPLE" << std::endl;
+    return 0;
+  }
   // std::cout << "MPI Thread provided: " << provided << std::endl;
-  */
 
   MPI_Comm lammps_comm = MPI_COMM_WORLD;
 
