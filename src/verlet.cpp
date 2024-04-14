@@ -5863,9 +5863,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             comm->receive_data_process_stencil_md(true, &receive_requests[recv_idx++], recv_zoid_num, false);
         }
     }
-    auto end_r = std::chrono::high_resolution_clock::now();
-    auto duration_r = std::chrono::duration_cast<std::chrono::microseconds>(end_r - begin_r).count();
-    pre_recv_time += duration_r;
 
     // start compute
     std::vector<MPI_Request> send_requests[NUM_ZOIDS];
@@ -5877,6 +5874,10 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             send_requests[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
         }
     }
+
+    auto end_r = std::chrono::high_resolution_clock::now();
+    auto duration_r = std::chrono::duration_cast<std::chrono::microseconds>(end_r - begin_r).count();
+    pre_recv_time += duration_r;
 
     /*
     for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -6112,9 +6113,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             comm->receive_data_process_stencil_md(false, &receive_requests_next_dt[recv_idx++], recv_zoid_num, false);
         }
     }
-    end_r = std::chrono::high_resolution_clock::now();
-    duration_r = std::chrono::duration_cast<std::chrono::microseconds>(end_r - begin_r).count();
-    pre_recv_time += duration_r;
 
     // start compute
     std::vector<MPI_Request> send_requests_next_dt[NUM_ZOIDS];
@@ -6125,6 +6123,10 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             send_requests_next_dt[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
         }
     }
+
+    end_r = std::chrono::high_resolution_clock::now();
+    duration_r = std::chrono::duration_cast<std::chrono::microseconds>(end_r - begin_r).count();
+    pre_recv_time += duration_r;
 
     running_recv_idx = 0;
     // start compute
