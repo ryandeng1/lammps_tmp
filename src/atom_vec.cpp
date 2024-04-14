@@ -1938,17 +1938,27 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             int segment_idx = segment_idxs_buf[i];
             int counter = segment_idx * (3) + pos_start_idx;
             if (segment_type == RECV_DATA_PROCESS_LOCAL) {
-                for (int j = 0; j < segment_size; j++) {
+                cilk_for (int j = 0; j < segment_size; j++) {
+                    /*
                     double x_x = buf[counter++];
                     double x_y = buf[counter++];
                     double x_z = buf[counter++];
 
                     int idx = recv_pos_local_list[local_list_idx++];
+                    */
+
+                    double x_x = buf[counter + j * 3];
+                    double x_y = buf[counter + j * 3 + 1];
+                    double x_z = buf[counter + j * 3 + 2];
+
+                    int idx = recv_pos_local_list[local_list_idx + j];
 
                     x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
                     x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
                     x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
                 }
+
+                local_list_idx += segment_size;
             } else {
                 assert(segment_type == RECV_DATA_PROCESS_GHOST);
                 for (int j = 0; j < segment_size; j++) {
@@ -1977,10 +1987,15 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
         m = vel_start_idx;
 
-        for (int i = 0; i < num_recv_vel; i++) {
+        cilk_for (int i = 0; i < num_recv_vel; i++) {
+            /*
             double v_x = buf[m++];
             double v_y = buf[m++];
             double v_z = buf[m++];
+            */
+            double v_x = buf[m + i * 3];
+            double v_y = buf[m + i * 3 + 1];
+            double v_z = buf[m + i * 3 + 2];
 
             int idx = recv_pos_local_list[i];
 
