@@ -6099,7 +6099,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 auto end2 = std::chrono::high_resolution_clock::now();
                 auto duration2 =
                         std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
-                unpack_self_time += duration;
+                unpack_self_time += duration2;
             }
         }
     }
@@ -6329,7 +6329,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 auto end2 = std::chrono::high_resolution_clock::now();
                 auto duration2 =
                         std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
-                unpack_self_time += duration;
+                unpack_self_time += duration2;
             }
         }
     }
