@@ -1905,7 +1905,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
 
-        #pragma cilk grainsize NUM_WORKERS_PER_THREAD
+        #pragma cilk grainsize 256
         cilk_for (int i = 0; i < num_recv_force; i++) {
             /*
             double f_x = buf[m++];
@@ -1939,7 +1939,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             int segment_idx = segment_idxs_buf[i];
             int counter = segment_idx * (3) + pos_start_idx;
             if (segment_type == RECV_DATA_PROCESS_LOCAL) {
-                #pragma cilk grainsize NUM_WORKERS_PER_THREAD
+                #pragma cilk grainsize 256
                 cilk_for (int j = 0; j < segment_size; j++) {
                     /*
                     double x_x = buf[counter++];
@@ -1989,7 +1989,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
         m = vel_start_idx;
 
-        #pragma cilk grainsize NUM_WORKERS_PER_THREAD
+        #pragma cilk grainsize 256
         cilk_for (int i = 0; i < num_recv_vel; i++) {
             /*
             double v_x = buf[m++];
