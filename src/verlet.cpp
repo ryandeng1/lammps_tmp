@@ -84,6 +84,8 @@ static int64_t next_dt_comm_duration = 0;
 static int64_t send_pack_duration = 0;
 static int64_t misc_time = 0;
 
+static int64_t unpack_self_time = 0;
+
 static int64_t pre_recv_time = 0;
 
 // based on dep of zoids I want to eval
@@ -5421,6 +5423,7 @@ void Verlet::run(int n) {
     int64_t stencil_md_total_send_pack_duration = 0;
     int64_t stencil_md_total_misc_duration = 0;
     int64_t stencil_md_total_pre_recv_time = 0;
+    int64_t stencil_md_total_unpack_self_time = 0;
 
     // int64_t my_compute_duration = curr_dt_compute_duration + next_dt_compute_duration;
 
@@ -5430,6 +5433,7 @@ void Verlet::run(int n) {
 
     MPI_Allreduce(&mpi_duration, &stencil_md_total_mpi_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&misc_time, &stencil_md_total_misc_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&unpack_self_time, &stencil_md_total_unpack_self_time, 1, MPI_INT64_T, MPI_SUM, world);
 
     MPI_Allreduce(&pre_recv_time, &stencil_md_total_pre_recv_time, 1, MPI_INT64_T, MPI_SUM, world);
     // MPI_Allreduce(&curr_dt_comm_duration, &stencil_md_total_curr_dt_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
@@ -5450,7 +5454,8 @@ void Verlet::run(int n) {
                   << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration
                   << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration
                   << " TOTAL MISC DURATION: " << stencil_md_total_misc_duration
-                  << " TOTAL PRE-RECV TIME: " << stencil_md_total_pre_recv_time << RESET_COLOR << std::endl;
+                  << " TOTAL PRE-RECV TIME: " << stencil_md_total_pre_recv_time
+                  << " TOTAL UNPACK SELF TIME: " << stencil_md_total_unpack_self_time << RESET_COLOR << std::endl;
 
         std::cout << YELLOW << "CURR DT TOTAL COMM DURATION: " << stencil_md_total_curr_dt_comm_duration
                   << " NEXT DT COMM DURATION: " << stencil_md_total_next_dt_comm_duration << RESET_COLOR << std::endl;
@@ -6086,9 +6091,15 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 auto duration =
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                 send_comm_duration += duration;
+
+                auto begin2 = std::chrono::high_resolution_clock::now();
                 if (lmp->send_to_neighbors_procs[zoid_num].find(comm->me) != lmp->send_to_neighbors_procs[zoid_num].end()) {
                     comm_->send_packed_data_to_process_stencil_md(true, zoid, nullptr, comm->me);
                 }
+                auto end2 = std::chrono::high_resolution_clock::now();
+                auto duration2 =
+                        std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
+                unpack_self_time += duration;
             }
         }
     }
@@ -6310,9 +6321,15 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                 send_comm_duration += duration;
+
+                auto begin2 = std::chrono::high_resolution_clock::now();
                 if (lmp->send_to_neighbors_procs_next_dt[zoid_num].find(comm->me) != lmp->send_to_neighbors_procs_next_dt[zoid_num].end()) {
                     comm_->send_packed_data_to_process_stencil_md(false, zoid, nullptr, comm->me);
                 }
+                auto end2 = std::chrono::high_resolution_clock::now();
+                auto duration2 =
+                        std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
+                unpack_self_time += duration;
             }
         }
     }
