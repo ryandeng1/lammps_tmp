@@ -994,7 +994,7 @@ void CommBrick::exchange()
 // send the data from the current process to the domains created by stencil_md
 // calls the "lammps" version of atom and comm and clears everything out,
 // migrates all the shit over to "stencil_md" send to process that owns the zoid
-void CommBrick::exchange_stencil_md_initial_send()
+void CommBrick::exchange_stencil_md_initial_send(std::vector<MPI_Request>& r)
 {
   int i, m, nsend, nrecv, nrecv1, nrecv2, nlocal;
   double lo, hi, value;
@@ -1044,16 +1044,14 @@ void CommBrick::exchange_stencil_md_initial_send()
   // atom->nlocal = nlocal;
   // send atoms to zoids from dep level 0 to 4.
   std::vector<MPI_Request> requests;
+  int idx = 0;
   for (int dep = 0; dep < NUM_DEPS; dep++) {
     for (int j = 0; j < lmp->queues[dep].size(); j++) {
       queue_info &zoid = lmp->queues[dep][j];
       int zoid_num = zoid.num;
-      MPI_Request r1;
-      MPI_Request r2;
-      MPI_Isend(&stencil_md_initial_exchange_nsend, 1, MPI_INT, zoid_num % comm->nprocs, zoid_num, world, &r1);
-      MPI_Isend(buf_send, stencil_md_initial_exchange_nsend, MPI_DOUBLE, zoid_num % comm->nprocs, zoid_num, world, &r2);
-      requests.push_back(r1);
-      requests.push_back(r2);
+      MPI_Isend(&stencil_md_initial_exchange_nsend, 1, MPI_INT, zoid_num % comm->nprocs, zoid_num, world, &r[2 * idx]);
+      MPI_Isend(buf_send, stencil_md_initial_exchange_nsend, MPI_DOUBLE, zoid_num % comm->nprocs, zoid_num, world, &r[2 * idx + 1]);
+      idx++;
     }
   }
 

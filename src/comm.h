@@ -82,7 +82,7 @@ class Comm : protected Pointers {
   virtual void borders() = 0;                      // setup list of atoms to comm
 
   virtual void exchange_stencil_md_initial_send_to_dep0() { assert(false); };
-  virtual void exchange_stencil_md_initial_send() { assert(false); };
+  virtual void exchange_stencil_md_initial_send(std::vector<MPI_Request>& r) { assert(false); };
   virtual void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) { assert(false); };
   virtual void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) { assert(false); }
 

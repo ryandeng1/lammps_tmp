@@ -34,7 +34,7 @@ class CommBrick : public Comm {
   void borders() override;                      // setup list of atoms to comm
 
   void exchange_stencil_md_initial_send_to_dep0() override;                     // move atoms to new procs, stencil_md version
-  void exchange_stencil_md_initial_send() override;                     // move atoms to new procs, stencil_md version
+  void exchange_stencil_md_initial_send(std::vector<MPI_Request>& r) override;                     // move atoms to new procs, stencil_md version
   void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;                     // move atoms to new procs, stencil_md version
   void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
 
