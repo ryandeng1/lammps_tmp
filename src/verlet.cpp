@@ -6020,7 +6020,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
                 int vec_idx = 0;
-                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
+                for (int proc = 0; proc < comm->nprocs; proc++) {
                     if (proc != comm->me
                         && lmp->send_to_neighbors_procs[zoid_num].find(proc) != lmp->send_to_neighbors_procs[zoid_num].end()) {
                         bool sent = comm_->send_packed_data_to_process_stencil_md(true, zoid, &send_requests[zoid_num][proc], proc);
@@ -6242,7 +6242,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
                 int vec_idx = 0;
-                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
+                for (int proc = 0; proc < comm->nprocs; proc++) {
                     if (proc != comm->me
                             && lmp->send_to_neighbors_procs_next_dt[zoid_num].find(proc) != lmp->send_to_neighbors_procs_next_dt[zoid_num].end()) {
                         // bool sent = comm_->send_packed_data_to_process_stencil_md(false, zoid, &send_requests_next_dt[zoid_num][vec_idx], proc);
