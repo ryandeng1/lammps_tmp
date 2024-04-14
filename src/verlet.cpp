@@ -285,7 +285,9 @@ void Verlet::setup(int flag) {
     update->setupflag = 0;
 
     std::cout << GREEN << "------------------- LAMMPS SETUP DONE -------------------------" << RESET_COLOR << std::endl;
-    setup_stencil_md();
+    if (!ONLY_RUN_LAMMPS) {
+        setup_stencil_md();
+    }
 }
 
 void atom_reorder_stencil_md(Atom* atom_, int* current, int* permute, int start,
@@ -5183,6 +5185,9 @@ void Verlet::run(int n) {
     delete[] send_x;
 
     MPI_Barrier(world);
+    if (ONLY_RUN_LAMMPS) {
+        return;
+    }
 
     // setup data structures to run stencil md
     // map dependency levels to number of zoids to wait on
