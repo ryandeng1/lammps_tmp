@@ -1647,7 +1647,7 @@ void CommBrick::construct_send_list_stencil_md_send(
             std::vector<int> segment_lengths_force;
             int num_force_segments = get_segments(idx_vec_force[t], segment_idxs_force, segment_lengths_force);
 
-            if (num_force_segments > 10) {
+            if (num_force_segments > 100) {
                 std::cout << YELLOW << "curr dt zoid: " << zoid.num << " to: " << send_zoid_num << " time: " << t << " num force segments: " << num_force_segments << RESET_COLOR << std::endl;
             }
 
@@ -1664,7 +1664,7 @@ void CommBrick::construct_send_list_stencil_md_send(
             std::vector<int> segment_lengths_pos;
             int num_pos_segments = get_segments(idx_vec_pos[t], segment_idxs_pos, segment_lengths_pos);
 
-            if (num_pos_segments > 10) {
+            if (num_pos_segments > 100) {
                 std::cout << YELLOW << "curr dt zoid: " << zoid.num << " to: " << send_zoid_num << " time: " << t << " num pos_segments segments: " << num_pos_segments << RESET_COLOR << std::endl;
             }
 
@@ -1857,7 +1857,7 @@ void CommBrick::construct_send_list_stencil_md_next_dt_send(
             std::vector<int> segment_lengths_force;
             int num_force_segments = get_segments(idx_vec_force[t], segment_idxs_force, segment_lengths_force);
 
-            if (num_force_segments > 10) {
+            if (num_force_segments > 100) {
                 std::cout << YELLOW << "next dt zoid: " << zoid.num << " to: " << send_zoid_num << " time: " << t << " num force segments: " << num_force_segments << RESET_COLOR << std::endl;
             }
 
@@ -1873,7 +1873,7 @@ void CommBrick::construct_send_list_stencil_md_next_dt_send(
             std::vector<int> segment_lengths_pos;
             int num_pos_segments = get_segments(idx_vec_pos[t], segment_idxs_pos, segment_lengths_pos);
 
-            if (num_pos_segments > 10) {
+            if (num_pos_segments > 100) {
                 std::cout << YELLOW << "next dt zoid: " << zoid.num << " to: " << send_zoid_num << " time: " << t << " num pos_segments segments: " << num_pos_segments << RESET_COLOR << std::endl;
             }
 

@@ -23,6 +23,7 @@
 #include "memory.h"
 #include "modify.h"
 #include "tokenizer.h"
+#include <cilk/cilk.h>
 
 #include <cstring>
 #include <iostream>
@@ -1904,10 +1905,16 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
 
-        for (int i = 0; i < num_recv_force; i++) {
+        cilk_for (int i = 0; i < num_recv_force; i++) {
+            /*
             double f_x = buf[m++];
             double f_y = buf[m++];
             double f_z = buf[m++];
+            */
+            double f_x = buf[m + i * 3];
+            double f_y = buf[m + i * 3 + 1];
+            double f_z = buf[m + i * 3 + 2];
+
 
             int idx = recv_force_list[i];
 
@@ -1915,6 +1922,8 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             f[idx][1] += f_y;
             f[idx][2] += f_z;
         }
+
+        m += 3 * num_recv_force;
 
         int pos_start_idx = nrecv_force * (3);
 
@@ -1955,7 +1964,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
 
                     int idx = recv_ghost_idx_list[curr_pos_segment] + ghost_idx;
 
-                    // TODO: test if ghost pos actually needed
                     x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
                     x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
                     x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];

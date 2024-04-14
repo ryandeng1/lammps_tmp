@@ -479,8 +479,10 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 in_zoid_curr = in_zoid_curr && at_least_one_curr;
                 in_zoid_next = in_zoid_next && at_least_one_next;
 
-                double lo_borders = lo_curr - ALLEGRO_SLOPE;
-                double hi_borders = hi_curr + ALLEGRO_SLOPE;
+                // double lo_borders = lo_curr - ALLEGRO_SLOPE;
+                // double hi_borders = hi_curr + ALLEGRO_SLOPE;
+                double lo_borders = lo_curr - ALLEGRO_CUTOFF_RADIUS;
+                double hi_borders = hi_curr + ALLEGRO_CUTOFF_RADIUS;
 
                 bool at_least_one_borders =
                     (sub >= lo_borders && sub <= hi_borders) ||
@@ -596,6 +598,7 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         }
         */
 
+            /*
             bool a_same_curr_prev = (vec_a[0] == vec_a[2]);
             bool b_same_curr_prev = (vec_b[0] == vec_b[2]);
 
@@ -617,6 +620,7 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             if (!a_same_curr_next && b_same_curr_next) {
                 return false;
             }
+            */
 
             for (int i = 0; i < min_vec_size; i++) {
                 if (vec_a[i] < vec_b[i]) {
@@ -633,6 +637,7 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             std::vector<int>& borders_vec_b = idx_to_borders_zoids[b];
             int min_size = std::min(borders_vec_a.size(), borders_vec_b.size());
 
+            /*
             for (int i = 0; i < min_size; i++) {
                 int a_proc = borders_vec_a[i] % comm->nprocs;
                 int b_proc = borders_vec_a[i] % comm->nprocs;
@@ -644,6 +649,7 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                     continue;
                 }
             }
+            */
 
             for (int i = 0; i < min_size; i++) {
                 if (borders_vec_a[i] < borders_vec_b[i]) {
@@ -661,6 +667,7 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 return false;
             }
 
+            /*
             double* pos_a = atom_->x[a + atom_->nlocal];
             Point pa(pos_a[0], pos_a[1], pos_a[2]);
 
@@ -671,7 +678,6 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             vec_points.push_back(pa);
             vec_points.push_back(pb);
 
-            /*
             CGAL::spatial_sort(vec_points.begin(), vec_points.end());
             if (fabs(vec_points[0][0] - pa[0]) <= 1e-5 && fabs(vec_points[0][1] - pa[1]) <= 1e-5 && fabs(vec_points[0][2] - pa[2]) <= 1e-5) {
                 return true;
@@ -679,9 +685,9 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 return false;
             }
             */
-            // return a < b;
+            return a < b;
 
-            return atom_->tag[a + atom_->nlocal] < atom_->tag[b + atom_->nlocal];
+            // return atom_->tag[a + atom_->nlocal] < atom_->tag[b + atom_->nlocal];
         });
 
     for (int i = 0; i < atom_->nghost; i++) {
