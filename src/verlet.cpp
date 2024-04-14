@@ -2061,15 +2061,17 @@ void Verlet::setup_stencil_md() {
     }
 
     // Now need to communicate with ther zoids to construct send_list and second_send_list
+    std::vector<MPI_Request> r[NUM_ZOIDS];
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             int zoid_num = zoid.num;
             // receive only if the zoid belongs to me
             if (zoid_num % comm->nprocs == comm->me) {
+                r[zoid_num] = std::move(std::vector<MPI_Request>(2 * lmp->recv_from_neighbors[zoid_num].size(), MPI_REQUEST_NULL));
                 lmp->comm_stencil_md[zoid_num]
                     ->construct_second_send_list_stencil_md_send(
-                        lmp->atom_stencil_md[zoid_num], zoid);
+                        lmp->atom_stencil_md[zoid_num], zoid, r[zoid_num]);
             }
         }
     }
@@ -2096,8 +2098,20 @@ void Verlet::setup_stencil_md() {
         }
     }
 
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            int zoid_num = zoid.num;
+            // receive only if the zoid belongs to me
+            if (zoid_num % comm->nprocs == comm->me) {
+                MPI_Waitall(r[zoid_num].size(), r[zoid_num].data(), MPI_STATUSES_IGNORE);
+            }
+        }
+    }
+
     MPI_Barrier(world);
 
+    std::vector<MPI_Request> r2_arr[NUM_ZOIDS];
     // construct local list now, ghost to local?
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -2115,9 +2129,10 @@ void Verlet::setup_stencil_md() {
                     zoid.send_pos_sizes[t] = new int*[num_send_neighbors];
                     zoid.send_pos_num_segments[t] = new int[num_send_neighbors];
                 }
+                r2_arr[zoid_num] = std::move(std::vector<MPI_Request>(2 * lmp->send_to_neighbors[zoid_num].size(), MPI_REQUEST_NULL));
                 lmp->comm_stencil_md[zoid_num]
                     ->construct_send_list_stencil_md_send(
-                        lmp->atom_stencil_md[zoid_num], zoid);
+                        lmp->atom_stencil_md[zoid_num], zoid, r2_arr[zoid_num]);
             }
         }
     }
@@ -2134,16 +2149,27 @@ void Verlet::setup_stencil_md() {
     }
 
     MPI_Barrier(world);
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            int zoid_num = zoid.num;
+            if (zoid_num % comm->nprocs == comm->me) {
+                MPI_Waitall(r2_arr[zoid_num].size(), r2_arr[zoid_num].data(), MPI_STATUSES_IGNORE);
+            }
+        }
+    }
 
     // next dt construct lists
+    std::vector<MPI_Request> r_next_dt[NUM_ZOIDS];
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info& zoid = lmp->queues_next_dt[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs == comm->me) {
+                r_next_dt[zoid_num] = std::move(std::vector<MPI_Request>(2 * lmp->recv_from_neighbors_next_dt[zoid_num].size(), MPI_REQUEST_NULL));
                 lmp->comm_stencil_md[zoid_num]
                     ->construct_second_send_list_stencil_md_next_dt_send(
-                        lmp->atom_stencil_md[zoid_num], zoid);
+                        lmp->atom_stencil_md[zoid_num], zoid, r_next_dt[zoid_num]);
             }
         }
     }
@@ -2170,8 +2196,20 @@ void Verlet::setup_stencil_md() {
         }
     }
 
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            queue_info& zoid = lmp->queues_next_dt[dep][j];
+            int zoid_num = zoid.num;
+            // receive only if the zoid belongs to me
+            if (zoid_num % comm->nprocs == comm->me) {
+                MPI_Waitall(r_next_dt[zoid_num].size(), r_next_dt[zoid_num].data(), MPI_STATUSES_IGNORE);
+            }
+        }
+    }
+
     MPI_Barrier(world);
 
+    std::vector<MPI_Request> r2_next_dt[NUM_ZOIDS];
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info& zoid = lmp->queues_next_dt[dep][j];
@@ -2189,9 +2227,10 @@ void Verlet::setup_stencil_md() {
                     zoid.send_pos_sizes[t] = new int*[num_send_neighbors];
                     zoid.send_pos_num_segments[t] = new int[num_send_neighbors];
                 }
+                r2_next_dt[zoid_num] = std::move(std::vector<MPI_Request>(2 * lmp->send_to_neighbors_next_dt[zoid_num].size(), MPI_REQUEST_NULL));
                 lmp->comm_stencil_md[zoid_num]
                     ->construct_send_list_stencil_md_next_dt_send(
-                        lmp->atom_stencil_md[zoid_num], zoid);
+                        lmp->atom_stencil_md[zoid_num], zoid, r2_next_dt[zoid_num]);
             }
         }
     }
@@ -2205,6 +2244,17 @@ void Verlet::setup_stencil_md() {
                 lmp->comm_stencil_md[zoid_num]
                     ->construct_send_list_stencil_md_next_dt(
                         lmp->atom_stencil_md[zoid_num], zoid);
+            }
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            queue_info& zoid = lmp->queues_next_dt[dep][j];
+            int zoid_num = zoid.num;
+            // receive only if the zoid belongs to me
+            if (zoid_num % comm->nprocs == comm->me) {
+                MPI_Waitall(r2_next_dt[zoid_num].size(), r2_next_dt[zoid_num].data(), MPI_STATUSES_IGNORE);
             }
         }
     }

@@ -1388,10 +1388,12 @@ void CommBrick::exchange_stencil_md_initial_receive(Atom *atom_, Domain *domain_
 
 // send ghosts to other zoid for the to compute their second send list which is based on local atoms in previous timesteps
 // local t --> ghost t + 1, we need to send ghost t + 1 in order for the receiving zoid to order their local t (or ghost t + 1) to match accordingly
-void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid) {
+void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid,
+                                                           std::vector<MPI_Request>& r) {
     int zoid_num = zoid.num;
     std::vector<int>& recv_from = lmp->recv_from_neighbors[zoid_num];
 
+    int idx = 0;
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_zoid_num = recv_from[i];
 
@@ -1431,9 +1433,6 @@ void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom *, NU
 
         assert(buf_idx == total);
 
-        MPI_Request r1;
-        MPI_Request r2;
-
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             send_list_sendnum_stencil_md[i][t] = nsend_arr[t];
         }
@@ -1441,20 +1440,23 @@ void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom *, NU
         // dst << 16 | src
         int mpi_tag = (recv_zoid_num << 16 | zoid_num);
 
-        MPI_Isend(send_list_sendnum_stencil_md[i], NUM_TIMESTEPS_IN_PARALLEL + 1, MPI_INT, recv_zoid_num % comm->nprocs, mpi_tag, world, &r1);
+        MPI_Isend(send_list_sendnum_stencil_md[i], NUM_TIMESTEPS_IN_PARALLEL + 1, MPI_INT, recv_zoid_num % comm->nprocs, mpi_tag, world, &r[2 * idx]);
         if (total) {
             MPI_Isend(buf_send_stencil_md[i], total, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
-                      world, &r2);
+                      world, &r[2 * idx + 1]);
         }
+        idx++;
     }
 }
 
 // send ghosts to other zoid for the to compute their second send list which is based on local atoms in previous timesteps
 // local t --> ghost t + 1, we need to send ghost t + 1 in order for the receiving zoid to order their local t (or ghost t + 1) to match accordingly
-void CommBrick::construct_second_send_list_stencil_md_next_dt_send(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid) {
+void CommBrick::construct_second_send_list_stencil_md_next_dt_send(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid,
+                                                                   std::vector<MPI_Request>& r) {
     int zoid_num = zoid.num;
     std::vector<int>& recv_from = lmp->recv_from_neighbors_next_dt[zoid_num];
 
+    int idx = 0;
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_zoid_num = recv_from[i];
 
@@ -1498,19 +1500,20 @@ void CommBrick::construct_second_send_list_stencil_md_next_dt_send(std::array<At
 
         int mpi_tag = (recv_zoid_num << 16 | zoid_num);
 
-        MPI_Request r1;
-        MPI_Request r2;
-        MPI_Isend(send_list_sendnum_stencil_md[i], NUM_TIMESTEPS_IN_PARALLEL + 1, MPI_INT, recv_zoid_num % comm->nprocs, mpi_tag, world, &r1);
+        MPI_Isend(send_list_sendnum_stencil_md[i], NUM_TIMESTEPS_IN_PARALLEL + 1, MPI_INT,
+                  recv_zoid_num % comm->nprocs, mpi_tag, world, &r[2 * idx]);
         if (total) {
             MPI_Isend(buf_send_stencil_md[i], total, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
-                      world, &r2);
+                      world, &r[2 * idx + 1]);
         }
+        idx++;
     }
 }
 
 // send my ghost atoms to construct send_list_stencil_md
 void CommBrick::construct_send_list_stencil_md_send(
-        std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid) {
+        std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid,
+        std::vector<MPI_Request>& r) {
     int zoid_num = zoid.num;
 
     int max_atoms = -1;
@@ -1563,6 +1566,7 @@ void CommBrick::construct_send_list_stencil_md_send(
         upper_bound += atom_arr[t]->nghost;
     }
 
+    int idx = 0;
     for (int i = 0; i < send_to.size(); i++) {
         int send_zoid_num = send_to[i];
         queue_info& send_zoid = lmp->zoid_num_to_zoid[send_zoid_num];
@@ -1699,9 +1703,6 @@ void CommBrick::construct_send_list_stencil_md_send(
             }
         }
 
-        MPI_Request r1;
-        MPI_Request r2;
-
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             send_list_sendnum_stencil_md[i][t] = idx_vec_force[t].size();
         }
@@ -1714,17 +1715,20 @@ void CommBrick::construct_send_list_stencil_md_send(
         int mpi_tag = (send_zoid_num << 16 | zoid_num);
 
         MPI_Isend(send_list_sendnum_stencil_md[i], 2 * (NUM_TIMESTEPS_IN_PARALLEL + 1),
-                  MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r1);
+                  MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r[2 * idx]);
         if (total) {
             MPI_Isend(buf_send_stencil_md[i], total, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag,
-                      world, &r2);
+                      world, &r[2 * idx + 1]);
         }
+
+        idx++;
     }
 }
 
 // send my ghost atoms to construct send_list_stencil_md
 void CommBrick::construct_send_list_stencil_md_next_dt_send(
-        std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid) {
+        std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid,
+        std::vector<MPI_Request>& r) {
     int zoid_num = zoid.num;
 
     int max_atoms = -1;
@@ -1777,6 +1781,7 @@ void CommBrick::construct_send_list_stencil_md_next_dt_send(
         upper_bound += atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t]->nghost;
     }
 
+    int idx = 0;
     for (int i = 0; i < send_to.size(); i++) {
         int send_zoid_num = send_to[i];
         queue_info& send_zoid = lmp->zoid_num_to_zoid_next_dt[send_zoid_num];
@@ -1907,9 +1912,6 @@ void CommBrick::construct_send_list_stencil_md_next_dt_send(
             }
         }
 
-        MPI_Request r1;
-        MPI_Request r2;
-
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             send_list_sendnum_stencil_md[i][t] = idx_vec_force[t].size();
         }
@@ -1922,12 +1924,13 @@ void CommBrick::construct_send_list_stencil_md_next_dt_send(
         int mpi_tag = (send_zoid_num << 16 | zoid_num);
 
         MPI_Isend(send_list_sendnum_stencil_md[i], 2 * (NUM_TIMESTEPS_IN_PARALLEL + 1),
-                  MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r1);
+                  MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r[2 * idx]);
 
         if (total) {
             MPI_Isend(buf_send_stencil_md[i], total, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag,
-                      world, &r2);
+                      world, &r[2 * idx + 1]);
         }
+        idx++;
     }
 }
 
