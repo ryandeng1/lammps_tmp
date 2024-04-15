@@ -3040,20 +3040,6 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
 
     auto &send_to_neighbors = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
 
-    /*
-    std::vector<int> neighbors_in_proc;
-    for (int i = 0; i < send_to_neighbors.size(); i++) {
-        int neighbor = send_to_neighbors[i];
-        if (neighbor % comm->nprocs == proc) {
-            neighbors_in_proc.push_back(i);
-        }
-    }
-
-    if (neighbors_in_proc.size() == 0) {
-        return false;
-    }
-    */
-
     if (proc != comm->me) {
         int mpi_tag = (proc << 16 | zoid_num);
         MPI_Isend(buf_send_stencil_md[proc], num_elems_send, MPI_DOUBLE, proc, mpi_tag, world,
@@ -3074,7 +3060,6 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
         queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
         auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[zoid_num];
 
-        /*
         cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
             int other_zoid_num = zoid_num_idxs_recv[i].first;
             int recv_idx = zoid_num_idxs_recv[i].second;
@@ -3131,7 +3116,6 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
                             &buf_send_stencil_md[comm->me][other_starting_idx], pbc_flag_);
             }
         }
-        */
         return false;
     }
 }
@@ -3438,7 +3422,6 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
     auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[recv_zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[recv_zoid_num];
 
     // for (auto& [zoid_num, recv_idx] : zoid_num_idxs_recv) {
-    /*
     cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
         int zoid_num = zoid_num_idxs_recv[i].first;
         int recv_idx = zoid_num_idxs_recv[i].second;
@@ -3498,8 +3481,6 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
 
         }
     }
-    */
-
 }
 
 void CommBrick::send_data_stencil_md_next_dt(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr,
