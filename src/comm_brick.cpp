@@ -3039,6 +3039,7 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
     int num_elems_send = zoid.num_send_process[proc];
 
     auto &send_to_neighbors = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+
     /*
     std::vector<int> neighbors_in_proc;
     for (int i = 0; i < send_to_neighbors.size(); i++) {
@@ -3061,24 +3062,17 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
     } else {
         int start_timestep = 1;
         int end_timestep = NUM_TIMESTEPS_IN_PARALLEL + 1;
-        int receive_request_idx = -1;
+
         auto& recv_from_neighbor_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
-        auto it = std::find(recv_from_neighbor_procs.begin(), recv_from_neighbor_procs.end(), zoid_num);
-        assert(it != recv_from_neighbor_procs.end());
-        receive_request_idx = std::distance(recv_from_neighbor_procs.begin(), it);
+        int receive_request_idx = curr_dt ? lmp->recv_from_neighbors_procs_idxs[zoid_num] : lmp->recv_from_neighbors_procs_idxs_next_dt[zoid_num];
+        if (curr_dt) {
+            assert(receive_request_idx >= 0 && receive_request_idx < lmp->recv_from_neighbors_procs.size());
+        } else {
+            assert(receive_request_idx >= 0 && receive_request_idx < lmp->recv_from_neighbors_procs_next_dt.size());
+        }
 
         queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
         auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[zoid_num];
-
-        // for (auto& [other_zoid_num, recv_idx] : zoid_num_idxs_recv) {
-        /*
-        std::stringstream s;
-        for (auto& tmp : zoid_num_idxs_recv) {
-            s << tmp.first << " ";
-        }
-
-        // std::cout << "zoid: " << zoid.num << " curr_dt: " << curr_dt << " num zoids to unpack: " << zoid_num_idxs_recv.size() << " zoids: " << s.str() << std::endl;
-        */
 
         cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
             int other_zoid_num = zoid_num_idxs_recv[i].first;
@@ -3098,29 +3092,9 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
             idxs.push_back(0);
             for (int t = start_timestep; t < end_timestep; t++) {
                 if (curr_dt) {
-                    int nrecv_force_timestep = lmp->num_recv_force_from_zoid[t][receive_request_idx];
-                    int nrecv_pos_timestep = lmp->num_recv_pos_from_zoid[t][receive_request_idx];
-                    int nrecv_vel_timestep = lmp->num_recv_vel_from_zoid[t][receive_request_idx];
-
-                    int num_elems;
-                    if (DEBUG_SEND_RECV_DATA) {
-                        num_elems = nrecv_force_timestep * (3 + 1) + nrecv_pos_timestep * (3 + 1) + nrecv_vel_timestep * (3 + 1);
-                    } else {
-                        num_elems = nrecv_force_timestep * (3) + nrecv_pos_timestep * (3) + nrecv_vel_timestep * (3);
-                    }
-                    idxs.push_back(num_elems + idxs[idxs.size() - 1]);
+                    idxs.push_back(lmp->num_recv_elems_from_zoid[t][receive_request_idx] + idxs[idxs.size() - 1]);
                 } else {
-                    int nrecv_force_timestep = lmp->num_recv_force_from_zoid_next_dt[t][receive_request_idx];
-                    int nrecv_pos_timestep = lmp->num_recv_pos_from_zoid_next_dt[t][receive_request_idx];
-                    int nrecv_vel_timestep = lmp->num_recv_vel_from_zoid_next_dt[t][receive_request_idx];
-
-                    int num_elems;
-                    if (DEBUG_SEND_RECV_DATA) {
-                        num_elems = nrecv_force_timestep * (3 + 1) + nrecv_pos_timestep * (3 + 1) + nrecv_vel_timestep * (3 + 1);
-                    } else {
-                        num_elems = nrecv_force_timestep * (3) + nrecv_pos_timestep * (3) + nrecv_vel_timestep * (3);
-                    }
-                    idxs.push_back(num_elems + idxs[idxs.size() - 1]);
+                    idxs.push_back(lmp->num_recv_elems_from_zoid_next_dt[t][receive_request_idx] + idxs[idxs.size() - 1]);
                 }
             }
 
