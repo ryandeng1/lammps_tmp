@@ -586,21 +586,18 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
 
             int min_vec_size = vec_a.size();
 
-            /*
-        for (int i = 0; i < 2; i++) {
-            int a_proc = vec_a[i] % comm->nprocs;
-            int b_proc = vec_b[i] % comm->nprocs;
-            if (a_proc < b_proc) {
-                return true;
-            } else if (a_proc > b_proc) {
-                return false;
-            } else {
-                continue;
+            for (int i = 0; i < 2; i++) {
+                int a_proc = vec_a[i] % comm->nprocs;
+                int b_proc = vec_b[i] % comm->nprocs;
+                if (a_proc < b_proc) {
+                    return true;
+                } else if (a_proc > b_proc) {
+                    return false;
+                } else {
+                    continue;
+                }
             }
-        }
-        */
 
-            /*
             bool a_same_curr_prev = (vec_a[0] == vec_a[2]);
             bool b_same_curr_prev = (vec_b[0] == vec_b[2]);
 
@@ -622,7 +619,6 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             if (!a_same_curr_next && b_same_curr_next) {
                 return false;
             }
-            */
 
             for (int i = 0; i < min_vec_size; i++) {
                 if (vec_a[i] < vec_b[i]) {
@@ -639,7 +635,6 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             std::vector<int>& borders_vec_b = idx_to_borders_zoids[b];
             int min_size = std::min(borders_vec_a.size(), borders_vec_b.size());
 
-            /*
             for (int i = 0; i < min_size; i++) {
                 int a_proc = borders_vec_a[i] % comm->nprocs;
                 int b_proc = borders_vec_a[i] % comm->nprocs;
@@ -651,7 +646,6 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                     continue;
                 }
             }
-            */
 
             for (int i = 0; i < min_size; i++) {
                 if (borders_vec_a[i] < borders_vec_b[i]) {
@@ -699,6 +693,26 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
     atom_reorder_ghost_stencil_md(atom_, current, permute, 0, atom_->nghost,
                                   atom_->nlocal);
 
+    bool debug = (zoid.num == 18 && timestep == 1);
+    if (false) {
+        for (int i = 0; i < atom_->nghost; i++) {
+            int new_idx = i + atom_->nlocal;
+            int old_idx = ghost_idxs[i];
+            std::stringstream idx_to_zoids_str;
+            for (auto& x : idx_to_zoids[old_idx]) {
+                idx_to_zoids_str << x << " ";
+            }
+
+            std::stringstream idx_to_borders_zoids_str;
+            for (auto& x : idx_to_borders_zoids[old_idx]) {
+                idx_to_borders_zoids_str << x << " ";
+            }
+
+            std::cout << "new idx: " << i + atom_->nlocal << " old idx: " << old_idx << " idx to zoids: " << idx_to_zoids_str.str() << " borders: " << idx_to_borders_zoids_str.str()
+                << " pos: " << atom_->x[new_idx][0] << " " << atom_->x[new_idx][1] << " " << atom_->x[new_idx][2] << std::endl;
+        }
+    }
+
     delete[] current;
     delete[] permute;
 }
@@ -734,13 +748,6 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
     std::vector<int> test_segment_sizes;
     int test_num_segments = get_segments(test_nonrelevant_idxs,
                                          test_segment_idxs, test_segment_sizes);
-    /*
-    if (test_nonrelevant_idxs.size() > 0) {
-        std::cout << "curr dt test num segments: " << test_num_segments
-                  << " idxs: " << test_segment_idxs
-                  << " sizes: " << test_segment_sizes << std::endl;
-    }
-    */
 
     for (int i = 0; i < atom_->nghost; i++) {
         int actual_idx = i + atom_->nlocal;
@@ -821,12 +828,24 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             }
 
             if (in_zoid_prev) {
-                neighbor_to_idxs[recv_zoid_num].push_back(i + atom_->nlocal);
+                neighbor_to_idxs[recv_zoid_num].push_back(actual_idx);
             }
         }
     }
 
-    // std::cout << RED << "RYAN zoid: " << zoid.num << " timestep: " << timestep << " num ghost affected? " << ghost_idxs_affected.size() << RESET_COLOR << std::endl;
+    bool debug = (zoid.num == 18 && timestep == 1);
+    if (false) {
+        for (auto& [recv_zoid_num, idxs] : neighbor_to_idxs) {
+            std::stringstream debug_idx;
+            for (auto& idx : idxs) {
+                std::cout << "zoid: " << zoid.num << " recv from: " << recv_zoid_num << " idx: " << idx << " pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1] << " " << atom_->x[idx][2]
+                    << " relevant? " << std::endl;
+            }
+        }
+
+        assert(false);
+    }
+
 
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_from_zoid_num = recv_from[i];
@@ -1271,7 +1290,7 @@ void setup_atom_relevant_idxs_stencil_md(
         Atom* atom_ = atom_arr[t];
 
         for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
-            if (PURELY_LOCAL_POTENTIAL && TRY_PRECOMPUTE_RELEVANT_ATOM_IDX) {
+            if (PURELY_LOCAL_POTENTIAL && !TRY_PRECOMPUTE_RELEVANT_ATOM_IDX) {
                 zoid.relevant_atom_idxs[t].insert(i);
                 continue;
             }
@@ -1314,7 +1333,7 @@ void setup_atom_relevant_tags_stencil_md(
         Atom* atom_ = atom_arr[t];
 
         for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
-            if (PURELY_LOCAL_POTENTIAL && TRY_PRECOMPUTE_RELEVANT_ATOM_IDX) {
+            if (PURELY_LOCAL_POTENTIAL && !TRY_PRECOMPUTE_RELEVANT_ATOM_IDX) {
                 zoid.relevant_atom_tags[t].insert(atom_->tag[i]);
                 continue;
             }
@@ -1364,7 +1383,7 @@ void setup_atom_relevant_tags_stencil_md_next_dt(
         Atom* atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
 
         for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
-            if (PURELY_LOCAL_POTENTIAL && TRY_PRECOMPUTE_RELEVANT_ATOM_IDX) {
+            if (PURELY_LOCAL_POTENTIAL && !TRY_PRECOMPUTE_RELEVANT_ATOM_IDX) {
                 zoid.relevant_atom_tags[t].insert(atom_->tag[i]);
                 continue;
             }
@@ -1412,7 +1431,7 @@ void setup_atom_relevant_idxs_stencil_md_next_dt(
         Atom* atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
 
         for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
-            if (PURELY_LOCAL_POTENTIAL && TRY_PRECOMPUTE_RELEVANT_ATOM_IDX) {
+            if (PURELY_LOCAL_POTENTIAL && !TRY_PRECOMPUTE_RELEVANT_ATOM_IDX) {
                 zoid.relevant_atom_idxs[t].insert(i);
                 continue;
             }
@@ -3253,34 +3272,6 @@ void Verlet::setup_stencil_md() {
                             get_segments(local_buf_idxs, local_segment_idxs_buf,
                                          local_segment_sizes_buf);
 
-                        /*
-                        if (print) {
-                            std::cout
-                                << "DEBUG local buf idxs: " << local_buf_idxs
-                                << std::endl;
-                            std::cout
-                                << "segment idxs: " << local_segment_idxs_buf
-                                << std::endl;
-                            std::cout
-                                << "segment sizes: " << local_segment_sizes_buf
-                                << std::endl;
-
-                            for (int k = 0;
-                                 k < zoid.recv_list_local_num_force_only[t][i];
-                                 k++) {
-                                int idx =
-                                    zoid.recv_list_local_force_only[t][i][k];
-                            }
-
-                            for (int k = 0;
-                                 k < zoid.recv_list_local_num_force_pos[t][i];
-                                 k++) {
-                                int idx =
-                                    zoid.recv_list_local_force_pos[t][i][k];
-                            }
-                        }
-                        */
-
                         std::vector<int> ghost_buf_idxs;
 
                         std::set<int> ghost_buf_idxs_set;
@@ -3348,38 +3339,14 @@ void Verlet::setup_stencil_md() {
                                 ghost_segment_sizes_buf[k];
                         }
 
-                        if (print) {
-                            std::cout << "num local segments: "
+                        /*
+                        if (true) {
+                            std::cout << YELLOW << "curr dt zoid: " << zoid.num << " time: " << t << " num local segments: "
                                       << num_local_segments_buf
                                       << " num ghost segments: "
-                                      << num_ghost_segments_buf << std::endl;
-                            for (int k = 0; k < ghost_buf_idxs.size(); k++) {
-                                std::cout
-                                    << "debug ghost buf idx: " << k
-                                    << " buf idx: " << ghost_buf_idxs[k]
-                                    << " tag: " << recv_tags[ghost_buf_idxs[k]]
-                                    << std::endl;
-                            }
-
-                            for (int k = 0; k < num_local_segments_buf; k++) {
-                                std::cout
-                                    << "debug local buf segment number: " << k
-                                    << " segment idx: "
-                                    << local_segment_idxs_buf[k]
-                                    << " size: " << local_segment_sizes_buf[k]
-                                    << std::endl;
-                            }
-
-                            for (int k = 0; k < num_ghost_segments_buf; k++) {
-                                std::cout
-                                    << "debug ghost buf segment number: "
-                                    << k + num_local_segments_buf
-                                    << " segment idx: "
-                                    << ghost_segment_idxs_buf[k]
-                                    << " size: " << ghost_segment_sizes_buf[k]
-                                    << std::endl;
-                            }
+                                      << num_ghost_segments_buf << " num recv ghost: " << zoid.recv_ghost_num_segments[t][i] << " recv from: " << recv_from[i] << RESET_COLOR << std::endl;
                         }
+                        */
 
                         delete[] recv_tags;
                     }
