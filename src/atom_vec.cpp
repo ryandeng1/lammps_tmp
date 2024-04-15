@@ -1938,15 +1938,9 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             int segment_idx = segment_idxs_buf[i];
             int counter = segment_idx * (3) + pos_start_idx;
             if (segment_type == RECV_DATA_PROCESS_LOCAL) {
+                /*
                 #pragma cilk grainsize 128
                 cilk_for (int j = 0; j < segment_size; j++) {
-                    /*
-                    double x_x = buf[counter++];
-                    double x_y = buf[counter++];
-                    double x_z = buf[counter++];
-
-                    int idx = recv_pos_local_list[local_list_idx++];
-                    */
 
                     double x_x = buf[counter + j * 3];
                     double x_y = buf[counter + j * 3 + 1];
@@ -1958,8 +1952,8 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
                     x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
                     x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
                 }
-
                 local_list_idx += segment_size;
+                */
             } else {
                 counter++;
                 counter++;
