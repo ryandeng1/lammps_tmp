@@ -3245,9 +3245,6 @@ bool CommBrick::send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
     auto end_atom_pack = std::chrono::high_resolution_clock::now();
     auto duration_atom_pack = std::chrono::duration_cast<std::chrono::microseconds>(end_atom_pack-begin_atom_pack).count();
 
-    if (num_elems_send != buf_idx) {
-        std::cout << "num elems send: " << num_elems_send << " buf idx: " << buf_idx << " curr dt: " << curr_dt << std::endl;
-    }
     assert(num_elems_send == buf_idx);
 
     if (proc != comm->me) {
