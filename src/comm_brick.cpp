@@ -3031,15 +3031,23 @@ void CommBrick::pack_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
         grow_send_stencil_md(num_elems_send, proc, 0);
     }
 
-    int buf_idx = 0;
-    // TODO: parallelize
+    std::vector<int> idxs;
+    idxs.push_back(0);
     for (int t = start_timestep; t < end_timestep; t++) {
+        idxs.push_back(zoid.num_send_process_timestep[proc][t] + idxs[idxs.size() - 1]);
+    }
+
+    // int buf_idx = 0;
+    // TODO: parallelize
+    cilk_for (int t = start_timestep; t < end_timestep; t++) {
         Atom* atom_;
         if (curr_dt) {
             atom_ = atom_arr[t];
         } else {
             atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
         }
+
+        int starting_idx = idxs[t - start_timestep];
 
         int* pbc_flags_ = nullptr;
         int n = atom_->avec->pack_data_to_process_stencil_md(
@@ -3048,9 +3056,9 @@ void CommBrick::pack_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
                 zoid.send_process_num_segments[t][proc], zoid.send_process_segment_types[t][proc],
                 zoid.send_process_segment_idxs[t][proc], zoid.send_process_segment_sizes[t][proc],
                 zoid.send_pos_total_num_elems[t], zoid.send_pos_num_segments[t], zoid.send_pos_idxs[t], zoid.send_pos_sizes[t],
-                zoid.send_process_local_list[t][proc], &buf_send_stencil_md[proc][buf_idx], pbc_flags_);
+                zoid.send_process_local_list[t][proc], &buf_send_stencil_md[proc][starting_idx], pbc_flags_);
 
-        buf_idx += n;
+        // buf_idx += n;
     }
 }
 

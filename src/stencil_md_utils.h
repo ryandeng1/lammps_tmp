@@ -388,6 +388,7 @@ struct queue_info {
   std::set<int>* can_eval_center_tags;
 
   // num elems send to process across ALL timesteps
+  int** num_send_process_timestep;
   int* num_send_process;
   int* num_recv_process;
 };
