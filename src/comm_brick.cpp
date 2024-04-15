@@ -3074,6 +3074,7 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
         queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
         auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[zoid_num];
 
+        /*
         cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
             int other_zoid_num = zoid_num_idxs_recv[i].first;
             int recv_idx = zoid_num_idxs_recv[i].second;
@@ -3117,14 +3118,6 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
                     // nrecv_vel = lmp->num_recv_vel_from_zoid_next_dt[t][receive_request_idx];
                 }
 
-                /*
-                std::cout << "unpack process SELF UNPACK: " << comm->me << " zoid: " << other_zoid.num << " recv from: " << zoid_num << " timestep: " << t
-                          << " pos start: " << nrecv_force << " vel start: " << nrecv_force + nrecv_pos << " vel offset: " << zoid.recv_process_vel_offset[t][recv_idx]
-                          << " force offset: " << other_zoid.recv_process_force_offset[t][recv_idx]
-                          << " nrecv force: " << nrecv_force << " nrecv pos: " << nrecv_pos << " nrecv vel: " << nrecv_vel
-                          << " increment: " << nrecv_force * 4 + nrecv_pos * 4 + nrecv_vel * 4 << std::endl;
-                */
-
                 int other_starting_idx = idxs[t - start_timestep];
 
                 atom_->avec->unpack_data_from_process_stencil_md(
@@ -3136,16 +3129,9 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
                         other_zoid.recv_ghost_num_segments[t][recv_idx], other_zoid.recv_ghost_idxs[t][recv_idx], other_zoid.recv_ghost_sizes[t][recv_idx],
                         // &buf_send_stencil_md[comm->me][other_buf_idx], pbc_flag_);
                             &buf_send_stencil_md[comm->me][other_starting_idx], pbc_flag_);
-
-                /*
-                if (DEBUG_SEND_RECV_DATA) {
-                    other_buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
-                } else {
-                    other_buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
-                }
-                */
             }
         }
+        */
         return false;
     }
 }
