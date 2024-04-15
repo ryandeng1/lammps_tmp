@@ -3422,7 +3422,7 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
     auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[recv_zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[recv_zoid_num];
 
     // for (auto& [zoid_num, recv_idx] : zoid_num_idxs_recv) {
-    for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
+    cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
         int zoid_num = zoid_num_idxs_recv[i].first;
         int recv_idx = zoid_num_idxs_recv[i].second;
 
@@ -3448,7 +3448,7 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
         }
 
         int buf_idx = 0;
-        for (int t = start_timestep; t < end_timestep; t++) {
+        cilk_for (int t = start_timestep; t < end_timestep; t++) {
             // Atom* atom_ = atom_arr[t];
             Atom* atom_;
 
