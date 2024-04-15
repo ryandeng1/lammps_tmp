@@ -1568,7 +1568,7 @@ int AtomVec::unpack_border_stencil_md(int n, int first, double *buf, Atom *atom_
 int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                                              int* total_num_elems_send_force, int* num_send_force, int** force_idx_list, int** force_size_list,
                                              int num_segments, int* segment_types, int* segment_idxs, int* segment_lengths,
-                                             int* num_send_vel, int** vel_idx_list, int** vel_size_list,
+                                             int* total_num_elems_send_vel, int* num_send_vel, int** vel_idx_list, int** vel_size_list,
                                              int* local_list, double* buf, int* pbc_flags) {
     if (DEBUG_SEND_RECV_DATA) {
         int m = 0;
@@ -1683,10 +1683,10 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
     } else {
         int m = 0;
 
-        int arr_sizes[num_zoid_recv];
-        arr_sizes[0] = 0;
+        int arr_sizes_f[num_zoid_recv];
+        arr_sizes_f[0] = 0;
         for (int i = 1; i < num_zoid_recv; i++) {
-            arr_sizes[i] = arr_sizes[i - 1] + total_num_elems_send_force[zoid_idxs[i - 1]] * 3;
+            arr_sizes_f[i] = arr_sizes_f[i - 1] + total_num_elems_send_force[zoid_idxs[i - 1]] * 3;
         }
 
         cilk_for (int i = 0; i < num_zoid_recv; i++) {
@@ -1714,7 +1714,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
 
                 // memcpy(&buf[m], &eval_f_stencil_md[force_idx][0], force_size * sizeof(double) * 3);
                 // m += force_size * 3;
-                memcpy(&buf[m + arr_sizes[i] + idx], &eval_f_stencil_md[force_idx][0], force_size * sizeof(double) * 3);
+                memcpy(&buf[m + arr_sizes_f[i] + idx], &eval_f_stencil_md[force_idx][0], force_size * sizeof(double) * 3);
                 idx += force_size * 3;
             }
         }
@@ -1762,7 +1762,13 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
 
         int vel_start_idx = m;
 
-        for (int i = 0; i < num_zoid_recv; i++) {
+        int arr_sizes_v[num_zoid_recv];
+        arr_sizes_v[0] = 0;
+        for (int i = 1; i < num_zoid_recv; i++) {
+            arr_sizes_v[i] = arr_sizes_v[i - 1] + total_num_elems_send_vel[zoid_idxs[i - 1]] * 3;
+        }
+
+        cilk_for (int i = 0; i < num_zoid_recv; i++) {
             int zoid_idx = zoid_idxs[i];
             assert(zoid_idx >= 0 && zoid_idx <= 26);
 
@@ -1771,6 +1777,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
             int* vel_segment_idxs = vel_idx_list[zoid_idx];
             int* vel_segment_sizes = vel_size_list[zoid_idx];
 
+            int idx = 0;
             for (int j = 0; j < num_send_vel_segments; j++) {
                 int vel_idx = vel_segment_idxs[j];
                 int vel_size = vel_segment_sizes[j];
@@ -1784,9 +1791,15 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                 }
                 */
 
-                memcpy(&buf[m], &v[vel_idx][0], vel_size * sizeof(double) * 3);
-                m += vel_size * 3;
+                // memcpy(&buf[m], &v[vel_idx][0], vel_size * sizeof(double) * 3);
+                memcpy(&buf[m + arr_sizes_v[i] + idx], &v[vel_idx][0], vel_size * sizeof(double) * 3);
+                idx += vel_size * 3;
+                // m += vel_size * 3;
             }
+        }
+
+        for (int i = 0; i < num_zoid_recv; i++) {
+            m += total_num_elems_send_vel[zoid_idxs[i]] * 3;
         }
 
         return m;

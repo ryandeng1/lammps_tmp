@@ -366,8 +366,8 @@ void StencilMD::INIT_ZOID_DATA() {
 
                 zoid.send_pos_idxs = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_pos_sizes = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_pos_num_segments =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_num_segments = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_total_num_elems = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_list_local_force_only =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -485,8 +485,8 @@ void StencilMD::INIT_ZOID_DATA() {
 
                 zoid.send_pos_idxs = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_pos_sizes = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_pos_num_segments =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_num_segments = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_total_num_elems = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_list_local_force_only =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];

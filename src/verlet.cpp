@@ -2158,6 +2158,7 @@ void Verlet::setup_stencil_md() {
                     zoid.send_pos_idxs[t] = new int*[num_send_neighbors];
                     zoid.send_pos_sizes[t] = new int*[num_send_neighbors];
                     zoid.send_pos_num_segments[t] = new int[num_send_neighbors];
+                    zoid.send_pos_total_num_elems[t] = new int[num_send_neighbors];
                 }
                 r2_arr[zoid_num] = std::move(std::vector<MPI_Request>(2 * lmp->send_to_neighbors[zoid_num].size(), MPI_REQUEST_NULL));
                 lmp->comm_stencil_md[zoid_num]
@@ -2256,6 +2257,7 @@ void Verlet::setup_stencil_md() {
                     zoid.send_pos_idxs[t] = new int*[num_send_neighbors];
                     zoid.send_pos_sizes[t] = new int*[num_send_neighbors];
                     zoid.send_pos_num_segments[t] = new int[num_send_neighbors];
+                    zoid.send_pos_total_num_elems[t] = new int[num_send_neighbors];
                 }
                 r2_next_dt[zoid_num] = std::move(std::vector<MPI_Request>(2 * lmp->send_to_neighbors_next_dt[zoid_num].size(), MPI_REQUEST_NULL));
                 lmp->comm_stencil_md[zoid_num]
