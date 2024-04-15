@@ -383,7 +383,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.send_segment_sizes =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_segment_types =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_segment_idxs =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_num_segments =
@@ -404,7 +404,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.atom_idx_mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_process_segment_types =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_process_segment_idxs =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_process_segment_sizes =
@@ -417,7 +417,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.send_process_segment_idxs =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_process_segment_types =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_process_num_segments =
                         new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_process_local_list =
@@ -426,7 +426,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.send_process_segment_sizes[t] = new int*[comm->nprocs];
                     zoid.send_process_segment_idxs[t] = new int*[comm->nprocs];
-                    zoid.send_process_segment_types[t] = new int*[comm->nprocs];
+                    zoid.send_process_segment_types[t] = new bool*[comm->nprocs];
                     zoid.send_process_num_segments[t] = new int[comm->nprocs];
                     zoid.send_process_local_list[t] = new int*[comm->nprocs];
                 }
@@ -502,7 +502,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.send_segment_sizes =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_segment_types =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_segment_idxs =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_num_segments =
@@ -522,7 +522,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.atom_idx_mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_process_segment_types =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_process_segment_idxs =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_process_segment_sizes =
@@ -535,7 +535,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.send_process_segment_idxs =
                         new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_process_segment_types =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_process_num_segments =
                         new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.send_process_local_list =
@@ -544,7 +544,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.send_process_segment_sizes[t] = new int*[comm->nprocs];
                     zoid.send_process_segment_idxs[t] = new int*[comm->nprocs];
-                    zoid.send_process_segment_types[t] = new int*[comm->nprocs];
+                    zoid.send_process_segment_types[t] = new bool*[comm->nprocs];
                     zoid.send_process_num_segments[t] = new int[comm->nprocs];
                     zoid.send_process_local_list[t] = new int*[comm->nprocs];
                 }

@@ -1567,7 +1567,7 @@ int AtomVec::unpack_border_stencil_md(int n, int first, double *buf, Atom *atom_
 
 int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                                              int* total_num_elems_send_force, int* num_send_force, int** force_idx_list, int** force_size_list,
-                                             int num_segments, int* segment_types, int* segment_idxs, int* segment_lengths,
+                                             int num_segments, bool* segment_types, int* segment_idxs, int* segment_lengths,
                                              int* total_num_elems_send_vel, int* num_send_vel, int** vel_idx_list, int** vel_size_list,
                                              int* local_list, double* buf, int* pbc_flags) {
     if (DEBUG_SEND_RECV_DATA) {
@@ -1610,7 +1610,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
 
         // Note: potentially sending data to middle and pbc, so just send raw positions, have the receiver reinterpret it?
         for (int i = 0; i < num_segments; i++) {
-            int segment_type = segment_types[i];
+            bool segment_type = segment_types[i];
             int segment_size = segment_lengths[i];
             if (segment_type == SEND_DATA_PROCESS_LOCAL) {
                 for (int j = 0; j < segment_size; j++) {
@@ -1731,7 +1731,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
 
         // Note: potentially sending data to middle and pbc, so just send raw positions, have the receiver reinterpret it?
         for (int i = 0; i < num_segments; i++) {
-            int segment_type = segment_types[i];
+            bool segment_type = segment_types[i];
             int segment_size = segment_lengths[i];
             if (segment_type == SEND_DATA_PROCESS_LOCAL) {
                 cilk_for (int j = 0; j < segment_size; j++) {
@@ -1808,7 +1808,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
 
 void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos,
                                          int force_offset_buf, int num_recv_force, int* recv_force_list,
-                                         int num_pos_segments_buf, int* segment_types_buf, int* segment_idxs_buf, int* segment_sizes_buf,
+                                         int num_pos_segments_buf, bool* segment_types_buf, int* segment_idxs_buf, int* segment_sizes_buf,
                                          int vel_offset_buf, int num_recv_vel, int* recv_pos_local_list,
                                          int num_recv_ghost, int* recv_ghost_idx_list, int* recv_ghost_size_list,
                                          double* buf, int* pbc_flags) {
@@ -1846,7 +1846,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         int curr_pos_segment = 0;
 
         for (int i = 0; i < num_pos_segments_buf; i++) {
-            int segment_type = segment_types_buf[i];
+            bool segment_type = segment_types_buf[i];
             int segment_size = segment_sizes_buf[i];
             int segment_idx = segment_idxs_buf[i];
             int counter = segment_idx * (3 + 1) + pos_start_idx;
@@ -1958,7 +1958,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         int curr_pos_segment = 0;
 
         for (int i = 0; i < num_pos_segments_buf; i++) {
-            int segment_type = segment_types_buf[i];
+            bool segment_type = segment_types_buf[i];
             int segment_size = segment_sizes_buf[i];
             int segment_idx = segment_idxs_buf[i];
             int counter = segment_idx * (3) + pos_start_idx;
@@ -2022,7 +2022,7 @@ int AtomVec::pack_data_stencil_md(int num_send_force, int num_send_pos,
                              int* force_idx_list, int* force_size_list,
                              int* pos_idx_list, int* pos_size_list,
                              int* local_to_ghost_list,
-                             int num_segments, int* segment_types, int* segment_idxs, int* segment_sizes,
+                             int num_segments, bool* segment_types, int* segment_idxs, int* segment_sizes,
                              double* buf, int* pbc_flags, bool debug) {
   /*
    * Send data.
@@ -2111,7 +2111,7 @@ int AtomVec::pack_data_stencil_md(int num_send_force, int num_send_pos,
       int local_list_idx = 0;
 
       for (int i = 0; i < num_segments; i++) {
-          int segment_type = segment_types[i];
+          bool segment_type = segment_types[i];
           int segment_size = segment_sizes[i];
           if (segment_type == LOCAL_SEGMENT_TYPE) {
               for (int j = 0; j < segment_size; j++) {
@@ -2187,7 +2187,7 @@ int AtomVec::pack_data_stencil_md(int num_send_force, int num_send_pos,
       int local_list_idx = 0;
 
       for (int i = 0; i < num_segments; i++) {
-          int segment_type = segment_types[i];
+          bool segment_type = segment_types[i];
           int segment_size = segment_sizes[i];
           if (segment_type == LOCAL_SEGMENT_TYPE) {
               for (int j = 0; j < segment_size; j++) {

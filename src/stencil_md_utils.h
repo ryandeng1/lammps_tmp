@@ -41,13 +41,14 @@ constexpr int RIGHT = 1;
 constexpr int MIDDLE = 2;
 constexpr int PBC = 3;
 
-constexpr int LOCAL_SEGMENT_TYPE = 0;
-constexpr int GHOST_SEGMENT_TYPE = -1;
+constexpr bool LOCAL_SEGMENT_TYPE = true;
+constexpr bool GHOST_SEGMENT_TYPE = false;
 
-constexpr int SEND_DATA_PROCESS_LOCAL = 0;
-constexpr int SEND_DATA_PROCESS_GHOST = 1;
-constexpr int RECV_DATA_PROCESS_LOCAL = 2;
-constexpr int RECV_DATA_PROCESS_GHOST = 3;
+constexpr bool SEND_DATA_PROCESS_LOCAL = true;
+constexpr bool SEND_DATA_PROCESS_GHOST = false;
+
+constexpr bool RECV_DATA_PROCESS_LOCAL = true;
+constexpr bool RECV_DATA_PROCESS_GHOST = false;
 
 constexpr int NUM_DEPS = 4;
 
@@ -350,7 +351,7 @@ struct queue_info {
   // for second sendlist
   int*** send_local_list;
   int*** send_segment_sizes;
-  int*** send_segment_types;
+  bool*** send_segment_types;
   int*** send_segment_idxs;
   int** send_num_segments;
 
@@ -369,7 +370,7 @@ struct queue_info {
 
   int*** send_process_segment_sizes;
   int*** send_process_segment_idxs;
-  int*** send_process_segment_types;
+  bool*** send_process_segment_types;
   int** send_process_num_segments;
   int*** send_process_local_list;
 
@@ -378,7 +379,7 @@ struct queue_info {
   int** recv_process_pos_offset;
 
   int*** recv_process_segment_sizes;
-  int*** recv_process_segment_types;
+  bool*** recv_process_segment_types;
   int*** recv_process_segment_idxs;
   int** recv_process_num_segments;
 

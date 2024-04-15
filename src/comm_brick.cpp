@@ -2211,7 +2211,7 @@ void CommBrick::construct_second_send_list_stencil_md(
                 Atom* atom_ = atom_arr[t];
                 int nsend_stencil_md = 0;
 
-                std::vector<int> new_segment_types;
+                std::vector<bool> new_segment_types;
                 std::vector<int> new_segment_sizes;
                 std::vector<int> new_segment_idxs;
 
@@ -2301,7 +2301,7 @@ void CommBrick::construct_second_send_list_stencil_md(
                 }
 
                 zoid.send_segment_sizes[t][i] = new int[num_segments];
-                zoid.send_segment_types[t][i] = new int[num_segments];
+                zoid.send_segment_types[t][i] = new bool[num_segments];
                 zoid.send_segment_idxs[t][i] = new int[num_segments];
 
                 for (int j = 0; j < num_segments; j++) {
@@ -2503,7 +2503,7 @@ void CommBrick::construct_second_send_list_stencil_md_next_dt(
                 }
 
                 zoid.send_segment_sizes[t][i] = new int[num_segments];
-                zoid.send_segment_types[t][i] = new int[num_segments];
+                zoid.send_segment_types[t][i] = new bool[num_segments];
                 zoid.send_segment_idxs[t][i] = new int[num_segments];
 
                 for (int j = 0; j < num_segments; j++) {

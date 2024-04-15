@@ -2115,7 +2115,7 @@ void Verlet::setup_stencil_md() {
                     lmp->send_to_neighbors[zoid_num].size();
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.send_segment_sizes[t] = new int*[num_send_neighbors];
-                    zoid.send_segment_types[t] = new int*[num_send_neighbors];
+                    zoid.send_segment_types[t] = new bool*[num_send_neighbors];
                     zoid.send_segment_idxs[t] = new int*[num_send_neighbors];
                     zoid.send_num_segments[t] = new int[num_send_neighbors];
                     zoid.send_local_list[t] = new int*[num_send_neighbors];
@@ -2215,7 +2215,7 @@ void Verlet::setup_stencil_md() {
                     lmp->send_to_neighbors_next_dt[zoid_num].size();
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.send_segment_sizes[t] = new int*[num_send_neighbors];
-                    zoid.send_segment_types[t] = new int*[num_send_neighbors];
+                    zoid.send_segment_types[t] = new bool*[num_send_neighbors];
                     zoid.send_segment_idxs[t] = new int*[num_send_neighbors];
                     zoid.send_num_segments[t] = new int[num_send_neighbors];
                     zoid.send_local_list[t] = new int*[num_send_neighbors];
@@ -2348,7 +2348,7 @@ void Verlet::setup_stencil_md() {
 
                         for (int k = 0; k < zoid.send_num_segments[t][i];
                              k++) {
-                            int segment_type =
+                            bool segment_type =
                                 zoid.send_segment_types[t][i][k];
                             if (segment_type == LOCAL_SEGMENT_TYPE) {
                                 num_local_sizes +=
@@ -2459,7 +2459,7 @@ void Verlet::setup_stencil_md() {
 
                         for (int k = 0; k < zoid.send_num_segments[t][i];
                              k++) {
-                            int segment_type =
+                            bool segment_type =
                                 zoid.send_segment_types[t][i][k];
                             if (segment_type == LOCAL_SEGMENT_TYPE) {
                                 num_local_sizes +=
@@ -2552,7 +2552,7 @@ void Verlet::setup_stencil_md() {
                         int* local_list = zoid.send_local_list[t][i];
                         int local_list_idx = 0;
                         for (int k = 0; k < zoid.send_num_segments[t][i]; k++) {
-                            int segment_type = zoid.send_segment_types[t][i][k];
+                            bool segment_type = zoid.send_segment_types[t][i][k];
                             if (segment_type == GHOST_SEGMENT_TYPE) {
                                 int ghost_size =
                                     zoid.send_segment_sizes[t][i][k];
@@ -2600,7 +2600,7 @@ void Verlet::setup_stencil_md() {
                             int local_list_idx = 0;
 
                             for (int k = 0; k < num_segments; k++) {
-                                int segment_type =
+                                bool segment_type =
                                     zoid.send_segment_types[t][i][k];
                                 if (segment_type == GHOST_SEGMENT_TYPE) {
                                     int ghost_size =
@@ -2812,7 +2812,7 @@ void Verlet::setup_stencil_md() {
                                 int num_segments = zoid.send_num_segments[t][i];
                                 int local_list_idx = 0;
                                 for (int k = 0; k < num_segments; k++) {
-                                    int segment_type =
+                                    bool segment_type =
                                         zoid.send_segment_types[t][i][k];
                                     if (segment_type == LOCAL_SEGMENT_TYPE) {
                                         int local_size =
@@ -2859,7 +2859,7 @@ void Verlet::setup_stencil_md() {
                                 int num_segments = zoid.send_num_segments[t][i];
                                 int local_list_idx = 0;
                                 for (int k = 0; k < num_segments; k++) {
-                                    int segment_type =
+                                    bool segment_type =
                                         zoid.send_segment_types[t][i][k];
                                     if (segment_type == LOCAL_SEGMENT_TYPE) {
                                         int local_size =
@@ -2909,7 +2909,7 @@ void Verlet::setup_stencil_md() {
                                 int num_segments = zoid.send_num_segments[t][i];
                                 int local_list_idx = 0;
                                 for (int k = 0; k < num_segments; k++) {
-                                    int segment_type =
+                                    bool segment_type =
                                         zoid.send_segment_types[t][i][k];
                                     if (segment_type == GHOST_SEGMENT_TYPE) {
                                         int ghost_size =
@@ -2962,7 +2962,7 @@ void Verlet::setup_stencil_md() {
                         zoid.send_process_num_segments[t][proc] =
                             num_local_segments + num_ghost_segments;
                         zoid.send_process_segment_types[t][proc] =
-                            new int[num_local_segments + num_ghost_segments];
+                            new bool[num_local_segments + num_ghost_segments];
                         zoid.send_process_segment_idxs[t][proc] =
                             new int[num_local_segments + num_ghost_segments];
                         zoid.send_process_segment_sizes[t][proc] =
@@ -3183,7 +3183,7 @@ void Verlet::setup_stencil_md() {
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
                     zoid.recv_process_segment_types[t] =
-                        new int*[recv_from.size()];
+                        new bool*[recv_from.size()];
                     zoid.recv_process_segment_idxs[t] =
                         new int*[recv_from.size()];
                     zoid.recv_process_segment_sizes[t] =
@@ -3320,7 +3320,7 @@ void Verlet::setup_stencil_md() {
                         zoid.recv_process_num_segments[t][i] =
                             num_local_segments_buf + num_ghost_segments_buf;
                         zoid.recv_process_segment_types[t][i] =
-                            new int[num_local_segments_buf +
+                            new bool[num_local_segments_buf +
                                     num_ghost_segments_buf];
                         zoid.recv_process_segment_idxs[t][i] =
                             new int[num_local_segments_buf +
@@ -3408,7 +3408,7 @@ void Verlet::setup_stencil_md() {
                         int* local_list = zoid.send_local_list[t][i];
                         int local_list_idx = 0;
                         for (int k = 0; k < zoid.send_num_segments[t][i]; k++) {
-                            int segment_type = zoid.send_segment_types[t][i][k];
+                            bool segment_type = zoid.send_segment_types[t][i][k];
                             if (segment_type == GHOST_SEGMENT_TYPE) {
                                 int ghost_size =
                                     zoid.send_segment_sizes[t][i][k];
@@ -3454,7 +3454,7 @@ void Verlet::setup_stencil_md() {
                             int local_list_idx = 0;
 
                             for (int k = 0; k < num_segments; k++) {
-                                int segment_type =
+                                bool segment_type =
                                     zoid.send_segment_types[t][i][k];
                                 if (segment_type == GHOST_SEGMENT_TYPE) {
                                     int ghost_size =
@@ -3669,7 +3669,7 @@ void Verlet::setup_stencil_md() {
                                 int num_segments = zoid.send_num_segments[t][i];
                                 int local_list_idx = 0;
                                 for (int k = 0; k < num_segments; k++) {
-                                    int segment_type =
+                                    bool segment_type =
                                         zoid.send_segment_types[t][i][k];
                                     if (segment_type == LOCAL_SEGMENT_TYPE) {
                                         int local_size =
@@ -3716,7 +3716,7 @@ void Verlet::setup_stencil_md() {
                                 int num_segments = zoid.send_num_segments[t][i];
                                 int local_list_idx = 0;
                                 for (int k = 0; k < num_segments; k++) {
-                                    int segment_type =
+                                    bool segment_type =
                                         zoid.send_segment_types[t][i][k];
                                     if (segment_type == LOCAL_SEGMENT_TYPE) {
                                         int local_size =
@@ -3766,7 +3766,7 @@ void Verlet::setup_stencil_md() {
                                 int num_segments = zoid.send_num_segments[t][i];
                                 int local_list_idx = 0;
                                 for (int k = 0; k < num_segments; k++) {
-                                    int segment_type =
+                                    bool segment_type =
                                         zoid.send_segment_types[t][i][k];
                                     if (segment_type == GHOST_SEGMENT_TYPE) {
                                         int ghost_size =
@@ -3819,7 +3819,7 @@ void Verlet::setup_stencil_md() {
                         zoid.send_process_num_segments[t][proc] =
                             num_local_segments + num_ghost_segments;
                         zoid.send_process_segment_types[t][proc] =
-                            new int[num_local_segments + num_ghost_segments];
+                            new bool[num_local_segments + num_ghost_segments];
                         zoid.send_process_segment_idxs[t][proc] =
                             new int[num_local_segments + num_ghost_segments];
                         zoid.send_process_segment_sizes[t][proc] =
@@ -4055,7 +4055,7 @@ void Verlet::setup_stencil_md() {
                         lmp->atom_stencil_md[zoid_num]
                                             [NUM_TIMESTEPS_IN_PARALLEL - t];
                     zoid.recv_process_segment_types[t] =
-                        new int*[recv_from.size()];
+                        new bool*[recv_from.size()];
                     zoid.recv_process_segment_idxs[t] =
                         new int*[recv_from.size()];
                     zoid.recv_process_segment_sizes[t] =
@@ -4185,7 +4185,7 @@ void Verlet::setup_stencil_md() {
                         zoid.recv_process_num_segments[t][i] =
                             num_local_segments_buf + num_ghost_segments_buf;
                         zoid.recv_process_segment_types[t][i] =
-                            new int[num_local_segments_buf +
+                            new bool[num_local_segments_buf +
                                     num_ghost_segments_buf];
                         zoid.recv_process_segment_idxs[t][i] =
                             new int[num_local_segments_buf +
