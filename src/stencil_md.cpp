@@ -703,6 +703,10 @@ void StencilMD::INIT_ZOID_NEIGHBORS() {
         }
     }
 
+    for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
+        lmp->recv_from_neighbors_procs_idxs[lmp->recv_from_neighbors_procs[i]] = i;
+    }
+
     lmp->send_to_neighbors_procs_next_dt = new std::unordered_set<int>[NUM_ZOIDS];
     for (int i = 0; i < NUM_ZOIDS; i++) {
         auto& send_to = lmp->send_to_neighbors_next_dt[i];
@@ -722,6 +726,11 @@ void StencilMD::INIT_ZOID_NEIGHBORS() {
             }
         }
     }
+
+    for (int i = 0; i < lmp->recv_from_neighbors_procs_next_dt.size(); i++) {
+        lmp->recv_from_neighbors_procs_idxs_next_dt[lmp->recv_from_neighbors_procs_next_dt[i]] = i;
+    }
+
 }
 
 void StencilMD::INIT_DOMAIN_BOUNDS() {

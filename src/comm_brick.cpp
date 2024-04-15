@@ -3444,13 +3444,7 @@ void CommBrick::receive_data_process_stencil_md(bool curr_dt, MPI_Request* reque
 
 void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, bool is_initial) {
     // assume the sender will have done all of the unpacking
-    if (recv_zoid_num % comm->nprocs == comm->me) {
-        return;
-    }
-
-    if (!curr_dt) {
-        assert(!is_initial);
-    }
+    assert(recv_zoid_num % comm->nprocs != comm->me);
 
     int start_timestep;
     int end_timestep;
@@ -3463,13 +3457,21 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
         end_timestep = NUM_TIMESTEPS_IN_PARALLEL + 1;
     }
 
-    int receive_request_idx = -1;
     auto& recv_from_neighbor_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
+    int receive_request_idx = curr_dt ? lmp->recv_from_neighbors_procs_idxs[recv_zoid_num] : lmp->recv_from_neighbors_procs_idxs_next_dt[recv_zoid_num];
+    if (curr_dt) {
+        assert(receive_request_idx >= 0 && receive_request_idx < lmp->recv_from_neighbors_procs.size());
+    } else {
+        assert(receive_request_idx >= 0 && receive_request_idx < lmp->recv_from_neighbors_procs_next_dt.size());
+    }
+
+    /*
     auto it = std::find(recv_from_neighbor_procs.begin(), recv_from_neighbor_procs.end(), recv_zoid_num);
 
     assert(it != recv_from_neighbor_procs.end());
 
     receive_request_idx = std::distance(recv_from_neighbor_procs.begin(), it);
+    */
 
     auto begin = std::chrono::high_resolution_clock::now();
     queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[recv_zoid_num] : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];

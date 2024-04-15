@@ -93,9 +93,11 @@ class LAMMPS {
 
   std::unordered_set<int>* send_to_neighbors_procs;
   std::vector<int> recv_from_neighbors_procs;
+  int recv_from_neighbors_procs_idxs[NUM_ZOIDS];
 
   std::unordered_set<int>* send_to_neighbors_procs_next_dt;
   std::vector<int> recv_from_neighbors_procs_next_dt;
+  int recv_from_neighbors_procs_idxs_next_dt[NUM_ZOIDS];
 
   int* num_recv_force_from_zoid[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int* num_recv_pos_from_zoid[NUM_TIMESTEPS_IN_PARALLEL + 1];
