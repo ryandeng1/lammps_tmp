@@ -1984,6 +1984,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
         m = vel_start_idx;
 
+        /*
         #pragma cilk grainsize 128
         cilk_for (int i = 0; i < num_recv_vel; i++) {
             double v_x = buf[m + i * 3];
@@ -1996,6 +1997,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             v[idx][1] = v_y;
             v[idx][2] = v_z;
         }
+        */
     }
 }
 
