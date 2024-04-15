@@ -1692,14 +1692,19 @@ void CommBrick::construct_send_list_stencil_md_send(
                 std::cout << YELLOW << "curr dt zoid: " << zoid.num << " to: " << send_zoid_num << " time: " << t << " num pos_segments segments: " << num_pos_segments << RESET_COLOR << std::endl;
             }
 
+            int total_send_pos_to_zoid = 0;
             zoid.send_pos_num_segments[t][i] = num_pos_segments;
             zoid.send_pos_idxs[t][i] = new int[num_pos_segments];
             zoid.send_pos_sizes[t][i] = new int[num_pos_segments];
+
             for (int j = 0; j < num_pos_segments; j++) {
                 zoid.send_pos_idxs[t][i][j] = segment_idxs_pos[j];
                 zoid.send_pos_sizes[t][i][j] = segment_lengths_pos[j];
+
+                total_send_pos_to_zoid += segment_lengths_pos[j];
             }
 
+            zoid.send_pos_total_num_elems[t][i] = total_send_pos_to_zoid;
             sendnum_stencil_md[t][i] = nsend_stencil_md;
         }
 
@@ -1910,11 +1915,15 @@ void CommBrick::construct_send_list_stencil_md_next_dt_send(
             zoid.send_pos_num_segments[t][i] = num_pos_segments;
             zoid.send_pos_idxs[t][i] = new int[num_pos_segments];
             zoid.send_pos_sizes[t][i] = new int[num_pos_segments];
+
+            int total_send_pos_to_zoid = 0;
             for (int j = 0; j < num_pos_segments; j++) {
                 zoid.send_pos_idxs[t][i][j] = segment_idxs_pos[j];
                 zoid.send_pos_sizes[t][i][j] = segment_lengths_pos[j];
+                total_send_pos_to_zoid += segment_lengths_pos[j];
             }
 
+            zoid.send_pos_total_num_elems[t][i] = total_send_pos_to_zoid;
             sendnum_stencil_md_next_dt[t][i] = nsend_stencil_md;
         }
 
@@ -3038,7 +3047,7 @@ void CommBrick::pack_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
                 zoid.send_force_total_num_elems[t], zoid.send_force_num_segments[t], zoid.send_force_idxs[t], zoid.send_force_sizes[t],
                 zoid.send_process_num_segments[t][proc], zoid.send_process_segment_types[t][proc],
                 zoid.send_process_segment_idxs[t][proc], zoid.send_process_segment_sizes[t][proc],
-                zoid.send_pos_num_segments[t], zoid.send_pos_idxs[t], zoid.send_pos_sizes[t],
+                zoid.send_pos_total_num_elems[t], zoid.send_pos_num_segments[t], zoid.send_pos_idxs[t], zoid.send_pos_sizes[t],
                 zoid.send_process_local_list[t][proc], &buf_send_stencil_md[proc][buf_idx], pbc_flags_);
 
         buf_idx += n;
@@ -3237,7 +3246,7 @@ bool CommBrick::send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
                 zoid.send_force_total_num_elems[t], zoid.send_force_num_segments[t], zoid.send_force_idxs[t], zoid.send_force_sizes[t],
                 zoid.send_process_num_segments[t][proc], zoid.send_process_segment_types[t][proc],
                 zoid.send_process_segment_idxs[t][proc], zoid.send_process_segment_sizes[t][proc],
-                zoid.send_pos_num_segments[t], zoid.send_pos_idxs[t], zoid.send_pos_sizes[t],
+                zoid.send_pos_total_num_elems[t], zoid.send_pos_num_segments[t], zoid.send_pos_idxs[t], zoid.send_pos_sizes[t],
                 zoid.send_process_local_list[t][proc], &buf_send_stencil_md[proc][buf_idx], pbc_flags_);
 
         buf_idx += n;
