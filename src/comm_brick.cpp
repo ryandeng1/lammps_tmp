@@ -3478,6 +3478,7 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
     auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[recv_zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[recv_zoid_num];
 
     // for (auto& [zoid_num, recv_idx] : zoid_num_idxs_recv) {
+    /*
     cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
         int zoid_num = zoid_num_idxs_recv[i].first;
         int recv_idx = zoid_num_idxs_recv[i].second;
@@ -3535,15 +3536,10 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
                     // &buf_recv_stencil_md[receive_request_idx][buf_idx], pbc_flag_);
                         &buf_recv_stencil_md[receive_request_idx][starting_idx], pbc_flag_);
 
-            /*
-            if (DEBUG_SEND_RECV_DATA) {
-                buf_idx += nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
-            } else {
-                buf_idx += nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
-            }
-            */
         }
     }
+    */
+
 }
 
 void CommBrick::send_data_stencil_md_next_dt(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr,
