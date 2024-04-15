@@ -114,7 +114,7 @@ class AtomVec : protected Pointers {
   virtual int pack_border_stencil_md(int, int*, double*, int*, int**);
   virtual int unpack_border_stencil_md(int, int, double*, Atom*, int);
 
-  virtual int pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs, int* num_send_force, int** force_idx_list, int** force_size_list,
+  virtual int pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs, int* total_num_elems_send_force, int* num_send_force, int** force_idx_list, int** force_size_list,
                                               int num_pos_segments, int* segment_types, int* segment_idxs, int* segment_lengths,
                                               int* num_send_vel, int** vel_idx_list, int** vel_size_list,
                                               int* local_list, double* buf, int* pbc_flags);

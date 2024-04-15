@@ -334,6 +334,7 @@ struct queue_info {
   int*** send_force_idxs;
   int*** send_force_sizes;
   int** send_force_num_segments;
+  int** send_force_total_num_elems;
 
   int*** send_pos_idxs;
   int*** send_pos_sizes;

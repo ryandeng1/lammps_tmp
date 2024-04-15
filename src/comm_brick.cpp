@@ -1674,10 +1674,15 @@ void CommBrick::construct_send_list_stencil_md_send(
             zoid.send_force_idxs[t][i] = new int[num_force_segments];
             zoid.send_force_sizes[t][i] = new int[num_force_segments];
 
+            int total_send_force_to_zoid = 0;
             for (int j = 0; j < num_force_segments; j++) {
                 zoid.send_force_idxs[t][i][j] = segment_idxs_force[j];
                 zoid.send_force_sizes[t][i][j] = segment_lengths_force[j];
+
+                total_send_force_to_zoid += segment_lengths_force[j];
             }
+
+            zoid.send_force_total_num_elems[t][i] = total_send_force_to_zoid;
 
             std::vector<int> segment_idxs_pos;
             std::vector<int> segment_lengths_pos;
@@ -1883,10 +1888,16 @@ void CommBrick::construct_send_list_stencil_md_next_dt_send(
             zoid.send_force_num_segments[t][i] = num_force_segments;
             zoid.send_force_idxs[t][i] = new int[num_force_segments];
             zoid.send_force_sizes[t][i] = new int[num_force_segments];
+
+            int total_send_force_to_zoid = 0;
             for (int j = 0; j < num_force_segments; j++) {
                 zoid.send_force_idxs[t][i][j] = segment_idxs_force[j];
                 zoid.send_force_sizes[t][i][j] = segment_lengths_force[j];
+
+                total_send_force_to_zoid += segment_lengths_force[j];
             }
+
+            zoid.send_force_total_num_elems[t][i] = total_send_force_to_zoid;
 
             std::vector<int> segment_idxs_pos;
             std::vector<int> segment_lengths_pos;
@@ -3012,6 +3023,7 @@ void CommBrick::pack_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
     }
 
     int buf_idx = 0;
+    // TODO: parallelize
     for (int t = start_timestep; t < end_timestep; t++) {
         Atom* atom_;
         if (curr_dt) {
@@ -3023,7 +3035,7 @@ void CommBrick::pack_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
         int* pbc_flags_ = nullptr;
         int n = atom_->avec->pack_data_to_process_stencil_md(
                 neighbors_in_proc.size(), neighbors_in_proc.data(),
-                zoid.send_force_num_segments[t], zoid.send_force_idxs[t], zoid.send_force_sizes[t],
+                zoid.send_force_total_num_elems[t], zoid.send_force_num_segments[t], zoid.send_force_idxs[t], zoid.send_force_sizes[t],
                 zoid.send_process_num_segments[t][proc], zoid.send_process_segment_types[t][proc],
                 zoid.send_process_segment_idxs[t][proc], zoid.send_process_segment_sizes[t][proc],
                 zoid.send_pos_num_segments[t], zoid.send_pos_idxs[t], zoid.send_pos_sizes[t],
@@ -3222,7 +3234,7 @@ bool CommBrick::send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
         int* pbc_flags_ = nullptr;
         int n = atom_->avec->pack_data_to_process_stencil_md(
                 neighbors_in_proc.size(), neighbors_in_proc.data(),
-                zoid.send_force_num_segments[t], zoid.send_force_idxs[t], zoid.send_force_sizes[t],
+                zoid.send_force_total_num_elems[t], zoid.send_force_num_segments[t], zoid.send_force_idxs[t], zoid.send_force_sizes[t],
                 zoid.send_process_num_segments[t][proc], zoid.send_process_segment_types[t][proc],
                 zoid.send_process_segment_idxs[t][proc], zoid.send_process_segment_sizes[t][proc],
                 zoid.send_pos_num_segments[t], zoid.send_pos_idxs[t], zoid.send_pos_sizes[t],
@@ -3233,10 +3245,9 @@ bool CommBrick::send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, 
     auto end_atom_pack = std::chrono::high_resolution_clock::now();
     auto duration_atom_pack = std::chrono::duration_cast<std::chrono::microseconds>(end_atom_pack-begin_atom_pack).count();
 
-    if (pack_duration != nullptr) {
-        // (*pack_duration) += duration_atom_pack;
+    if (num_elems_send != buf_idx) {
+        std::cout << "num elems send: " << num_elems_send << " buf idx: " << buf_idx << " curr dt: " << curr_dt << std::endl;
     }
-
     assert(num_elems_send == buf_idx);
 
     if (proc != comm->me) {

@@ -2152,8 +2152,9 @@ void Verlet::setup_stencil_md() {
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.send_force_idxs[t] = new int*[num_send_neighbors];
                     zoid.send_force_sizes[t] = new int*[num_send_neighbors];
-                    zoid.send_force_num_segments[t] =
-                        new int[num_send_neighbors];
+                    zoid.send_force_num_segments[t] = new int[num_send_neighbors];
+                    zoid.send_force_total_num_elems[t] = new int[num_send_neighbors];
+
                     zoid.send_pos_idxs[t] = new int*[num_send_neighbors];
                     zoid.send_pos_sizes[t] = new int*[num_send_neighbors];
                     zoid.send_pos_num_segments[t] = new int[num_send_neighbors];
@@ -2249,8 +2250,8 @@ void Verlet::setup_stencil_md() {
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.send_force_idxs[t] = new int*[num_send_neighbors];
                     zoid.send_force_sizes[t] = new int*[num_send_neighbors];
-                    zoid.send_force_num_segments[t] =
-                        new int[num_send_neighbors];
+                    zoid.send_force_num_segments[t] = new int[num_send_neighbors];
+                    zoid.send_force_total_num_elems[t] = new int[num_send_neighbors];
 
                     zoid.send_pos_idxs[t] = new int*[num_send_neighbors];
                     zoid.send_pos_sizes[t] = new int*[num_send_neighbors];
