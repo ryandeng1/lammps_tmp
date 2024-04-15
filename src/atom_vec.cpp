@@ -1905,7 +1905,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
 
-        /*
         #pragma cilk grainsize 128
         cilk_for (int i = 0; i < num_recv_force; i++) {
             double f_x = buf[m + i * 3];
@@ -1918,7 +1917,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             f[idx][1] += f_y;
             f[idx][2] += f_z;
         }
-        */
 
         m += 3 * num_recv_force;
 
@@ -1935,7 +1933,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             int segment_idx = segment_idxs_buf[i];
             int counter = segment_idx * (3) + pos_start_idx;
             if (segment_type == RECV_DATA_PROCESS_LOCAL) {
-                /*
                 #pragma cilk grainsize 128
                 cilk_for (int j = 0; j < segment_size; j++) {
 
@@ -1950,12 +1947,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
                     x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
                 }
                 local_list_idx += segment_size;
-                */
             } else {
-                counter++;
-                counter++;
-                counter++;
-                /*
                 assert(segment_type == RECV_DATA_PROCESS_GHOST);
                 for (int j = 0; j < segment_size; j++) {
                     int buf_idx = counter / 3;
@@ -1976,7 +1968,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
 
                     ghost_idx++;
                 }
-                */
             }
         }
 
@@ -1984,7 +1975,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
         m = vel_start_idx;
 
-        /*
         #pragma cilk grainsize 128
         cilk_for (int i = 0; i < num_recv_vel; i++) {
             double v_x = buf[m + i * 3];
@@ -1997,7 +1987,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             v[idx][1] = v_y;
             v[idx][2] = v_z;
         }
-        */
     }
 }
 
