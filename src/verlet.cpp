@@ -2785,6 +2785,7 @@ void Verlet::setup_stencil_md() {
             new int[lmp->recv_from_neighbors_procs.size()];
         memset(lmp->num_recv_vel_from_zoid[t], -1,
                lmp->recv_from_neighbors_procs.size());
+        lmp->num_recv_elems_from_zoid[t] = new int[lmp->recv_from_neighbors_procs.size()];
     }
 
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
@@ -3241,6 +3242,11 @@ void Verlet::setup_stencil_md() {
                                     num_pos_recv;
                                 lmp->num_recv_vel_from_zoid[t][k] =
                                     num_vel_recv;
+                                if (DEBUG_SEND_RECV_DATA) {
+                                    lmp->num_recv_elems_from_zoid[t][k] = num_force_recv * (3 + 1) + num_pos_recv * (3 + 1) + num_vel_recv * (3 + 1);
+                                } else {
+                                    lmp->num_recv_elems_from_zoid[t][k] = num_force_recv * (3) + num_pos_recv * (3) + num_vel_recv * (3);
+                                }
                             }
                         }
 
@@ -3633,6 +3639,7 @@ void Verlet::setup_stencil_md() {
             new int[lmp->recv_from_neighbors_procs_next_dt.size()];
         memset(lmp->num_recv_vel_from_zoid_next_dt[t], -1,
                lmp->recv_from_neighbors_procs_next_dt.size());
+        lmp->num_recv_elems_from_zoid_next_dt[t] = new int[lmp->recv_from_neighbors_procs_next_dt.size()];
     }
 
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
@@ -4108,6 +4115,12 @@ void Verlet::setup_stencil_md() {
                                     num_pos_recv;
                                 lmp->num_recv_vel_from_zoid_next_dt[t][k] =
                                     num_vel_recv;
+
+                                if (DEBUG_SEND_RECV_DATA) {
+                                    lmp->num_recv_elems_from_zoid_next_dt[t][k] = num_force_recv * (3 + 1) + num_pos_recv * (3 + 1) + num_vel_recv * (3 + 1);
+                                } else {
+                                    lmp->num_recv_elems_from_zoid_next_dt[t][k] = num_force_recv * (3) + num_pos_recv * (3) + num_vel_recv * (3);
+                                }
                             }
                         }
 

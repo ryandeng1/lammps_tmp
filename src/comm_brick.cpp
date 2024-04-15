@@ -37,6 +37,7 @@
 #include "stencil_md_utils.h"
 #include "timer.h"
 #include <cilk/cilk.h>
+#include <sstream>
 
 using namespace LAMMPS_NS;
 
@@ -760,6 +761,8 @@ void CommBrick::forward_comm(int /*dummy*/)
   // n_ghost + ___ (we fill in the last ___)
   //
 
+  int num_send = 0;
+
   for (int iswap = 0; iswap < nswap; iswap++) {
     if (sendproc[iswap] != me) {
       if (comm_x_only) {
@@ -770,6 +773,7 @@ void CommBrick::forward_comm(int /*dummy*/)
         n = avec->pack_comm(sendnum[iswap], sendlist[iswap], buf_send, pbc_flag[iswap], pbc[iswap]);
         if (n) MPI_Send(buf_send, n, MPI_DOUBLE, sendproc[iswap], 0, world);
         if (size_forward_recv[iswap]) MPI_Wait(&request, MPI_STATUS_IGNORE);
+        num_send += size_forward_recv[iswap];
         // std::cout << GREEN << "lammps forward comm num recv " << size_forward_recv[iswap] << " other way around? " << n << RESET_COLOR << std::endl;
       } else if (ghost_velocity) {
         if (size_forward_recv[iswap])
@@ -804,6 +808,13 @@ void CommBrick::forward_comm(int /*dummy*/)
       }
     }
   }
+
+  /*
+  MPI_Allreduce(MPI_IN_PLACE, &num_send, 1, MPI_INT, MPI_SUM, world);
+  if (comm->me == 0) {
+      std::cout << "num send forward: " << num_send << std::endl;
+  }
+  */
 }
 
 /* ----------------------------------------------------------------------
@@ -833,6 +844,7 @@ void CommBrick::reverse_comm()
   */
 
   // std::cout << "me: " << comm->me << " lammps no force. num: " << num_no_force << " out of: " << atom->nghost << std::endl;
+  int num_send = 0;
 
   for (int iswap = nswap - 1; iswap >= 0; iswap--) {
     if (sendproc[iswap] != me) {
@@ -845,6 +857,7 @@ void CommBrick::reverse_comm()
           MPI_Send(buf, size_reverse_send[iswap], MPI_DOUBLE, recvproc[iswap], 0, world);
         }
         if (size_reverse_recv[iswap]) MPI_Wait(&request, MPI_STATUS_IGNORE);
+        num_send += size_reverse_recv[iswap];
         // std::cout << GREEN << "lammps reverse comm num recv " << size_reverse_recv[iswap] << RESET_COLOR << std::endl;
       } else {
         if (size_reverse_recv[iswap])
@@ -865,6 +878,12 @@ void CommBrick::reverse_comm()
       }
     }
   }
+  /*
+  MPI_Allreduce(MPI_IN_PLACE, &num_send, 1, MPI_INT, MPI_SUM, world);
+  if (comm->me == 0) {
+      std::cout << "num send reverse: " << num_send << std::endl;
+  }
+  */
 }
 
 /* ----------------------------------------------------------------------
@@ -2252,10 +2271,6 @@ void CommBrick::construct_second_send_list_stencil_md(
                     }
                 }
 
-                if (num_local_segments > 1) {
-                    std::cout << "debug second send list zoid: " << zoid_num << " send to: " << send_zoid_num << " time: " << t << " num local segments: " << num_local_segments << std::endl;
-                }
-
                 int num_segments = new_segment_types.size();
                 int num_local = local_idxs.size();
 
@@ -3056,6 +3071,15 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, queue_info&
         auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[zoid_num];
 
         // for (auto& [other_zoid_num, recv_idx] : zoid_num_idxs_recv) {
+        /*
+        std::stringstream s;
+        for (auto& tmp : zoid_num_idxs_recv) {
+            s << tmp.first << " ";
+        }
+
+        // std::cout << "zoid: " << zoid.num << " curr_dt: " << curr_dt << " num zoids to unpack: " << zoid_num_idxs_recv.size() << " zoids: " << s.str() << std::endl;
+        */
+
         cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
             int other_zoid_num = zoid_num_idxs_recv[i].first;
             int recv_idx = zoid_num_idxs_recv[i].second;
@@ -3471,29 +3495,9 @@ void CommBrick::unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, 
         idxs.push_back(0);
         for (int t = start_timestep; t < end_timestep; t++) {
             if (curr_dt) {
-                int nrecv_force_timestep = lmp->num_recv_force_from_zoid[t][receive_request_idx];
-                int nrecv_pos_timestep = lmp->num_recv_pos_from_zoid[t][receive_request_idx];
-                int nrecv_vel_timestep = lmp->num_recv_vel_from_zoid[t][receive_request_idx];
-
-                int num_elems;
-                if (DEBUG_SEND_RECV_DATA) {
-                    num_elems = nrecv_force_timestep * (3 + 1) + nrecv_pos_timestep * (3 + 1) + nrecv_vel_timestep * (3 + 1);
-                } else {
-                    num_elems = nrecv_force_timestep * (3) + nrecv_pos_timestep * (3) + nrecv_vel_timestep * (3);
-                }
-                idxs.push_back(num_elems + idxs[idxs.size() - 1]);
+                idxs.push_back(lmp->num_recv_elems_from_zoid[t][receive_request_idx] + idxs[idxs.size() - 1]);
             } else {
-                int nrecv_force_timestep = lmp->num_recv_force_from_zoid_next_dt[t][receive_request_idx];
-                int nrecv_pos_timestep = lmp->num_recv_pos_from_zoid_next_dt[t][receive_request_idx];
-                int nrecv_vel_timestep = lmp->num_recv_vel_from_zoid_next_dt[t][receive_request_idx];
-
-                int num_elems;
-                if (DEBUG_SEND_RECV_DATA) {
-                    num_elems = nrecv_force_timestep * (3 + 1) + nrecv_pos_timestep * (3 + 1) + nrecv_vel_timestep * (3 + 1);
-                } else {
-                    num_elems = nrecv_force_timestep * (3) + nrecv_pos_timestep * (3) + nrecv_vel_timestep * (3);
-                }
-                idxs.push_back(num_elems + idxs[idxs.size() - 1]);
+                idxs.push_back(lmp->num_recv_elems_from_zoid_next_dt[t][receive_request_idx] + idxs[idxs.size() - 1]);
             }
         }
 

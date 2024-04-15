@@ -101,9 +101,13 @@ class LAMMPS {
   int* num_recv_pos_from_zoid[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int* num_recv_vel_from_zoid[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
+  int* num_recv_elems_from_zoid[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
   int* num_recv_force_from_zoid_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int* num_recv_pos_from_zoid_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int* num_recv_vel_from_zoid_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+  int* num_recv_elems_from_zoid_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
   int* zoid_num_to_idx;
   queue_info* zoid_num_to_zoid;
