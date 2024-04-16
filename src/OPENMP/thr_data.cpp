@@ -24,6 +24,10 @@
 #include "memory.h"
 #include "timer.h"
 
+#include <cilk/cilk.h>
+#include <cilk/opadd_reducer.h>
+#include "stencil_md_utils.h"
+
 using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
@@ -261,6 +265,62 @@ void ThrData::virial_fdotr_compute(double **x, int nlocal, int nghost, int nfirs
   }
 }
 
+void ThrData::virial_fdotr_compute_stencil_md(double **x, int nlocal, int nghost, int nfirst) {
+
+    // sum over force on all particles including ghosts
+
+    if (nfirst < 0) {
+        cilk::opadd_reducer<double> vp0 = 0.0;
+        cilk::opadd_reducer<double> vp1 = 0.0;
+        cilk::opadd_reducer<double> vp2 = 0.0;
+        cilk::opadd_reducer<double> vp3 = 0.0;
+        cilk::opadd_reducer<double> vp4 = 0.0;
+        cilk::opadd_reducer<double> vp5 = 0.0;
+
+        int nall = nlocal + nghost;
+        #pragma cilk grainsize NUM_WORKERS_PER_THREAD
+        cilk_for (int i = 0; i < nall; i++) {
+            vp0 += _f[i][0] * x[i][0];
+            vp1 += _f[i][1] * x[i][1];
+            vp2 += _f[i][2] * x[i][2];
+            vp3 += _f[i][1] * x[i][0];
+            vp4 += _f[i][2] * x[i][0];
+            vp5 += _f[i][2] * x[i][1];
+        }
+
+        virial_pair[0] = vp0;
+        virial_pair[1] = vp1;
+        virial_pair[2] = vp2;
+        virial_pair[3] = vp3;
+        virial_pair[4] = vp4;
+        virial_pair[5] = vp5;
+
+        // neighbor includegroup flag is set
+        // sum over force on initial nfirst particles and ghosts
+
+    } else {
+        assert(false);
+        int nall = nfirst;
+        for (int i = 0; i < nall; i++) {
+            virial_pair[0] += _f[i][0] * x[i][0];
+            virial_pair[1] += _f[i][1] * x[i][1];
+            virial_pair[2] += _f[i][2] * x[i][2];
+            virial_pair[3] += _f[i][1] * x[i][0];
+            virial_pair[4] += _f[i][2] * x[i][0];
+            virial_pair[5] += _f[i][2] * x[i][1];
+        }
+        nall = nlocal + nghost;
+        for (int i = nlocal; i < nall; i++) {
+            virial_pair[0] += _f[i][0] * x[i][0];
+            virial_pair[1] += _f[i][1] * x[i][1];
+            virial_pair[2] += _f[i][2] * x[i][2];
+            virial_pair[3] += _f[i][1] * x[i][0];
+            virial_pair[4] += _f[i][2] * x[i][0];
+            virial_pair[5] += _f[i][2] * x[i][1];
+        }
+    }
+}
+
 /* ---------------------------------------------------------------------- */
 
 double ThrData::memory_usage()
@@ -384,7 +444,7 @@ void LAMMPS_NS::data_reduce_thr_stencil_md(double *dall, int nall, int nthreads,
         // contiguous values in the array at a time
         // -- modify this code based on the size of the cache line
         double t0, t1, t2, t3, t4, t5, t6, t7;
-        for (m = ifrom; m < (ito - 7); m += 8) {
+        for (int m = ifrom; m < (ito - 7); m += 8) {
             t0 = dall[m];
             t1 = dall[m + 1];
             t2 = dall[m + 2];

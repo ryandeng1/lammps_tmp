@@ -142,6 +142,7 @@ class ThrData {
  public:
   // compute global per thread virial contribution from global forces and positions
   void virial_fdotr_compute(double **, int, int, int);
+  void virial_fdotr_compute_stencil_md(double **, int, int, int);
 
   double memory_usage();
 
