@@ -278,7 +278,6 @@ void ThrData::virial_fdotr_compute_stencil_md(double **x, int nlocal, int nghost
         cilk::opadd_reducer<double> vp5 = 0.0;
 
         int nall = nlocal + nghost;
-        std::cout << "nall: " << nall << std::endl;
         #pragma cilk grainsize NUM_WORKERS_PER_THREAD
         cilk_for (int i = 0; i < nall; i++) {
             vp0 += _f[i][0] * x[i][0];
