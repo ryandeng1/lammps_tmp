@@ -1978,10 +1978,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
                 local_list_idx += segment_size;
             } else {
                 assert(segment_type == RECV_DATA_PROCESS_GHOST);
-                counter++;
-                counter++;
-                counter++;
-                /*
                 for (int j = 0; j < segment_size; j++) {
                     int buf_idx = counter / 3;
                     double x_x = buf[counter++];
@@ -2001,7 +1997,6 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
 
                     ghost_idx++;
                 }
-                */
             }
         }
 
