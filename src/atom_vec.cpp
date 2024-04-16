@@ -1734,6 +1734,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
             bool segment_type = segment_types[i];
             int segment_size = segment_lengths[i];
             if (segment_type == SEND_DATA_PROCESS_LOCAL) {
+                #pragma cilk grainsize 32
                 cilk_for (int j = 0; j < segment_size; j++) {
                     int idx = local_list[local_list_idx + j];
                     buf[m + j * 3 + 0] = x[idx][0];
@@ -1936,6 +1937,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
 
+        #pragma cilk grainsize 32
         cilk_for (int i = 0; i < num_recv_force; i++) {
             double f_x = buf[m + i * 3];
             double f_y = buf[m + i * 3 + 1];
@@ -1963,6 +1965,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             int segment_idx = segment_idxs_buf[i];
             int counter = segment_idx * (3) + pos_start_idx;
             if (segment_type == RECV_DATA_PROCESS_LOCAL) {
+                #pragma cilk grainsize 32
                 cilk_for (int j = 0; j < segment_size; j++) {
 
                     double x_x = buf[counter + j * 3];
@@ -1978,6 +1981,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
                 local_list_idx += segment_size;
             } else {
                 assert(segment_type == RECV_DATA_PROCESS_GHOST);
+
                 for (int j = 0; j < segment_size; j++) {
                     int buf_idx = counter / 3;
                     double x_x = buf[counter++];
@@ -2004,6 +2008,7 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
         m = vel_start_idx;
 
+        #pragma cilk grainsize 32
         cilk_for (int i = 0; i < num_recv_vel; i++) {
             double v_x = buf[m + i * 3];
             double v_y = buf[m + i * 3 + 1];
