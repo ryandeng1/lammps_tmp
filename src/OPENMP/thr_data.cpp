@@ -447,7 +447,7 @@ void LAMMPS_NS::data_reduce_thr_stencil_md(double *dall, int nall, int nthreads,
         // contiguous values in the array at a time
         // -- modify this code based on the size of the cache line
         double t0, t1, t2, t3, t4, t5, t6, t7;
-        for (int m = ifrom; m < (ito - 7); m += 8) {
+        for (m = ifrom; m < (ito - 7); m += 8) {
             t0 = dall[m];
             t1 = dall[m + 1];
             t2 = dall[m + 2];
