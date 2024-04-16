@@ -505,9 +505,9 @@ void ThrOMP::reduce_thr_stencil_md(void *style, const int eflag, const int vflag
                 // this is a non-hybrid pair style. compute per thread fdotr
                 if (fix->last_pair_hybrid == nullptr) {
                     if (lmp->neighbor->includegroup == 0)
-                        thr->virial_fdotr_compute_stencil_md(x, nlocal, nghost, -1);
+                        thr->virial_fdotr_compute(x, nlocal, nghost, -1);
                     else
-                        thr->virial_fdotr_compute_stencil_md(x, nlocal, nghost, nfirst);
+                        thr->virial_fdotr_compute(x, nlocal, nghost, nfirst);
                 } else {
                     if (style == fix->last_pair_hybrid) {
                         assert(false);
