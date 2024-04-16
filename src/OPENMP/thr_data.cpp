@@ -364,6 +364,7 @@ void LAMMPS_NS::data_reduce_thr(double *dall, int nall, int nthreads, int ndim, 
     const int ito = ((ifrom + idelta) > nvals) ? nvals : (ifrom + idelta);
 
 #if defined(USER_OMP_NO_UNROLL)
+    assert(false);
     if (ifrom < nvals) {
       int m = 0;
 
@@ -453,16 +454,16 @@ void LAMMPS_NS::data_reduce_thr_stencil_md(double *dall, int nall, int nthreads,
         // (8 doubles) wide, explicitly unroll this loop to  compute 8
         // contiguous values in the array at a time
         // -- modify this code based on the size of the cache line
-        double t0, t1, t2, t3, t4, t5, t6, t7;
-        for (m = ifrom; m < (ito - 7); m += 8) {
-            t0 = dall[m];
-            t1 = dall[m + 1];
-            t2 = dall[m + 2];
-            t3 = dall[m + 3];
-            t4 = dall[m + 4];
-            t5 = dall[m + 5];
-            t6 = dall[m + 6];
-            t7 = dall[m + 7];
+        // double t0, t1, t2, t3, t4, t5, t6, t7;
+        cilk_for (int m = ifrom; m < (ito - 7); m += 8) {
+            double t0 = dall[m];
+            double t1 = dall[m + 1];
+            double t2 = dall[m + 2];
+            double t3 = dall[m + 3];
+            double t4 = dall[m + 4];
+            double t5 = dall[m + 5];
+            double t6 = dall[m + 6];
+            double t7 = dall[m + 7];
             for (int n = 1; n < nthreads; ++n) {
                 t0 += dall[n * nvals + m];
                 t1 += dall[n * nvals + m + 1];
@@ -490,8 +491,19 @@ void LAMMPS_NS::data_reduce_thr_stencil_md(double *dall, int nall, int nthreads,
             dall[m + 6] = t6;
             dall[m + 7] = t7;
         }
+
         // do the last < 8 values
+        /*
         for (; m < ito; m++) {
+            for (int n = 1; n < nthreads; ++n) {
+                dall[m] += dall[n * nvals + m];
+                dall[n * nvals + m] = 0.0;
+            }
+        }
+        */
+
+        int last_idx = (ito - ifrom) / 8 * 8 + ifrom;
+        for (int m = last_idx; m < ito; m++) {
             for (int n = 1; n < nthreads; ++n) {
                 dall[m] += dall[n * nvals + m];
                 dall[n * nvals + m] = 0.0;
