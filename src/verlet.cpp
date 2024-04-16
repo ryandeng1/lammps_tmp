@@ -5765,15 +5765,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_pr
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             compute_duration_cilk += duration;
-            if (curr_dt) {
-                curr_dt_compute_dep_time[get_zoid_dep(zoid_num)] += duration;
-                curr_dt_num_atoms[get_zoid_dep(zoid_num)] += atom_next_timestep->nlocal;
-                curr_dt_compute_dep_times_vec[get_zoid_dep(zoid_num)].push_back(duration);
-            } else {
-                next_dt_compute_dep_time[get_zoid_dep_next_dt(zoid_num)] += duration;
-                next_dt_num_atoms[get_zoid_dep_next_dt(zoid_num)] += atom_next_timestep->nlocal;
-                next_dt_compute_dep_times_vec[get_zoid_dep_next_dt(zoid_num)].push_back(duration);
-            }
         }
 
         // reverse communication of forces
@@ -6055,6 +6046,23 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
         send_pack_duration += send_pack_duration_cilk / SIZES[dep];
 
+        curr_dt_compute_dep_time[dep] += compute_duration_cilk / SIZES[dep];
+        int num_local_dep = 0;
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info &zoid = lmp->queues[dep][j];
+            int zoid_num = zoid.num;
+            if (zoid_num % comm->nprocs != comm->me) {
+                continue;
+            }
+
+            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
+                num_local_dep += lmp->atom_stencil_md[zoid_num][t + 1]->nlocal;
+            }
+        }
+        curr_dt_num_atoms[dep] += num_local_dep;
+        curr_dt_compute_dep_times_vec[dep].push_back(compute_duration_cilk / SIZES[dep]);
+
+
         if (dep < NUM_DEPS - 1) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 queue_info& zoid = lmp->queues[dep][j];
@@ -6296,6 +6304,23 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         compute_duration += compute_duration_cilk / SIZES[dep];
         modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
         send_pack_duration += send_pack_duration_cilk / SIZES[dep];
+
+        int num_local_dep = 0;
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            queue_info &zoid = lmp->queues_next_dt[dep][j];
+            int zoid_num = zoid.num;
+            if (zoid_num % comm->nprocs != comm->me) {
+                continue;
+            }
+
+            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
+                num_local_dep += lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - (t + 1)]->nlocal;
+            }
+        }
+
+        next_dt_compute_dep_time[dep] += compute_duration_cilk / SIZES[dep];
+        next_dt_num_atoms[dep] += num_local_dep;
+        next_dt_compute_dep_times_vec[dep].push_back(compute_duration_cilk / SIZES[dep]);
 
         if (dep < NUM_DEPS - 1) {
             for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
