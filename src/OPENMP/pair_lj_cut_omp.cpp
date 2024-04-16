@@ -262,11 +262,32 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         // reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
     } // end of omp parallel region
 
+    // try new reduce
+
+
+    double* f = &(atom_->eval_f_stencil_md[0][0]);
+
+    int nvals = nall * 3;
+
+    #pragma cilk grainsize 3 * NUM_WORKERS_PER_THREAD
+    cilk_for (int i = 0; i < nvals; i++) {
+        double t0 = f[i];
+        for (int n = 1; n < nthreads_to_use; ++n) {
+            t0 += f[n * nvals + i];
+        }
+        f[i] = t0;
+    }
+
+    /*
+    // try new reduce
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         ThrData *thr = fix->get_thr(tid);
         reduce_thr_stencil_md(this, eflag, vflag, thr, atom_, nthreads_to_use);
     } // end of omp parallel region
+    */
 }
+
+
 
 template <int EVFLAG, int EFLAG, int NEWTON_PAIR>
 void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
