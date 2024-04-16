@@ -270,6 +270,7 @@ void ThrData::virial_fdotr_compute_stencil_md(double **x, int nlocal, int nghost
     // sum over force on all particles including ghosts
 
     if (nfirst < 0) {
+        /*
         cilk::opadd_reducer<double> vp0 = 0.0;
         cilk::opadd_reducer<double> vp1 = 0.0;
         cilk::opadd_reducer<double> vp2 = 0.0;
@@ -278,6 +279,7 @@ void ThrData::virial_fdotr_compute_stencil_md(double **x, int nlocal, int nghost
         cilk::opadd_reducer<double> vp5 = 0.0;
 
         int nall = nlocal + nghost;
+        std::cout << "nall: " << nall << std::endl;
         #pragma cilk grainsize NUM_WORKERS_PER_THREAD
         cilk_for (int i = 0; i < nall; i++) {
             vp0 += _f[i][0] * x[i][0];
@@ -294,6 +296,7 @@ void ThrData::virial_fdotr_compute_stencil_md(double **x, int nlocal, int nghost
         virial_pair[3] = vp3;
         virial_pair[4] = vp4;
         virial_pair[5] = vp5;
+        */
 
         // neighbor includegroup flag is set
         // sum over force on initial nfirst particles and ghosts
