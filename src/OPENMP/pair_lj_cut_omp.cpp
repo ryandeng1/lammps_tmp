@@ -274,7 +274,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     int nvals = nall * 3;
 
-    #pragma cilk grainsize NUM_WORKERS_PER_THREAD
+    // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
     cilk_for (int i = 0; i < nvals; i++) {
         double t0 = f[i];
         for (int n = 1; n < nthreads_to_use; ++n) {
