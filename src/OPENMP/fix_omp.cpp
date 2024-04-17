@@ -485,7 +485,6 @@ void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
         nthreads_to_use = comm->nthreads;
     }
 
-    #pragma cilk grainsize 4
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // thr[tid]->check_tid(tid);
         thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
