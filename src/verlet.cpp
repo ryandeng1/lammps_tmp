@@ -248,7 +248,9 @@ void Verlet::setup(int flag) {
     modify->setup_pre_force(vflag);
 
     if (pair_compute_flag) {
-        force->pair->compute(eflag, vflag);
+        if (!ONLY_RUN_STENCIL_MD) {
+            force->pair->compute(eflag, vflag);
+        }
     } else if (force->pair) {
         force->pair->compute_dummy(eflag, vflag);
     }
