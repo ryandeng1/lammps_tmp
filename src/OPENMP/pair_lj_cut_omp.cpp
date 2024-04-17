@@ -274,6 +274,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     int nvals = nall * 3;
 
+    /*
     #pragma cilk grainsize NUM_WORKERS_PER_THREAD
     cilk_for (int i = 0; i < nvals; i++) {
         double t0 = f[i];
@@ -282,6 +283,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         }
         f[i] = t0;
     }
+    */
 
     /*
     // try new reduce
