@@ -71,7 +71,6 @@ typedef CGAL::Creator_uniform_3<double,Point>               Creator;
 using namespace LAMMPS_NS;
 
 static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
-constexpr bool USE_DEP_TO_WAIT_IDXS = true;
 static int64_t unpack_duration = 0;
 static int64_t send_comm_duration = 0;
 static int64_t recv_comm_duration = 0;
@@ -5142,11 +5141,9 @@ void Verlet::run(int n) {
     // map dependency levels to number of zoids to wait on
     std::vector<int> dep_to_wait_idxs[NUM_DEPS];
     std::set<int> zoids_already_waiting_on;
-    std::map<int, std::vector<int>> zoid_to_wait_idxs;
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         int num_zoids = 0;
-        std::vector<int> dep_recv_zoids;
         for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
             int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
             if (recv_zoid_num % comm->nprocs != comm->me) {
@@ -5156,12 +5153,10 @@ void Verlet::run(int n) {
                     if (zoid_num % comm->nprocs == comm->me) {
                         auto& recv_from = lmp->recv_from_neighbors[zoid_num];
                         if (std::find(recv_from.begin(), recv_from.end(),
-                                      recv_zoid_num) != recv_from.end() &&
-                            zoids_already_waiting_on.find(recv_zoid_num) == zoids_already_waiting_on.end()) {
+                                      recv_zoid_num) != recv_from.end()
+                                      && zoids_already_waiting_on.find(recv_zoid_num) == zoids_already_waiting_on.end()) {
                             dep_to_wait_idxs[dep].push_back(i);
                             zoids_already_waiting_on.insert(recv_zoid_num);
-                            dep_recv_zoids.push_back(recv_zoid_num);
-                            zoid_to_wait_idxs[zoid_num].push_back(i);
                             break;
                         }
                     }
@@ -5171,60 +5166,12 @@ void Verlet::run(int n) {
     }
 
     std::cout << "------------------------------------------------------------------------" << std::endl;
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        int num_directly_wait_on = 0;
-        for (auto& idx : dep_to_wait_idxs[dep]) {
-            int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
-            // std::cout << "Wait on idx: " << idx << " zoid: " << recv_zoid_num << std::endl;
-
-            if (get_zoid_dep(recv_zoid_num) == dep - 1 && (recv_zoid_num % comm->nprocs != comm->me)) {
-                num_directly_wait_on++;
-            }
-        }
-
-        int num_wait_on_normally = 0;
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
-            int zoid_num = lmp->queues[dep][j].num;
-            if (zoid_num % comm->nprocs == comm->me) {
-                for (auto& recv_from_zoid_num : lmp->recv_from_neighbors[zoid_num]) {
-                    if (recv_from_zoid_num % comm->nprocs != comm->me) {
-                        num_wait_on_normally++;
-                    }
-                }
-            }
-        }
-
-        // std::cout << "me: " << comm->me << " dep: " << dep << " num wait on: " << dep_to_wait_idxs[dep].size() << " num directly wait on: " << num_directly_wait_on << " num wait on normally: " << num_wait_on_normally << std::endl;
-    }
-
-    /*
-    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
-        if (zoid_num % comm->nprocs == comm->me) {
-            if (dep_to_wait_idxs[get_zoid_dep(zoid_num)].size() >= 9) {
-                std::vector<int> tmp;
-                for (int wait_idx : zoid_to_wait_idxs[zoid_num]) {
-                    int wait_zoid = lmp->recv_from_neighbors_procs[wait_idx];
-                    if (get_zoid_dep(wait_zoid) == get_zoid_dep(zoid_num) - 1) {
-                        tmp.push_back(wait_idx);
-                    }
-                }
-
-                std::cout << CYAN << "zoid num: " << zoid_num << " num directly wait on: " << tmp.size() << " num recv from: " << lmp->recv_from_neighbors[zoid_num].size() << RESET_COLOR << std::endl;
-                for (int wait_idx : tmp) {
-                    int wait_zoid = lmp->recv_from_neighbors_procs[wait_idx];
-                    std::cout << BLUE << "me: " << comm->me << " zoid: " << zoid_num << " waiting on zoid: " << lmp->recv_from_neighbors_procs[wait_idx] << RESET_COLOR << std::endl;
-                }
-            }
-        }
-    }
-    */
 
     MPI_Barrier(world);
 
     // map dependency levels to number of zoids to wait on
     std::vector<int> dep_to_wait_idxs_next_dt[NUM_DEPS];
     std::set<int> zoids_already_waiting_on_next_dt;
-    std::map<int, std::vector<int>> zoid_to_wait_idxs_next_dt;
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         int num_zoids = 0;
@@ -5247,7 +5194,6 @@ void Verlet::run(int n) {
                             zoids_already_waiting_on_next_dt.insert(
                                     recv_zoid_num);
                             dep_recv_zoids.push_back(recv_zoid_num);
-                            zoid_to_wait_idxs_next_dt[zoid_num].push_back(i);
                             break;
                         }
                     }
@@ -5305,16 +5251,10 @@ void Verlet::run(int n) {
 
     auto begin = std::chrono::high_resolution_clock::now();
     for (int t = 0; t < n; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
-        if (USE_DEP_TO_WAIT_IDXS) {
-            run_stencil_md(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, zoid_num_to_num_procs, zoid_num_to_num_procs_next_dt,
-                           test_f, test_x);
-        } else {
-            /*
-            run_stencil_md(t, zoid_to_wait_idxs, zoid_to_wait_idxs_next_dt, zoid_num_to_num_procs, zoid_num_to_num_procs_next_dt,
-                           test_f, test_x);
-            */
-        }
+        run_stencil_md(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, zoid_num_to_num_procs, zoid_num_to_num_procs_next_dt,
+                       test_f, test_x);
     }
+
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
     int64_t total_duration_stencil_md = 0;
@@ -5343,8 +5283,8 @@ void Verlet::run(int n) {
         MPI_Allreduce(&curr_dt_num_atoms[dep], &total_num_atoms_curr_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
         MPI_Allreduce(&next_dt_num_atoms[dep], &total_num_atoms_next_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
 
-        stencil_md_total_num_atoms_curr_dt_dep[dep] += total_num_atoms_curr_dt_dep;
-        stencil_md_total_num_atoms_next_dt_dep[dep] += total_num_atoms_next_dt_dep;
+        stencil_md_total_num_atoms_curr_dt_dep[dep] = total_num_atoms_curr_dt_dep;
+        stencil_md_total_num_atoms_next_dt_dep[dep] = total_num_atoms_next_dt_dep;
     }
 
     if (comm->me == 0) {
@@ -5456,6 +5396,11 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_pr
 #endif
         if (TEST_AGAINST_LAMMPS_LOCAL) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
+
+            stencilMD->COMPARE_POS_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_x);
+            stencilMD->COMPARE_FORCE_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_f);
+
+            /*
             for (int k = 0; k < atom_->nlocal; k++) {
                 int tag = atom_->tag[k];
                 double* x_ = atom_->x[k];
@@ -5596,6 +5541,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_pr
                     }
                 }
             }
+            */
         }
 
         auto begin_m = std::chrono::high_resolution_clock::now();
@@ -5609,6 +5555,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_pr
 
         if (TEST_AGAINST_LAMMPS_LOCAL) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t + 1 : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t + 1;
+            stencilMD->COMPARE_POS_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_next_timestep, zoid, test_x);
+            /*
             for (int k = 0; k < atom_next_timestep->nlocal; k++) {
                 int tag = atom_next_timestep->tag[k];
                 double* x_ = atom_next_timestep->x[k];
@@ -5700,6 +5648,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_pr
                     }
                 }
             }
+            */
         }
 
         if (n_pre_force) {
@@ -5900,38 +5849,36 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         // start compute curr dt
 
-        if (USE_DEP_TO_WAIT_IDXS) {
-            if (dep > 0) {
-                auto begin = std::chrono::high_resolution_clock::now();
+        if (dep > 0) {
+            auto begin = std::chrono::high_resolution_clock::now();
 
-                auto begin_mpi = std::chrono::high_resolution_clock::now();
-                MPI_Waitall(dep_to_wait_idxs[dep].size(), &receive_requests[running_recv_idx], MPI_STATUSES_IGNORE);
-                running_recv_idx += dep_to_wait_idxs[dep].size();
-                auto end_mpi = std::chrono::high_resolution_clock::now();
-                auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
-                        end_mpi - begin_mpi).count();
-                mpi_duration += duration_mpi;
+            auto begin_mpi = std::chrono::high_resolution_clock::now();
+            MPI_Waitall(dep_to_wait_idxs[dep].size(), &receive_requests[running_recv_idx], MPI_STATUSES_IGNORE);
+            running_recv_idx += dep_to_wait_idxs[dep].size();
+            auto end_mpi = std::chrono::high_resolution_clock::now();
+            auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
+                    end_mpi - begin_mpi).count();
+            mpi_duration += duration_mpi;
 
-                for (int idx: dep_to_wait_idxs[dep]) {
-                // cilk_for (int i = 0 ; i < dep_to_wait_idxs[dep].size(); i++) {
-                    // int idx = dep_to_wait_idxs[dep][i];
-                    int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
-                    /*
-                    MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
-                    */
-                    auto begin_unpack = std::chrono::high_resolution_clock::now();
-                    comm->unpack_data_process_stencil_md(true, recv_zoid_num, false);
-                    auto end_unpack = std::chrono::high_resolution_clock::now();
-                    auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
-                            end_unpack - begin_unpack).count();
-                    unpack_duration += duration_unpack;
-                }
-
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration =
-                        std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                recv_comm_duration += duration;
+            for (int idx: dep_to_wait_idxs[dep]) {
+            // cilk_for (int i = 0 ; i < dep_to_wait_idxs[dep].size(); i++) {
+                // int idx = dep_to_wait_idxs[dep][i];
+                int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
+                /*
+                MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
+                */
+                auto begin_unpack = std::chrono::high_resolution_clock::now();
+                comm->unpack_data_process_stencil_md(true, recv_zoid_num, false);
+                auto end_unpack = std::chrono::high_resolution_clock::now();
+                auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
+                        end_unpack - begin_unpack).count();
+                unpack_duration += duration_unpack;
             }
+
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            recv_comm_duration += duration;
         }
 
         compute_duration_cilk = 0;
@@ -5940,41 +5887,11 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         send_pack_duration_cilk = 0;
 
         cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
-        // for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
                 continue;
             }
-
-            /*
-            if (!USE_DEP_TO_WAIT_IDXS) {
-                auto begin = std::chrono::high_resolution_clock::now();
-                for (int idx: dep_to_wait_idxs[zoid_num]) {
-                    int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
-                    auto begin_mpi = std::chrono::high_resolution_clock::now();
-                    MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
-                    auto end_mpi = std::chrono::high_resolution_clock::now();
-                    auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
-                            end_mpi - begin_mpi).count();
-                    // mpi_duration += duration_mpi;
-                    auto begin_unpack = std::chrono::high_resolution_clock::now();
-                    comm->unpack_data_process_stencil_md(true, recv_zoid_num, false);
-                    auto end_unpack = std::chrono::high_resolution_clock::now();
-                    auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
-                            end_unpack - begin_unpack).count();
-                    // unpack_duration += duration_unpack;
-                    curr_dt_wait_dep[get_zoid_dep(recv_zoid_num)] += duration_mpi;
-                }
-
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration =
-                        std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                // recv_comm_duration += duration;
-                // curr_dt_comm_duration += duration;
-                // curr_dt_dep_time[dep] += duration;
-            }
-            */
 
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
             int** atom_idx_mapping = lmp->queues[dep][j].atom_idx_mapping;
@@ -5987,15 +5904,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
                 int vec_idx = 0;
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
-                // for (int proc = 0; proc < comm->nprocs; proc++) {
-                    /*
-                    bool sent = comm_->send_data_to_process_stencil_md(true,
-                        atom_arr, lmp->zoid_num_to_zoid[zoid_num],
-                        &send_requests[zoid_num][vec_idx], proc, false, &send_pack_duration);
-                    if (sent) {
-                        vec_idx++;
-                    }
-                    */
                     comm_->pack_data_to_process_stencil_md(true,
                                                            lmp->atom_stencil_md[zoid_num],
                                                            zoid, proc, false);
@@ -6047,12 +5955,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                         bool sent = comm_->send_packed_data_to_process_stencil_md(true, zoid,
                                                                                   &send_requests[zoid_num][proc],
                                                                                   proc);
-                        /*
-                        assert(sent);
-                        if (sent) {
-                            vec_idx++;
-                        }
-                        */
                     }
                 }
 
@@ -6162,42 +6064,39 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
     // start compute
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep > 0) {
-            if (USE_DEP_TO_WAIT_IDXS) {
-                auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
 
+            auto begin_mpi = std::chrono::high_resolution_clock::now();
+            MPI_Waitall(dep_to_wait_idxs_next_dt[dep].size(), &receive_requests_next_dt[running_recv_idx], MPI_STATUSES_IGNORE);
+            running_recv_idx += dep_to_wait_idxs_next_dt[dep].size();
+            auto end_mpi = std::chrono::high_resolution_clock::now();
+            auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
+                    end_mpi - begin_mpi).count();
+            mpi_duration += duration_mpi;
+
+            for (int idx: dep_to_wait_idxs_next_dt[dep]) {
+                // int idx = dep_to_wait_idxs_next_dt[dep][i];
+                int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[idx];
+                /*
                 auto begin_mpi = std::chrono::high_resolution_clock::now();
-                MPI_Waitall(dep_to_wait_idxs_next_dt[dep].size(), &receive_requests_next_dt[running_recv_idx], MPI_STATUSES_IGNORE);
-                running_recv_idx += dep_to_wait_idxs_next_dt[dep].size();
+                MPI_Wait(&receive_requests_next_dt[idx], MPI_STATUS_IGNORE);
                 auto end_mpi = std::chrono::high_resolution_clock::now();
                 auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
                         end_mpi - begin_mpi).count();
                 mpi_duration += duration_mpi;
-
-                for (int idx: dep_to_wait_idxs_next_dt[dep]) {
-                // cilk_for (int i = 0; i < dep_to_wait_idxs_next_dt[dep].size(); i++) {
-                    // int idx = dep_to_wait_idxs_next_dt[dep][i];
-                    int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[idx];
-                    /*
-                    auto begin_mpi = std::chrono::high_resolution_clock::now();
-                    MPI_Wait(&receive_requests_next_dt[idx], MPI_STATUS_IGNORE);
-                    auto end_mpi = std::chrono::high_resolution_clock::now();
-                    auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
-                            end_mpi - begin_mpi).count();
-                    mpi_duration += duration_mpi;
-                    */
-                    auto begin_unpack = std::chrono::high_resolution_clock::now();
-                    comm->unpack_data_process_stencil_md(false, recv_zoid_num, false);
-                    auto end_unpack = std::chrono::high_resolution_clock::now();
-                    auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
-                            end_unpack - begin_unpack).count();
-                    unpack_duration += duration_unpack;
-                }
-
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                recv_comm_duration += duration;
-                next_dt_comm_duration += duration;
+                */
+                auto begin_unpack = std::chrono::high_resolution_clock::now();
+                comm->unpack_data_process_stencil_md(false, recv_zoid_num, false);
+                auto end_unpack = std::chrono::high_resolution_clock::now();
+                auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
+                        end_unpack - begin_unpack).count();
+                unpack_duration += duration_unpack;
             }
+
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            recv_comm_duration += duration;
+            next_dt_comm_duration += duration;
         }
 
         compute_duration_cilk = 0;
@@ -6206,39 +6105,11 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         send_pack_duration_cilk = 0;
 
         cilk_for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
-        // for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info &zoid = lmp->queues_next_dt[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
                 continue;
             }
-
-            /*
-            if (!USE_DEP_TO_WAIT_IDXS) {
-                auto begin = std::chrono::high_resolution_clock::now();
-                for (int idx: dep_to_wait_idxs_next_dt[zoid_num]) {
-                    int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[idx];
-                    auto begin_mpi = std::chrono::high_resolution_clock::now();
-                    MPI_Wait(&receive_requests_next_dt[idx], MPI_STATUS_IGNORE);
-                    auto end_mpi = std::chrono::high_resolution_clock::now();
-                    auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
-                            end_mpi - begin_mpi).count();
-                    mpi_duration += duration_mpi;
-                    auto begin_unpack = std::chrono::high_resolution_clock::now();
-                    comm->unpack_data_process_stencil_md(false, recv_zoid_num, false);
-                    auto end_unpack = std::chrono::high_resolution_clock::now();
-                    auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
-                            end_unpack - begin_unpack).count();
-                    unpack_duration += duration_unpack;
-                    next_dt_wait_dep[get_zoid_dep_next_dt(recv_zoid_num)] += duration_mpi;
-                }
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                recv_comm_duration += duration;
-                next_dt_comm_duration += duration;
-                next_dt_dep_time[dep] += duration;
-            }
-            */
 
             auto &atom_arr = lmp->atom_stencil_md[zoid_num];
             int **atom_idx_mapping = zoid.atom_idx_mapping;
@@ -6337,7 +6208,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
     // cleanup MPI_Request objects
     for (int i = 0; i < NUM_ZOIDS; i++) {
-        if (send_requests_next_dt[i].size() > 0) {
+        if (i % comm->nprocs == comm->me) {
             MPI_Waitall(send_requests_next_dt[i].size(), send_requests_next_dt[i].data(), MPI_STATUSES_IGNORE);
         }
     }

@@ -61,6 +61,10 @@ public:
     void BUILD_NEIGHBOR_LIST_NEXT_DT();
 
     void COMPUTE_NUM_SEND_RECV_PROCESS();
+
+    void COMPARE_POS_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_x);
+
+    void COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_f);
 };
 
 }

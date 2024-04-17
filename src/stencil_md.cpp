@@ -112,7 +112,7 @@ void StencilMD::FORCE_PAIR_SETTINGS(int narg, char **arg) {
     for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
         if (i % comm->nprocs == comm->me) {
             for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-                assert(lmp->force_stencil_md[i][j]->pair != NULL);
+                assert(lmp->force_stencil_md[i][j]->pair != nullptr);
                 lmp->force_stencil_md[i][j]->pair->settings(narg, arg);
                 lmp->force_stencil_md_next_dt[i][j]->pair->settings(narg, arg);
             }
@@ -1185,6 +1185,159 @@ void StencilMD::COMPUTE_NUM_SEND_RECV_PROCESS() {
 
                     zoid.num_send_process_timestep[proc][t] = num_elems_send_timestep;
                 }
+            }
+        }
+    }
+}
+
+void StencilMD::COMPARE_POS_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info &zoid,
+                                           double **test_x) {
+    int zoid_num = zoid.num;
+    for (int k = 0; k < atom_->nlocal; k++) {
+        int tag = atom_->tag[k];
+        double *x_ = atom_->x[k];
+        for (int dim = 0; dim < 3; dim++) {
+            double val = x_[dim];
+            if (val < 0) {
+                val += domain->prd[dim];
+            } else if (val >= domain->prd[dim]) {
+                val -= domain->prd[dim];
+            }
+
+            double test_val = test_x[timestep][tag * 3 + dim];
+            if (test_val < 0) {
+                test_val += domain->prd[dim];
+            } else if (test_val >= domain->prd[dim]) {
+                test_val -= domain->prd[dim];
+            }
+
+            if (fabs(val - test_val) > 1e-6) {
+                if (curr_dt) {
+                    std::cout << "-------POS DIFF--------"
+                              << std::endl;
+                } else {
+                    std::cout << "-------NEXT DT POS DIFF--------"
+                              << std::endl;
+                }
+                std::cout << "idx: " << k
+                          << " out of: " << atom_->nlocal
+                          << std::endl;
+                std::cout
+                        << "Dim: " << dim << " Zoid: " << zoid_num
+                        << " timestep: " << timestep << " tag: " << tag
+                        << " different. " << std::endl;
+                std::cout << "What I have: " << x_[0] << " "
+                          << x_[1] << " " << x_[2] << std::endl;
+                std::cout << "What does LAMMPS have? "
+                          << test_x[timestep][tag * 3 + 0] << " "
+                          << test_x[timestep][tag * 3 + 1] << " "
+                          << test_x[timestep][tag * 3 + 2]
+                          << std::endl;
+                std::cout
+                        << "Diff: "
+                        << fabs(x_[dim] - test_x[timestep][tag * 3 + dim])
+                        << std::endl;
+                std::cout << "pos: " << atom_->x[k][0] << " "
+                          << atom_->x[k][1] << " "
+                          << atom_->x[k][2] << std::endl;
+
+                /*
+                for (int tmp = 0; tmp < 3; tmp++) {
+                    std::cout
+                            << "lo: "
+                            << zoid.zoid.cuts[tmp].lower +
+                               zoid.zoid.cuts[tmp].slope_lower *
+                               t
+                            << std::endl;
+                    std::cout
+                            << "hi: "
+                            << zoid.zoid.cuts[tmp].upper +
+                               zoid.zoid.cuts[tmp].slope_upper *
+                               t
+                            << std::endl;
+                }
+                */
+                assert(false);
+            }
+        }
+    }
+}
+
+void StencilMD::COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_f) {
+    int zoid_num = zoid.num;
+
+    for (int k = 0; k < atom_->nlocal; k++) {
+        // compare forces on local atoms?
+        int tag = atom_->tag[k];
+        for (int dim = 0; dim < 3; dim++) {
+            double my_force = atom_->f[k][dim] +
+                              atom_->eval_f_stencil_md[k][dim];
+            if (fabs(my_force - test_f[timestep][tag * 3 + dim]) >
+                1e-6) {
+                if (curr_dt) {
+                    std::cout << "------FORCE DIFF--------"
+                              << std::endl;
+                } else {
+                    std::cout << "------NEXT DT FORCE DIFF--------"
+                              << std::endl;
+                }
+                std::cout << "idx: " << k
+                          << " out of: " << atom_->nlocal
+                          << std::endl;
+                std::cout
+                        << "Dim: " << dim << " Zoid: " << zoid_num
+                        << " timestep: " << timestep << " tag: " << tag
+                        << " different. " << std::endl;
+                std::cout << "what I have f: " << atom_->f[k][0]
+                          << " " << atom_->f[k][1] << " "
+                          << atom_->f[k][2] << std::endl;
+                std::cout
+                        << "what I have eval "
+                        << atom_->eval_f_stencil_md[k][0] << " "
+                        << atom_->eval_f_stencil_md[k][1] << " "
+                        << atom_->eval_f_stencil_md[k][2]
+                        << std::endl;
+                std::cout << "what I have: "
+                          << atom_->f[k][0] +
+                             atom_->eval_f_stencil_md[k][0]
+                          << " "
+                          << atom_->f[k][1] +
+                             atom_->eval_f_stencil_md[k][1]
+                          << " "
+                          << atom_->f[k][2] +
+                             atom_->eval_f_stencil_md[k][2]
+                          << std::endl;
+                std::cout << "What does LAMMPS have? "
+                          << test_f[timestep][tag * 3 + 0] << " "
+                          << test_f[timestep][tag * 3 + 1] << " "
+                          << test_f[timestep][tag * 3 + 2]
+                          << std::endl;
+                std::cout
+                        << "Diff: "
+                        << fabs(my_force - test_f[timestep][tag * 3 + dim])
+                        << std::endl;
+                std::cout << "pos: " << atom_->x[k][0] << " "
+                          << atom_->x[k][1] << " "
+                          << atom_->x[k][2] << std::endl;
+
+                /*
+                for (int tmp = 0; tmp < 3; tmp++) {
+                    std::cout
+                            << "lo: "
+                            << zoid.zoid.cuts[tmp].lower +
+                               zoid.zoid.cuts[tmp].slope_lower *
+                               t
+                            << std::endl;
+                    std::cout
+                            << "hi: "
+                            << zoid.zoid.cuts[tmp].upper +
+                               zoid.zoid.cuts[tmp].slope_upper *
+                               t
+                            << std::endl;
+                }
+                */
+
+                assert(false);
             }
         }
     }
