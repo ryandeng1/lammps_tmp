@@ -245,7 +245,10 @@ void Verlet::setup(int flag) {
     force->setup();
     ev_set(update->ntimestep);
     force_clear();
-    modify->setup_pre_force(vflag);
+
+    if (!ONLY_RUN_STENCIL_MD) {
+        modify->setup_pre_force(vflag);
+    }
 
     if (pair_compute_flag) {
         if (!ONLY_RUN_STENCIL_MD) {
