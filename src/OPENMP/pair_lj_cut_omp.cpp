@@ -198,6 +198,8 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       double* f = &(atom->f[0][0]);
       int nvals = nall * 3;
 
+      int nworkers = __cilkrts_get_nworkers();
+
       // wsp_t start_reduce = wsp_getworkspan();
       cilk_for (int i = 0; i < nvals; i++) {
           /*
@@ -208,7 +210,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           f[i] = t0;
           */
           double t0 = f[i];
-          for (int n = 1; n < __cilkrts_get_nworkers(); ++n) {
+          for (int n = 1; n < nworkers; ++n) {
               t0 += f[n * nvals + i];
           }
           f[i] = t0;
