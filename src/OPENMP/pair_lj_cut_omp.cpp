@@ -53,28 +53,65 @@ void PairLJCutOMP::compute(int eflag, int vflag)
   const int nthreads = comm->nthreads;
   const int inum = list->inum;
 
-  /*
-  if (comm->me == 0) {
-      int* ilist = list->ilist;
-      int* numneigh = list->numneigh;
-      int** firstneigh = list->firstneigh;
+  if (LAMMPS_USE_CILK) {
+      cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
+          // int ifrom, ito, tid;
+          int ifrom, ito;
+          // each thread works on a fixed chunk of atoms.
+          const int idelta = 1 + inum / comm->nthreads;
+          ifrom = tid * idelta;
+          ito = ((ifrom + idelta) > inum) ? inum : ifrom + idelta;
 
-      // loop over neighbors of my atoms
-      for (int ii = 0; ii < inum; ii++) {
-          int i = ilist[ii];
-          int* jlist = firstneigh[i];
-          int jnum = numneigh[i];
+          // loop_setup_thr(ifrom, ito, tid, inum, nthreads);
+          ThrData *thr = fix->get_thr(tid);
+          thr->timer(Timer::START);
+          ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
 
-          for (int jj = 0; jj < jnum; jj++) {
-              int j = jlist[jj];
-
-              std::cout << "me: " << comm->me << " i: " << i << " neighbor j: " << j << std::endl;
+          if (evflag) {
+              if (eflag) {
+                  if (force->newton_pair) {
+                      eval_stencil_md<1,1,1>(ifrom, ito, thr, atom);
+                  } else {
+                      eval_stencil_md<1,1,0>(ifrom, ito, thr, atom);
+                  }
+              } else {
+                  if (force->newton_pair) {
+                      eval_stencil_md<1,0,1>(ifrom, ito, thr, atom);
+                  } else {
+                      eval_stencil_md<1,0,0>(ifrom, ito, thr, atom);
+                  }
+              }
+          } else {
+              if (force->newton_pair) {
+                  eval_stencil_md<0,0,1>(ifrom, ito, thr, atom);
+              } else {
+                  eval_stencil_md<0,0,0>(ifrom, ito, thr, atom);
+              }
           }
+          thr->timer(Timer::PAIR);
+      } // end of omp parallel region
+
+      // try new reduce
+
+      if (comm->nthreads == 1) {
+          return;
       }
 
-      assert(false);
+      double* f = &(atom->f[0][0]);
+
+      int nvals = nall * 3;
+
+      // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
+      cilk_for (int i = 0; i < nvals; i++) {
+          double t0 = f[i];
+          for (int n = 1; n < comm->nthreads; ++n) {
+              t0 += f[n * nvals + i];
+          }
+          f[i] = t0;
+      }
+
+      return;
   }
-  */
 
 
 #if defined(_OPENMP)

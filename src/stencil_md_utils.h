@@ -77,9 +77,11 @@ constexpr bool DEBUG = true;
 
 constexpr int NUM_WORKERS_PER_THREAD = 128;
 
-constexpr bool ONLY_RUN_LAMMPS = true;
+constexpr bool ONLY_RUN_LAMMPS = false;
 
 constexpr bool ONLY_RUN_STENCIL_MD = false;
+
+constexpr bool LAMMPS_USE_CILK = true;
 
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
