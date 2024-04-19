@@ -108,23 +108,19 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       int nvals = nall * 3;
 
       // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
+      /*
       cilk_for (int i = 0; i < nvals; i++) {
           cilk::opadd_reducer<double> t0 = f[i];
           cilk_for (int n = 1; n < comm->nthreads; ++n) {
               t0 += f[n * nvals + i];
           }
           f[i] = t0;
-          /*
-          for (int n = 1; n < comm->nthreads; ++n) {
-              t0 += f[n * nvals + i];
-          }
-          f[i] = t0;
-          */
       }
 
       wsp_t end = wsp_getworkspan();
       wsp_t elapsed = wsp_sub(end, start);
       wsp_dump(elapsed, "potential_calc");
+      */
 
       return;
   }
