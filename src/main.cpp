@@ -48,7 +48,7 @@ int main(int argc, char **argv)
   int provided;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
   assert(provided >= MPI_THREAD_MULTIPLE);
-  if (provided < MPI_THREAD_MULTIPLE) {
+  if (provided < MPI_THREAD_SERIALIZED) {
     std::cout << "COULD NOT PROVIDE MPI_THREAD_MULTIPLE" << std::endl;
     return 0;
   }
