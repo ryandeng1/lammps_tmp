@@ -57,8 +57,86 @@ void PairLJCutOMP::compute(int eflag, int vflag)
   const int inum = list->inum;
 
   if (LAMMPS_USE_CILK) {
-      wsp_t start = wsp_getworkspan();
+      wsp_t start_compute = wsp_getworkspan();
 
+      const auto * _noalias const x = (dbl3_t *) atom->x[0];
+      const int * _noalias const type = atom->type;
+      const double * _noalias const special_lj = force->special_lj;
+      const int * _noalias const ilist = list->ilist;
+      const int * _noalias const numneigh = list->numneigh;
+      const int * const * const firstneigh = list->firstneigh;
+      const int nlocal = atom->nlocal;
+
+      bool newton_pair = force->newton_pair;
+      std::cout << "comm nthreads: " << comm->nthreads << std::endl;
+
+      cilk_for (int i = 0; i < atom->nlocal; i++) {
+          int tid = __cilkrts_get_worker_number();
+          ThrData *thr = fix->get_thr(tid);
+          auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
+          thr->timer(Timer::START);
+          ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
+
+          const int itype = type[i];
+          const int    * _noalias const jlist = firstneigh[i];
+          const double * _noalias const cutsqi = cutsq[itype];
+          const double * _noalias const offseti = offset[itype];
+          const double * _noalias const lj1i = lj1[itype];
+          const double * _noalias const lj2i = lj2[itype];
+          const double * _noalias const lj3i = lj3[itype];
+          const double * _noalias const lj4i = lj4[itype];
+
+          double xtmp = x[i].x;
+          double ytmp = x[i].y;
+          double ztmp = x[i].z;
+          int jnum = numneigh[i];
+
+          double fxtmp = 0.0;
+          double fytmp = 0.0;
+          double fztmp = 0.0;
+
+          for (int jj = 0; jj < jnum; jj++) {
+              int j = jlist[jj];
+              double factor_lj = special_lj[sbmask(j)];
+              j &= NEIGHMASK;
+
+              double delx = xtmp - x[j].x;
+              double dely = ytmp - x[j].y;
+              double delz = ztmp - x[j].z;
+              double rsq = delx*delx + dely*dely + delz*delz;
+              int jtype = type[j];
+
+              if (rsq < cutsqi[jtype]) {
+                  double r2inv = 1.0/rsq;
+                  double r6inv = r2inv*r2inv*r2inv;
+                  double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
+                  double fpair = factor_lj*forcelj*r2inv;
+
+                  fxtmp += delx*fpair;
+                  fytmp += dely*fpair;
+                  fztmp += delz*fpair;
+                  if (newton_pair || j < nlocal) {
+                      f[j].x -= delx*fpair;
+                      f[j].y -= dely*fpair;
+                      f[j].z -= delz*fpair;
+                  }
+
+                  double evdwl = 0.0;
+                  if (eflag) {
+                      evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+                      evdwl *= factor_lj;
+                  }
+
+                  if (eflag | vflag) ev_tally_thr(this,i,j,nlocal,newton_pair,
+                                                  evdwl,0.0,fpair,delx,dely,delz,thr);
+              }
+          }
+          f[i].x += fxtmp;
+          f[i].y += fytmp;
+          f[i].z += fztmp;
+      }
+
+      /*
       #pragma cilk grainsize 1
       cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
           // int ifrom, ito, tid;
@@ -106,9 +184,20 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       double* f = &(atom->f[0][0]);
 
       int nvals = nall * 3;
+      */
+
+      wsp_t end_compute = wsp_getworkspan();
+      wsp_t elapsed_compute = wsp_sub(end_compute, start_compute);
+
+      if (comm->me == 0) {
+          wsp_dump(elapsed_compute, "potential_calc");
+      }
 
       // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
-      /*
+      double* f = &(atom->f[0][0]);
+      int nvals = nall * 3;
+
+      wsp_t start_reduce = wsp_getworkspan();
       cilk_for (int i = 0; i < nvals; i++) {
           cilk::opadd_reducer<double> t0 = f[i];
           cilk_for (int n = 1; n < comm->nthreads; ++n) {
@@ -117,10 +206,12 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           f[i] = t0;
       }
 
-      wsp_t end = wsp_getworkspan();
-      wsp_t elapsed = wsp_sub(end, start);
-      wsp_dump(elapsed, "potential_calc");
-      */
+      wsp_t end_reduce = wsp_getworkspan();
+      wsp_t elapsed_reduce = wsp_sub(end_reduce, start_reduce);
+
+      if (comm->me == 0) {
+          wsp_dump(elapsed_reduce, "reduce");
+      }
 
       return;
   }
