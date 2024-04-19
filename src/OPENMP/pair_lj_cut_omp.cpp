@@ -24,6 +24,8 @@
 #include "omp_compat.h"
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
+#include <cilk/cilkscale.h>
+
 using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
@@ -54,6 +56,8 @@ void PairLJCutOMP::compute(int eflag, int vflag)
   const int inum = list->inum;
 
   if (LAMMPS_USE_CILK) {
+      wsp_t start = wsp_getworkspan();
+
       #pragma cilk grainsize 1
       cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
           // int ifrom, ito, tid;
@@ -110,6 +114,10 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           }
           f[i] = t0;
       }
+
+      wsp_t end = wsp_getworkspan();
+      wsp_t elapsed = wsp_sub(end, start);
+      wsp_dump(elapsed, "potential_calc");
 
       return;
   }
