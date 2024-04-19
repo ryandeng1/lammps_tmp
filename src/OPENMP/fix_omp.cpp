@@ -317,6 +317,7 @@ void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_, Neighbor* neighbor_) 
 
         thr = new ThrData *[nthreads];
         _nthr = nthreads;
+
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE
 #endif
@@ -455,6 +456,16 @@ void FixOMP::pre_force(int)
   double *erforce = atom->erforce;
   double *desph = atom->desph;
   double *drho = atom->drho;
+
+  if (LAMMPS_USE_CILK) {
+      cilk_for(int tid = 0; tid < comm->nthreads; tid++) {
+          thr[tid]->check_tid(tid);
+          thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
+      }
+
+      _reduced = false;
+      return;
+  }
 
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(f,torque,erforce,desph,drho)
