@@ -201,7 +201,6 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       int nworkers = __cilkrts_get_nworkers();
 
       // wsp_t start_reduce = wsp_getworkspan();
-      /*
       cilk_for (int i = 0; i < nvals; i++) {
           double t0 = f[i];
           for (int n = 1; n < nworkers; ++n) {
@@ -209,7 +208,6 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           }
           f[i] = t0;
       }
-      */
 
       /*
       wsp_t end_reduce = wsp_getworkspan();
