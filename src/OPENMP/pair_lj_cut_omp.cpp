@@ -57,7 +57,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
   const int inum = list->inum;
 
   if (LAMMPS_USE_CILK) {
-      // wsp_t start_compute = wsp_getworkspan();
+      wsp_t start_compute = wsp_getworkspan();
 
       const auto * _noalias const x = (dbl3_t *) atom->x[0];
       const int * _noalias const type = atom->type;
@@ -185,36 +185,32 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       int nvals = nall * 3;
       */
 
-      /*
       wsp_t end_compute = wsp_getworkspan();
       wsp_t elapsed_compute = wsp_sub(end_compute, start_compute);
 
       if (comm->me == 0) {
           wsp_dump(elapsed_compute, "potential_calc");
       }
-      */
 
       // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
       double* f = &(atom->f[0][0]);
       int nvals = nall * 3;
 
-      // wsp_t start_reduce = wsp_getworkspan();
+      wsp_t start_reduce = wsp_getworkspan();
       cilk_for (int i = 0; i < nvals; i++) {
           cilk::opadd_reducer<double> t0 = f[i];
-          cilk_for (int n = 1; n < comm->nthreads; ++n) {
+          cilk_for (int n = 1; n < __cilkrts_get_nworkers(); ++n) {
               t0 += f[n * nvals + i];
           }
           f[i] = t0;
       }
 
-      /*
       wsp_t end_reduce = wsp_getworkspan();
       wsp_t elapsed_reduce = wsp_sub(end_reduce, start_reduce);
 
       if (comm->me == 0) {
           wsp_dump(elapsed_reduce, "reduce");
       }
-      */
 
       return;
   }
