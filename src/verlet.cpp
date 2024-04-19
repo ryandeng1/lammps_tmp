@@ -4638,41 +4638,44 @@ void Verlet::setup_stencil_md() {
     }
 
     int total_evaled = 0;
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
-            queue_info& zoid = lmp->queues[dep][j];
-            int zoid_num = zoid.num;
-            if (zoid_num % comm->nprocs == comm->me) {
-                Atom* atom_ = lmp->atom_stencil_md[zoid_num][0];
-                // Atom *next = lmp->atom_stencil_md[zoid_num][1];
-                for (int idx = 0; idx < atom_->nlocal; idx++) {
-                    int tag = atom_->tag[idx];
-                    for (int dim = 0; dim < 3; dim++) {
-                        double my_force = atom_->f[idx][dim] +
-                                          atom_->eval_f_stencil_md[idx][dim];
-                        if (fabs(recv_f[tag * 3 + dim] - my_force) > 5e-5) {
-                            std::cout
-                                << "zoid: " << zoid_num << " idx: " << idx
-                                << " tag: " << atom_->tag[idx]
-                                << " dim: " << dim
-                                << " what I have: " << my_force
-                                << " what lammps has: " << recv_f[tag * 3 + dim]
-                                << " diff: "
-                                << fabs(recv_f[tag * 3 + dim] - my_force)
-                                << std::endl;
-                            std::cout << "tag: " << atom_->tag[idx]
-                                      << " pos: " << atom_->x[idx][0] << " "
-                                      << atom_->x[idx][1] << " "
-                                      << atom_->x[idx][2] << std::endl;
 
-                            std::cout << "recv force: " << atom_->f[idx][dim]
-                                      << " eval force: "
-                                      << atom_->eval_f_stencil_md[idx][dim]
-                                      << " my force: " << my_force << std::endl;
-                            assert(fabs(my_force - recv_f[tag * 3 + dim]) <= 5e-5);
+    if (TEST_AGAINST_LAMMPS_LOCAL) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info &zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom *atom_ = lmp->atom_stencil_md[zoid_num][0];
+                    // Atom *next = lmp->atom_stencil_md[zoid_num][1];
+                    for (int idx = 0; idx < atom_->nlocal; idx++) {
+                        int tag = atom_->tag[idx];
+                        for (int dim = 0; dim < 3; dim++) {
+                            double my_force = atom_->f[idx][dim] +
+                                              atom_->eval_f_stencil_md[idx][dim];
+                            if (fabs(recv_f[tag * 3 + dim] - my_force) > 5e-5) {
+                                std::cout
+                                        << "zoid: " << zoid_num << " idx: " << idx
+                                        << " tag: " << atom_->tag[idx]
+                                        << " dim: " << dim
+                                        << " what I have: " << my_force
+                                        << " what lammps has: " << recv_f[tag * 3 + dim]
+                                        << " diff: "
+                                        << fabs(recv_f[tag * 3 + dim] - my_force)
+                                        << std::endl;
+                                std::cout << "tag: " << atom_->tag[idx]
+                                          << " pos: " << atom_->x[idx][0] << " "
+                                          << atom_->x[idx][1] << " "
+                                          << atom_->x[idx][2] << std::endl;
+
+                                std::cout << "recv force: " << atom_->f[idx][dim]
+                                          << " eval force: "
+                                          << atom_->eval_f_stencil_md[idx][dim]
+                                          << " my force: " << my_force << std::endl;
+                                assert(fabs(my_force - recv_f[tag * 3 + dim]) <= 5e-5);
+                            }
                         }
+                        total_evaled++;
                     }
-                    total_evaled++;
                 }
             }
         }
