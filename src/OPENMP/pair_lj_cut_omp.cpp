@@ -54,6 +54,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
   const int inum = list->inum;
 
   if (LAMMPS_USE_CILK) {
+      #pragma cilk grainsize 1
       cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
           // int ifrom, ito, tid;
           int ifrom, ito;
