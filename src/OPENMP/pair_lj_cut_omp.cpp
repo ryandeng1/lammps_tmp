@@ -517,7 +517,7 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
 }
 
 template <int EVFLAG, int EFLAG, int NEWTON_PAIR>
-void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const thr, Atom* atom_)
+inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const thr, Atom* atom_)
 {
     const auto * _noalias const x = (dbl3_t *) atom_->x[0];
     auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
