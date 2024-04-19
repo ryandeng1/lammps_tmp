@@ -25,6 +25,7 @@
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
 #include <cilk/cilkscale.h>
+#include <cilk/opadd_reducer.h>
 
 using namespace LAMMPS_NS;
 
@@ -113,11 +114,17 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 
       // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
       cilk_for (int i = 0; i < nvals; i++) {
-          double t0 = f[i];
+          cilk::opadd_reducer<double> t0 = f[i];
+          cilk_for (int n = 1; n < comm->nthreads; ++n) {
+              t0 += f[n * nvals + i];
+          }
+          f[i] = t0;
+          /*
           for (int n = 1; n < comm->nthreads; ++n) {
               t0 += f[n * nvals + i];
           }
           f[i] = t0;
+          */
       }
 
       return;
