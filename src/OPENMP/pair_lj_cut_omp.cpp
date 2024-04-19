@@ -201,6 +201,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       int nworkers = __cilkrts_get_nworkers();
 
       // wsp_t start_reduce = wsp_getworkspan();
+      #pragma cilk grainsize 16
       cilk_for (int i = 0; i < nvals; i++) {
           /*
           cilk::opadd_reducer<double> t0 = f[i];
