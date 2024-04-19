@@ -97,11 +97,6 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           thr->timer(Timer::PAIR);
       } // end of omp parallel region
 
-      wsp_t end = wsp_getworkspan();
-      wsp_t elapsed = wsp_sub(end, start);
-      wsp_dump(elapsed, "potential_calc");
-
-
       // try new reduce
 
       if (comm->nthreads == 1) {
@@ -126,6 +121,10 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           f[i] = t0;
           */
       }
+
+      wsp_t end = wsp_getworkspan();
+      wsp_t elapsed = wsp_sub(end, start);
+      wsp_dump(elapsed, "potential_calc");
 
       return;
   }
