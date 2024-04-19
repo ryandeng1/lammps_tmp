@@ -68,7 +68,6 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       const int nlocal = atom->nlocal;
 
       bool newton_pair = force->newton_pair;
-      std::cout << "comm nthreads: " << comm->nthreads << std::endl;
 
       cilk_for (int i = 0; i < atom->nlocal; i++) {
           int tid = __cilkrts_get_worker_number();
