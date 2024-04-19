@@ -5256,8 +5256,11 @@ void Verlet::run(int n) {
 
     auto begin = std::chrono::high_resolution_clock::now();
     for (int t = 0; t < n; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
-        run_stencil_md(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, zoid_num_to_num_procs, zoid_num_to_num_procs_next_dt,
-                       test_f, test_x);
+        cilk_scope {
+                run_stencil_md(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, zoid_num_to_num_procs,
+                               zoid_num_to_num_procs_next_dt,
+                               test_f, test_x);
+        }
     }
 
     auto end = std::chrono::high_resolution_clock::now();
