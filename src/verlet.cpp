@@ -4849,203 +4849,205 @@ void Verlet::run(int n) {
 
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < n + 1; i++) {
-        if (ONLY_RUN_STENCIL_MD) {
-            break;
-        }
-        /*
-        if (timer->check_timeout(i)) {
-            assert(false);
-            update->nsteps = i;
-            break;
-        }
-        */
+    cilk_scope {
+            for (int i = 0; i < n + 1; i++) {
+                if (ONLY_RUN_STENCIL_MD) {
+                    break;
+                }
+                /*
+                if (timer->check_timeout(i)) {
+                    assert(false);
+                    update->nsteps = i;
+                    break;
+                }
+                */
 
-        // ntimestep = ++update->ntimestep;
-        // ev_set(ntimestep);
+                // ntimestep = ++update->ntimestep;
+                // ev_set(ntimestep);
 
-        // initial time integration
+                // initial time integration
 
-        timer->stamp();
-
-        // Begin stencil md code
-        if (TEST_AGAINST_LAMMPS_LOCAL) {
-            // memset(send_f, 0, sizeof(send_f));
-            for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
-                send_f[j] = 0;
-            }
-            for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
-                send_x[j] = 0;
-            }
-
-            for (int j = 0; j < atom->nlocal; j++) {
-                int tag = atom->tag[j];
-                assert(tag >= 0 && tag <= atom->natoms);
-                send_f[tag * 3 + 0] = atom->f[j][0];
-                send_f[tag * 3 + 1] = atom->f[j][1];
-                send_f[tag * 3 + 2] = atom->f[j][2];
-
-                send_x[tag * 3 + 0] = atom->x[j][0];
-                send_x[tag * 3 + 1] = atom->x[j][1];
-                send_x[tag * 3 + 2] = atom->x[j][2];
-            }
-
-            MPI_Allreduce(send_f, test_f[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
-                          MPI_SUM, world);
-
-            MPI_Allreduce(send_x, test_x[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
-                          MPI_SUM, world);
-        }
-
-        if (i == n) {
-            break;
-        }
-        // end stencil md code
-
-        auto begin_m = std::chrono::high_resolution_clock::now();
-        modify->initial_integrate(vflag);
-        auto end_m = std::chrono::high_resolution_clock::now();
-        auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-        lammps_modify_duration += duration_m;
-        if (n_post_integrate)
-            modify->post_integrate();
-        timer->stamp(Timer::MODIFY);
-
-        // regular communication vs neighbor list rebuild
-
-        nflag = neighbor->decide();
-
-        if (nflag == 0) {
-            timer->stamp();
-            auto begin = std::chrono::high_resolution_clock::now();
-            comm->forward_comm();
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            lammps_comm_duration += duration;
-            lammps_forward_comm_duration += duration;
-            lammps_forward_comm_times.push_back(duration);
-            timer->stamp(Timer::COMM);
-        } else {
-            assert(false);
-            if (n_pre_exchange) {
                 timer->stamp();
-                modify->pre_exchange();
+
+                // Begin stencil md code
+                if (TEST_AGAINST_LAMMPS_LOCAL) {
+                    // memset(send_f, 0, sizeof(send_f));
+                    for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+                        send_f[j] = 0;
+                    }
+                    for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+                        send_x[j] = 0;
+                    }
+
+                    for (int j = 0; j < atom->nlocal; j++) {
+                        int tag = atom->tag[j];
+                        assert(tag >= 0 && tag <= atom->natoms);
+                        send_f[tag * 3 + 0] = atom->f[j][0];
+                        send_f[tag * 3 + 1] = atom->f[j][1];
+                        send_f[tag * 3 + 2] = atom->f[j][2];
+
+                        send_x[tag * 3 + 0] = atom->x[j][0];
+                        send_x[tag * 3 + 1] = atom->x[j][1];
+                        send_x[tag * 3 + 2] = atom->x[j][2];
+                    }
+
+                    MPI_Allreduce(send_f, test_f[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
+                                  MPI_SUM, world);
+
+                    MPI_Allreduce(send_x, test_x[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
+                                  MPI_SUM, world);
+                }
+
+                if (i == n) {
+                    break;
+                }
+                // end stencil md code
+
+                auto begin_m = std::chrono::high_resolution_clock::now();
+                modify->initial_integrate(vflag);
+                auto end_m = std::chrono::high_resolution_clock::now();
+                auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
+                lammps_modify_duration += duration_m;
+                if (n_post_integrate)
+                    modify->post_integrate();
                 timer->stamp(Timer::MODIFY);
-            }
-            if (triclinic)
-                domain->x2lamda(atom->nlocal);
-            domain->pbc();
-            if (domain->box_change) {
-                domain->reset_box();
-                comm->setup();
-                if (neighbor->style)
-                    neighbor->setup_bins();
-            }
-            timer->stamp();
-            comm->exchange();
-            if (sortflag && ntimestep >= atom->nextsort)
-                atom->sort();
-            comm->borders();
-            if (triclinic)
-                domain->lamda2x(atom->nlocal + atom->nghost);
-            timer->stamp(Timer::COMM);
-            if (n_pre_neighbor) {
-                modify->pre_neighbor();
+
+                // regular communication vs neighbor list rebuild
+
+                nflag = neighbor->decide();
+
+                if (nflag == 0) {
+                    timer->stamp();
+                    auto begin = std::chrono::high_resolution_clock::now();
+                    comm->forward_comm();
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    lammps_comm_duration += duration;
+                    lammps_forward_comm_duration += duration;
+                    lammps_forward_comm_times.push_back(duration);
+                    timer->stamp(Timer::COMM);
+                } else {
+                    assert(false);
+                    if (n_pre_exchange) {
+                        timer->stamp();
+                        modify->pre_exchange();
+                        timer->stamp(Timer::MODIFY);
+                    }
+                    if (triclinic)
+                        domain->x2lamda(atom->nlocal);
+                    domain->pbc();
+                    if (domain->box_change) {
+                        domain->reset_box();
+                        comm->setup();
+                        if (neighbor->style)
+                            neighbor->setup_bins();
+                    }
+                    timer->stamp();
+                    comm->exchange();
+                    if (sortflag && ntimestep >= atom->nextsort)
+                        atom->sort();
+                    comm->borders();
+                    if (triclinic)
+                        domain->lamda2x(atom->nlocal + atom->nghost);
+                    timer->stamp(Timer::COMM);
+                    if (n_pre_neighbor) {
+                        modify->pre_neighbor();
+                        timer->stamp(Timer::MODIFY);
+                    }
+                    neighbor->build(1);
+                    timer->stamp(Timer::NEIGH);
+                    if (n_post_neighbor) {
+                        modify->post_neighbor();
+                        timer->stamp(Timer::MODIFY);
+                    }
+                }
+
+                // force computations
+                // important for pair to come before bonded contributions
+                // since some bonded potentials tally pairwise energy/virial
+                // and Pair:ev_tally() needs to be called before any tallying
+
+                force_clear();
+
+                timer->stamp();
+
+                if (n_pre_force) {
+                    auto begin = std::chrono::high_resolution_clock::now();
+                    modify->pre_force(vflag);
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    lammps_modify_duration += duration;
+                    lammps_modify_pre_force_duration += duration;
+                    timer->stamp(Timer::MODIFY);
+                }
+
+                if (pair_compute_flag) {
+                    auto begin = std::chrono::high_resolution_clock::now();
+                    force->pair->compute(eflag, vflag);
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    lammps_compute_duration += duration;
+                    timer->stamp(Timer::PAIR);
+                }
+
+                if (atom->molecular != Atom::ATOMIC) {
+                    if (force->bond)
+                        force->bond->compute(eflag, vflag);
+                    if (force->angle)
+                        force->angle->compute(eflag, vflag);
+                    if (force->dihedral)
+                        force->dihedral->compute(eflag, vflag);
+                    if (force->improper)
+                        force->improper->compute(eflag, vflag);
+                    timer->stamp(Timer::BOND);
+                }
+
+                if (kspace_compute_flag) {
+                    force->kspace->compute(eflag, vflag);
+                    timer->stamp(Timer::KSPACE);
+                }
+
+                if (n_pre_reverse) {
+                    modify->pre_reverse(eflag, vflag);
+                    timer->stamp(Timer::MODIFY);
+                }
+
+                // reverse communication of forces
+                if (force->newton) {
+                    auto begin = std::chrono::high_resolution_clock::now();
+                    comm->reverse_comm();
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    lammps_comm_duration += duration;
+                    lammps_reverse_comm_duration += duration;
+                    lammps_reverse_comm_times.push_back(duration);
+                    timer->stamp(Timer::COMM);
+                }
+
+                // force modifications, final time integration, diagnostics
+                if (n_post_force_any)
+                    modify->post_force(vflag);
+
+                auto begin_m2 = std::chrono::high_resolution_clock::now();
+                modify->final_integrate();
+                auto end_m2 = std::chrono::high_resolution_clock::now();
+                auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
+                lammps_modify_duration += duration_m2;
+                if (n_end_of_step) {
+                    modify->end_of_step();
+                }
                 timer->stamp(Timer::MODIFY);
+
+                // all output
+
+                /*
+                if (ntimestep == output->next) {
+                    timer->stamp();
+                    output->write(ntimestep);
+                    timer->stamp(Timer::OUTPUT);
+                }
+                */
             }
-            neighbor->build(1);
-            timer->stamp(Timer::NEIGH);
-            if (n_post_neighbor) {
-                modify->post_neighbor();
-                timer->stamp(Timer::MODIFY);
-            }
-        }
-
-        // force computations
-        // important for pair to come before bonded contributions
-        // since some bonded potentials tally pairwise energy/virial
-        // and Pair:ev_tally() needs to be called before any tallying
-
-        force_clear();
-
-        timer->stamp();
-
-        if (n_pre_force) {
-            auto begin = std::chrono::high_resolution_clock::now();
-            modify->pre_force(vflag);
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            lammps_modify_duration += duration;
-            lammps_modify_pre_force_duration += duration;
-            timer->stamp(Timer::MODIFY);
-        }
-
-        if (pair_compute_flag) {
-            auto begin = std::chrono::high_resolution_clock::now();
-            force->pair->compute(eflag, vflag);
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            lammps_compute_duration += duration;
-            timer->stamp(Timer::PAIR);
-        }
-
-        if (atom->molecular != Atom::ATOMIC) {
-            if (force->bond)
-                force->bond->compute(eflag, vflag);
-            if (force->angle)
-                force->angle->compute(eflag, vflag);
-            if (force->dihedral)
-                force->dihedral->compute(eflag, vflag);
-            if (force->improper)
-                force->improper->compute(eflag, vflag);
-            timer->stamp(Timer::BOND);
-        }
-
-        if (kspace_compute_flag) {
-            force->kspace->compute(eflag, vflag);
-            timer->stamp(Timer::KSPACE);
-        }
-
-        if (n_pre_reverse) {
-            modify->pre_reverse(eflag, vflag);
-            timer->stamp(Timer::MODIFY);
-        }
-
-        // reverse communication of forces
-        if (force->newton) {
-            auto begin = std::chrono::high_resolution_clock::now();
-            comm->reverse_comm();
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            lammps_comm_duration += duration;
-            lammps_reverse_comm_duration += duration;
-            lammps_reverse_comm_times.push_back(duration);
-            timer->stamp(Timer::COMM);
-        }
-
-        // force modifications, final time integration, diagnostics
-        if (n_post_force_any)
-            modify->post_force(vflag);
-
-        auto begin_m2 = std::chrono::high_resolution_clock::now();
-        modify->final_integrate();
-        auto end_m2 = std::chrono::high_resolution_clock::now();
-        auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
-        lammps_modify_duration += duration_m2;
-        if (n_end_of_step) {
-            modify->end_of_step();
-        }
-        timer->stamp(Timer::MODIFY);
-
-        // all output
-
-        /*
-        if (ntimestep == output->next) {
-            timer->stamp();
-            output->write(ntimestep);
-            timer->stamp(Timer::OUTPUT);
-        }
-        */
     }
 
     auto end_lammps = std::chrono::high_resolution_clock::now();
