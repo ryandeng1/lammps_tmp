@@ -87,7 +87,7 @@ include(PreventInSourceBuilds)
 
 # string(APPEND CMAKE_CXX_FLAGS " -fsanitize=memory ")
 # string(APPEND CMAKE_CXX_FLAGS " -fopencilk -fsanitize=address,undefined ")
-string(APPEND CMAKE_CXX_FLAGS " -fopencilk ")
+string(APPEND CMAKE_CXX_FLAGS " -fopencilk -fcilktool=cilkscale ")
 # set(Gperftools_DIR ${CMAKE_MODULE_PATH})
 # find_package(Gperftools REQUIRED)
 string(APPEND CMAKE_CXX_FLAGS " -g ")
