@@ -208,7 +208,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
           for (int n = 1; n < nworkers; n++) {
               for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
-                  f[i] += f[n * nvals + i];
+                  f[j] += f[n * nvals + j];
               }
           }
       }
