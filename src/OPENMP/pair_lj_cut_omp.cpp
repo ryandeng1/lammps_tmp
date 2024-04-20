@@ -485,6 +485,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     constexpr int CHUNK_SIZE = 256;
 
+    /*
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
         for (int n = 1; n < __cilkrts_get_nworkers(); n++) {
             for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
@@ -492,6 +493,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
         }
     }
+    */
 
     /*
     // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
