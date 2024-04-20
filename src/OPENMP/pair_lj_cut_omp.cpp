@@ -202,7 +202,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 
       // wsp_t start_reduce = wsp_getworkspan();
 
-      constexpr int CHUNK_SIZE = 64;
+      constexpr int CHUNK_SIZE = 256;
 
       cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
           for (int n = 1; n < nworkers; n++) {
