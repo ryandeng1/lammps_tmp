@@ -264,6 +264,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
     ev_init(eflag,vflag);
     const int nall = atom_->nlocal + atom_->nghost;
+    const int nlocal = atom_->nlocal;
     const int nthreads = comm->nthreads;
     const int inum = list->inum;
 
@@ -278,33 +279,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     }
 
     // std::cout << "zoid: " << zoid.num << " nthreads: " << nthreads << " num workers to use: " << nthreads_to_use << " num local: " << inum << std::endl;
-
-    /*
-    if (true) {
-        int nlocal = atom_->nlocal;
-
-        int* ilist = list->ilist;
-        int* numneigh = list->numneigh;
-        int** firstneigh = list->firstneigh;
-
-        // loop over neighbors of my atoms
-        for (int ii = 0; ii < inum; ii++) {
-            int i = ilist[ii];
-            int* jlist = firstneigh[i];
-            int jnum = numneigh[i];
-
-            for (int jj = 0; jj < jnum; jj++) {
-                int j = jlist[jj];
-
-                if (num_eval != nullptr && ((zoid.num == 63 && *num_eval == 1))) {
-                    std::cout << YELLOW << "zoid: " << zoid.num << " time: " << *num_eval << " i: " << i << " neighbor: " << j << " nlocal: " << atom_->nlocal << " nghost: " << atom_->nlocal + atom_->nghost
-                        << " tag i: " << atom_->tag[i] << " tag j: " << atom_->tag[j] << " pos i: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2]
-                        << " pos j: " << atom_->x[j][0] << " " << atom_->x[j][1] << " " << atom_->x[j][2] << RESET_COLOR << std::endl;
-                }
-            }
-        }
-    }
-    */
 
 /*
 #if defined(_OPENMP)
@@ -420,6 +394,85 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         // reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
     } // end of omp parallel region
 
+    /*
+    const auto * _noalias const x = (dbl3_t *) atom_->x[0];
+    const int * _noalias const type = atom_->type;
+    const double * _noalias const special_lj = force->special_lj;
+    const int * _noalias const ilist = list->ilist;
+    const int * _noalias const numneigh = list->numneigh;
+    const int * const * const firstneigh = list->firstneigh;
+    bool newton_pair = force->newton_pair;
+
+    std::cout << "eflag: " << eflag << " vflag: " << vflag << std::endl;
+
+    cilk_for (int i = 0; i < atom_->nlocal; i++) {
+        int tid = __cilkrts_get_worker_number();
+        assert(tid >= 0 && tid < comm->nthreads);
+        ThrData *thr = fix->get_thr(tid);
+        auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
+        thr->timer(Timer::START);
+        ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
+
+        const int itype = type[i];
+        const int    * _noalias const jlist = firstneigh[i];
+        const double * _noalias const cutsqi = cutsq[itype];
+        const double * _noalias const offseti = offset[itype];
+        const double * _noalias const lj1i = lj1[itype];
+        const double * _noalias const lj2i = lj2[itype];
+        const double * _noalias const lj3i = lj3[itype];
+        const double * _noalias const lj4i = lj4[itype];
+
+        double xtmp = x[i].x;
+        double ytmp = x[i].y;
+        double ztmp = x[i].z;
+        int jnum = numneigh[i];
+
+        double fxtmp = 0.0;
+        double fytmp = 0.0;
+        double fztmp = 0.0;
+
+        for (int jj = 0; jj < jnum; jj++) {
+            int j = jlist[jj];
+            double factor_lj = special_lj[sbmask(j)];
+            j &= NEIGHMASK;
+
+            double delx = xtmp - x[j].x;
+            double dely = ytmp - x[j].y;
+            double delz = ztmp - x[j].z;
+            double rsq = delx*delx + dely*dely + delz*delz;
+            int jtype = type[j];
+
+            if (rsq < cutsqi[jtype]) {
+                double r2inv = 1.0/rsq;
+                double r6inv = r2inv*r2inv*r2inv;
+                double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
+                double fpair = factor_lj*forcelj*r2inv;
+
+                fxtmp += delx*fpair;
+                fytmp += dely*fpair;
+                fztmp += delz*fpair;
+                if (newton_pair || j < nlocal) {
+                    f[j].x -= delx*fpair;
+                    f[j].y -= dely*fpair;
+                    f[j].z -= delz*fpair;
+                }
+
+                double evdwl = 0.0;
+                if (eflag) {
+                    evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+                    evdwl *= factor_lj;
+                }
+
+                if (eflag | vflag) ev_tally_thr(this,i,j,nlocal,newton_pair,
+                                                evdwl,0.0,fpair,delx,dely,delz,thr);
+            }
+        }
+        f[i].x += fxtmp;
+        f[i].y += fytmp;
+        f[i].z += fztmp;
+    }
+    */
+
     // try new reduce
 
     if (nthreads_to_use == 1) {
@@ -432,15 +485,13 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     constexpr int CHUNK_SIZE = 256;
 
-    /*
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
-        for (int n = 1; n < nthreads_to_use; n++) {
+        for (int n = 1; n < __cilkrts_get_nworkers(); n++) {
             for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
                 f[j] += f[n * nvals + j];
             }
         }
     }
-    */
 
     /*
     // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
