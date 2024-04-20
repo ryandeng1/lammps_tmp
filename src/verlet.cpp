@@ -93,6 +93,8 @@ static int64_t next_dt_compute_dep_time[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1
 static int64_t curr_dt_num_atoms[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
 static int64_t next_dt_num_atoms[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
 
+static bool time_shit = true;
+
 static std::vector<int64_t> curr_dt_compute_dep_times_vec[NUM_DEPS];
 static std::vector<int64_t> next_dt_compute_dep_times_vec[NUM_DEPS];
 
@@ -5710,10 +5712,12 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             compute_duration_cilk += duration;
-            if (curr_dt) {
-                curr_dt_compute_dep_time[zoid_num][t + 1] += duration;
-            } else {
-                next_dt_compute_dep_time[zoid_num][t + 1] += duration;
+            if (time_shit) {
+                if (curr_dt) {
+                    curr_dt_compute_dep_time[zoid_num][t + 1] += duration;
+                } else {
+                    next_dt_compute_dep_time[zoid_num][t + 1] += duration;
+                }
             }
         }
 
@@ -5887,7 +5891,16 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
 
-            run_stencil_md_zoid<true>(starting_timestep, zoid_num, test_f, test_x);
+
+            if (dep == 0) {
+                time_shit = false;
+                run_stencil_md_zoid<true>(starting_timestep, zoid_num, test_f, test_x);
+
+                time_shit = true;
+                run_stencil_md_zoid<true>(starting_timestep, zoid_num, test_f, test_x);
+            } else {
+                run_stencil_md_zoid<true>(starting_timestep, zoid_num, test_f, test_x);
+            }
 
             if (dep < NUM_DEPS - 1) {
                 auto begin = std::chrono::high_resolution_clock::now();
