@@ -69,7 +69,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 
       bool newton_pair = force->newton_pair;
 
-      #pragma cilk grainsize 64
+      #pragma cilk grainsize 128
       cilk_for (int i = 0; i < atom->nlocal; i++) {
           int tid = __cilkrts_get_worker_number();
           ThrData *thr = fix->get_thr(tid);
@@ -202,7 +202,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       int nworkers = __cilkrts_get_nworkers();
 
       // wsp_t start_reduce = wsp_getworkspan();
-      #pragma cilk grainsize 256
+      #pragma cilk grainsize 128
       cilk_for (int i = 0; i < nvals; i++) {
           double t0 = f[i];
           for (int n = 1; n < nworkers; ++n) {
