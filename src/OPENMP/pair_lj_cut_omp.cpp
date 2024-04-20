@@ -548,10 +548,10 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     int nvals = nall * 3;
 
-    constexpr int CHUNK_SIZE = 256;
+    constexpr int CHUNK_SIZE = 128;
 
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
-        for (int n = 1; n < __cilkrts_get_nworkers(); n++) {
+        for (int n = 1; n < nthreads_to_use; n++) {
             for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
                 f[j] += f[n * nvals + j];
             }
