@@ -1686,8 +1686,10 @@ void Verlet::setup_stencil_md() {
 
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
+            queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 std::cout << "zoid: " << zoid_num << " time: " << t << " nlocal: " << lmp->atom_stencil_md[zoid_num][t]->nlocal << " num ghost: " << lmp->atom_stencil_md[zoid_num][t]->nghost << std::endl;
+                print_cuts(zoid.zoid);
             }
         }
     }
@@ -5796,8 +5798,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
     std::cout << "ME: " << comm->me << " NUM RECV LAUNCH CURR DT: " << lmp->recv_from_neighbors_procs.size() << " NEXT DT: " << lmp->recv_from_neighbors_procs_next_dt.size()
         << " CURR DT FILTERED SIZE: " << curr_dt_tmp.size() << " NEXT DT FILTERED SIZE: " << next_dt_tmp.size() << std::endl;
     */
-
-    MPI_Barrier(world);
 
     int num_zoids_recv_from = lmp->recv_from_neighbors_procs.size();
     std::vector<std::future<void>> receive_request_futures;
