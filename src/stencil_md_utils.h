@@ -77,7 +77,7 @@ constexpr bool DEBUG = true;
 
 constexpr int NUM_WORKERS_PER_THREAD = 128;
 
-constexpr bool ONLY_RUN_LAMMPS = false;
+constexpr bool ONLY_RUN_LAMMPS = true;
 
 constexpr bool ONLY_RUN_STENCIL_MD = false;
 

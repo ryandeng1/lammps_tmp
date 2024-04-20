@@ -4679,6 +4679,7 @@ void Verlet::setup_stencil_md() {
                 }
             }
         }
+        std::cout << GREEN << "-------- SETUP STENCIL MD PASSED ---------" << RESET_COLOR << std::endl;
     }
 
     int total_atoms_evaled = 0;
@@ -4709,8 +4710,6 @@ void Verlet::setup_stencil_md() {
     */
 
 
-    std::cout << GREEN << "-------- SETUP STENCIL MD PASSED ---------"
-              << RESET_COLOR << std::endl;
     MPI_Barrier(world);
 
     /*

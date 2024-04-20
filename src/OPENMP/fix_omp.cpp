@@ -125,13 +125,20 @@ FixOMP::FixOMP(LAMMPS *lmp, int narg, char **arg)
 
   thr = new ThrData *[nthreads];
   _nthr = nthreads;
+  if (LAMMPS_USE_CILK) {
+      for (int tid = 0; tid < nthreads; tid++) {
+          auto t = new Timer(lmp);
+          thr[tid] = new ThrData(tid, t);
+      }
+  } else {
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(lmp)
 #endif
-  {
-    const int tid = get_tid();
-    auto t = new Timer(lmp);
-    thr[tid] = new ThrData(tid,t);
+      {
+          const int tid = get_tid();
+          auto t = new Timer(lmp);
+          thr[tid] = new ThrData(tid, t);
+      }
   }
 }
 
