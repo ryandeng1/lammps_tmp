@@ -193,16 +193,9 @@ void StencilMD::CREATE() {
             if (lmp->kokkos) {
                 // domain_ = new DomainKokkos(lmp);
                 domain_ = nullptr;
-            }
-#ifdef LMP_OPENMP
-                else {
-            domain_ = new DomainOMP(lmp);
-        }
-#else
-            else {
+            } else {
                 domain_ = new Domain(lmp);
             }
-#endif
             lmp->domain_stencil_md[i][j] = domain_;
         }
 
@@ -244,16 +237,9 @@ void StencilMD::CREATE_NEXT_DT() {
             if (lmp->kokkos) {
                 // domain_ = new DomainKokkos(lmp);
                 domain_ = nullptr;
-            }
-#ifdef LMP_OPENMP
-                else {
-            domain_ = new DomainOMP(lmp);
-        }
-#else
-            else {
+            } else {
                 domain_ = new Domain(lmp);
             }
-#endif
             lmp->domain_stencil_md_next_dt[i][j] = domain_;
         }
 

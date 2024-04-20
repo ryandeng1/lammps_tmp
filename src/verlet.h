@@ -48,7 +48,7 @@ class Verlet : public Integrate {
   void cleanup_stencil_md();
 
   template <bool curr_dt>
-  void run_stencil_md_zoid(int start_timestep, int zoid_num, int num_procs, double** test_f, double** test_x);
+  void run_stencil_md_zoid(int start_timestep, int zoid_num, double** test_f, double** test_x);
 
   void run_stencil_md(int start_timestep, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
                       int* zoid_num_to_num_procs, int* zoid_num_to_num_procs_next_dt,

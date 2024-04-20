@@ -5376,7 +5376,7 @@ void Verlet::run(int n) {
 
 // assume already have all the data necessary to run the zoid
 template <bool curr_dt>
-void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, int num_procs, double** test_f, double** test_x) {
+void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** test_f, double** test_x) {
     int n_pre_force = modify->n_pre_force;
     int n_post_force_any = modify->n_post_force_any;
     int n_end_of_step = modify->n_end_of_step;
@@ -5782,36 +5782,10 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
     }
     */
 
-    /*
-    std::vector<int> curr_dt_tmp;
-    std::vector<int> next_dt_tmp;
-    for (auto& x : lmp->recv_from_neighbors_procs) {
-        if (x % comm->nprocs != comm->me) {
-            curr_dt_tmp.push_back(x);
-        }
-    }
-    for (auto& x : lmp->recv_from_neighbors_procs_next_dt) {
-        if (x % comm->nprocs != comm->me) {
-            next_dt_tmp.push_back(x);
-        }
-    }
-    std::cout << "ME: " << comm->me << " NUM RECV LAUNCH CURR DT: " << lmp->recv_from_neighbors_procs.size() << " NEXT DT: " << lmp->recv_from_neighbors_procs_next_dt.size()
-        << " CURR DT FILTERED SIZE: " << curr_dt_tmp.size() << " NEXT DT FILTERED SIZE: " << next_dt_tmp.size() << std::endl;
-    */
-
     int num_zoids_recv_from = lmp->recv_from_neighbors_procs.size();
     std::vector<std::future<void>> receive_request_futures;
     std::vector<MPI_Request> receive_requests(
         lmp->recv_from_neighbors_procs.size(), MPI_REQUEST_NULL);
-
-    /*
-    for (int i = 0; i < lmp->recv_from_neighbors_procs.size(); i++) {
-        int recv_zoid_num = lmp->recv_from_neighbors_procs[i];
-        if (recv_zoid_num % comm->nprocs != comm->me) {
-            comm->receive_data_process_stencil_md(true, &receive_requests[i], recv_zoid_num, false);
-        }
-    }
-    */
 
     auto begin_r = std::chrono::high_resolution_clock::now();
     int recv_idx = 0;
@@ -5836,21 +5810,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
     auto end_r = std::chrono::high_resolution_clock::now();
     auto duration_r = std::chrono::duration_cast<std::chrono::microseconds>(end_r - begin_r).count();
     pre_recv_time += duration_r;
-
-    /*
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        std::stringstream curr_dt_debug;
-        for (auto& idx: dep_to_wait_idxs[dep]) {
-            curr_dt_debug << lmp->recv_from_neighbors_procs[idx] << " ";
-        }
-        std::stringstream next_dt_debug;
-        for (auto& idx: dep_to_wait_idxs_next_dt[dep]) {
-            next_dt_debug << lmp->recv_from_neighbors_procs_next_dt[idx] << " ";
-        }
-        std::cout << YELLOW << "curr dt dep: " << dep << " size: " << dep_to_wait_idxs[dep].size() << " wait zoids: " << curr_dt_debug.str() << RESET_COLOR << std::endl;
-        std::cout << GREEN << "next dt dep: " << dep << " size: " << dep_to_wait_idxs_next_dt[dep].size() << " wait zoids: " << next_dt_debug.str() << RESET_COLOR << std::endl;
-    }
-    */
 
     int running_recv_idx = 0;
     for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -5901,9 +5860,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
 
             auto& atom_arr = lmp->atom_stencil_md[zoid_num];
-            int** atom_idx_mapping = lmp->queues[dep][j].atom_idx_mapping;
 
-            run_stencil_md_zoid<true>(starting_timestep, zoid_num, -1, test_f, test_x);
+            run_stencil_md_zoid<true>(starting_timestep, zoid_num, test_f, test_x);
 
             if (dep < NUM_DEPS - 1) {
                 auto begin = std::chrono::high_resolution_clock::now();
@@ -5912,7 +5870,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 int vec_idx = 0;
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(true,
-                                                           lmp->atom_stencil_md[zoid_num],
+                                                           atom_arr,
                                                            zoid, proc, false);
                 }
                 auto end = std::chrono::high_resolution_clock::now();
@@ -6119,9 +6077,8 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
 
             auto &atom_arr = lmp->atom_stencil_md[zoid_num];
-            int **atom_idx_mapping = zoid.atom_idx_mapping;
 
-            run_stencil_md_zoid<false>(starting_timestep, zoid_num, -1, test_f, test_x);
+            run_stencil_md_zoid<false>(starting_timestep, zoid_num, test_f, test_x);
 
             // send data
             if (dep < NUM_DEPS - 1) {
@@ -6132,7 +6089,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(false,
                                                            atom_arr,
-                                                           lmp->zoid_num_to_zoid_next_dt[zoid_num],
+                                                           zoid,
                                                            proc, false);
                 }
 
