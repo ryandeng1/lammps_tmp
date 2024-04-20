@@ -5273,6 +5273,8 @@ void Verlet::run(int n) {
 
     std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << " total duration: " << total_duration_stencil_md << std::endl;
 
+    MPI_Barrier(world);
+
     int64_t stencil_md_total_compute_time_curr_dt_dep[NUM_DEPS] = {0};
     int64_t stencil_md_total_compute_time_next_dt_dep[NUM_DEPS] = {0};
 
