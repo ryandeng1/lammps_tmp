@@ -69,6 +69,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 
       bool newton_pair = force->newton_pair;
 
+      // this code didn't perform as well
       /*
       cilk_for (int i = 0; i < atom->nlocal; i++) {
           int tid = __cilkrts_get_worker_number();
@@ -429,6 +430,17 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     int nvals = nall * 3;
 
+    constexpr int CHUNK_SIZE = 256;
+
+    cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
+        for (int n = 1; n < nworkers; n++) {
+            for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
+                f[j] += f[n * nvals + j];
+            }
+        }
+    }
+
+    /*
     // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
     cilk_for (int i = 0; i < nvals; i++) {
         double t0 = f[i];
@@ -437,6 +449,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         }
         f[i] = t0;
     }
+    */
 
     // try new reduce
     /*
