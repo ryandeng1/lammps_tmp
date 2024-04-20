@@ -79,7 +79,7 @@ constexpr int NUM_WORKERS_PER_THREAD = 128;
 
 constexpr bool ONLY_RUN_LAMMPS = false;
 
-constexpr bool ONLY_RUN_STENCIL_MD = false;
+constexpr bool ONLY_RUN_STENCIL_MD = true;
 
 constexpr bool LAMMPS_USE_CILK = true;
 
