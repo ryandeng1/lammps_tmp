@@ -126,10 +126,10 @@ FixOMP::FixOMP(LAMMPS *lmp, int narg, char **arg)
   thr = new ThrData *[nthreads];
   _nthr = nthreads;
   if (LAMMPS_USE_CILK) {
-      for (int tid = 0; tid < nthreads; tid++) {
-          auto t = new Timer(lmp);
-          thr[tid] = new ThrData(tid, t);
-      }
+    for (int tid = 0; tid < nthreads; tid++) {
+        auto t = new Timer(lmp);
+        thr[tid] = new ThrData(tid, t);
+    }
   } else {
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(lmp)
@@ -323,6 +323,7 @@ void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_, Neighbor* neighbor_) 
     if (nthreads != omp_get_max_threads()) omp_set_num_threads(nthreads);
 #endif
     if (_nthr != nthreads) {
+        assert(false);
         if (comm->me == 0)
             utils::logmesg(lmp,"Re-init OPENMP for {} OpenMP thread(s)\n", nthreads);
 
@@ -333,6 +334,8 @@ void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_, Neighbor* neighbor_) 
         _nthr = nthreads;
 
         if (LAMMPS_USE_CILK) {
+            std::cout << "nthreads: " << nthreads << std::endl;
+            assert(false);
             for (int tid = 0; tid < nthreads; tid++) {
                 auto t = new Timer(lmp);
                 thr[tid] = new ThrData(tid, t);
@@ -517,13 +520,12 @@ void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
         nthreads_to_use = comm->nthreads;
     }
 
-    cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
+    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
         // thr[tid]->check_tid(tid);
         thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
     }
-
     /*
-    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
+    cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // thr[tid]->check_tid(tid);
         thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
     }
