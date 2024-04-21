@@ -346,12 +346,14 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                         f[j].z -= delz * fpair;
                     }
 
+                    /*
                     if (eflag) {
                         evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
                         evdwl *= factor_lj;
                     }
 
                     if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
+                    */
                 }
             }
 
