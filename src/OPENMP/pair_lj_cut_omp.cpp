@@ -27,6 +27,7 @@
 #include <cilk/cilkscale.h>
 #include <cilk/opadd_reducer.h>
 #include <sstream>
+#include "stencil_md_utils.h"
 
 using namespace LAMMPS_NS;
 
@@ -69,75 +70,6 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       const int nlocal = atom->nlocal;
 
       bool newton_pair = force->newton_pair;
-
-      // this code didn't perform as well
-      /*
-      cilk_for (int i = 0; i < atom->nlocal; i++) {
-          int tid = __cilkrts_get_worker_number();
-          ThrData *thr = fix->get_thr(tid);
-          auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
-          thr->timer(Timer::START);
-          ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
-
-          const int itype = type[i];
-          const int    * _noalias const jlist = firstneigh[i];
-          const double * _noalias const cutsqi = cutsq[itype];
-          const double * _noalias const offseti = offset[itype];
-          const double * _noalias const lj1i = lj1[itype];
-          const double * _noalias const lj2i = lj2[itype];
-          const double * _noalias const lj3i = lj3[itype];
-          const double * _noalias const lj4i = lj4[itype];
-
-          double xtmp = x[i].x;
-          double ytmp = x[i].y;
-          double ztmp = x[i].z;
-          int jnum = numneigh[i];
-
-          double fxtmp = 0.0;
-          double fytmp = 0.0;
-          double fztmp = 0.0;
-
-          for (int jj = 0; jj < jnum; jj++) {
-              int j = jlist[jj];
-              double factor_lj = special_lj[sbmask(j)];
-              j &= NEIGHMASK;
-
-              double delx = xtmp - x[j].x;
-              double dely = ytmp - x[j].y;
-              double delz = ztmp - x[j].z;
-              double rsq = delx*delx + dely*dely + delz*delz;
-              int jtype = type[j];
-
-              if (rsq < cutsqi[jtype]) {
-                  double r2inv = 1.0/rsq;
-                  double r6inv = r2inv*r2inv*r2inv;
-                  double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
-                  double fpair = factor_lj*forcelj*r2inv;
-
-                  fxtmp += delx*fpair;
-                  fytmp += dely*fpair;
-                  fztmp += delz*fpair;
-                  if (newton_pair || j < nlocal) {
-                      f[j].x -= delx*fpair;
-                      f[j].y -= dely*fpair;
-                      f[j].z -= delz*fpair;
-                  }
-
-                  double evdwl = 0.0;
-                  if (eflag) {
-                      evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
-                      evdwl *= factor_lj;
-                  }
-
-                  if (eflag | vflag) ev_tally_thr(this,i,j,nlocal,newton_pair,
-                                                  evdwl,0.0,fpair,delx,dely,delz,thr);
-              }
-          }
-          f[i].x += fxtmp;
-          f[i].y += fytmp;
-          f[i].z += fztmp;
-      }
-      */
 
       cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
           // int ifrom, ito, tid;
@@ -182,22 +114,10 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           return;
       }
 
-      /*
-      wsp_t end_compute = wsp_getworkspan();
-      wsp_t elapsed_compute = wsp_sub(end_compute, start_compute);
-
-      if (comm->me == 0) {
-          wsp_dump(elapsed_compute, "potential_calc");
-      }
-      */
-
-      // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
       double* f = &(atom->f[0][0]);
       int nvals = nall * 3;
 
       int nworkers = __cilkrts_get_nworkers();
-
-      // wsp_t start_reduce = wsp_getworkspan();
 
       constexpr int CHUNK_SIZE = 256;
 
@@ -216,15 +136,6 @@ void PairLJCutOMP::compute(int eflag, int vflag)
               t0 += f[n * nvals + i];
           }
           f[i] = t0;
-      }
-      */
-
-      /*
-      wsp_t end_reduce = wsp_getworkspan();
-      wsp_t elapsed_reduce = wsp_sub(end_reduce, start_reduce);
-
-      if (comm->me == 0) {
-          wsp_dump(elapsed_reduce, "reduce");
       }
       */
 
@@ -289,14 +200,59 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     int* numneigh = list->numneigh;
     int** firstneigh = list->firstneigh;
 
+    /*
+    {
+        int count_target_tag = 0;
+
+        double **x = atom_->x;
+        int *type = atom_->type;
+        int nlocal = atom_->nlocal;
+        double *special_lj = force->special_lj;
+        int newton_pair = force->newton_pair;
+
+        int inum = list->inum;
+        int* ilist = list->ilist;
+        int* numneigh = list->numneigh;
+        int** firstneigh = list->firstneigh;
+
+        // loop over neighbors of my atoms
+
+        for (int ii = 0; ii < inum; ii++) {
+            int i = ilist[ii];
+            double xtmp = x[i][0];
+            double ytmp = x[i][1];
+            double ztmp = x[i][2];
+            int itype = type[i];
+            int *jlist = firstneigh[i];
+            int jnum = numneigh[i];
+            if (num_eval != nullptr) {
+                stencilmd_num_visited += jnum;
+            }
+            for (int jj = 0; jj < jnum; jj++) {
+                int j = jlist[jj];
+                double factor_lj = special_lj[sbmask(j)];
+                j &= NEIGHMASK;
+
+                double delx = xtmp - x[j][0];
+                double dely = ytmp - x[j][1];
+                double delz = ztmp - x[j][2];
+                double rsq = delx * delx + dely * dely + delz * delz;
+                int jtype = type[j];
+
+                if (rsq < cutsq[itype][jtype]) {
+                    // STENCIL_MD_ATOM_EDGES_COUNTS[atom_->tag[i]]++;
+                    // STENCIL_MD_ATOM_EDGES_COUNTS[atom_->tag[j]]++;
+                }
+            }
+        }
+    }
+    */
+
+    /*
     constexpr int THRESHOLD = 128;
     if (nlocal < THRESHOLD) {
         // double **f = atom_->eval_f_stencil_md;
         auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
-
-        cilk::opadd_reducer<double> fxtmp = 0.0;
-        cilk::opadd_reducer<double> fytmp = 0.0;
-        cilk::opadd_reducer<double> fztmp = 0.0;
 
         // loop over neighbors of my atoms
         for (int ii = 0; ii < inum; ii++) {
@@ -346,14 +302,12 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                         f[j].z -= delz * fpair;
                     }
 
-                    /*
-                    if (eflag) {
-                        evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
-                        evdwl *= factor_lj;
-                    }
-
-                    if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
-                    */
+//                    if (eflag) {
+//                        evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
+//                        evdwl *= factor_lj;
+//                    }
+//
+//                    if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
                 }
             }
 
@@ -364,10 +318,13 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
         return;
     }
+    */
+
 
     cilk_for (int ii = 0; ii < atom_->nlocal; ii++) {
-        // double **f = atom_->eval_f_stencil_md;
-        // ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
+        cilk::opadd_reducer<double> fxtmp = 0.0;
+        cilk::opadd_reducer<double> fytmp = 0.0;
+        cilk::opadd_reducer<double> fztmp = 0.0;
 
         int i = ilist[ii];
         double xtmp = x[i][0];
@@ -378,9 +335,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         int* jlist = firstneigh[i];
         int jnum = numneigh[i];
 
-        cilk::opadd_reducer<double> fxtmp = 0.0;
-        cilk::opadd_reducer<double> fytmp = 0.0;
-        cilk::opadd_reducer<double> fztmp = 0.0;
         // loop over neighbors of my atoms
 
         cilk_for (int jj = 0; jj < jnum; jj++) {
@@ -388,7 +342,8 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
             int tid = __cilkrts_get_worker_number();
             ThrData *thr = fix->get_thr(tid);
-            auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
+            // auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
+            double** f = thr->get_f();
 
             int j = jlist[jj];
             double factor_lj = special_lj[sbmask(j)];
@@ -409,13 +364,14 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                 fxtmp += delx * fpair;
                 fytmp += dely * fpair;
                 fztmp += delz * fpair;
+
                 if (newton_pair || j < nlocal) {
-                    // f[j][0] -= delx * fpair;
-                    // f[j][1] -= dely * fpair;
-                    // f[j][2] -= delz * fpair;
-                    f[j].x -= delx * fpair;
-                    f[j].y -= dely * fpair;
-                    f[j].z -= delz * fpair;
+                    f[j][0] -= delx * fpair;
+                    f[j][1] -= dely * fpair;
+                    f[j][2] -= delz * fpair;
+                    // f[j].x -= delx * fpair;
+                    // f[j].y -= dely * fpair;
+                    // f[j].z -= delz * fpair;
                 }
 
                 /*
@@ -431,88 +387,16 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
         int tid = __cilkrts_get_worker_number();
         ThrData *thr = fix->get_thr(tid);
-        auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
+        // auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
+        double** f = thr->get_f();
 
-        f[i].x += fxtmp;
-        f[i].y += fytmp;
-        f[i].z += fztmp;
+        // f[i].x += fxtmp;
+        // f[i].y += fytmp;
+        // f[i].z += fztmp;
+        f[i][0] += fxtmp;
+        f[i][1] += fytmp;
+        f[i][2] += fztmp;
     }
-
-/*
-#if defined(_OPENMP)
-#pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(eflag,vflag)
-#endif
-*/
-
-    /*
-    cilk_for (int ii = 0; ii < nlocal; ii++) {
-        int tid = __cilkrts_get_worker_number();
-        ThrData *thr = fix->get_thr(tid);
-        auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
-        ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
-
-        const int i = ilist[ii];
-        const int itype = type[i];
-        const int    * _noalias const jlist = firstneigh[i];
-        const double * _noalias const cutsqi = cutsq[itype];
-        const double * _noalias const offseti = offset[itype];
-        const double * _noalias const lj1i = lj1[itype];
-        const double * _noalias const lj2i = lj2[itype];
-        const double * _noalias const lj3i = lj3[itype];
-        const double * _noalias const lj4i = lj4[itype];
-
-        double xtmp = x[i].x;
-        double ytmp = x[i].y;
-        double ztmp = x[i].z;
-        int jnum = numneigh[i];
-        double fxtmp = 0.0;
-        double fytmp = 0.0;
-        double fztmp = 0.0;
-
-        double evdwl = 0.0;
-
-        for (int jj = 0; jj < jnum; jj++) {
-            int j = jlist[jj];
-            double factor_lj = special_lj[sbmask(j)];
-            j &= NEIGHMASK;
-
-            double delx = xtmp - x[j].x;
-            double dely = ytmp - x[j].y;
-            double delz = ztmp - x[j].z;
-            double rsq = delx*delx + dely*dely + delz*delz;
-            int jtype = type[j];
-
-            if (rsq < cutsqi[jtype]) {
-                double r2inv = 1.0/rsq;
-                double r6inv = r2inv*r2inv*r2inv;
-                double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
-                double fpair = factor_lj*forcelj*r2inv;
-
-                fxtmp += delx*fpair;
-                fytmp += dely*fpair;
-                fztmp += delz*fpair;
-                if (force->newton_pair|| j < nlocal) {
-                    f[j].x -= delx*fpair;
-                    f[j].y -= dely*fpair;
-                    f[j].z -= delz*fpair;
-                }
-
-                if (eflag) {
-                    evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
-                    evdwl *= factor_lj;
-                }
-
-                if (eflag | vflag) {
-                    ev_tally_thr(this, i, j, nlocal, force->newton_pair,
-                                 evdwl, 0.0, fpair, delx, dely, delz, thr);
-                }
-            }
-        }
-        f[i].x += fxtmp;
-        f[i].y += fytmp;
-        f[i].z += fztmp;
-    }
-    */
 
     /*
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
@@ -552,85 +436,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         thr->timer(Timer::PAIR);
         // reduce_thr_stencil_md(this, eflag, vflag, thr, atom_);
     } // end of omp parallel region
-    */
-
-    /*
-    const auto * _noalias const x = (dbl3_t *) atom_->x[0];
-    const int * _noalias const type = atom_->type;
-    const double * _noalias const special_lj = force->special_lj;
-    const int * _noalias const ilist = list->ilist;
-    const int * _noalias const numneigh = list->numneigh;
-    const int * const * const firstneigh = list->firstneigh;
-    bool newton_pair = force->newton_pair;
-
-    std::cout << "eflag: " << eflag << " vflag: " << vflag << std::endl;
-
-    cilk_for (int i = 0; i < atom_->nlocal; i++) {
-        int tid = __cilkrts_get_worker_number();
-        assert(tid >= 0 && tid < comm->nthreads);
-        ThrData *thr = fix->get_thr(tid);
-        auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
-        thr->timer(Timer::START);
-        ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
-
-        const int itype = type[i];
-        const int    * _noalias const jlist = firstneigh[i];
-        const double * _noalias const cutsqi = cutsq[itype];
-        const double * _noalias const offseti = offset[itype];
-        const double * _noalias const lj1i = lj1[itype];
-        const double * _noalias const lj2i = lj2[itype];
-        const double * _noalias const lj3i = lj3[itype];
-        const double * _noalias const lj4i = lj4[itype];
-
-        double xtmp = x[i].x;
-        double ytmp = x[i].y;
-        double ztmp = x[i].z;
-        int jnum = numneigh[i];
-
-        double fxtmp = 0.0;
-        double fytmp = 0.0;
-        double fztmp = 0.0;
-
-        for (int jj = 0; jj < jnum; jj++) {
-            int j = jlist[jj];
-            double factor_lj = special_lj[sbmask(j)];
-            j &= NEIGHMASK;
-
-            double delx = xtmp - x[j].x;
-            double dely = ytmp - x[j].y;
-            double delz = ztmp - x[j].z;
-            double rsq = delx*delx + dely*dely + delz*delz;
-            int jtype = type[j];
-
-            if (rsq < cutsqi[jtype]) {
-                double r2inv = 1.0/rsq;
-                double r6inv = r2inv*r2inv*r2inv;
-                double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
-                double fpair = factor_lj*forcelj*r2inv;
-
-                fxtmp += delx*fpair;
-                fytmp += dely*fpair;
-                fztmp += delz*fpair;
-                if (newton_pair || j < nlocal) {
-                    f[j].x -= delx*fpair;
-                    f[j].y -= dely*fpair;
-                    f[j].z -= delz*fpair;
-                }
-
-                double evdwl = 0.0;
-                if (eflag) {
-                    evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
-                    evdwl *= factor_lj;
-                }
-
-                if (eflag | vflag) ev_tally_thr(this,i,j,nlocal,newton_pair,
-                                                evdwl,0.0,fpair,delx,dely,delz,thr);
-            }
-        }
-        f[i].x += fxtmp;
-        f[i].y += fytmp;
-        f[i].z += fztmp;
-    }
     */
 
     // try new reduce
@@ -674,8 +479,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     } // end of omp parallel region
     */
 }
-
-
 
 template <int EVFLAG, int EFLAG, int NEWTON_PAIR>
 void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
@@ -741,6 +544,7 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
           f[j].z -= delz*fpair;
         }
 
+        /*
         if (EFLAG) {
           evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
           evdwl *= factor_lj;
@@ -748,6 +552,7 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
 
         if (EVFLAG) ev_tally_thr(this,i,j,nlocal,NEWTON_PAIR,
                                  evdwl,0.0,fpair,delx,dely,delz,thr);
+        */
       }
     }
     f[i].x += fxtmp;
@@ -757,7 +562,7 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
 }
 
 template <int EVFLAG, int EFLAG, int NEWTON_PAIR>
-inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const thr, Atom* atom_)
+void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const thr, Atom* atom_)
 {
     const auto * _noalias const x = (dbl3_t *) atom_->x[0];
     auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
@@ -822,6 +627,7 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
                     f[j].z -= delz*fpair;
                 }
 
+                /*
                 if (EFLAG) {
                     evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
                     evdwl *= factor_lj;
@@ -831,6 +637,7 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
                     ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
                                  evdwl, 0.0, fpair, delx, dely, delz, thr);
                 }
+                */
             }
         }
         f[i].x += fxtmp;

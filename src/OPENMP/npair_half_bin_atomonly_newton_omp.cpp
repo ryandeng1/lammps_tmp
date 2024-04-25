@@ -286,11 +286,6 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                 bool shrinking_out_of_bounds = false;
                 bool expanding_out_of_bounds = false;
 
-                bool debug = false;
-                double debug_lo[3] = {0};
-                double debug_hi[3] = {0};
-                bool debug_ghost_edge[3] = {false, false, false};
-
                 for (int dim = 0; dim < 3; dim++) {
                     double lo = domain_->sublo[dim];
                     double hi = domain_->subhi[dim];
@@ -301,9 +296,6 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                     } else if (!my_dim_shrinking && out_of_bounds) {
                         expanding_out_of_bounds = true;
                     }
-
-                    debug_lo[dim] = lo;
-                    debug_hi[dim] = hi;
                 }
 
                 bool add_ghost_edge = shrinking_out_of_bounds;
@@ -338,10 +330,11 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                 if (i == j) {
                     continue;
                 }
+
                 if (neighbor_idxs.find(j) != neighbor_idxs.end()) {
                     continue;
                 }
-                // add an edge if the ghost atom is ghost in a shrinking dimension
+
                 if (j < nlocal) {
                     if (x[j][2] < ztmp) continue;
                     if (x[j][2] == ztmp) {
@@ -350,10 +343,8 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                     }
                 }
 
+                // add an edge if the ghost atom is ghost in a shrinking dimension
                 if (j >= nlocal) {
-                    bool debug = false;
-                    double debug_lo[3] = {0};
-                    double debug_hi[3] = {0};
                     bool shrinking_out_of_bounds = false;
                     bool expanding_out_of_bounds = false;
 
@@ -367,8 +358,6 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                         } else if (!my_dim_shrinking && out_of_bounds) {
                             expanding_out_of_bounds = true;
                         }
-                        debug_lo[dim] = lo;
-                        debug_hi[dim] = hi;
                     }
 
                     bool add_ghost_edge = shrinking_out_of_bounds;
@@ -402,7 +391,7 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
         if (ipage->status())
             error->one(FLERR,"Neighbor list overflow, boost neigh_modify one");
 
-        // std::cout << "sorting: " << std::is_sorted(neighbors.begin(), neighbors.end()) << std::endl;
+        assert(n == neighbors.size());
         std::sort(neighbors.begin(), neighbors.end());
         for (int neigh_idx = 0; neigh_idx < n; neigh_idx++) {
             neighptr[neigh_idx] = neighbors[neigh_idx];
