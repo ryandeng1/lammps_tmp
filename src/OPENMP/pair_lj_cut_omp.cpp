@@ -49,6 +49,9 @@ static void merge(void* left, void* right) {
 
 static dbl3_t cilk_reducer(new_reducer, merge) ftmp;
 
+// static cilk::opadd_reducer<int> num_edges = 0;
+// static cilk::opadd_reducer<int> num_accepted_edges = 0;
+
 /* ---------------------------------------------------------------------- */
 
 PairLJCutOMP::PairLJCutOMP(LAMMPS *lmp) :
@@ -70,6 +73,8 @@ PairLJCutOMP::PairLJCutOMP(LAMMPS *lmp, Modify* modify_) :
 
 void PairLJCutOMP::compute(int eflag, int vflag)
 {
+  // num_edges = 0;
+  // num_accepted_edges = 0;
   ev_init(eflag,vflag);
 
   const int nall = atom->nlocal + atom->nghost;
@@ -149,6 +154,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       }
       */
 
+      // std::cout << "LAMMPS num edges: " << num_edges << " num accepted: " << num_accepted_edges << std::endl;
       return;
   }
 
@@ -184,7 +190,8 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 }
 
 void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
-    int num_edges = 0;
+    // num_edges = 0;
+    // num_accepted_edges = 0;
     ev_init(eflag,vflag);
     const int nall = atom_->nlocal + atom_->nghost;
     const int nlocal = atom_->nlocal;
@@ -400,6 +407,11 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         reduce_thr_stencil_md(this, eflag, vflag, thr, atom_, nthreads_to_use);
     } // end of omp parallel region
     */
+    /*
+    if (num_eval != nullptr) {
+        std::cout << CYAN << "nlocal: " << nlocal << " zoid: " << zoid.num << " timestep: " << *num_eval << " num edges: " << num_edges << " num accepted edges: " << num_accepted_edges << RESET_COLOR << std::endl;
+    }
+    */
 }
 
 template <int EVFLAG, int EFLAG, int NEWTON_PAIR>
@@ -441,6 +453,7 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
     fxtmp=fytmp=fztmp=0.0;
 
     for (jj = 0; jj < jnum; jj++) {
+      // num_edges++;
       j = jlist[jj];
       factor_lj = special_lj[sbmask(j)];
       j &= NEIGHMASK;
@@ -452,6 +465,7 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
       jtype = type[j];
 
       if (rsq < cutsqi[jtype]) {
+        // num_accepted_edges++;
         r2inv = 1.0/rsq;
         r6inv = r2inv*r2inv*r2inv;
         forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
@@ -525,13 +539,15 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
         // fxtmp = 0.0;
         // fytmp = 0.0;
         // fztmp = 0.0;
-        double fxtmp = 0.0;
-        double fytmp = 0.0;
-        double fztmp = 0.0;
+        // double fxtmp = 0.0;
+        // double fytmp = 0.0;
+        // double fztmp = 0.0;
 
-        // ftmp = {0};
+        ftmp = {0};
 
-        for (int jj = 0; jj < jnum; jj++) {
+        #pragma cilk grainsize 32
+        cilk_for (int jj = 0; jj < jnum; jj++) {
+            // num_edges++;
             double evdwl = 0.0;
             int j = jlist[jj];
             double factor_lj = special_lj[sbmask(j)];
@@ -544,19 +560,21 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
             int jtype = type[j];
 
             if (rsq < cutsqi[jtype]) {
+                // num_accepted_edges++;
                 double r2inv = 1.0/rsq;
                 double r6inv = r2inv*r2inv*r2inv;
                 double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
                 double fpair = factor_lj*forcelj*r2inv;
 
+                /*
                 fxtmp += delx*fpair;
                 fytmp += dely*fpair;
                 fztmp += delz*fpair;
-                /*
+                */
                 ftmp.x += delx*fpair;
                 ftmp.y += dely*fpair;
                 ftmp.z += delz*fpair;
-                */
+
                 if (NEWTON_PAIR || j < nlocal) {
                     f[j].x -= delx*fpair;
                     f[j].y -= dely*fpair;
@@ -576,14 +594,14 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
                 */
             }
         }
+        /*
         f[i].x += fxtmp;
         f[i].y += fytmp;
         f[i].z += fztmp;
-        /*
+        */
         f[i].x += ftmp.x;
         f[i].y += ftmp.y;
         f[i].z += ftmp.z;
-        */
     }
 }
 
