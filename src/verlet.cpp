@@ -6194,7 +6194,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
     // clear force on everything except first timestep
     // this should get optimized to be `memset` with -O3
     begin_misc = std::chrono::high_resolution_clock::now();
-    #pragma cilk grainsize 1
     cilk_for (int i = 0; i < NUM_ZOIDS; i++) {
         if (i % comm->nprocs == comm->me) {
             #pragma cilk grainsize 1
