@@ -5249,7 +5249,7 @@ void Verlet::run(int n) {
                     }
                 }
             }
-            assert(num_procs >= 0 && num_procs < comm->nprocs);
+           assert(num_procs >= 0 && num_procs < comm->nprocs);
             zoid_num_to_num_procs_next_dt[zoid_num] = num_procs;
         }
     }
@@ -5901,6 +5901,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
 
                 int vec_idx = 0;
+                #pragma cilk grainsize 1
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(true,
                                                            atom_arr,
@@ -6120,6 +6121,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 auto begin = std::chrono::high_resolution_clock::now();
 
                 int vec_idx = 0;
+                #pragma cilk grainsize 1
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(false,
                                                            atom_arr,
