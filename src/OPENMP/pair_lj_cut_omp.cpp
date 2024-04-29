@@ -354,11 +354,9 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     // try new reduce
 
-    /*
     if (nthreads_to_use == 1) {
         return;
     }
-    */
 
     double* f = &(atom_->eval_f_stencil_md[0][0]);
 
