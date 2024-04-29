@@ -87,22 +87,28 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           if (evflag) {
               if (eflag) {
                   if (force->newton_pair) {
-                      eval_stencil_md<1,1,1>(ifrom, ito, thr, atom);
+                      // eval_stencil_md<1,1,1>(ifrom, ito, thr, atom);
+                      eval<1, 1, 1>(ifrom, ito, thr);
                   } else {
-                      eval_stencil_md<1,1,0>(ifrom, ito, thr, atom);
+                      // eval_stencil_md<1,1,0>(ifrom, ito, thr, atom);
+                      eval<1, 1, 0>(ifrom, ito, thr);
                   }
               } else {
                   if (force->newton_pair) {
-                      eval_stencil_md<1,0,1>(ifrom, ito, thr, atom);
+                      // eval_stencil_md<1,0,1>(ifrom, ito, thr, atom);
+                      eval<1,0,1>(ifrom, ito, thr);
                   } else {
-                      eval_stencil_md<1,0,0>(ifrom, ito, thr, atom);
+                      // eval_stencil_md<1,0,0>(ifrom, ito, thr, atom);
+                      eval<1,0,0>(ifrom, ito, thr);
                   }
               }
           } else {
               if (force->newton_pair) {
-                  eval_stencil_md<0,0,1>(ifrom, ito, thr, atom);
+                  // eval_stencil_md<0,0,1>(ifrom, ito, thr, atom);
+                  eval<0,0,1>(ifrom, ito, thr);
               } else {
-                  eval_stencil_md<0,0,0>(ifrom, ito, thr, atom);
+                  // eval_stencil_md<0,0,0>(ifrom, ito, thr, atom);
+                  eval<0,0,0>(ifrom, ito, thr);
               }
           }
           thr->timer(Timer::PAIR);
