@@ -545,7 +545,6 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
 
         ftmp = {0};
 
-        #pragma cilk grainsize 32
         cilk_for (int jj = 0; jj < jnum; jj++) {
             // num_edges++;
             double evdwl = 0.0;
