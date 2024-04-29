@@ -508,7 +508,7 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
         // double fytmp = 0.0;
         // double fztmp = 0.0;
 
-        cilk_for (int jj = 0; jj < jnum; jj++) {
+        for (int jj = 0; jj < jnum; jj++) {
             double evdwl = 0.0;
             int j = jlist[jj];
             double factor_lj = special_lj[sbmask(j)];
