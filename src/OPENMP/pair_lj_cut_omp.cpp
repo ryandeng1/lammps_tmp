@@ -485,6 +485,10 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
 
     // loop over neighbors of my atoms
 
+    cilk::opadd_reducer<double> fxtmp = 0.0;
+    cilk::opadd_reducer<double> fytmp = 0.0;
+    cilk::opadd_reducer<double> fztmp = 0.0;
+
     for (int ii = iifrom; ii < iito; ++ii) {
         const int i = ilist[ii];
         const int itype = type[i];
@@ -501,9 +505,12 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
         double ztmp = x[i].z;
         int jnum = numneigh[i];
 
-        cilk::opadd_reducer<double> fxtmp = 0.0;
-        cilk::opadd_reducer<double> fytmp = 0.0;
-        cilk::opadd_reducer<double> fztmp = 0.0;
+//        cilk::opadd_reducer<double> fxtmp = 0.0;
+//        cilk::opadd_reducer<double> fytmp = 0.0;
+//        cilk::opadd_reducer<double> fztmp = 0.0;
+        fxtmp = 0.0;
+        fytmp = 0.0;
+        fztmp = 0.0;
         // double fxtmp = 0.0;
         // double fytmp = 0.0;
         // double fztmp = 0.0;
