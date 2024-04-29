@@ -29,8 +29,6 @@
 #include <sstream>
 #include "stencil_md_utils.h"
 
-// auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
-
 using namespace LAMMPS_NS;
 
 static void new_reducer(void* view) {
@@ -539,13 +537,13 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
         // fxtmp = 0.0;
         // fytmp = 0.0;
         // fztmp = 0.0;
-        // double fxtmp = 0.0;
-        // double fytmp = 0.0;
-        // double fztmp = 0.0;
+        double fxtmp = 0.0;
+        double fytmp = 0.0;
+        double fztmp = 0.0;
 
-        ftmp = {0};
+        // ftmp = {0};
 
-        cilk_for (int jj = 0; jj < jnum; jj++) {
+        for (int jj = 0; jj < jnum; jj++) {
             // num_edges++;
             double evdwl = 0.0;
             int j = jlist[jj];
@@ -565,14 +563,15 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
                 double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
                 double fpair = factor_lj*forcelj*r2inv;
 
-                /*
                 fxtmp += delx*fpair;
                 fytmp += dely*fpair;
                 fztmp += delz*fpair;
-                */
+
+                /*
                 ftmp.x += delx*fpair;
                 ftmp.y += dely*fpair;
                 ftmp.z += delz*fpair;
+                */
 
                 if (NEWTON_PAIR || j < nlocal) {
                     f[j].x -= delx*fpair;
@@ -593,14 +592,14 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
                 */
             }
         }
-        /*
         f[i].x += fxtmp;
         f[i].y += fytmp;
         f[i].z += fztmp;
-        */
+        /*
         f[i].x += ftmp.x;
         f[i].y += ftmp.y;
         f[i].z += ftmp.z;
+        */
     }
 }
 
