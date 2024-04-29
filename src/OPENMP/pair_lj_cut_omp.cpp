@@ -29,11 +29,25 @@
 #include <sstream>
 #include "stencil_md_utils.h"
 
-//static cilk::opadd_reducer<double> fxtmp = 0.0;
-//static cilk::opadd_reducer<double> fytmp = 0.0;
-//static cilk::opadd_reducer<double> fztmp = 0.0;
+// auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
 
 using namespace LAMMPS_NS;
+
+static void new_reducer(void* view) {
+    {
+        ((dbl3_t *)view)->x = 0.0;
+        ((dbl3_t *)view)->y = 0.0;
+        ((dbl3_t *)view)->z = 0.0;
+    }
+}
+
+static void merge(void* left, void* right) {
+    ((dbl3_t *)left)->x += ((dbl3_t*)right)->x;
+    ((dbl3_t *)left)->y += ((dbl3_t*)right)->y;
+    ((dbl3_t *)left)->z += ((dbl3_t*)right)->z;
+}
+
+static dbl3_t cilk_reducer(new_reducer, merge) ftmp;
 
 /* ---------------------------------------------------------------------- */
 
@@ -505,15 +519,17 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
         double ztmp = x[i].z;
         int jnum = numneigh[i];
 
-        cilk::opadd_reducer<double> fxtmp = 0.0;
-        cilk::opadd_reducer<double> fytmp = 0.0;
-        cilk::opadd_reducer<double> fztmp = 0.0;
+        // cilk::opadd_reducer<double> fxtmp = 0.0;
+        // cilk::opadd_reducer<double> fytmp = 0.0;
+        // cilk::opadd_reducer<double> fztmp = 0.0;
         // fxtmp = 0.0;
         // fytmp = 0.0;
         // fztmp = 0.0;
         // double fxtmp = 0.0;
         // double fytmp = 0.0;
         // double fztmp = 0.0;
+
+        ftmp = {0};
 
         for (int jj = 0; jj < jnum; jj++) {
             double evdwl = 0.0;
@@ -533,9 +549,12 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
                 double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
                 double fpair = factor_lj*forcelj*r2inv;
 
-                fxtmp += delx*fpair;
-                fytmp += dely*fpair;
-                fztmp += delz*fpair;
+//                fxtmp += delx*fpair;
+//                fytmp += dely*fpair;
+//                fztmp += delz*fpair;
+                ftmp.x += delx*fpair;
+                ftmp.y += dely*fpair;
+                ftmp.z += delz*fpair;
                 if (NEWTON_PAIR || j < nlocal) {
                     f[j].x -= delx*fpair;
                     f[j].y -= dely*fpair;
@@ -555,9 +574,14 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
                 */
             }
         }
+        /*
         f[i].x += fxtmp;
         f[i].y += fytmp;
         f[i].z += fztmp;
+        */
+        f[i].x += ftmp.x;
+        f[i].y += ftmp.y;
+        f[i].z += ftmp.z;
     }
 }
 
