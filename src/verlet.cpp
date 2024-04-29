@@ -193,9 +193,6 @@ void Verlet::init() {
    setup before run
 ------------------------------------------------------------------------- */
 
-int64_t LAMMPS_ATOM_EDGES_COUNTS[131073] = {0};
-int64_t STENCIL_MD_ATOM_EDGES_COUNTS[131073] = {0};
-
 void Verlet::setup(int flag) {
 
     if (comm->me == 0 && screen) {
@@ -5266,21 +5263,6 @@ void Verlet::run(int n) {
                                zoid_num_to_num_procs_next_dt,
                                test_f, test_x);
         }
-
-        /*
-        for (int tag_ = 0; tag_ <= 131072; tag_++) {
-            int64_t lammps_total = 0;
-            MPI_Allreduce(&LAMMPS_ATOM_EDGES_COUNTS[tag_], &lammps_total, 1, MPI_INT64_T, MPI_SUM, world);
-
-            int64_t stencilmd_total = 0;
-            MPI_Allreduce(&STENCIL_MD_ATOM_EDGES_COUNTS[tag_], &stencilmd_total, 1, MPI_INT64_T, MPI_SUM, world);
-
-            if (lammps_total != stencilmd_total) {
-                std::cout << "lammps total: " << lammps_total << " stencil md total: " << stencilmd_total << " tag: " << tag_ << std::endl;
-                assert(false);
-            }
-        }
-        */
     }
 
     auto end = std::chrono::high_resolution_clock::now();
