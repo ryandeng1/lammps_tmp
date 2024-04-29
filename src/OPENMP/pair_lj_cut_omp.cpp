@@ -29,9 +29,9 @@
 #include <sstream>
 #include "stencil_md_utils.h"
 
-static cilk::opadd_reducer<double> fxtmp = 0.0;
-static cilk::opadd_reducer<double> fytmp = 0.0;
-static cilk::opadd_reducer<double> fztmp = 0.0;
+//static cilk::opadd_reducer<double> fxtmp = 0.0;
+//static cilk::opadd_reducer<double> fytmp = 0.0;
+//static cilk::opadd_reducer<double> fztmp = 0.0;
 
 using namespace LAMMPS_NS;
 
@@ -505,12 +505,12 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
         double ztmp = x[i].z;
         int jnum = numneigh[i];
 
-//        cilk::opadd_reducer<double> fxtmp = 0.0;
-//        cilk::opadd_reducer<double> fytmp = 0.0;
-//        cilk::opadd_reducer<double> fztmp = 0.0;
-        fxtmp = 0.0;
-        fytmp = 0.0;
-        fztmp = 0.0;
+        cilk::opadd_reducer<double> fxtmp = 0.0;
+        cilk::opadd_reducer<double> fytmp = 0.0;
+        cilk::opadd_reducer<double> fztmp = 0.0;
+        // fxtmp = 0.0;
+        // fytmp = 0.0;
+        // fztmp = 0.0;
         // double fxtmp = 0.0;
         // double fytmp = 0.0;
         // double fztmp = 0.0;
