@@ -29,6 +29,10 @@
 #include <sstream>
 #include "stencil_md_utils.h"
 
+static cilk::opadd_reducer<double> fxtmp = 0.0;
+static cilk::opadd_reducer<double> fytmp = 0.0;
+static cilk::opadd_reducer<double> fztmp = 0.0;
+
 using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
@@ -484,10 +488,6 @@ inline void PairLJCutOMP::eval_stencil_md(int iifrom, int iito, ThrData * const 
     // int j,jj,jnum,jtype;
 
     // loop over neighbors of my atoms
-
-    cilk::opadd_reducer<double> fxtmp = 0.0;
-    cilk::opadd_reducer<double> fytmp = 0.0;
-    cilk::opadd_reducer<double> fztmp = 0.0;
 
     for (int ii = iifrom; ii < iito; ++ii) {
         const int i = ilist[ii];
