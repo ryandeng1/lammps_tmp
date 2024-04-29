@@ -59,18 +59,6 @@ void PairLJCutOMP::compute(int eflag, int vflag)
   const int inum = list->inum;
 
   if (LAMMPS_USE_CILK) {
-      // wsp_t start_compute = wsp_getworkspan();
-
-      const auto * _noalias const x = (dbl3_t *) atom->x[0];
-      const int * _noalias const type = atom->type;
-      const double * _noalias const special_lj = force->special_lj;
-      const int * _noalias const ilist = list->ilist;
-      const int * _noalias const numneigh = list->numneigh;
-      const int * const * const firstneigh = list->firstneigh;
-      const int nlocal = atom->nlocal;
-
-      bool newton_pair = force->newton_pair;
-
       cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
           // int ifrom, ito, tid;
           int ifrom, ito;
@@ -123,12 +111,10 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       double* f = &(atom->f[0][0]);
       int nvals = nall * 3;
 
-      int nworkers = __cilkrts_get_nworkers();
-
       constexpr int CHUNK_SIZE = 256;
 
       cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
-          for (int n = 1; n < nworkers; n++) {
+          for (int n = 1; n < comm->nthreads; n++) {
               for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
                   f[j] += f[n * nvals + j];
               }
