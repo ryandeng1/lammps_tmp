@@ -132,7 +132,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       double* f = &(atom->f[0][0]);
       int nvals = nall * 3;
 
-      constexpr int CHUNK_SIZE = 256;
+      constexpr int CHUNK_SIZE = NUM_WORKERS_PER_THREAD;
 
       cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
           for (int n = 1; n < comm->nthreads; n++) {
