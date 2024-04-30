@@ -230,7 +230,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         thr->timer(Timer::START);
         ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
 
-        thr->init_force(nall,f_,torque,erforce,desph,drho);
+        // thr->init_force(nall,f_,torque,erforce,desph,drho);
 
         if (evflag) {
             if (eflag) {
