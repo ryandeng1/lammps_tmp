@@ -49,7 +49,7 @@ class PairLJCutOMP : public PairLJCut, public ThrOMP {
   void eval(int ifrom, int ito, ThrData *const thr);
 
   template <int EVFLAG, int EFLAG, int NEWTON_PAIR>
-  inline void eval_stencil_md(int ifrom, int ito, ThrData *const thr, Atom* atom_);
+  __attribute__((always_inline))  void eval_stencil_md(int ifrom, int ito, ThrData *const thr, Atom* atom_);
 };
 
 }    // namespace LAMMPS_NS
