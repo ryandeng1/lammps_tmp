@@ -75,11 +75,11 @@ constexpr bool TRY_PRECOMPUTE_RELEVANT_ATOM_IDX = false;
 
 constexpr bool DEBUG = true;
 
-constexpr int NUM_WORKERS_PER_THREAD = 128;
+constexpr int NUM_WORKERS_PER_THREAD = 512;
 
 constexpr bool ONLY_RUN_LAMMPS = false;
 
-constexpr bool ONLY_RUN_STENCIL_MD = true;
+constexpr bool ONLY_RUN_STENCIL_MD = false;
 
 constexpr bool LAMMPS_USE_CILK = true;
 
