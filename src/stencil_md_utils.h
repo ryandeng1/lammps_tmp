@@ -83,6 +83,8 @@ constexpr bool ONLY_RUN_STENCIL_MD = true;
 
 constexpr bool LAMMPS_USE_CILK = true;
 
+constexpr bool TIME_STENCIL_MD = false;
+
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
         {std::make_tuple(RIGHT, RIGHT, RIGHT), 1},

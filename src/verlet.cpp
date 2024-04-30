@@ -5309,47 +5309,24 @@ void Verlet::run(int n) {
     }
     */
 
-    for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
-        if (zoid_num % comm->nprocs == comm->me) {
-            for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                std::cout << GREEN << "curr dt zoid: " << zoid_num << " timestep: " << t << " running time: " << curr_dt_compute_dep_time[zoid_num][t]
-                          << " nlocal: " << (double) curr_dt_num_atoms[zoid_num][t] / 24 << " ratio: " << (double)curr_dt_num_atoms[zoid_num][t] / curr_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
+    if (TIME_STENCIL_MD) {
+        for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
+            if (zoid_num % comm->nprocs == comm->me) {
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    std::cout << GREEN << "curr dt zoid: " << zoid_num << " timestep: " << t << " running time: " << curr_dt_compute_dep_time[zoid_num][t]
+                              << " nlocal: " << (double) curr_dt_num_atoms[zoid_num][t] / 24 << " ratio: " << (double)curr_dt_num_atoms[zoid_num][t] / curr_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
 
+                }
+
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    std::cout << GREEN << "next dt zoid: " << zoid_num << " timestep: " << t << " running time: " << next_dt_compute_dep_time[zoid_num][t]
+                              << " nlocal: " << (double) next_dt_num_atoms[zoid_num][t] / 24 << " ratio: " << (double)next_dt_num_atoms[zoid_num][t] / next_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
+                }
             }
 
-            for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                std::cout << GREEN << "next dt zoid: " << zoid_num << " timestep: " << t << " running time: " << next_dt_compute_dep_time[zoid_num][t]
-                          << " nlocal: " << (double) next_dt_num_atoms[zoid_num][t] / 24 << " ratio: " << (double)next_dt_num_atoms[zoid_num][t] / next_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
-            }
-        }
-
-        MPI_Barrier(world);
-    }
-
-    /*
-    if (comm->me == 0) {
-        int64_t stencil_md_total_compute_time = 0;
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            std::cout << CYAN << "CURR DT DEP: " << dep << " total time: " << stencil_md_total_compute_time_curr_dt_dep[dep]
-                << " NUM ATOMS: " << stencil_md_total_num_atoms_curr_dt_dep[dep] << " ratio: " << (double) stencil_md_total_num_atoms_curr_dt_dep[dep] / stencil_md_total_compute_time_curr_dt_dep[dep] << RESET_COLOR << std::endl;
-
-            stencil_md_total_compute_time += stencil_md_total_compute_time_curr_dt_dep[dep];
-        }
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            std::cout << CYAN << "NEXT DT DEP: " << dep << " total time: " << stencil_md_total_compute_time_next_dt_dep[dep]
-                << " NUM ATOMS: " << stencil_md_total_num_atoms_next_dt_dep[dep] << " ratio: " << (double)  stencil_md_total_num_atoms_next_dt_dep[dep] / stencil_md_total_compute_time_next_dt_dep[dep] << RESET_COLOR << std::endl;
-            stencil_md_total_compute_time += stencil_md_total_compute_time_next_dt_dep[dep];
-        }
-
-
-        std::cout << CYAN << " TOTAL COMPUTE TIME: " << stencil_md_total_compute_time << RESET_COLOR << std::endl;
-
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            std::cout << GREEN << "ME: " << comm->me << " curr dt mean: " << mean(curr_dt_compute_dep_times_vec[dep]) << " sd: " << sd(curr_dt_compute_dep_times_vec[dep])
-                      << " next dt mean: " << mean(next_dt_compute_dep_times_vec[dep]) << " sd: " << sd(next_dt_compute_dep_times_vec[dep]) << RESET_COLOR << std::endl;
+            MPI_Barrier(world);
         }
     }
-    */
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
@@ -5429,7 +5406,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
 
     auto end_m = std::chrono::high_resolution_clock::now();
     auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-    modify_pre_force_duration_cilk += duration_m;
+    if (TIME_STENCIL_MD) {
+        modify_pre_force_duration_cilk += duration_m;
+    }
 
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
@@ -5596,7 +5575,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
                 zoid.can_eval_pos[t]);
         auto end_m = std::chrono::high_resolution_clock::now();
         auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-        modify_duration_cilk += duration_m;
+        if (TIME_STENCIL_MD) {
+            modify_duration_cilk += duration_m;
+        }
 
         if (TEST_AGAINST_LAMMPS_LOCAL) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t + 1 : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t + 1;
@@ -5727,7 +5708,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
                     zoid, &curr_dt_flag);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            compute_duration_cilk += duration;
+            if (TIME_STENCIL_MD) {
+                compute_duration_cilk += duration;
+            }
             if (curr_dt) {
                 curr_dt_compute_dep_time[zoid_num][t + 1] += duration;
             } else {
@@ -5759,7 +5742,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
         auto end_m2 = std::chrono::high_resolution_clock::now();
         auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
         // modify_duration += duration_m2;
-        modify_duration_cilk += duration_m2;
+        if (TIME_STENCIL_MD) {
+            modify_duration_cilk += duration_m2;
+        }
 
         if (n_end_of_step) {
             assert(false);
@@ -5924,25 +5909,27 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
         }
 
-        modify_duration += modify_duration_cilk / SIZES[dep];
-        compute_duration += compute_duration_cilk / SIZES[dep];
-        modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
-        send_pack_duration += send_pack_duration_cilk / SIZES[dep];
-
         // curr_dt_compute_dep_time[dep] += compute_duration_cilk / SIZES[dep];
-        int num_local_dep = 0;
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
-            queue_info &zoid = lmp->queues[dep][j];
-            int zoid_num = zoid.num;
-            if (zoid_num % comm->nprocs == comm->me) {
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    // num_local_dep += lmp->atom_stencil_md[zoid_num][t + 1]->nlocal;
-                    curr_dt_num_atoms[zoid_num][t] += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+        if (TIME_STENCIL_MD) {
+            modify_duration += modify_duration_cilk / SIZES[dep];
+            compute_duration += compute_duration_cilk / SIZES[dep];
+            modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
+            send_pack_duration += send_pack_duration_cilk / SIZES[dep];
+
+            int num_local_dep = 0;
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info &zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs == comm->me) {
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        // num_local_dep += lmp->atom_stencil_md[zoid_num][t + 1]->nlocal;
+                        curr_dt_num_atoms[zoid_num][t] += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
                 }
             }
-        }
 
-        curr_dt_compute_dep_times_vec[dep].push_back(compute_duration_cilk / SIZES[dep]);
+            curr_dt_compute_dep_times_vec[dep].push_back(compute_duration_cilk / SIZES[dep]);
+        }
 
         if (dep < NUM_DEPS - 1) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -6140,30 +6127,32 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration =
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                send_pack_duration_cilk += duration;
+                if (TIME_STENCIL_MD) {
+                    send_pack_duration_cilk += duration;
+                }
             }
         }
 
-        modify_duration += modify_duration_cilk / SIZES[dep];
-        compute_duration += compute_duration_cilk / SIZES[dep];
-        modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
-        send_pack_duration += send_pack_duration_cilk / SIZES[dep];
+        if (TIME_STENCIL_MD) {
+            modify_duration += modify_duration_cilk / SIZES[dep];
+            compute_duration += compute_duration_cilk / SIZES[dep];
+            modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
+            send_pack_duration += send_pack_duration_cilk / SIZES[dep];
 
-        int num_local_dep = 0;
-        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
-            queue_info &zoid = lmp->queues_next_dt[dep][j];
-            int zoid_num = zoid.num;
-            if (zoid_num % comm->nprocs != comm->me) {
-                continue;
-            }
+            int num_local_dep = 0;
+            for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+                queue_info &zoid = lmp->queues_next_dt[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs != comm->me) {
+                    continue;
+                }
 
-            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                next_dt_num_atoms[zoid_num][t] += lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - (t)]->nlocal;
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    next_dt_num_atoms[zoid_num][t] += lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - (t)]->nlocal;
+                }
             }
+            next_dt_compute_dep_times_vec[dep].push_back(compute_duration_cilk / SIZES[dep]);
         }
-
-        // next_dt_compute_dep_time[dep] += compute_duration_cilk / SIZES[dep];
-        next_dt_compute_dep_times_vec[dep].push_back(compute_duration_cilk / SIZES[dep]);
 
         if (dep < NUM_DEPS - 1) {
             for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
