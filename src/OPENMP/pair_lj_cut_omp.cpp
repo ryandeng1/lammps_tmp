@@ -299,6 +299,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         return;
     }
 
+    /*
     if (nthreads_to_use > 1) {
         // curr_dt == 1
         if (*num_eval == 1) {
@@ -317,6 +318,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
         }
     }
+    */
 
     double **f_ = atom_->eval_f_stencil_md;
     double **torque = atom_->torque;
