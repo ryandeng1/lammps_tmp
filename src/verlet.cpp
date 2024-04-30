@@ -4848,6 +4848,7 @@ void Verlet::run(int n) {
     int64_t lammps_reverse_comm_duration = 0;
     int64_t lammps_modify_duration = 0;
     int64_t lammps_modify_pre_force_duration = 0;
+    int64_t lammps_num_atoms = 0;
 
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
@@ -4989,6 +4990,7 @@ void Verlet::run(int n) {
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                     lammps_compute_duration += duration;
+                    lammps_num_atoms += atom->nlocal;
                     timer->stamp(Timer::PAIR);
                 }
 
@@ -5086,8 +5088,8 @@ void Verlet::run(int n) {
                   << total_reverse_comm_duration << RESET_COLOR << std::endl;
 
         std::cout << YELLOW
-                  << "lammps compute duration: " << lammps_compute_duration
-                  << " microseconds. " << " total compute duration: " << total_compute_duration << RESET_COLOR
+                  << "lammps compute duration: " << lammps_compute_duration << " ratio: " << (double) lammps_num_atoms / lammps_compute_duration
+                  << " " << " total compute duration: " << total_compute_duration << RESET_COLOR
                   << std::endl;
 
         std::cout << YELLOW
@@ -6196,7 +6198,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
     begin_misc = std::chrono::high_resolution_clock::now();
     cilk_for (int i = 0; i < NUM_ZOIDS; i++) {
         if (i % comm->nprocs == comm->me) {
-            #pragma cilk grainsize 1
             cilk_for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 Atom* atom_ = lmp->atom_stencil_md[i][t];
                 int nall = atom_->nlocal + atom_->nghost;
