@@ -5896,7 +5896,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
-        #pragma cilk grainsize 1
         cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             int zoid_num = zoid.num;
@@ -5921,7 +5920,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration =
                         std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                send_pack_duration_cilk += duration;
+                // send_pack_duration_cilk += duration;
             }
         }
 
@@ -6114,7 +6113,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
-        #pragma cilk grainsize 1
         cilk_for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info &zoid = lmp->queues_next_dt[dep][j];
             int zoid_num = zoid.num;
