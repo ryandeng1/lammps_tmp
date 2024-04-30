@@ -5307,13 +5307,13 @@ void Verlet::run(int n) {
         if (zoid_num % comm->nprocs == comm->me) {
             for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 std::cout << GREEN << "curr dt zoid: " << zoid_num << " timestep: " << t << " running time: " << curr_dt_compute_dep_time[zoid_num][t]
-                          << " nlocal: " << curr_dt_num_atoms[zoid_num][t] << " ratio: " << (double)curr_dt_num_atoms[zoid_num][t] / curr_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
+                          << " nlocal: " << (double) curr_dt_num_atoms[zoid_num][t] / 96 << " ratio: " << (double)curr_dt_num_atoms[zoid_num][t] / curr_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
 
             }
 
             for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 std::cout << GREEN << "next dt zoid: " << zoid_num << " timestep: " << t << " running time: " << next_dt_compute_dep_time[zoid_num][t]
-                          << " nlocal: " << next_dt_num_atoms[zoid_num][t] << " ratio: " << (double)next_dt_num_atoms[zoid_num][t] / next_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
+                          << " nlocal: " << (double) next_dt_num_atoms[zoid_num][t] / 96 << " ratio: " << (double)next_dt_num_atoms[zoid_num][t] / next_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
             }
         }
 
