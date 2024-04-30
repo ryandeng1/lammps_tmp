@@ -76,6 +76,7 @@ static int64_t send_comm_duration = 0;
 static int64_t recv_comm_duration = 0;
 static int64_t compute_duration = 0;
 static int64_t modify_duration = 0;
+static int64_t modify_final_duration = 0;
 static int64_t modify_pre_force_duration = 0;
 static int64_t mpi_duration = 0;
 static int64_t curr_dt_comm_duration = 0;
@@ -102,6 +103,7 @@ static std::vector<int64_t> next_dt_compute_dep_times_vec[NUM_DEPS];
 
 static cilk::opadd_reducer<int64_t> compute_duration_cilk = 0;
 static cilk::opadd_reducer<int64_t> modify_duration_cilk = 0;
+static cilk::opadd_reducer<int64_t> modify_final_duration_cilk = 0;
 static cilk::opadd_reducer<int64_t> modify_pre_force_duration_cilk = 0;
 static cilk::opadd_reducer<int64_t> send_pack_duration_cilk = 0;
 
@@ -5334,6 +5336,7 @@ void Verlet::run(int n) {
     int64_t stencil_md_total_recv_comm_duration = 0;
     int64_t stencil_md_total_compute_duration = 0;
     int64_t stencil_md_total_modify_duration = 0;
+    int64_t stencil_md_total_modify_final_duration = 0;
     int64_t stencil_md_total_modify_pre_force_duration = 0;
     int64_t stencil_md_total_mpi_duration = 0;
     int64_t stencil_md_total_curr_dt_comm_duration = 0;
@@ -5347,6 +5350,8 @@ void Verlet::run(int n) {
 
     MPI_Allreduce(&compute_duration, &stencil_md_total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&modify_final_duration, &stencil_md_total_modify_final_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&modify_pre_force_duration, &stencil_md_total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     MPI_Allreduce(&mpi_duration, &stencil_md_total_mpi_duration, 1, MPI_INT64_T, MPI_SUM, world);
@@ -5368,7 +5373,8 @@ void Verlet::run(int n) {
                   << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
                   << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
                   << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
-                  << " TOTAL MODIFY: " << stencil_md_total_modify_duration << " TOTAL MODIFY PRE FORCE: " << stencil_md_total_modify_pre_force_duration
+                  << " TOTAL MODIFY: " << stencil_md_total_modify_duration << " TOTAL MODIFY FINAL DURATION: " << stencil_md_total_modify_final_duration
+                  << " TOTAL MODIFY PRE FORCE: " << stencil_md_total_modify_pre_force_duration
                   << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration
                   << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration
                   << " TOTAL MISC DURATION: " << stencil_md_total_misc_duration
@@ -5745,7 +5751,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
         auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
         // modify_duration += duration_m2;
         if (TIME_STENCIL_MD) {
-            modify_duration_cilk += duration_m2;
+            modify_final_duration_cilk += duration_m2;
         }
 
         if (n_end_of_step) {
@@ -5880,6 +5886,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
         compute_duration_cilk = 0;
         modify_duration_cilk = 0;
+        modify_final_duration_cilk = 0;
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
@@ -5914,6 +5921,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         // curr_dt_compute_dep_time[dep] += compute_duration_cilk / SIZES[dep];
         if (TIME_STENCIL_MD) {
             modify_duration += modify_duration_cilk / SIZES[dep];
+            modify_final_duration += modify_final_duration_cilk / SIZES[dep];
             compute_duration += compute_duration_cilk / SIZES[dep];
             modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
             send_pack_duration += send_pack_duration_cilk / SIZES[dep];
@@ -6099,6 +6107,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
         compute_duration_cilk = 0;
         modify_duration_cilk = 0;
+        modify_final_duration_cilk = 0;
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
@@ -6137,6 +6146,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
         if (TIME_STENCIL_MD) {
             modify_duration += modify_duration_cilk / SIZES[dep];
+            modify_final_duration += modify_final_duration_cilk / SIZES[dep];
             compute_duration += compute_duration_cilk / SIZES[dep];
             modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
             send_pack_duration += send_pack_duration_cilk / SIZES[dep];
