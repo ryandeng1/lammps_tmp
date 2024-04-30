@@ -95,8 +95,8 @@ static int64_t next_dt_compute_dep_time[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1
 static int64_t curr_dt_num_atoms[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
 static int64_t next_dt_num_atoms[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
 
-static int64_t curr_dt_num_accepted_edges[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
-static int64_t next_dt_num_accepted_edges[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
+static int64_t curr_dt_num_edges[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
+static int64_t next_dt_num_edges[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
 
 static std::vector<int64_t> curr_dt_compute_dep_times_vec[NUM_DEPS];
 static std::vector<int64_t> next_dt_compute_dep_times_vec[NUM_DEPS];
@@ -5312,24 +5312,22 @@ void Verlet::run(int n) {
     */
 
     if (TIME_STENCIL_MD) {
-        /*
         for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
             if (zoid_num % comm->nprocs == comm->me) {
                 for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     std::cout << GREEN << "curr dt zoid: " << zoid_num << " timestep: " << t << " running time: " << curr_dt_compute_dep_time[zoid_num][t]
-                              << " nlocal: " << (double) curr_dt_num_atoms[zoid_num][t] / 24 << " ratio: " << (double)curr_dt_num_atoms[zoid_num][t] / curr_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
+                              << " ratio: " << (double)curr_dt_num_edges[zoid_num][t] / curr_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
 
                 }
 
                 for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     std::cout << GREEN << "next dt zoid: " << zoid_num << " timestep: " << t << " running time: " << next_dt_compute_dep_time[zoid_num][t]
-                              << " nlocal: " << (double) next_dt_num_atoms[zoid_num][t] / 24 << " ratio: " << (double)next_dt_num_atoms[zoid_num][t] / next_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
+                              << " ratio: " << (double)next_dt_num_edges[zoid_num][t] / next_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
                 }
             }
 
             MPI_Barrier(world);
         }
-        */
     }
 
     int64_t stencil_md_total_send_comm_duration = 0;
@@ -5706,14 +5704,11 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
 
             // int* atom_idx_mapping_ = zoid.atom_idx_mapping[t + 1];
             auto begin = std::chrono::high_resolution_clock::now();
-            int curr_dt_flag = 0;
-            if (curr_dt) {
-                curr_dt_flag = 1;
-            }
+            int num_edges = 0;
             next_force->pair->compute_stencil_md(
                     eflag, vflag, atom_next_timestep,
                     zoid.can_eval_center[t + 1],
-                    zoid, &curr_dt_flag);
+                    zoid, &num_edges);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             if (TIME_STENCIL_MD) {
@@ -5721,8 +5716,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
             }
             if (curr_dt) {
                 curr_dt_compute_dep_time[zoid_num][t + 1] += duration;
+                curr_dt_num_edges[zoid_num][t + 1] += num_edges;
             } else {
                 next_dt_compute_dep_time[zoid_num][t + 1] += duration;
+                next_dt_num_edges[zoid_num][t + 1] += num_edges;
             }
         }
 

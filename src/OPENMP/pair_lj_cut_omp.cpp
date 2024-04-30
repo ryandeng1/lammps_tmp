@@ -47,7 +47,7 @@ static void merge(void* left, void* right) {
 
 static dbl3_t cilk_reducer(new_reducer, merge) ftmp;
 
-// static cilk::opadd_reducer<int> num_edges = 0;
+static cilk::opadd_reducer<int> num_edges = 0;
 // static cilk::opadd_reducer<int> num_accepted_edges = 0;
 
 /* ---------------------------------------------------------------------- */
@@ -188,7 +188,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 }
 
 void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
-    // num_edges = 0;
+    num_edges = 0;
     // num_accepted_edges = 0;
     ev_init(eflag,vflag);
     const int nall = atom_->nlocal + atom_->nghost;
@@ -239,6 +239,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             double fztmp = 0.0;
 
             for (int jj = 0; jj < jnum; jj++) {
+                num_edges++;
                 double evdwl = 0.0;
                 int j = jlist[jj];
                 double factor_lj = special_lj[sbmask(j)];
@@ -261,41 +262,19 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                     fytmp += dely*fpair;
                     fztmp += delz*fpair;
 
-                    /*
-                    ftmp.x += delx*fpair;
-                    ftmp.y += dely*fpair;
-                    ftmp.z += delz*fpair;
-                    */
-
                     if (newton_pair || j < nlocal) {
                         f[j].x -= delx*fpair;
                         f[j].y -= dely*fpair;
                         f[j].z -= delz*fpair;
                     }
-
-                    /*
-                    if (EFLAG) {
-                        evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
-                        evdwl *= factor_lj;
-                    }
-
-                    if (EVFLAG) {
-                        ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
-                                     evdwl, 0.0, fpair, delx, dely, delz, thr);
-                    }
-                    */
                 }
             }
             f[i].x += fxtmp;
             f[i].y += fytmp;
             f[i].z += fztmp;
-            /*
-            f[i].x += ftmp.x;
-            f[i].y += ftmp.y;
-            f[i].z += ftmp.z;
-            */
         }
 
+        *num_eval += num_edges;
         return;
     }
 
@@ -364,6 +343,8 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         }
         thr->timer(Timer::PAIR);
     }
+
+    *num_eval += num_edges;
 
     // try new reduce
     if (nthreads_to_use == 1) {
@@ -541,7 +522,7 @@ __attribute__((always_inline)) void PairLJCutOMP::eval_stencil_md(int iifrom, in
         // ftmp = {0};
 
         for (int jj = 0; jj < jnum; jj++) {
-            // num_edges++;
+            num_edges++;
             double evdwl = 0.0;
             int j = jlist[jj];
             double factor_lj = special_lj[sbmask(j)];
