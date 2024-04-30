@@ -226,7 +226,7 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
         const double * const mass = atom->mass;
         const int * const type = next->type;
 
-        #pragma cilk grainsize 256
+        #pragma cilk grainsize 512
         cilk_for (int i = 0; i < nlocal; i++) {
             int next_idx = atom_idx_mapping[i];
             assert(next_idx != -1);
@@ -235,7 +235,7 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
             next_v[next_idx].z = v[i].z;
         }
 
-        #pragma cilk grainsize 256
+        #pragma cilk grainsize 512
         cilk_for (int i = 0; i < next_nlocal; i++) {
             if (mask[i] & groupbit) {
                 const double dtfm = dtf / mass[type[i]];
