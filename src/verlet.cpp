@@ -6200,7 +6200,9 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
     // clear force on everything except first timestep
     // this should get optimized to be `memset` with -O3
     begin_misc = std::chrono::high_resolution_clock::now();
+    #pragma cilk grainsize 1
     cilk_for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
+        #pragma cilk grainsize 1
         cilk_for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             Atom* atom_ = lmp->atom_stencil_md[i][t];
             int nall = atom_->nlocal + atom_->nghost;
