@@ -45,6 +45,7 @@ int main(int argc, char **argv)
 {
   // MPI_Init(&argc, &argv);
   // TODO: Ryan stencil md, change this back if needed?
+  #undef _OPENMP
   int provided;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
   assert(provided >= MPI_THREAD_MULTIPLE);
