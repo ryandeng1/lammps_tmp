@@ -5929,7 +5929,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             if (zoid_num % comm->nprocs == comm->me) {
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     // num_local_dep += lmp->atom_stencil_md[zoid_num][t + 1]->nlocal;
-                    curr_dt_num_atoms[zoid_num][t] = lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    curr_dt_num_atoms[zoid_num][t] += lmp->atom_stencil_md[zoid_num][t]->nlocal;
                 }
             }
         }
@@ -6152,7 +6152,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
 
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                next_dt_num_atoms[zoid_num][t] = lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - (t)]->nlocal;
+                next_dt_num_atoms[zoid_num][t] += lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - (t)]->nlocal;
             }
         }
 
