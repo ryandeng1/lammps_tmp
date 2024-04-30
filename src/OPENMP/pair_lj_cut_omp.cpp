@@ -206,6 +206,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         nthreads_to_use = nthreads;
     }
 
+
     if (nthreads_to_use == 1) {
         const auto * _noalias const x = (dbl3_t *) atom_->x[0];
         auto * _noalias f = (dbl3_t *) &(atom_->eval_f_stencil_md[0][0]);
@@ -298,6 +299,25 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         return;
     }
 
+    if (nthreads_to_use > 1) {
+        // curr_dt == 1
+        if (*num_eval == 1) {
+            int zoid_dep = get_zoid_dep(zoid.num);
+            if (zoid_dep == 0 || zoid_dep == NUM_DEPS - 1) {
+                nthreads_to_use = std::min<int>(comm->nthreads, __cilkrts_get_nworkers());
+            } else {
+                nthreads_to_use = __cilkrts_get_nworkers() / 3;
+            }
+        } else {
+            int zoid_dep = get_zoid_dep_next_dt(zoid.num);
+            if (zoid_dep == 0 || zoid_dep == NUM_DEPS - 1) {
+                nthreads_to_use = std::min<int>(comm->nthreads, __cilkrts_get_nworkers());
+            } else {
+                nthreads_to_use = __cilkrts_get_nworkers() / 3;
+            }
+        }
+    }
+
     double **f_ = atom_->eval_f_stencil_md;
     double **torque = atom_->torque;
     double *erforce = atom_->erforce;
@@ -317,7 +337,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         thr->timer(Timer::START);
         ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
 
-        // thr->init_force(nall,f_,torque,erforce,desph,drho);
+        thr->init_force(nall,f_,torque,erforce,desph,drho);
 
         if (evflag) {
             if (eflag) {

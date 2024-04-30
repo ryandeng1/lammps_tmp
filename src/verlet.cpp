@@ -90,8 +90,12 @@ static int64_t pre_recv_time = 0;
 // based on dep of zoids I want to eval
 static int64_t curr_dt_compute_dep_time[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
 static int64_t next_dt_compute_dep_time[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
+
 static int64_t curr_dt_num_atoms[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
 static int64_t next_dt_num_atoms[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
+
+static int64_t curr_dt_num_accepted_edges[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
+static int64_t next_dt_num_accepted_edges[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
 
 static std::vector<int64_t> curr_dt_compute_dep_times_vec[NUM_DEPS];
 static std::vector<int64_t> next_dt_compute_dep_times_vec[NUM_DEPS];
@@ -4304,10 +4308,11 @@ void Verlet::setup_stencil_md() {
                             lmp->atom_stencil_md[zoid_num][t]);
                         */
                         // Warm up?
+                        int curr_dt_flag = 1;
                         force_->pair->compute_stencil_md(
                             eflag, vflag, lmp->atom_stencil_md[zoid_num][t],
                             zoid.can_eval_center[t],
-                            lmp->zoid_num_to_zoid[zoid_num], nullptr);
+                            lmp->zoid_num_to_zoid[zoid_num], &curr_dt_flag);
                         force_clear_stencil_md(
                             lmp->atom_stencil_md[zoid_num][t], force_,
                             lmp->neighbor_stencil_md[zoid_num][t]);
@@ -4535,10 +4540,11 @@ void Verlet::setup_stencil_md() {
                 // todo: eflag and vflag might cause some issues
                 // TODO: compute force for each pair in parallel
 
+                int curr_dt_flag = 1;
                 force_->pair->compute_stencil_md(
                     eflag, vflag, lmp->atom_stencil_md[zoid_num][0],
                     zoid.can_eval_center[0], lmp->zoid_num_to_zoid[zoid_num],
-                    nullptr);
+                    &curr_dt_flag);
 
                 if (dep < NUM_DEPS - 1) {
                     Comm *comm_ = lmp->comm_stencil_md[zoid_num];
@@ -5413,11 +5419,13 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
 
     auto begin_m = std::chrono::high_resolution_clock::now();
 
+    /*
     cilk_for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         Atom* atom_next_timestep = curr_dt ? atom_arr[t + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t - 1];
         Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][t + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
         modify_->pre_force_stencil_md(vflag, atom_next_timestep);
     }
+    */
 
     auto end_m = std::chrono::high_resolution_clock::now();
     auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
@@ -5709,11 +5717,14 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
 
             // int* atom_idx_mapping_ = zoid.atom_idx_mapping[t + 1];
             auto begin = std::chrono::high_resolution_clock::now();
-            int timestep = t + 1;
+            int curr_dt_flag = 0;
+            if (curr_dt) {
+                curr_dt_flag = 1;
+            }
             next_force->pair->compute_stencil_md(
                     eflag, vflag, atom_next_timestep,
                     zoid.can_eval_center[t + 1],
-                    zoid, &timestep);
+                    zoid, &curr_dt_flag);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             compute_duration_cilk += duration;
