@@ -5312,7 +5312,6 @@ void Verlet::run(int n) {
     */
 
     if (TIME_STENCIL_MD) {
-        /*
         for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
             if (zoid_num % comm->nprocs == comm->me) {
                 for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
@@ -5329,7 +5328,6 @@ void Verlet::run(int n) {
 
             MPI_Barrier(world);
         }
-        */
     }
 
     int64_t stencil_md_total_send_comm_duration = 0;
