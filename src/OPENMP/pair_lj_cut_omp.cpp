@@ -225,7 +225,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         nthreads_to_use = nthreads;
     }
 
-
     if (nthreads_to_use == 1) {
         const auto * _noalias const x = (dbl3_t *) atom_->x[0];
         auto * _noalias f = (dbl3_t *) &(atom_->eval_f_stencil_md[0][0]);
@@ -379,6 +378,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         return;
     }
 
+    /*
     double* f = &(atom_->eval_f_stencil_md[0][0]);
 
     int nvals = nall * 3;
@@ -393,6 +393,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
         }
     }
+    */
 
     /*
     end = wsp_getworkspan();
