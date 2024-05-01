@@ -239,7 +239,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             double fztmp = 0.0;
 
             for (int jj = 0; jj < jnum; jj++) {
-                num_edges++;
+                // num_edges++;
                 double evdwl = 0.0;
                 int j = jlist[jj];
                 double factor_lj = special_lj[sbmask(j)];
@@ -429,7 +429,6 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
     fxtmp=fytmp=fztmp=0.0;
 
     for (jj = 0; jj < jnum; jj++) {
-      // num_edges++;
       j = jlist[jj];
       factor_lj = special_lj[sbmask(j)];
       j &= NEIGHMASK;
@@ -522,7 +521,7 @@ __attribute__((always_inline)) void PairLJCutOMP::eval_stencil_md(int iifrom, in
         // ftmp = {0};
 
         for (int jj = 0; jj < jnum; jj++) {
-            num_edges++;
+            // num_edges++;
             double evdwl = 0.0;
             int j = jlist[jj];
             double factor_lj = special_lj[sbmask(j)];
