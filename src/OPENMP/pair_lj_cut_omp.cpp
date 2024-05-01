@@ -123,11 +123,14 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           }
           thr->timer(Timer::PAIR);
       } // end of omp parallel region
+
+      /*
       wsp_t end = wsp_getworkspan();
       wsp_t elapsed = wsp_sub(end, start);
       if (comm->me == 0) {
           wsp_dump(elapsed, "lammps_compute");
       }
+      */
 
       // try new reduce
 
@@ -140,7 +143,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 
       constexpr int CHUNK_SIZE = 256;
 
-      start = wsp_getworkspan();
+      // start = wsp_getworkspan();
 
       cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
           for (int n = 1; n < comm->nthreads; n++) {
@@ -150,11 +153,13 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           }
       }
 
+      /*
       end = wsp_getworkspan();
       elapsed = wsp_sub(end, start);
       if (comm->me == 0) {
           wsp_dump(elapsed, "lammps_reduce");
       }
+      */
 
       /*
       cilk_for (int i = 0; i < nvals; i++) {
@@ -319,7 +324,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     double *desph = atom_->desph;
     double *drho = atom_->drho;
 
-    wsp_t start = wsp_getworkspan();
+    // wsp_t start = wsp_getworkspan();
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // int ifrom, ito, tid;
         int ifrom, ito;
@@ -358,6 +363,8 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         }
         thr->timer(Timer::PAIR);
     }
+
+    /*
     wsp_t end = wsp_getworkspan();
     wsp_t elapsed = wsp_sub(end, start);
     if (zoid.num == 0) {
@@ -365,6 +372,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     }
 
     *num_eval += num_edges;
+    */
 
     // try new reduce
     if (nthreads_to_use == 1) {
@@ -377,7 +385,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     constexpr int CHUNK_SIZE = NUM_WORKERS_PER_THREAD;
 
-    start = wsp_getworkspan();
+    // start = wsp_getworkspan();
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
         for (int n = 1; n < nthreads_to_use; n++) {
             for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
@@ -385,11 +393,14 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
         }
     }
+
+    /*
     end = wsp_getworkspan();
     elapsed = wsp_sub(end, start);
     if (zoid.num == 0) {
         wsp_dump(elapsed, "reduce");
     }
+    */
 
     /*
     // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
