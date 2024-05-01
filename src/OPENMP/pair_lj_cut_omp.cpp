@@ -225,98 +225,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         nthreads_to_use = nthreads;
     }
 
-    if (nthreads_to_use == 1 && false) {
-        const auto * _noalias const x = (dbl3_t *) atom_->x[0];
-        auto * _noalias f = (dbl3_t *) &(atom_->eval_f_stencil_md[0][0]);
-
-        int *type = atom_->type;
-        double *special_lj = force->special_lj;
-        int newton_pair = force->newton_pair;
-        const int * _noalias const ilist = list->ilist;
-        const int * const * const firstneigh = list->firstneigh;
-        const int * _noalias const numneigh = list->numneigh;
-
-        for (int ii = 0; ii < nlocal; ++ii) {
-            const int i = ilist[ii];
-            const int itype = type[i];
-            const int    * _noalias const jlist = firstneigh[i];
-            const double * _noalias const cutsqi = cutsq[itype];
-            const double * _noalias const offseti = offset[itype];
-            const double * _noalias const lj1i = lj1[itype];
-            const double * _noalias const lj2i = lj2[itype];
-            const double * _noalias const lj3i = lj3[itype];
-            const double * _noalias const lj4i = lj4[itype];
-
-            double xtmp = x[i].x;
-            double ytmp = x[i].y;
-            double ztmp = x[i].z;
-            int jnum = numneigh[i];
-
-            double fxtmp = 0.0;
-            double fytmp = 0.0;
-            double fztmp = 0.0;
-
-            for (int jj = 0; jj < jnum; jj++) {
-                // num_edges++;
-                double evdwl = 0.0;
-                int j = jlist[jj];
-                double factor_lj = special_lj[sbmask(j)];
-                j &= NEIGHMASK;
-
-                double delx = xtmp - x[j].x;
-                double dely = ytmp - x[j].y;
-                double delz = ztmp - x[j].z;
-                double rsq = delx*delx + dely*dely + delz*delz;
-                int jtype = type[j];
-
-                if (rsq < cutsqi[jtype]) {
-                    // num_accepted_edges++;
-                    double r2inv = 1.0/rsq;
-                    double r6inv = r2inv*r2inv*r2inv;
-                    double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
-                    double fpair = factor_lj*forcelj*r2inv;
-
-                    fxtmp += delx*fpair;
-                    fytmp += dely*fpair;
-                    fztmp += delz*fpair;
-
-                    if (newton_pair || j < nlocal) {
-                        f[j].x -= delx*fpair;
-                        f[j].y -= dely*fpair;
-                        f[j].z -= delz*fpair;
-                    }
-                }
-            }
-            f[i].x += fxtmp;
-            f[i].y += fytmp;
-            f[i].z += fztmp;
-        }
-
-        *num_eval += num_edges;
-        return;
-    }
-
-    /*
-    if (nthreads_to_use > 1) {
-        // curr_dt == 1
-        if (*num_eval == 1) {
-            int zoid_dep = get_zoid_dep(zoid.num);
-            if (zoid_dep == 0 || zoid_dep == NUM_DEPS - 1) {
-                nthreads_to_use = std::min<int>(comm->nthreads, __cilkrts_get_nworkers());
-            } else {
-                nthreads_to_use = __cilkrts_get_nworkers() / 3;
-            }
-        } else {
-            int zoid_dep = get_zoid_dep_next_dt(zoid.num);
-            if (zoid_dep == 0 || zoid_dep == NUM_DEPS - 1) {
-                nthreads_to_use = std::min<int>(comm->nthreads, __cilkrts_get_nworkers());
-            } else {
-                nthreads_to_use = __cilkrts_get_nworkers() / 3;
-            }
-        }
-    }
-    */
-
     double **f_ = atom_->eval_f_stencil_md;
     double **torque = atom_->torque;
     double *erforce = atom_->erforce;
@@ -376,7 +284,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         return;
     }
 
-    /*
     double* f = &(atom_->eval_f_stencil_md[0][0]);
 
     int nvals = nall * 3;
@@ -391,7 +298,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
         }
     }
-    */
 
     /*
     end = wsp_getworkspan();
