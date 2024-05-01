@@ -45,9 +45,9 @@ static void merge(void* left, void* right) {
     ((dbl3_t *)left)->z += ((dbl3_t*)right)->z;
 }
 
-static dbl3_t cilk_reducer(new_reducer, merge) ftmp;
+// static dbl3_t cilk_reducer(new_reducer, merge) ftmp;
 
-static cilk::opadd_reducer<int> num_edges = 0;
+// static cilk::opadd_reducer<int> num_edges = 0;
 // static cilk::opadd_reducer<int> num_accepted_edges = 0;
 
 /* ---------------------------------------------------------------------- */
@@ -207,7 +207,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 }
 
 void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
-    num_edges = 0;
+    // num_edges = 0;
     // num_accepted_edges = 0;
     ev_init(eflag,vflag);
     const int nall = atom_->nlocal + atom_->nghost;
