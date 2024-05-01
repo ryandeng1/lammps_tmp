@@ -80,6 +80,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
   const int inum = list->inum;
 
   if (LAMMPS_USE_CILK) {
+      wsp_t start = wsp_getworkspan();
       cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
           // int ifrom, ito, tid;
           int ifrom, ito;
@@ -122,6 +123,11 @@ void PairLJCutOMP::compute(int eflag, int vflag)
           }
           thr->timer(Timer::PAIR);
       } // end of omp parallel region
+      wsp_t end = wsp_getworkspan();
+      wsp_t elapsed = wsp_sub(end, start);
+      if (comm->me == 0) {
+          wsp_dump(elapsed, "lammps_compute");
+      }
 
       // try new reduce
 
@@ -134,12 +140,20 @@ void PairLJCutOMP::compute(int eflag, int vflag)
 
       constexpr int CHUNK_SIZE = NUM_WORKERS_PER_THREAD;
 
+      start = wsp_getworkspan();
+
       cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
           for (int n = 1; n < comm->nthreads; n++) {
               for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
                   f[j] += f[n * nvals + j];
               }
           }
+      }
+
+      end = wsp_getworkspan();
+      elapsed = wsp_sub(end, start);
+      if (comm->me == 0) {
+          wsp_dump(elapsed, "lammps_reduce");
       }
 
       /*
