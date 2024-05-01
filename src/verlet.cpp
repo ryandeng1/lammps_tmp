@@ -5316,12 +5316,14 @@ void Verlet::run(int n) {
             if (zoid_num % comm->nprocs == comm->me) {
                 for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     std::cout << GREEN << "curr dt zoid: " << zoid_num << " timestep: " << t << " running time: " << curr_dt_compute_dep_time[zoid_num][t]
+                              << " num edges: " << curr_dt_num_edges[zoid_num][t]
                               << " ratio: " << (double)curr_dt_num_edges[zoid_num][t] / curr_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
 
                 }
 
                 for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     std::cout << GREEN << "next dt zoid: " << zoid_num << " timestep: " << t << " running time: " << next_dt_compute_dep_time[zoid_num][t]
+                              << " num edges: " << next_dt_num_edges[zoid_num][t]
                               << " ratio: " << (double)next_dt_num_edges[zoid_num][t] / next_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
                 }
             }
@@ -5400,7 +5402,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
     auto& atom_arr = lmp->atom_stencil_md[zoid_num];
     int** atom_idx_mapping = zoid.atom_idx_mapping;
 
-    /*
     auto begin_m = std::chrono::high_resolution_clock::now();
 
     cilk_for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
@@ -5414,7 +5415,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
     if (TIME_STENCIL_MD) {
         modify_pre_force_duration_cilk += duration_m;
     }
-    */
 
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
