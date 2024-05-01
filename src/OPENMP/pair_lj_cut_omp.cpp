@@ -225,7 +225,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         nthreads_to_use = nthreads;
     }
 
-    if (nthreads_to_use == 1) {
+    if (nthreads_to_use == 1 && false) {
         const auto * _noalias const x = (dbl3_t *) atom_->x[0];
         auto * _noalias f = (dbl3_t *) &(atom_->eval_f_stencil_md[0][0]);
 
@@ -325,12 +325,10 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     // wsp_t start = wsp_getworkspan();
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
-        // int ifrom, ito, tid;
-        int ifrom, ito;
         // each thread works on a fixed chunk of atoms.
         const int idelta = 1 + inum / nthreads_to_use;
-        ifrom = tid * idelta;
-        ito = ((ifrom + idelta) > inum) ? inum : ifrom + idelta;
+        int ifrom = tid * idelta;
+        int ito = ((ifrom + idelta) > inum) ? inum : ifrom + idelta;
 
         // loop_setup_thr(ifrom, ito, tid, inum, nthreads);
         ThrData *thr = fix->get_thr(tid);
