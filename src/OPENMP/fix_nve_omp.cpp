@@ -125,7 +125,6 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
         const double * const mass = atom->mass;
         const int * const type = atom_->type;
 
-        #pragma cilk grainsize 128
         cilk_for (int i = 0; i < nlocal; i++) {
             if (mask[i] & groupbit) {
                 const double dtfm = dtf / mass[type[i]];
