@@ -5887,7 +5887,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
-        cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
@@ -5903,7 +5903,6 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
 
                 int vec_idx = 0;
-                #pragma cilk grainsize 1
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(true,
                                                            atom_arr,
@@ -6108,7 +6107,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
-        cilk_for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info &zoid = lmp->queues_next_dt[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
