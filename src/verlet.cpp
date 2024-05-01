@@ -5903,6 +5903,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 Comm* comm_ = lmp->comm_stencil_md[zoid_num];
 
                 int vec_idx = 0;
+                #pragma cilk grainsize 1
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(true,
                                                            atom_arr,
