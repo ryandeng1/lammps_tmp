@@ -141,7 +141,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       double* f = &(atom->f[0][0]);
       int nvals = nall * 3;
 
-      constexpr int CHUNK_SIZE = 256;
+      constexpr int CHUNK_SIZE = 512;
 
       // start = wsp_getworkspan();
 
