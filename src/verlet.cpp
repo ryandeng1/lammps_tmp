@@ -5429,149 +5429,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
 
             stencilMD->COMPARE_POS_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_x);
             stencilMD->COMPARE_FORCE_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_f);
-
-            /*
-            for (int k = 0; k < atom_->nlocal; k++) {
-                int tag = atom_->tag[k];
-                double* x_ = atom_->x[k];
-                for (int dim = 0; dim < 3; dim++) {
-                    double val = x_[dim];
-                    if (val < 0) {
-                        val += domain->prd[dim];
-                    } else if (val >= domain->prd[dim]) {
-                        val -= domain->prd[dim];
-                    }
-
-                    double test_val = test_x[timestep_to_compare_against][tag * 3 + dim];
-                    if (test_val < 0) {
-                        test_val += domain->prd[dim];
-                    } else if (test_val >= domain->prd[dim]) {
-                        test_val -= domain->prd[dim];
-                    }
-
-                    if (fabs(val - test_val) > 1e-6) {
-                        if (curr_dt) {
-                            std::cout << "-------POS DIFF--------"
-                                      << std::endl;
-                        } else {
-                            std::cout << "-------NEXT DT POS DIFF--------"
-                                      << std::endl;
-                        }
-                        std::cout << "idx: " << k
-                                  << " out of: " << atom_->nlocal
-                                  << std::endl;
-                        std::cout
-                                << "Dim: " << dim << " Zoid: " << zoid_num
-                                << " timestep: " << timestep_to_compare_against << " tag: " << tag
-                                << " different. " << std::endl;
-                        std::cout << "What I have: " << x_[0] << " "
-                                  << x_[1] << " " << x_[2] << std::endl;
-                        std::cout << "What does LAMMPS have? "
-                                  << test_x[t][tag * 3 + 0] << " "
-                                  << test_x[t][tag * 3 + 1] << " "
-                                  << test_x[t][tag * 3 + 2]
-                                  << std::endl;
-                        std::cout
-                                << "Diff: "
-                                << fabs(x_[dim] - test_x[t][tag * 3 + dim])
-                                << std::endl;
-                        std::cout << "pos: " << atom_->x[k][0] << " "
-                                  << atom_->x[k][1] << " "
-                                  << atom_->x[k][2] << std::endl;
-
-                        for (int tmp = 0; tmp < 3; tmp++) {
-                            std::cout
-                                    << "lo: "
-                                    << zoid.zoid.cuts[tmp].lower +
-                                       zoid.zoid.cuts[tmp].slope_lower *
-                                       t
-                                    << std::endl;
-                            std::cout
-                                    << "hi: "
-                                    << zoid.zoid.cuts[tmp].upper +
-                                       zoid.zoid.cuts[tmp].slope_upper *
-                                       t
-                                    << std::endl;
-                        }
-                        assert(false);
-                    }
-                }
-            }
-
-            for (int k = 0; k < atom_->nlocal; k++) {
-                // compare forces on local atoms?
-                int tag = atom_->tag[k];
-                for (int dim = 0; dim < 3; dim++) {
-                    double my_force = atom_->f[k][dim] +
-                                      atom_->eval_f_stencil_md[k][dim];
-                    if (fabs(my_force - test_f[timestep_to_compare_against][tag * 3 + dim]) >
-                        1e-6) {
-                        if (curr_dt) {
-                            std::cout << "------FORCE DIFF--------"
-                                      << std::endl;
-                        } else {
-                            std::cout << "------NEXT DT FORCE DIFF--------"
-                                      << std::endl;
-                        }
-                        std::cout << "idx: " << k
-                                  << " out of: " << atom_->nlocal
-                                  << std::endl;
-                        std::cout
-                                << "Dim: " << dim << " Zoid: " << zoid_num
-                                << " timestep: " << timestep_to_compare_against << " tag: " << tag
-                                << " different. " << std::endl;
-                        std::cout << "what I have f: " << atom_->f[k][0]
-                                  << " " << atom_->f[k][1] << " "
-                                  << atom_->f[k][2] << std::endl;
-                        std::cout
-                                << "what I have eval "
-                                << atom_->eval_f_stencil_md[k][0] << " "
-                                << atom_->eval_f_stencil_md[k][1] << " "
-                                << atom_->eval_f_stencil_md[k][2]
-                                << std::endl;
-                        std::cout << "what I have: "
-                                  << atom_->f[k][0] +
-                                     atom_->eval_f_stencil_md[k][0]
-                                  << " "
-                                  << atom_->f[k][1] +
-                                     atom_->eval_f_stencil_md[k][1]
-                                  << " "
-                                  << atom_->f[k][2] +
-                                     atom_->eval_f_stencil_md[k][2]
-                                  << std::endl;
-                        std::cout << "What does LAMMPS have? "
-                                  << test_f[t][tag * 3 + 0] << " "
-                                  << test_f[t][tag * 3 + 1] << " "
-                                  << test_f[t][tag * 3 + 2]
-                                  << std::endl;
-                        std::cout
-                                << "Diff: "
-                                << fabs(my_force - test_f[t][tag * 3 + dim])
-                                << std::endl;
-                        std::cout << "pos: " << atom_->x[k][0] << " "
-                                  << atom_->x[k][1] << " "
-                                  << atom_->x[k][2] << std::endl;
-
-                        for (int tmp = 0; tmp < 3; tmp++) {
-                            std::cout
-                                    << "lo: "
-                                    << zoid.zoid.cuts[tmp].lower +
-                                       zoid.zoid.cuts[tmp].slope_lower *
-                                       t
-                                    << std::endl;
-                            std::cout
-                                    << "hi: "
-                                    << zoid.zoid.cuts[tmp].upper +
-                                       zoid.zoid.cuts[tmp].slope_upper *
-                                       t
-                                    << std::endl;
-                        }
-
-                        assert(false);
-                    }
-                }
-            }
-            */
         }
 
         auto begin_m = std::chrono::high_resolution_clock::now();
@@ -5588,99 +5445,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
         if (TEST_AGAINST_LAMMPS_LOCAL) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t + 1 : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t + 1;
             stencilMD->COMPARE_POS_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_next_timestep, zoid, test_x);
-            /*
-            for (int k = 0; k < atom_next_timestep->nlocal; k++) {
-                int tag = atom_next_timestep->tag[k];
-                double* x_ = atom_next_timestep->x[k];
-                for (int dim = 0; dim < 3; dim++) {
-                    double val = x_[dim];
-                    if (val < 0) {
-                        val += domain->prd[dim];
-                    } else if (val >= domain->prd[dim]) {
-                        val -= domain->prd[dim];
-                    }
-
-                    double test_val = test_x[timestep_to_compare_against][tag * 3 + dim];
-                    if (test_val < 0) {
-                        test_val += domain->prd[dim];
-                    } else if (test_val >= domain->prd[dim]) {
-                        test_val -= domain->prd[dim];
-                    }
-
-                    if (fabs(val - test_val) > 1e-6) {
-                        std::cout << "-------POS DIFF NEXT--------"
-                                  << std::endl;
-                        std::cout
-                                << "idx: " << k
-                                << " out of: " << atom_next_timestep->nlocal
-                                << std::endl;
-                        std::cout
-                                << "Dim: " << dim << " Zoid: " << zoid_num
-                                << " timestep: " << timestep_to_compare_against << " tag: " << tag
-                                << " different. " << std::endl;
-                        std::cout << "What I have: " << x_[0] << " "
-                                  << x_[1] << " " << x_[2] << std::endl;
-                        std::cout << "What does LAMMPS have? "
-                                  << test_x[t + 1][tag * 3 + 0] << " "
-                                  << test_x[t + 1][tag * 3 + 1] << " "
-                                  << test_x[t + 1][tag * 3 + 2]
-                                  << std::endl;
-                        std::cout << "Diff: " << fabs(val - test_val)
-                                  << std::endl;
-                        std::cout << "me val: " << val
-                                  << " test_val: " << test_val
-                                  << std::endl;
-                        std::cout
-                                << "pos: " << atom_next_timestep->x[k][0]
-                                << " " << atom_next_timestep->x[k][1] << " "
-                                << atom_next_timestep->x[k][2] << std::endl;
-                        std::cout
-                                << "can eval center? "
-                                << zoid.can_eval_center[t + 1][k]
-                                << " relevant? "
-                                << (zoid.relevant_atom_idxs[t + 1].find(
-                                        k) !=
-                                    zoid.relevant_atom_idxs[t + 1].end())
-                                << std::endl;
-                        if (atom_->tag_to_idx.count(
-                                atom_next_timestep->tag[k])) {
-                            int prev_idx =
-                                    atom_->tag_to_idx[atom_next_timestep
-                                            ->tag[k]];
-                            std::cout
-                                    << "prev nlocal: " << atom_->nlocal
-                                    << " prev idx: " << prev_idx
-                                    << " prev can eval center? "
-                                    << zoid.can_eval_center[t][prev_idx]
-                                    << " relevant? "
-                                    << (zoid.relevant_atom_idxs[t].find(
-                                            prev_idx) !=
-                                        zoid.relevant_atom_idxs[t].end())
-                                    << std::endl;
-                        } else {
-                            std::cout << "could not find prev tag"
-                                      << std::endl;
-                        }
-
-                        for (int tmp = 0; tmp < 3; tmp++) {
-                            std::cout
-                                    << "lo: "
-                                    << zoid.zoid.cuts[tmp].lower +
-                                       zoid.zoid.cuts[tmp].slope_lower *
-                                       (t + 1)
-                                    << std::endl;
-                            std::cout
-                                    << "hi: "
-                                    << zoid.zoid.cuts[tmp].upper +
-                                       zoid.zoid.cuts[tmp].slope_upper *
-                                       (t + 1)
-                                    << std::endl;
-                        }
-                        assert(false);
-                    }
-                }
-            }
-            */
         }
 
         if (n_pre_force) {
@@ -5852,6 +5616,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         if (dep > 0) {
             auto begin = std::chrono::high_resolution_clock::now();
 
+            /*
             auto begin_mpi = std::chrono::high_resolution_clock::now();
             MPI_Waitall(dep_to_wait_idxs[dep].size(), &receive_requests[running_recv_idx], MPI_STATUSES_IGNORE);
             running_recv_idx += dep_to_wait_idxs[dep].size();
@@ -5859,14 +5624,19 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
                     end_mpi - begin_mpi).count();
             mpi_duration += duration_mpi;
+            */
 
             for (int idx: dep_to_wait_idxs[dep]) {
-            // cilk_for (int i = 0 ; i < dep_to_wait_idxs[dep].size(); i++) {
-                // int idx = dep_to_wait_idxs[dep][i];
                 int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
-                /*
-                MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
-                */
+
+                auto begin_mpi = std::chrono::high_resolution_clock::now();
+                // MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
+                MPI_Wait(&receive_requests[running_recv_idx++], MPI_STATUS_IGNORE);
+                auto end_mpi = std::chrono::high_resolution_clock::now();
+                auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
+                        end_mpi - begin_mpi).count();
+                mpi_duration += duration_mpi;
+
                 auto begin_unpack = std::chrono::high_resolution_clock::now();
                 comm->unpack_data_process_stencil_md(true, recv_zoid_num, false);
                 auto end_unpack = std::chrono::high_resolution_clock::now();
@@ -5887,7 +5657,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
-        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+        cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
@@ -6068,6 +5838,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         if (dep > 0) {
             auto begin = std::chrono::high_resolution_clock::now();
 
+            /*
             auto begin_mpi = std::chrono::high_resolution_clock::now();
             MPI_Waitall(dep_to_wait_idxs_next_dt[dep].size(), &receive_requests_next_dt[running_recv_idx], MPI_STATUSES_IGNORE);
             running_recv_idx += dep_to_wait_idxs_next_dt[dep].size();
@@ -6075,18 +5846,20 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
                     end_mpi - begin_mpi).count();
             mpi_duration += duration_mpi;
+            */
 
             for (int idx: dep_to_wait_idxs_next_dt[dep]) {
                 // int idx = dep_to_wait_idxs_next_dt[dep][i];
                 int recv_zoid_num = lmp->recv_from_neighbors_procs_next_dt[idx];
-                /*
+
                 auto begin_mpi = std::chrono::high_resolution_clock::now();
-                MPI_Wait(&receive_requests_next_dt[idx], MPI_STATUS_IGNORE);
+                // MPI_Wait(&receive_requests_next_dt[idx], MPI_STATUS_IGNORE);
+                MPI_Wait(&receive_requests_next_dt[running_recv_idx++], MPI_STATUS_IGNORE);
                 auto end_mpi = std::chrono::high_resolution_clock::now();
                 auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(
                         end_mpi - begin_mpi).count();
                 mpi_duration += duration_mpi;
-                */
+
                 auto begin_unpack = std::chrono::high_resolution_clock::now();
                 comm->unpack_data_process_stencil_md(false, recv_zoid_num, false);
                 auto end_unpack = std::chrono::high_resolution_clock::now();
@@ -6107,7 +5880,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
-        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+        cilk_for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info &zoid = lmp->queues_next_dt[dep][j];
             int zoid_num = zoid.num;
             if (zoid_num % comm->nprocs != comm->me) {
