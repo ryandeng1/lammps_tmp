@@ -305,6 +305,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     double *desph = atom_->desph;
     double *drho = atom_->drho;
 
+    wsp_t start = wsp_getworkspan();
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // int ifrom, ito, tid;
         int ifrom, ito;
@@ -343,6 +344,11 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         }
         thr->timer(Timer::PAIR);
     }
+    wsp_t end = wsp_getworkspan();
+    wsp_t elapsed = wsp_sub(end, start);
+    if (zoid.num == 0) {
+        wsp_dump(elapsed, "compute");
+    }
 
     *num_eval += num_edges;
 
@@ -357,12 +363,18 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     constexpr int CHUNK_SIZE = NUM_WORKERS_PER_THREAD;
 
+    start = wsp_getworkspan();
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
         for (int n = 1; n < nthreads_to_use; n++) {
             for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
                 f[j] += f[n * nvals + j];
             }
         }
+    }
+    end = wsp_getworkspan();
+    elapsed = wsp_sub(end, start);
+    if (zoid.num == 0) {
+        wsp_dump(elapsed, "reduce");
     }
 
     /*
