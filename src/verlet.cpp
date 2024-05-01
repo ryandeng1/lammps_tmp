@@ -5400,21 +5400,21 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
     auto& atom_arr = lmp->atom_stencil_md[zoid_num];
     int** atom_idx_mapping = zoid.atom_idx_mapping;
 
+    /*
     auto begin_m = std::chrono::high_resolution_clock::now();
 
-    /*
     cilk_for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         Atom* atom_next_timestep = curr_dt ? atom_arr[t + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t - 1];
         Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][t + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
         modify_->pre_force_stencil_md(vflag, atom_next_timestep);
     }
-    */
 
     auto end_m = std::chrono::high_resolution_clock::now();
     auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
     if (TIME_STENCIL_MD) {
         modify_pre_force_duration_cilk += duration_m;
     }
+    */
 
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
