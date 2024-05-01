@@ -288,7 +288,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     int nvals = nall * 3;
 
-    constexpr int CHUNK_SIZE = NUM_WORKERS_PER_THREAD;
+    constexpr int CHUNK_SIZE = 256;
 
     // start = wsp_getworkspan();
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
@@ -450,17 +450,9 @@ __attribute__((always_inline)) void PairLJCutOMP::eval_stencil_md(int iifrom, in
         double ztmp = x[i].z;
         int jnum = numneigh[i];
 
-        // cilk::opadd_reducer<double> fxtmp = 0.0;
-        // cilk::opadd_reducer<double> fytmp = 0.0;
-        // cilk::opadd_reducer<double> fztmp = 0.0;
-        // fxtmp = 0.0;
-        // fytmp = 0.0;
-        // fztmp = 0.0;
         double fxtmp = 0.0;
         double fytmp = 0.0;
         double fztmp = 0.0;
-
-        // ftmp = {0};
 
         for (int jj = 0; jj < jnum; jj++) {
             // num_edges++;
@@ -511,14 +503,10 @@ __attribute__((always_inline)) void PairLJCutOMP::eval_stencil_md(int iifrom, in
                 */
             }
         }
+
         f[i].x += fxtmp;
         f[i].y += fytmp;
         f[i].z += fztmp;
-        /*
-        f[i].x += ftmp.x;
-        f[i].y += ftmp.y;
-        f[i].z += ftmp.z;
-        */
     }
 }
 
