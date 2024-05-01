@@ -288,7 +288,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     int nvals = nall * 3;
 
-    constexpr int CHUNK_SIZE = 256;
+    constexpr int CHUNK_SIZE = 512;
 
     // start = wsp_getworkspan();
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
