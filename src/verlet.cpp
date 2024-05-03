@@ -4860,7 +4860,6 @@ void Verlet::run(int n) {
 
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
-    cilk_scope {
             for (int i = 0; i < n + 1; i++) {
                 if (ONLY_RUN_STENCIL_MD) {
                     break;
@@ -5060,7 +5059,6 @@ void Verlet::run(int n) {
                 }
                 */
             }
-    }
 
     auto end_lammps = std::chrono::high_resolution_clock::now();
     auto duration_lammps = std::chrono::duration_cast<std::chrono::microseconds>(end_lammps - begin_lammps).count();
