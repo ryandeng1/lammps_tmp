@@ -48,7 +48,7 @@ static void merge(void* left, void* right) {
 // static dbl3_t cilk_reducer(new_reducer, merge) ftmp;
 
 // static cilk::opadd_reducer<int> num_edges = 0;
-// static cilk::opadd_reducer<int> num_accepted_edges = 0;
+// static cilk::opadd_reducer<int> num_lammps_edges = 0;
 
 /* ---------------------------------------------------------------------- */
 
@@ -175,7 +175,6 @@ void PairLJCutOMP::compute(int eflag, int vflag)
       return;
   }
 
-
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(eflag,vflag)
 #endif
@@ -202,6 +201,7 @@ void PairLJCutOMP::compute(int eflag, int vflag)
     thr->timer(Timer::PAIR);
     reduce_thr(this, eflag, vflag, thr);
   } // end of omp parallel region
+  std::cout << "num lammps edges: " << num_lammps_edges << std::endl;
 }
 
 void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
@@ -241,7 +241,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         thr->timer(Timer::START);
         ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
 
-        thr->init_force(nall,f_,torque,erforce,desph,drho);
+        // thr->init_force(nall,f_,torque,erforce,desph,drho);
 
         if (evflag) {
             if (eflag) {
@@ -273,9 +273,9 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     if (zoid.num == 0) {
         wsp_dump(elapsed, "compute");
     }
-
-    *num_eval += num_edges;
     */
+
+    // *num_eval += num_edges;
 
     // try new reduce
     if (nthreads_to_use == 1) {
@@ -372,6 +372,7 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
       j = jlist[jj];
       factor_lj = special_lj[sbmask(j)];
       j &= NEIGHMASK;
+      // num_lammps_edges++;
 
       delx = xtmp - x[j].x;
       dely = ytmp - x[j].y;
