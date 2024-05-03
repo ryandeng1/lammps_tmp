@@ -81,7 +81,7 @@ constexpr bool ONLY_RUN_LAMMPS = false;
 
 constexpr bool ONLY_RUN_STENCIL_MD = true;
 
-constexpr bool LAMMPS_USE_CILK = true;
+constexpr bool LAMMPS_USE_CILK = false;
 
 constexpr bool TIME_STENCIL_MD = true;
 
