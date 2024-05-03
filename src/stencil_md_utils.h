@@ -63,7 +63,7 @@ constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
 constexpr bool DEBUG_SEND_RECV_DATA = false;
 
-constexpr bool TEST_AGAINST_LAMMPS = false;
+constexpr bool TEST_AGAINST_LAMMPS = true;
 
 constexpr bool PURELY_LOCAL_POTENTIAL = true;
 
@@ -79,11 +79,11 @@ constexpr int NUM_WORKERS_PER_THREAD = 64;
 
 constexpr bool ONLY_RUN_LAMMPS = true;
 
-constexpr bool ONLY_RUN_STENCIL_MD = false;
+constexpr bool ONLY_RUN_STENCIL_MD = true;
 
 constexpr bool LAMMPS_USE_CILK = false;
 
-constexpr bool TIME_STENCIL_MD = false;
+constexpr bool TIME_STENCIL_MD = true;
 
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
