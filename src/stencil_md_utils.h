@@ -63,7 +63,7 @@ constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
 constexpr bool DEBUG_SEND_RECV_DATA = false;
 
-constexpr bool TEST_AGAINST_LAMMPS = true;
+constexpr bool TEST_AGAINST_LAMMPS = false;
 
 constexpr bool PURELY_LOCAL_POTENTIAL = true;
 
