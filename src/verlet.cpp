@@ -265,8 +265,10 @@ void Verlet::setup(int flag) {
     }
 
     if (atom->molecular != Atom::ATOMIC) {
-        if (force->bond) {
-            force->bond->compute(eflag, vflag);
+        if (!ONLY_RUN_STENCIL_MD) {
+            if (force->bond) {
+                force->bond->compute(eflag, vflag);
+            }
         }
         if (force->angle) {
             assert(false);
