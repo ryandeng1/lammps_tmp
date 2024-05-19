@@ -98,6 +98,7 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
     auto * _noalias const x = (dbl3_t *) atom_->x[0];
     auto * _noalias const next_x = (dbl3_t *) next->x[0];
     auto * _noalias const v = (dbl3_t *) atom_->v[0];
+    auto * _noalias const next_v = (dbl3_t *) next->v[0];
     const auto * _noalias const f = (dbl3_t *) atom_->f[0];
     const auto * _noalias const eval_f = (dbl3_t *) atom_->eval_f_stencil_md[0];
 
@@ -138,6 +139,11 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
                 next_x[next_idx].y = x[i].y + dtv * v[i].y;
                 next_x[next_idx].z = x[i].z + dtv * v[i].z;
                 assert(atom_->tag[i] == next->tag[next_idx]);
+                assert(next_idx != -1);
+
+                next_v[next_idx].x = v[i].x;
+                next_v[next_idx].y = v[i].y;
+                next_v[next_idx].z = v[i].z;
             }
         }
     }
@@ -224,14 +230,6 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
     } else {
         const double * const mass = atom->mass;
         const int * const type = next->type;
-
-        cilk_for (int i = 0; i < nlocal; i++) {
-            int next_idx = atom_idx_mapping[i];
-            assert(next_idx != -1);
-            next_v[next_idx].x = v[i].x;
-            next_v[next_idx].y = v[i].y;
-            next_v[next_idx].z = v[i].z;
-        }
 
         cilk_for (int i = 0; i < next_nlocal; i++) {
             if (mask[i] & groupbit) {

@@ -147,6 +147,14 @@ void _noopt Force::create_factories_stencil_md() {
 #include "stencil_md_style_pair.h"    // IWYU pragma: keep
 #undef PairStyleStencilMD
 #undef PAIR_CLASS_STENCIL_MD
+
+    bond_map_stencil_md = new BondCreatorMapStencilMD();
+
+#define BOND_CLASS_STENCIL_MD
+#define BondStyleStencilMD(key, Class) (*bond_map_stencil_md)[#key] = &style_creator_stencil_md<Bond, Class>;
+#include "stencil_md_style_bond.h"    // IWYU pragma: keep
+#undef BondStyleStencilMD
+#undef BOND_CLASS_STENCIL_MD
 }
 
 /* ---------------------------------------------------------------------- */
@@ -184,6 +192,7 @@ Force::~Force()
   delete kspace_map;
 
   delete pair_map_stencil_md;
+  delete bond_map_stencil_md;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -247,7 +256,7 @@ void Force::init_stencil_md(Neighbor* neighbor_) {
         pair->init_stencil_md(neighbor_);        // so g_ewald is defined
     }
     if (bond) {
-        assert(false);
+        // Note: for BOND FENE we do not need any special stencil-md code here
         bond->init();
     }
     if (angle) {
@@ -317,6 +326,8 @@ void Force::create_pair(const std::string &style, int trysuffix, bool use_stenci
    return sflag = 0 for no suffix added, 1 or 2 or 3 for suffix1/2/p added
    special case: if suffixp exists only try suffixp, not suffix
 ------------------------------------------------------------------------- */
+
+#include<unistd.h>
 
 Pair *Force::new_pair(const std::string &style, int trysuffix, int &sflag, bool use_stencil_md, Modify* modify_)
 {
@@ -434,13 +445,13 @@ char *Force::pair_match_ptr(Pair *ptr)
    create a bond style, called from input script or restart file
 ------------------------------------------------------------------------- */
 
-void Force::create_bond(const std::string &style, int trysuffix)
+void Force::create_bond(const std::string &style, int trysuffix, bool use_stencil_md, Modify* modify_)
 {
   delete[] bond_style;
   if (bond) delete bond;
 
   int sflag;
-  bond = new_bond(style, trysuffix, sflag);
+  bond = new_bond(style, trysuffix, sflag, use_stencil_md, modify_);
   bond_style = store_style(style, sflag);
 }
 
@@ -448,13 +459,19 @@ void Force::create_bond(const std::string &style, int trysuffix)
    generate a bond class, fist with suffix appended
 ------------------------------------------------------------------------- */
 
-Bond *Force::new_bond(const std::string &style, int trysuffix, int &sflag)
+Bond *Force::new_bond(const std::string &style, int trysuffix, int &sflag, bool use_stencil_md, Modify* modify_)
 {
+  // std::cout << "me: " << comm->me << " this: " << this << " use stencil md: " << use_stencil_md << " modify: " << modify_ << " bond style: " << style << " new bond " << " bond map stencil md: " << bond_map_stencil_md << " bond map: " << bond_map << std::endl;
   if (trysuffix && lmp->suffix_enable) {
     if (lmp->suffix) {
       sflag = 1;
       std::string estyle = style + "/" + lmp->suffix;
       if (bond_map->find(estyle) != bond_map->end()) {
+        if (use_stencil_md) {
+            BondCreatorStencilMD &bond_creator_stencil_md = (*bond_map_stencil_md)[estyle];
+            assert(modify_ != nullptr);
+            return bond_creator_stencil_md(lmp, modify_);
+        }
         BondCreator &bond_creator = (*bond_map)[estyle];
         return bond_creator(lmp);
       }
@@ -464,6 +481,11 @@ Bond *Force::new_bond(const std::string &style, int trysuffix, int &sflag)
       sflag = 2;
       std::string estyle = style + "/" + lmp->suffix2;
       if (bond_map->find(estyle) != bond_map->end()) {
+        if (use_stencil_md) {
+          BondCreatorStencilMD &bond_creator_stencil_md = (*bond_map_stencil_md)[estyle];
+          assert(modify_ != nullptr);
+          return bond_creator_stencil_md(lmp, modify_);
+        }
         BondCreator &bond_creator = (*bond_map)[estyle];
         return bond_creator(lmp);
       }

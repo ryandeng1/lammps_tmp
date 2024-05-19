@@ -15,6 +15,10 @@
 // clang-format off
 AtomStyle(atomic,AtomVecAtomic);
 // clang-format on
+#elifdef ATOM_CLASS_STENCIL_MD
+// clang-format off
+AtomStyleStencilMD(atomic,AtomVecAtomic);
+// clang-format on
 #else
 
 #ifndef LMP_ATOM_VEC_ATOMIC_H
@@ -27,6 +31,7 @@ namespace LAMMPS_NS {
 class AtomVecAtomic : public AtomVec {
  public:
   AtomVecAtomic(class LAMMPS *);
+  AtomVecAtomic(class LAMMPS *, class Atom *);
 };
 
 }    // namespace LAMMPS_NS

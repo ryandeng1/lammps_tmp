@@ -471,8 +471,6 @@ void ThrOMP::reduce_thr(void *style, const int eflag, const int vflag,
 
     if (lmp->atom->torque)
       data_reduce_thr(&(lmp->atom->torque[0][0]), nall, nthreads, 3, tid);
-  } else {
-      assert(false);
   }
   thr->timer(Timer::COMM);
 }

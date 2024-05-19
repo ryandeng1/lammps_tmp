@@ -50,6 +50,8 @@ enum{CONSTANT,EQUAL,ATOM};
 #define SINERTIA 0.4          // moment of inertia prefactor for sphere
 #define EINERTIA 0.2          // moment of inertia prefactor for ellipsoid
 
+constexpr int target_tag = 21731;
+
 /* ---------------------------------------------------------------------- */
 
 FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
@@ -189,6 +191,8 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   }
 }
 
+FixLangevin::FixLangevin(LAMMPS *lmp, Modify* modify_, int narg, char **arg) : FixLangevin(lmp, narg, arg) {}
+
 /* ---------------------------------------------------------------------- */
 
 FixLangevin::~FixLangevin()
@@ -315,6 +319,102 @@ void FixLangevin::init()
   if (gjfflag) gjfsib = sqrt(1.0+update->dt/2.0/t_period);
 }
 
+// Duplicated code above because *potentially* there might be some stencil-md data that is being modified
+void FixLangevin::init_stencil_md(Atom* atom_, Modify *, Neighbor*) {
+    if (gjfflag) {
+        assert(false);
+        if (t_period*2 == update->dt)
+            error->all(FLERR,"Fix langevin gjf cannot have t_period equal to dt/2");
+
+        // warn if any integrate fix comes after this one
+        int before = 1;
+        int flag = 0;
+        for (int i = 0; i < modify->nfix; i++) {
+            if (strcmp(id,modify->fix[i]->id) == 0) before = 0;
+            else if ((modify->fmask[i] && utils::strmatch(modify->fix[i]->style,"^nve")) && before) flag = 1;
+        }
+        if (flag)
+            error->all(FLERR,"Fix langevin gjf should come before fix nve");
+    }
+
+    if (oflag && !atom->sphere_flag)
+        error->all(FLERR,"Fix langevin omega requires atom style sphere");
+    if (ascale && !atom->ellipsoid_flag)
+        error->all(FLERR,"Fix langevin angmom requires atom style ellipsoid");
+
+    // check variable
+
+    if (tstr) {
+        assert(false);
+        tvar = input->variable->find(tstr);
+        if (tvar < 0)
+            error->all(FLERR,"Variable name for fix langevin does not exist");
+        if (input->variable->equalstyle(tvar)) tstyle = EQUAL;
+        else if (input->variable->atomstyle(tvar)) tstyle = ATOM;
+        else error->all(FLERR,"Variable for fix langevin is invalid style");
+    }
+
+    // if oflag or ascale set, check that all group particles are finite-size
+
+    if (oflag) {
+        assert(false);
+        double *radius = atom_->radius;
+        int *mask = atom_->mask;
+        int nlocal = atom_->nlocal;
+
+        for (int i = 0; i < nlocal; i++)
+            if (mask[i] & groupbit)
+                if (radius[i] == 0.0)
+                    error->one(FLERR,"Fix langevin omega requires extended particles");
+    }
+
+    if (ascale) {
+        assert(false);
+        avec = dynamic_cast<AtomVecEllipsoid *>(atom->style_match("ellipsoid"));
+        if (!avec)
+            error->all(FLERR,"Fix langevin angmom requires atom style ellipsoid");
+
+        int *ellipsoid = atom->ellipsoid;
+        int *mask = atom->mask;
+        int nlocal = atom->nlocal;
+
+        for (int i = 0; i < nlocal; i++)
+            if (mask[i] & groupbit)
+                if (ellipsoid[i] < 0)
+                    error->one(FLERR,"Fix langevin angmom requires extended particles");
+    }
+
+    // set force prefactors
+
+    if (!atom->rmass) {
+        for (int i = 1; i <= atom->ntypes; i++) {
+            gfactor1[i] = -atom->mass[i] / t_period / force->ftm2v;
+            if (gjfflag)
+                gfactor2[i] = sqrt(atom->mass[i]) *
+                              sqrt(2.0*force->boltz/t_period/update->dt/force->mvv2e) /
+                              force->ftm2v;
+            else
+                gfactor2[i] = sqrt(atom->mass[i]) *
+                              sqrt(24.0*force->boltz/t_period/update->dt/force->mvv2e) /
+                              force->ftm2v;
+            gfactor1[i] *= 1.0/ratio[i];
+            gfactor2[i] *= 1.0/sqrt(ratio[i]);
+        }
+    }
+
+    if (temperature && temperature->tempbias) tbiasflag = BIAS;
+    else tbiasflag = NOBIAS;
+
+    if (utils::strmatch(update->integrate_style,"^respa"))
+        nlevels_respa = (dynamic_cast<Respa *>(update->integrate))->nlevels;
+
+    if (utils::strmatch(update->integrate_style,"^respa") && gjfflag)
+        error->all(FLERR,"Fix langevin gjf and respa are not compatible");
+
+    if (gjfflag) gjfa = (1.0-update->dt/2.0/t_period)/(1.0+update->dt/2.0/t_period);
+    if (gjfflag) gjfsib = sqrt(1.0+update->dt/2.0/t_period);
+}
+
 /* ---------------------------------------------------------------------- */
 
 void FixLangevin::setup(int vflag)
@@ -365,11 +465,14 @@ void FixLangevin::setup(int vflag)
   if (utils::strmatch(update->integrate_style,"^verlet"))
     post_force(vflag);
   else {
+    assert(false);
     (dynamic_cast<Respa *>(update->integrate))->copy_flevel_f(nlevels_respa-1);
     post_force_respa(vflag,nlevels_respa-1,0);
     (dynamic_cast<Respa *>(update->integrate))->copy_f_flevel(nlevels_respa-1);
   }
+
   if (gjfflag) {
+    assert(false);
     double dtfm;
     double dt = update->dt;
     double **f = atom->f;
@@ -406,10 +509,104 @@ void FixLangevin::setup(int vflag)
   }
 }
 
+void FixLangevin::setup_stencil_md(int vflag, Atom* atom_) {
+    if (gjfflag) {
+        assert(false);
+        double dtfm;
+        double dt = update->dt;
+        double **v = atom->v;
+        double **f = atom->f;
+        int *mask = atom->mask;
+        int nlocal = atom->nlocal;
+        double *rmass = atom->rmass;
+        double *mass = atom->mass;
+        int *type = atom->type;
+        if (rmass) {
+            for (int i = 0; i < nlocal; i++)
+                if (mask[i] & groupbit) {
+                    dtfm = force->ftm2v * 0.5 * dt / rmass[i];
+                    v[i][0] -= dtfm * f[i][0];
+                    v[i][1] -= dtfm * f[i][1];
+                    v[i][2] -= dtfm * f[i][2];
+                    if (tbiasflag)
+                        temperature->remove_bias(i,v[i]);
+                    v[i][0] /= gjfa*gjfsib*gjfsib;
+                    v[i][1] /= gjfa*gjfsib*gjfsib;
+                    v[i][2] /= gjfa*gjfsib*gjfsib;
+                    if (tbiasflag)
+                        temperature->restore_bias(i,v[i]);
+                }
+
+        } else {
+            for (int i = 0; i < nlocal; i++)
+                if (mask[i] & groupbit) {
+                    dtfm = force->ftm2v * 0.5 * dt / mass[type[i]];
+                    v[i][0] -= dtfm * f[i][0];
+                    v[i][1] -= dtfm * f[i][1];
+                    v[i][2] -= dtfm * f[i][2];
+                    if (tbiasflag)
+                        temperature->remove_bias(i,v[i]);
+                    v[i][0] /= gjfa*gjfsib*gjfsib;
+                    v[i][1] /= gjfa*gjfsib*gjfsib;
+                    v[i][2] /= gjfa*gjfsib*gjfsib;
+                    if (tbiasflag)
+                        temperature->restore_bias(i,v[i]);
+                }
+        }
+    }
+
+    if (utils::strmatch(update->integrate_style,"^verlet"))
+        post_force_stencil_md(vflag, atom_);
+    else {
+        assert(false);
+        (dynamic_cast<Respa *>(update->integrate))->copy_flevel_f(nlevels_respa-1);
+        post_force_respa(vflag,nlevels_respa-1,0);
+        (dynamic_cast<Respa *>(update->integrate))->copy_f_flevel(nlevels_respa-1);
+    }
+
+    if (gjfflag) {
+        assert(false);
+        double dtfm;
+        double dt = update->dt;
+        double **f = atom->f;
+        double **v = atom->v;
+        int *mask = atom->mask;
+        int nlocal = atom->nlocal;
+        double *rmass = atom->rmass;
+        double *mass = atom->mass;
+        int *type = atom->type;
+        if (rmass) {
+            for (int i = 0; i < nlocal; i++)
+                if (mask[i] & groupbit) {
+                    dtfm = force->ftm2v * 0.5 * dt / rmass[i];
+                    v[i][0] += dtfm * f[i][0];
+                    v[i][1] += dtfm * f[i][1];
+                    v[i][2] += dtfm * f[i][2];
+                    lv[i][0] = v[i][0];
+                    lv[i][1] = v[i][1];
+                    lv[i][2] = v[i][2];
+                }
+//
+        } else {
+            for (int i = 0; i < nlocal; i++)
+                if (mask[i] & groupbit) {
+                    dtfm = force->ftm2v * 0.5 * dt / mass[type[i]];
+                    v[i][0] += dtfm * f[i][0];
+                    v[i][1] += dtfm * f[i][1];
+                    v[i][2] += dtfm * f[i][2];
+                    lv[i][0] = v[i][0];
+                    lv[i][1] = v[i][1];
+                    lv[i][2] = v[i][2];
+                }
+        }
+    }
+}
+
 /* ---------------------------------------------------------------------- */
 
 void FixLangevin::initial_integrate(int /* vflag */)
 {
+  assert(false);
   double **v = atom->v;
   double **f = atom->f;
   int *mask = atom->mask;
@@ -423,6 +620,26 @@ void FixLangevin::initial_integrate(int /* vflag */)
       v[i][0] = lv[i][0];
       v[i][1] = lv[i][1];
       v[i][2] = lv[i][2];
+    }
+}
+
+void FixLangevin::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
+    assert(false);
+    double **v = atom_->v;
+    double **f = atom_->eval_f_stencil_md;
+    double **eval_f = atom_->eval_f_stencil_md;
+    int *mask = atom_->mask;
+    int nlocal = atom_->nlocal;
+
+    for (int i = 0; i < nlocal; i++) {
+        if (mask[i] & groupbit) {
+            f[i][0] /= gjfa;
+            f[i][1] /= gjfa;
+            f[i][2] /= gjfa;
+            v[i][0] = lv[i][0];
+            v[i][1] = lv[i][1];
+            v[i][2] = lv[i][2];
+        }
     }
 }
 
@@ -564,10 +781,147 @@ void FixLangevin::post_force(int /*vflag*/)
             else          post_force_templated<0,0,0,0,0,0>();
 }
 
+void FixLangevin::post_force_stencil_md(int /*vflag*/, Atom* atom_) {
+    double *rmass = atom->rmass;
+    assert(!rmass);
+
+    // enumerate all 2^6 possibilities for template parameters
+    // this avoids testing them inside inner loop:
+    // TSTYLEATOM, GJF, TALLY, BIAS, RMASS, ZERO
+
+    if (tstyle == ATOM)
+        if (gjfflag)
+            if (tallyflag || osflag)
+                if (tbiasflag == BIAS)
+                    if (rmass)
+                        if (zeroflag) post_force_templated_stencil_md<1,1,1,1,1,1>(atom_);
+                        else          post_force_templated_stencil_md<1,1,1,1,1,0>(atom_);
+                    else
+                    if (zeroflag) post_force_templated_stencil_md<1,1,1,1,0,1>(atom);
+                    else          post_force_templated_stencil_md<1,1,1,1,0,0>(atom);
+                else
+                if (rmass)
+                    if (zeroflag) post_force_templated_stencil_md<1,1,1,0,1,1>(atom_);
+                    else          post_force_templated_stencil_md<1,1,1,0,1,0>(atom_);
+                else
+                if (zeroflag) post_force_templated_stencil_md<1,1,1,0,0,1>(atom_);
+                else          post_force_templated_stencil_md<1,1,1,0,0,0>(atom_);
+            else
+            if (tbiasflag == BIAS)
+                if (rmass)
+                    if (zeroflag) post_force_templated_stencil_md<1,1,0,1,1,1>(atom_);
+                    else          post_force_templated_stencil_md<1,1,0,1,1,0>(atom_);
+                else
+                if (zeroflag) post_force_templated_stencil_md<1,1,0,1,0,1>(atom_);
+                else          post_force_templated_stencil_md<1,1,0,1,0,0>(atom_);
+            else
+            if (rmass)
+                if (zeroflag) post_force_templated_stencil_md<1,1,0,0,1,1>(atom_);
+                else          post_force_templated_stencil_md<1,1,0,0,1,0>(atom_);
+            else
+            if (zeroflag) post_force_templated_stencil_md<1,1,0,0,0,1>(atom_);
+            else          post_force_templated_stencil_md<1,1,0,0,0,0>(atom_);
+        else
+        if (tallyflag || osflag)
+            if (tbiasflag == BIAS)
+                if (rmass)
+                    if (zeroflag) post_force_templated_stencil_md<1,0,1,1,1,1>(atom_);
+                    else          post_force_templated_stencil_md<1,0,1,1,1,0>(atom_);
+                else
+                if (zeroflag) post_force_templated_stencil_md<1,0,1,1,0,1>(atom_);
+                else          post_force_templated_stencil_md<1,0,1,1,0,0>(atom_);
+            else
+            if (rmass)
+                if (zeroflag) post_force_templated_stencil_md<1,0,1,0,1,1>(atom_);
+                else          post_force_templated_stencil_md<1,0,1,0,1,0>(atom_);
+            else
+            if (zeroflag) post_force_templated_stencil_md<1,0,1,0,0,1>(atom_);
+            else          post_force_templated_stencil_md<1,0,1,0,0,0>(atom_);
+        else
+        if (tbiasflag == BIAS)
+            if (rmass)
+                if (zeroflag) post_force_templated_stencil_md<1,0,0,1,1,1>(atom_);
+                else          post_force_templated_stencil_md<1,0,0,1,1,0>(atom_);
+            else
+            if (zeroflag) post_force_templated_stencil_md<1,0,0,1,0,1>(atom_);
+            else          post_force_templated_stencil_md<1,0,0,1,0,0>(atom_);
+        else
+        if (rmass)
+            if (zeroflag) post_force_templated_stencil_md<1,0,0,0,1,1>(atom_);
+            else          post_force_templated_stencil_md<1,0,0,0,1,0>(atom_);
+        else
+        if (zeroflag) post_force_templated_stencil_md<1,0,0,0,0,1>(atom_);
+        else          post_force_templated_stencil_md<1,0,0,0,0,0>(atom_);
+    else
+    if (gjfflag)
+        if (tallyflag  || osflag)
+            if (tbiasflag == BIAS)
+                if (rmass)
+                    if (zeroflag) post_force_templated_stencil_md<0,1,1,1,1,1>(atom_);
+                    else          post_force_templated_stencil_md<0,1,1,1,1,0>(atom_);
+                else
+                if (zeroflag) post_force_templated_stencil_md<0,1,1,1,0,1>(atom_);
+                else          post_force_templated_stencil_md<0,1,1,1,0,0>(atom_);
+            else
+            if (rmass)
+                if (zeroflag) post_force_templated_stencil_md<0,1,1,0,1,1>(atom_);
+                else          post_force_templated_stencil_md<0,1,1,0,1,0>(atom_);
+            else
+            if (zeroflag) post_force_templated_stencil_md<0,1,1,0,0,1>(atom_);
+            else          post_force_templated_stencil_md<0,1,1,0,0,0>(atom_);
+        else
+        if (tbiasflag == BIAS)
+            if (rmass)
+                if (zeroflag) post_force_templated_stencil_md<0,1,0,1,1,1>(atom_);
+                else          post_force_templated_stencil_md<0,1,0,1,1,0>(atom_);
+            else
+            if (zeroflag) post_force_templated_stencil_md<0,1,0,1,0,1>(atom_);
+            else          post_force_templated_stencil_md<0,1,0,1,0,0>(atom_);
+        else
+        if (rmass)
+            if (zeroflag) post_force_templated_stencil_md<0,1,0,0,1,1>(atom_);
+            else          post_force_templated_stencil_md<0,1,0,0,1,0>(atom_);
+        else
+        if (zeroflag) post_force_templated_stencil_md<0,1,0,0,0,1>(atom_);
+        else          post_force_templated_stencil_md<0,1,0,0,0,0>(atom_);
+    else
+    if (tallyflag || osflag)
+        if (tbiasflag == BIAS)
+            if (rmass)
+                if (zeroflag) post_force_templated_stencil_md<0,0,1,1,1,1>(atom_);
+                else          post_force_templated_stencil_md<0,0,1,1,1,0>(atom_);
+            else
+            if (zeroflag) post_force_templated_stencil_md<0,0,1,1,0,1>(atom_);
+            else          post_force_templated_stencil_md<0,0,1,1,0,0>(atom_);
+        else
+        if (rmass)
+            if (zeroflag) post_force_templated_stencil_md<0,0,1,0,1,1>(atom_);
+            else          post_force_templated_stencil_md<0,0,1,0,1,0>(atom_);
+        else
+        if (zeroflag) post_force_templated_stencil_md<0,0,1,0,0,1>(atom_);
+        else          post_force_templated_stencil_md<0,0,1,0,0,0>(atom_);
+    else
+    if (tbiasflag == BIAS)
+        if (rmass)
+            if (zeroflag) post_force_templated_stencil_md<0,0,0,1,1,1>(atom_);
+            else          post_force_templated_stencil_md<0,0,0,1,1,0>(atom_);
+        else
+        if (zeroflag) post_force_templated_stencil_md<0,0,0,1,0,1>(atom_);
+        else          post_force_templated_stencil_md<0,0,0,1,0,0>(atom_);
+    else
+    if (rmass)
+        if (zeroflag) post_force_templated_stencil_md<0,0,0,0,1,1>(atom_);
+        else          post_force_templated_stencil_md<0,0,0,0,1,0>(atom_);
+    else
+    if (zeroflag) post_force_templated_stencil_md<0,0,0,0,0,1>(atom_);
+    else          post_force_templated_stencil_md<0,0,0,0,0,0>(atom_);
+}
+
 /* ---------------------------------------------------------------------- */
 
 void FixLangevin::post_force_respa(int vflag, int ilevel, int /*iloop*/)
 {
+  assert(false);
   if (ilevel == nlevels_respa-1) post_force(vflag);
 }
 
@@ -661,9 +1015,18 @@ void FixLangevin::post_force_templated()
         fran[1] = gamma2*random->gaussian();
         fran[2] = gamma2*random->gaussian();
       } else {
+        double rand_x = 0.6;
+        double rand_y = 0.6;
+        double rand_z = 0.6;
+        fran[0] = gamma2*(rand_x-0.5);
+        fran[1] = gamma2*(rand_y-0.5);
+        fran[2] = gamma2*(rand_z-0.5);
+        // Note: for reproducibility sake, use constant numbers
+        /*
         fran[0] = gamma2*(random->uniform()-0.5);
         fran[1] = gamma2*(random->uniform()-0.5);
         fran[2] = gamma2*(random->uniform()-0.5);
+        */
       }
 
       if (Tp_BIAS) {
@@ -766,8 +1129,216 @@ void FixLangevin::post_force_templated()
 
   // thermostat omega and angmom
 
-  if (oflag) omega_thermostat();
-  if (ascale) angmom_thermostat();
+  if (oflag) {
+      assert(false);
+      omega_thermostat();
+  }
+  if (ascale) {
+      assert(false);
+      angmom_thermostat();
+  }
+}
+
+template < int Tp_TSTYLEATOM, int Tp_GJF, int Tp_TALLY,
+        int Tp_BIAS, int Tp_RMASS, int Tp_ZERO >
+void FixLangevin::post_force_templated_stencil_md(Atom* atom_) {
+    double gamma1,gamma2;
+
+    double **v = atom_->v;
+    double **f = atom_->eval_f_stencil_md;
+    double *rmass = atom_->rmass;
+    int *type = atom_->type;
+    int *mask = atom_->mask;
+    int nlocal = atom_->nlocal;
+
+    // apply damping and thermostat to atoms in group
+
+    // for Tp_TSTYLEATOM:
+    //   use per-atom per-coord target temperature
+    // for Tp_GJF:
+    //   use Gronbech-Jensen/Farago algorithm
+    //   else use regular algorithm
+    // for Tp_TALLY:
+    //   store drag plus random forces in flangevin[nlocal][3]
+    // for Tp_BIAS:
+    //   calculate temperature since some computes require temp
+    //   computed on current nlocal atoms to remove bias
+    //   test v = 0 since some computes mask non-participating atoms via v = 0
+    //   and added force has extra term not multiplied by v = 0
+    // for Tp_RMASS:
+    //   use per-atom masses
+    //   else use per-type masses
+    // for Tp_ZERO:
+    //   sum random force over all atoms in group
+    //   subtract sum/count from each atom in group
+
+    double fdrag[3],fran[3],fsum[3],fsumall[3];
+    bigint count;
+    double fswap;
+
+    double boltz = force->boltz;
+    double dt = update->dt;
+    double mvv2e = force->mvv2e;
+    double ftm2v = force->ftm2v;
+
+    compute_target();
+
+    if (Tp_ZERO) {
+        fsum[0] = fsum[1] = fsum[2] = 0.0;
+        count = group->count(igroup);
+        if (count == 0)
+            error->all(FLERR,"Cannot zero Langevin force of 0 atoms");
+    }
+
+    // reallocate flangevin if necessary
+
+    if (Tp_TALLY) {
+        if (atom->nmax > maxatom1) {
+            memory->destroy(flangevin);
+            maxatom1 = atom->nmax;
+            memory->create(flangevin,maxatom1,3,"langevin:flangevin");
+        }
+        flangevin_allocated = 1;
+    }
+
+    if (Tp_BIAS) temperature->compute_scalar();
+
+    for (int i = 0; i < nlocal; i++) {
+        if (mask[i] & groupbit) {
+            if (Tp_TSTYLEATOM) tsqrt = sqrt(tforce[i]);
+            if (Tp_RMASS) {
+                gamma1 = -rmass[i] / t_period / ftm2v;
+                if (Tp_GJF)
+                    gamma2 = sqrt(rmass[i]) * sqrt(2.0*boltz/t_period/dt/mvv2e) / ftm2v;
+                else
+                    gamma2 = sqrt(rmass[i]) * sqrt(24.0*boltz/t_period/dt/mvv2e) / ftm2v;
+                gamma1 *= 1.0/ratio[type[i]];
+                gamma2 *= 1.0/sqrt(ratio[type[i]]) * tsqrt;
+            } else {
+                gamma1 = gfactor1[type[i]];
+                gamma2 = gfactor2[type[i]] * tsqrt;
+            }
+
+            if (Tp_GJF) {
+                fran[0] = gamma2*random->gaussian();
+                fran[1] = gamma2*random->gaussian();
+                fran[2] = gamma2*random->gaussian();
+            } else {
+                double rand_x = 0.6;
+                double rand_y = 0.6;
+                double rand_z = 0.6;
+                fran[0] = gamma2*(rand_x-0.5);
+                fran[1] = gamma2*(rand_y-0.5);
+                fran[2] = gamma2*(rand_z-0.5);
+                /*
+                fran[0] = gamma2*(random->uniform()-0.5);
+                fran[1] = gamma2*(random->uniform()-0.5);
+                fran[2] = gamma2*(random->uniform()-0.5);
+                */
+            }
+
+            if (Tp_BIAS) {
+                temperature->remove_bias(i,v[i]);
+                fdrag[0] = gamma1*v[i][0];
+                fdrag[1] = gamma1*v[i][1];
+                fdrag[2] = gamma1*v[i][2];
+                if (v[i][0] == 0.0) fran[0] = 0.0;
+                if (v[i][1] == 0.0) fran[1] = 0.0;
+                if (v[i][2] == 0.0) fran[2] = 0.0;
+                temperature->restore_bias(i,v[i]);
+            } else {
+                fdrag[0] = gamma1*v[i][0];
+                fdrag[1] = gamma1*v[i][1];
+                fdrag[2] = gamma1*v[i][2];
+            }
+
+            if (Tp_GJF) {
+                if (Tp_BIAS)
+                    temperature->remove_bias(i,v[i]);
+                lv[i][0] = gjfsib*v[i][0];
+                lv[i][1] = gjfsib*v[i][1];
+                lv[i][2] = gjfsib*v[i][2];
+                if (Tp_BIAS)
+                    temperature->restore_bias(i,v[i]);
+                if (Tp_BIAS)
+                    temperature->restore_bias(i,lv[i]);
+
+                fswap = 0.5*(fran[0]+franprev[i][0]);
+                franprev[i][0] = fran[0];
+                fran[0] = fswap;
+                fswap = 0.5*(fran[1]+franprev[i][1]);
+                franprev[i][1] = fran[1];
+                fran[1] = fswap;
+                fswap = 0.5*(fran[2]+franprev[i][2]);
+                franprev[i][2] = fran[2];
+                fran[2] = fswap;
+
+                fdrag[0] *= gjfa;
+                fdrag[1] *= gjfa;
+                fdrag[2] *= gjfa;
+                fran[0] *= gjfa;
+                fran[1] *= gjfa;
+                fran[2] *= gjfa;
+                f[i][0] *= gjfa;
+                f[i][1] *= gjfa;
+                f[i][2] *= gjfa;
+            }
+
+            f[i][0] += fdrag[0] + fran[0];
+            f[i][1] += fdrag[1] + fran[1];
+            f[i][2] += fdrag[2] + fran[2];
+
+            if (Tp_ZERO) {
+                fsum[0] += fran[0];
+                fsum[1] += fran[1];
+                fsum[2] += fran[2];
+            }
+
+            if (Tp_TALLY) {
+                if (Tp_GJF) {
+                    fdrag[0] = gamma1*lv[i][0]/gjfsib/gjfsib;
+                    fdrag[1] = gamma1*lv[i][1]/gjfsib/gjfsib;
+                    fdrag[2] = gamma1*lv[i][2]/gjfsib/gjfsib;
+                    fswap = (2*fran[0]/gjfa - franprev[i][0])/gjfsib;
+                    fran[0] = fswap;
+                    fswap = (2*fran[1]/gjfa - franprev[i][1])/gjfsib;
+                    fran[1] = fswap;
+                    fswap = (2*fran[2]/gjfa - franprev[i][2])/gjfsib;
+                    fran[2] = fswap;
+                }
+                flangevin[i][0] = fdrag[0] + fran[0];
+                flangevin[i][1] = fdrag[1] + fran[1];
+                flangevin[i][2] = fdrag[2] + fran[2];
+
+            }
+        }
+    }
+
+    // set total force to zero
+
+    if (Tp_ZERO) {
+        MPI_Allreduce(fsum,fsumall,3,MPI_DOUBLE,MPI_SUM,world);
+        fsumall[0] /= count;
+        fsumall[1] /= count;
+        fsumall[2] /= count;
+        for (int i = 0; i < nlocal; i++) {
+            if (mask[i] & groupbit) {
+                f[i][0] -= fsumall[0];
+                f[i][1] -= fsumall[1];
+                f[i][2] -= fsumall[2];
+                if (Tp_TALLY) {
+                    flangevin[i][0] -= fsumall[0];
+                    flangevin[i][1] -= fsumall[1];
+                    flangevin[i][2] -= fsumall[2];
+                }
+            }
+        }
+    }
+
+    // thermostat omega and angmom
+
+    if (oflag) omega_thermostat();
+    if (ascale) angmom_thermostat();
 }
 
 /* ----------------------------------------------------------------------
@@ -789,6 +1360,7 @@ void FixLangevin::compute_target()
     t_target = t_start + delta * (t_stop-t_start);
     tsqrt = sqrt(t_target);
   } else {
+    assert(false);
     modify->clearstep_compute();
     if (tstyle == EQUAL) {
       t_target = input->variable->compute_equal(tvar);
@@ -919,7 +1491,11 @@ void FixLangevin::angmom_thermostat()
 
 void FixLangevin::end_of_step()
 {
-  if (!tallyflag && !gjfflag) return;
+  if (!tallyflag && !gjfflag) {
+      return;
+  }
+
+  assert(false);
 
   double **v = atom->v;
   int *mask = atom->mask;
@@ -992,6 +1568,7 @@ void FixLangevin::end_of_step()
 
 void FixLangevin::reset_target(double t_new)
 {
+  assert(false);
   t_target = t_start = t_stop = t_new;
 }
 
@@ -999,6 +1576,7 @@ void FixLangevin::reset_target(double t_new)
 
 void FixLangevin::reset_dt()
 {
+  assert(false);
   if (atom->mass) {
     for (int i = 1; i <= atom->ntypes; i++) {
       if (gjfflag)
@@ -1022,6 +1600,7 @@ void FixLangevin::reset_dt()
 
 int FixLangevin::modify_param(int narg, char **arg)
 {
+  assert(false);
   if (strcmp(arg[0],"temp") == 0) {
     if (narg < 2) error->all(FLERR,"Illegal fix_modify command");
     delete [] id_temp;
@@ -1046,6 +1625,7 @@ int FixLangevin::modify_param(int narg, char **arg)
 
 double FixLangevin::compute_scalar()
 {
+  assert(false);
   if (!tallyflag || !flangevin_allocated) return 0.0;
 
   // capture the very first energy transfer to thermal reservoir
@@ -1091,6 +1671,7 @@ double FixLangevin::compute_scalar()
 
 void *FixLangevin::extract(const char *str, int &dim)
 {
+  assert(false);
   dim = 0;
   if (strcmp(str,"t_target") == 0) {
     return &t_target;
@@ -1127,6 +1708,7 @@ void FixLangevin::grow_arrays(int nmax)
 
 void FixLangevin::copy_arrays(int i, int j, int /*delflag*/)
 {
+  assert(false);
   franprev[j][0] = franprev[i][0];
   franprev[j][1] = franprev[i][1];
   franprev[j][2] = franprev[i][2];
@@ -1141,6 +1723,7 @@ void FixLangevin::copy_arrays(int i, int j, int /*delflag*/)
 
 int FixLangevin::pack_exchange(int i, double *buf)
 {
+  assert(false);
   int n = 0;
   buf[n++] = franprev[i][0];
   buf[n++] = franprev[i][1];
@@ -1157,6 +1740,7 @@ int FixLangevin::pack_exchange(int i, double *buf)
 
 int FixLangevin::unpack_exchange(int nlocal, double *buf)
 {
+  assert(false);
   int n = 0;
   franprev[nlocal][0] = buf[n++];
   franprev[nlocal][1] = buf[n++];

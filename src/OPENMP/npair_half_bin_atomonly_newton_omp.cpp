@@ -290,7 +290,7 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                     double lo = domain_->sublo[dim];
                     double hi = domain_->subhi[dim];
                     bool my_dim_shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
-                    bool out_of_bounds = (x[j][dim] < lo || x[j][dim] > hi);
+                    bool out_of_bounds = (x[j][dim] < lo || x[j][dim] >= hi);
                     if (my_dim_shrinking && out_of_bounds) {
                         shrinking_out_of_bounds = true;
                     } else if (!my_dim_shrinking && out_of_bounds) {
@@ -352,7 +352,7 @@ void NPairHalfBinAtomonlyNewtonOmp::build_stencil_md(NeighList *list, Atom* atom
                         double lo = domain_->sublo[dim];
                         double hi = domain_->subhi[dim];
                         bool my_dim_shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
-                        bool out_of_bounds = (x[j][dim] < lo || x[j][dim] > hi);
+                        bool out_of_bounds = (x[j][dim] < lo || x[j][dim] >= hi);
                         if (my_dim_shrinking && out_of_bounds) {
                             shrinking_out_of_bounds = true;
                         } else if (!my_dim_shrinking && out_of_bounds) {

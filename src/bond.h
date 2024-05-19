@@ -80,6 +80,9 @@ class Bond : protected Pointers {
 
   void write_file(int, char **);
 
+  virtual void init_style_stencil_md() { assert(false); }
+  virtual void compute_stencil_md(int, int, Atom*, bool*, queue_info&, int*, Neighbor*) { assert(false); }
+
  protected:
   int instance_me;    // which Bond class instantiation I am
   int suffix_flag;    // suffix compatibility flag

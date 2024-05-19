@@ -438,6 +438,7 @@ void LAMMPS_NS::data_reduce_thr(double *dall, int nall, int nthreads, int ndim, 
 }
 
 void LAMMPS_NS::data_reduce_thr_stencil_md(double *dall, int nall, int nthreads, int ndim, int tid) {
+    assert(false);
     // NOOP in single-threaded execution.
     if (nthreads == 1) return;
 

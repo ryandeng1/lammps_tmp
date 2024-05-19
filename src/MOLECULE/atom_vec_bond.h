@@ -15,6 +15,10 @@
 // clang-format off
 AtomStyle(bond,AtomVecBond);
 // clang-format on
+#elifdef ATOM_CLASS_STENCIL_MD
+// clang-format off
+AtomStyleStencilMD(bond,AtomVecBond);
+// clang-format on
 #else
 
 #ifndef LMP_ATOM_VEC_BOND_H
@@ -27,9 +31,11 @@ namespace LAMMPS_NS {
 class AtomVecBond : public AtomVec {
  public:
   AtomVecBond(class LAMMPS *);
+  AtomVecBond(class LAMMPS *, class Atom*);
   ~AtomVecBond() override;
 
   void grow_pointers() override;
+  void grow_pointers_stencil_md(Atom* atom_) override;
   void pack_restart_pre(int) override;
   void pack_restart_post(int) override;
   void unpack_restart_init(int) override;

@@ -36,6 +36,8 @@ class CommBrick : public Comm {
   void exchange_stencil_md_initial_send_to_dep0() override;                     // move atoms to new procs, stencil_md version
   void exchange_stencil_md_initial_send(std::vector<MPI_Request>& r) override;                     // move atoms to new procs, stencil_md version
   void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;                     // move atoms to new procs, stencil_md version
+
+  void borders_stencil_md_initial_send(std::vector<MPI_Request>& r) override;                     // move atoms to new procs, stencil_md version
   void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
 
   void exchange_stencil_md_initial_send_to_zoid(Atom*, queue_info&, queue_info&, int timestep) override;                     // move atoms to new procs, stencil_md version
@@ -129,6 +131,7 @@ class CommBrick : public Comm {
   int send_list_sendnum_stencil_md[26][2 * (NUM_TIMESTEPS_IN_PARALLEL + 1)];
 
   int stencil_md_initial_exchange_nsend;
+  int stencil_md_initial_borders_nsend;
 
   int maxsend, maxrecv;    // current size of send/recv buffer
   int smax, rmax;          // max size in atoms of single borders send/recv

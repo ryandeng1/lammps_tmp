@@ -1949,12 +1949,15 @@ void Neighbor::init_topology()
     else bondwhich = ALL;
     if (!neigh_bond || bondwhich != old_bondwhich) {
       delete neigh_bond;
-      if (bondwhich == ALL)
-        neigh_bond = new NTopoBondAll(lmp);
-      else if (bondwhich == PARTIAL)
-        neigh_bond = new NTopoBondPartial(lmp);
-      else if (bondwhich == TEMPLATE)
-        neigh_bond = new NTopoBondTemplate(lmp);
+      if (bondwhich == ALL) {
+          neigh_bond = new NTopoBondAll(lmp);
+      } else if (bondwhich == PARTIAL) {
+          assert(false);
+          neigh_bond = new NTopoBondPartial(lmp);
+      } else if (bondwhich == TEMPLATE) {
+          assert(false);
+          neigh_bond = new NTopoBondTemplate(lmp);
+      }
     }
   }
 
@@ -2866,7 +2869,9 @@ void Neighbor::build_stencil_md(int topoflag, Atom* atom_, Domain* domain_, Comm
 
     // build topology lists for bonds/angles/etc
 
-    if ((atom->molecular != Atom::ATOMIC) && topoflag) build_topology();
+    if ((atom->molecular != Atom::ATOMIC) && topoflag) {
+        build_topology_stencil_md(atom_, domain_, zoid);
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -2882,20 +2887,49 @@ void Neighbor::build_topology()
     bondlist = neigh_bond->bondlist;
   }
   if (force->angle) {
+    assert(false);
     neigh_angle->build();
     nanglelist = neigh_angle->nanglelist;
     anglelist = neigh_angle->anglelist;
   }
   if (force->dihedral) {
+    assert(false);
     neigh_dihedral->build();
     ndihedrallist = neigh_dihedral->ndihedrallist;
     dihedrallist = neigh_dihedral->dihedrallist;
   }
   if (force->improper) {
+    assert(false);
     neigh_improper->build();
     nimproperlist = neigh_improper->nimproperlist;
     improperlist = neigh_improper->improperlist;
   }
+}
+
+void Neighbor::build_topology_stencil_md(Atom* atom_, Domain* domain_, queue_info& zoid) {
+    if (force->bond) {
+        neigh_bond->build_stencil_md(atom_, domain_, zoid);
+        nbondlist = neigh_bond->nbondlist;
+        bondlist = neigh_bond->bondlist;
+    }
+    if (force->angle) {
+        assert(false);
+        neigh_angle->build();
+        nanglelist = neigh_angle->nanglelist;
+        anglelist = neigh_angle->anglelist;
+    }
+    if (force->dihedral) {
+        assert(false);
+        neigh_dihedral->build();
+        ndihedrallist = neigh_dihedral->ndihedrallist;
+        dihedrallist = neigh_dihedral->dihedrallist;
+    }
+    if (force->improper) {
+        assert(false);
+        neigh_improper->build();
+        nimproperlist = neigh_improper->nimproperlist;
+        improperlist = neigh_improper->improperlist;
+    }
 }
 
 /* ----------------------------------------------------------------------

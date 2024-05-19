@@ -136,6 +136,7 @@ void FixNVE::initial_integrate_stencil_md(int /*vflag*/, Atom* atom_, Atom* next
 
     double **x = atom_->x;
     double **v = atom_->v;
+    double **next_v = next->v;
     double **f = atom_->f;
     double **eval_f = atom_->eval_f_stencil_md;
     double **next_x = next->x;
@@ -172,6 +173,11 @@ void FixNVE::initial_integrate_stencil_md(int /*vflag*/, Atom* atom_, Atom* next
                 v[i][2] += dtfm * (f[i][2] + eval_f[i][2]);
 
                 int next_idx = atom_idx_mapping[i];
+                assert(next_idx != -1);
+                next_v[next_idx][0] = v[i][0];
+                next_v[next_idx][1] = v[i][1];
+                next_v[next_idx][2] = v[i][2];
+
                 next_x[next_idx][0] = x[i][0] + dtv * v[i][0];
                 next_x[next_idx][1] = x[i][1] + dtv * v[i][1];
                 next_x[next_idx][2] = x[i][2] + dtv * v[i][2];
@@ -255,6 +261,7 @@ void FixNVE::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neigh
             }
 
     } else {
+        /*
         for (int i = 0; i < nlocal; i++) {
             int next_idx = atom_idx_mapping[i];
             assert(next_idx != -1);
@@ -262,6 +269,7 @@ void FixNVE::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neigh
             next_v[next_idx][1] = v[i][1];
             next_v[next_idx][2] = v[i][2];
         }
+        */
 
         for (int i = 0; i < next_nlocal; i++) {
             if (mask[i] & groupbit) {

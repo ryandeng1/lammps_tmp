@@ -27,6 +27,7 @@ class NTopo : protected Pointers {
   ~NTopo() override;
 
   virtual void build() = 0;
+  virtual void build_stencil_md(Atom*, Domain*, queue_info&) { assert(false); }
 
   double memory_usage();
 
@@ -41,6 +42,7 @@ class NTopo : protected Pointers {
   void allocate_improper();
 
   void bond_check();
+  void bond_check_stencil_md(Atom*);
   void angle_check();
   void dihedral_check(int, int **);
 };

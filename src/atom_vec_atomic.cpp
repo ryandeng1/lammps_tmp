@@ -34,3 +34,18 @@ AtomVecAtomic::AtomVecAtomic(LAMMPS *lmp) : AtomVec(lmp)
 
   setup_fields();
 }
+
+AtomVecAtomic::AtomVecAtomic(LAMMPS *lmp, Atom* atom_) : AtomVec(lmp) {
+    molecular = Atom::ATOMIC;
+    mass_type = PER_TYPE;
+
+    // strings with peratom variables to include in each AtomVec method
+    // strings cannot contain fields in corresponding AtomVec default strings
+    // order of fields in a string does not matter
+    // except: fields_data_atom & fields_data_vel must match data file
+
+    fields_data_atom = {"id", "type", "x"};
+    fields_data_vel = {"id", "v"};
+
+    setup_fields_stencil_md(atom_);
+}

@@ -55,9 +55,9 @@ constexpr int NUM_DEPS = 4;
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
-constexpr double ADDITIONAL_CUTOFF = 0.15;
+constexpr double ADDITIONAL_CUTOFF = 0.4;
 
-constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
+constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
@@ -77,13 +77,15 @@ constexpr bool DEBUG = true;
 
 constexpr int NUM_WORKERS_PER_THREAD = 64;
 
-constexpr bool ONLY_RUN_LAMMPS = true;
+constexpr bool ONLY_RUN_LAMMPS = false;
 
 constexpr bool ONLY_RUN_STENCIL_MD = false;
 
 constexpr bool LAMMPS_USE_CILK = false;
 
 constexpr bool TIME_STENCIL_MD = true;
+
+constexpr bool USE_BOND = true;
 
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},

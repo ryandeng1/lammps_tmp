@@ -84,6 +84,8 @@ class Comm : protected Pointers {
   virtual void exchange_stencil_md_initial_send_to_dep0() { assert(false); };
   virtual void exchange_stencil_md_initial_send(std::vector<MPI_Request>& r) { assert(false); };
   virtual void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) { assert(false); };
+
+  virtual void borders_stencil_md_initial_send(std::vector<MPI_Request>& r) { assert(false); };
   virtual void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) { assert(false); }
 
   virtual void exchange_stencil_md_initial_send_to_zoid(Atom*, queue_info&, queue_info&, int timestep) { assert(false); }

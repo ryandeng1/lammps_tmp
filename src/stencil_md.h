@@ -8,6 +8,7 @@
 #include "force.h"
 #include "modify.h"
 #include "pair.h"
+#include "bond.h"
 #include "atom.h"
 #include "neighbor.h"
 #include "comm.h"
@@ -24,6 +25,18 @@ public:
     void MODIFY_ADD_FIX_PACKAGE_STENCIL_MD(const std::string& fixcmd);
 
     void MODIFY_ADD_COMPUTE_STENCIL_MD(int narg, char **arg);
+
+    void ATOM_STYLE(const std::string &style, int narg, char **arg, int trysuffix);
+
+    void ATOM_SETTINGS();
+
+    void FORCE_SET_SPECIAL(int narg, char **arg);
+
+    void FORCE_CREATE_BOND(const std::string& style, int trysuffix);
+
+    void FORCE_BOND_SETTINGS(int narg, char **arg);
+
+    void FORCE_BOND_COEFF(int narg, char **arg);
 
     void FORCE_PAIR_COEFF(int narg, char **arg);
 

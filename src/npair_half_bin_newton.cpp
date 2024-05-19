@@ -64,6 +64,8 @@ void NPairHalfBinNewton::build(NeighList *list)
   int inum = 0;
   ipage->reset();
 
+  std::cout << "moltemplate: " << moltemplate << " molecular: " << molecular << std::endl;
+
   for (i = 0; i < nlocal; i++) {
     n = 0;
     neighptr = ipage->vget();
@@ -101,13 +103,19 @@ void NPairHalfBinNewton::build(NeighList *list)
 
       if (rsq <= cutneighsq[itype][jtype]) {
         if (molecular != Atom::ATOMIC) {
-          if (!moltemplate)
-            which = find_special(special[i],nspecial[i],tag[j]);
-          else if (imol >= 0)
-            which = find_special(onemols[imol]->special[iatom],
-                                 onemols[imol]->nspecial[iatom],
-                                 tag[j]-tagprev);
-          else which = 0;
+          if (!moltemplate) {
+              // RYAN: this is the path that is taken
+              which = find_special(special[i],nspecial[i],tag[j]);
+          } else if (imol >= 0) {
+              assert(false);
+              which = find_special(onemols[imol]->special[iatom],
+                                   onemols[imol]->nspecial[iatom],
+                                   tag[j] - tagprev);
+          } else {
+              assert(false);
+              which = 0;
+          }
+
           if (which == 0) neighptr[n++] = j;
           else if (domain->minimum_image_check(delx,dely,delz))
             neighptr[n++] = j;
@@ -158,4 +166,268 @@ void NPairHalfBinNewton::build(NeighList *list)
   }
 
   list->inum = inum;
+}
+
+void NPairHalfBinNewton::build_stencil_md(NeighList *list, Atom* atom_, Domain* domain_, queue_info& zoid) {
+    if (zoid.num == 0) {
+        std::cout << "zoid: " << zoid.num << " npairhalfbinnewton stencilmd build start" << std::endl;
+    }
+    int i,j,k,n,itype,jtype,ibin;
+    double xtmp,ytmp,ztmp,delx,dely,delz,rsq;
+    int *neighptr;
+    int moltemplate;
+    int imol, iatom;
+    tagint tagprev;
+
+    double **x = atom_->x;
+    int *type = atom_->type;
+    int *mask = atom_->mask;
+    tagint *tag = atom_->tag;
+    tagint *molecule = atom_->molecule;
+    tagint **special = atom_->special;
+    int **nspecial = atom_->nspecial;
+    int nlocal = atom_->nlocal;
+    if (includegroup) nlocal = atom_->nfirst;
+
+    int *molindex = atom_->molindex;
+    int *molatom = atom_->molatom;
+    Molecule **onemols = atom_->avec->onemols;
+    if (molecular == Atom::TEMPLATE) moltemplate = 1;
+    else moltemplate = 0;
+
+    int *ilist = list->ilist;
+    int *numneigh = list->numneigh;
+    int **firstneigh = list->firstneigh;
+    MyPage<int> *ipage = list->ipage;
+
+    int inum = 0;
+    ipage->reset();
+
+    for (i = 0; i < nlocal; i++) {
+        n = 0;
+        neighptr = ipage->vget();
+
+        itype = type[i];
+        xtmp = x[i][0];
+        ytmp = x[i][1];
+        ztmp = x[i][2];
+
+        if (moltemplate) {
+            assert(false);
+            imol = molindex[i];
+            iatom = molatom[i];
+            tagprev = tag[i] - iatom - 1;
+        }
+
+        std::set<int> neighbor_idxs;
+
+        // loop over rest of atoms in i's bin, ghosts are at end of linked list
+        // if j is owned atom, store it, since j is beyond i in linked list
+        // if j is ghost, only store if j coords are "above and to the right" of i
+
+        for (j = bins[i]; j >= 0; j = bins[j]) {
+            if (i == j) {
+                continue;
+            }
+            /*
+            if (j >= nlocal) {
+                if (x[j][2] < ztmp) continue;
+                if (x[j][2] == ztmp) {
+                    if (x[j][1] < ytmp) continue;
+                    if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
+                }
+            }
+            */
+
+            if (j < nlocal) {
+                if (x[j][2] < ztmp) continue;
+                if (x[j][2] == ztmp) {
+                    if (x[j][1] < ytmp) continue;
+                    if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
+                }
+            }
+
+            // add an edge if the ghost atom is ghost in a shrinking dimension
+            if (j >= nlocal) {
+                bool shrinking_out_of_bounds = false;
+                bool expanding_out_of_bounds = false;
+
+                bool debug = false;
+                double debug_lo[3] = {0};
+                double debug_hi[3] = {0};
+                bool debug_ghost_edge[3] = {false, false, false};
+
+                for (int dim = 0; dim < 3; dim++) {
+                    double lo = domain_->sublo[dim];
+                    double hi = domain_->subhi[dim];
+                    bool my_dim_shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
+                    bool out_of_bounds = (x[j][dim] < lo || x[j][dim] >= hi);
+                    if (my_dim_shrinking && out_of_bounds) {
+                        shrinking_out_of_bounds = true;
+                    } else if (!my_dim_shrinking && out_of_bounds) {
+                        expanding_out_of_bounds = true;
+                    }
+
+                    debug_lo[dim] = lo;
+                    debug_hi[dim] = hi;
+                }
+
+                bool add_ghost_edge = shrinking_out_of_bounds;
+
+                if (!add_ghost_edge) {
+                    continue;
+                }
+            }
+
+            jtype = type[j];
+            if (exclude && exclusion(i,j,itype,jtype,mask,molecule)) continue;
+
+            delx = xtmp - x[j][0];
+            dely = ytmp - x[j][1];
+            delz = ztmp - x[j][2];
+            rsq = delx*delx + dely*dely + delz*delz;
+
+            if (rsq <= cutneighsq[itype][jtype]) {
+                int which;
+                if (molecular != Atom::ATOMIC) {
+                    if (!moltemplate) {
+                        // RYAN: this is the path that is taken
+                        which = find_special(special[i],nspecial[i],tag[j]);
+                    } else if (imol >= 0) {
+                        assert(false);
+                        which = find_special(onemols[imol]->special[iatom],
+                                             onemols[imol]->nspecial[iatom],
+                                             tag[j] - tagprev);
+                    } else {
+                        assert(false);
+                        which = 0;
+                    }
+
+                    if (which == 0) {
+                        neighptr[n++] = j;
+                        neighbor_idxs.insert(j);
+                    } else if (domain->minimum_image_check(delx,dely,delz)) {
+                        neighptr[n++] = j;
+                        neighbor_idxs.insert(j);
+                    } else if (which > 0) {
+                        neighptr[n++] = j ^ (which << SBBITS);
+                        neighbor_idxs.insert(j);
+                    }
+                    // OLD: if (which >= 0) neighptr[n++] = j ^ (which << SBBITS);
+                } else {
+                    neighptr[n++] = j;
+                    neighbor_idxs.insert(j);
+                }
+                // assert(neighbor_idxs.find(j) == neighbor_idxs.end());
+                // neighbor_idxs.insert(j);
+                // neighptr[n++] = j;
+            }
+        }
+
+        // loop over all atoms in other bins in stencil, store every pair
+
+        ibin = atom2bin[i];
+
+        for (k = 0; k < nstencil; k++) {
+            for (j = binhead[ibin+stencil[k]]; j >= 0; j = bins[j]) {
+                if (i == j) {
+                    continue;
+                }
+                if (neighbor_idxs.find(j) != neighbor_idxs.end()) {
+                    continue;
+                }
+                // add an edge if the ghost atom is ghost in a shrinking dimension
+                if (j < nlocal) {
+                    if (x[j][2] < ztmp) continue;
+                    if (x[j][2] == ztmp) {
+                        if (x[j][1] < ytmp) continue;
+                        if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
+                    }
+                }
+
+                if (j >= nlocal) {
+                    bool shrinking_out_of_bounds = false;
+                    bool expanding_out_of_bounds = false;
+
+                    for (int dim = 0; dim < 3; dim++) {
+                        double lo = domain_->sublo[dim];
+                        double hi = domain_->subhi[dim];
+                        bool my_dim_shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
+                        bool out_of_bounds = (x[j][dim] < lo || x[j][dim] >= hi);
+                        if (my_dim_shrinking && out_of_bounds) {
+                            shrinking_out_of_bounds = true;
+                        } else if (!my_dim_shrinking && out_of_bounds) {
+                            expanding_out_of_bounds = true;
+                        }
+                    }
+
+                    bool add_ghost_edge = shrinking_out_of_bounds;
+
+                    if (!add_ghost_edge) {
+                        continue;
+                    }
+                }
+
+                jtype = type[j];
+                if (exclude && exclusion(i,j,itype,jtype,mask,molecule)) continue;
+
+                delx = xtmp - x[j][0];
+                dely = ytmp - x[j][1];
+                delz = ztmp - x[j][2];
+                rsq = delx*delx + dely*dely + delz*delz;
+
+                if (rsq <= cutneighsq[itype][jtype]) {
+                    if (molecular != Atom::ATOMIC) {
+                        int which;
+                        if (!moltemplate) {
+                            which = find_special(special[i], nspecial[i], tag[j]);
+                        } else if (imol >= 0) {
+                            which = find_special(onemols[imol]->special[iatom],
+                                                 onemols[imol]->nspecial[iatom],
+                                                 tag[j] - tagprev);
+                        } else {
+                            which = 0;
+                        }
+
+                        if (which == 0) {
+                            neighptr[n++] = j;
+                            assert(neighbor_idxs.find(j) == neighbor_idxs.end());
+                            neighbor_idxs.insert(j);
+                        } else if (domain->minimum_image_check(delx,dely,delz)) {
+                            neighptr[n++] = j;
+                            assert(neighbor_idxs.find(j) == neighbor_idxs.end());
+                            neighbor_idxs.insert(j);
+                        } else if (which > 0) {
+                            neighptr[n++] = j ^ (which << SBBITS);
+                            assert(neighbor_idxs.find(j) == neighbor_idxs.end());
+                            neighbor_idxs.insert(j);
+                        }
+                        // OLD: if (which >= 0) neighptr[n++] = j ^ (which << SBBITS);
+                    } else {
+                        neighptr[n++] = j;
+                        assert(neighbor_idxs.find(j) == neighbor_idxs.end());
+                        neighbor_idxs.insert(j);
+                    }
+
+                    /*
+                    if (neighbor_idxs.find(j) != neighbor_idxs.end()) {
+                        std::cout << RED << "zoid: " << zoid.num << " src idx: " << i << " repeated idx: " << j << RESET_COLOR << std::endl;
+                    }
+                    assert(neighbor_idxs.find(j) == neighbor_idxs.end());
+                    neighbor_idxs.insert(j);
+                    neighptr[n++] = j;
+                    */
+                }
+            }
+        }
+
+        ilist[inum++] = i;
+        firstneigh[i] = neighptr;
+        numneigh[i] = n;
+        ipage->vgot(n);
+        if (ipage->status())
+            error->one(FLERR,"Neighbor list overflow, boost neigh_modify one");
+    }
+
+    list->inum = inum;
 }

@@ -229,7 +229,11 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     double *desph = atom_->desph;
     double *drho = atom_->drho;
 
-    // wsp_t start = wsp_getworkspan();
+    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
+        ThrData *thr = fix->get_thr(tid);
+        thr->init_force(nall,f_,torque,erforce,desph,drho);
+    }
+
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // each thread works on a fixed chunk of atoms.
         const int idelta = 1 + inum / nthreads_to_use;
@@ -240,8 +244,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         ThrData *thr = fix->get_thr(tid);
         thr->timer(Timer::START);
         ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
-
-        thr->init_force(nall,f_,torque,erforce,desph,drho);
 
         if (evflag) {
             if (eflag) {
@@ -267,16 +269,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         thr->timer(Timer::PAIR);
     }
 
-    /*
-    wsp_t end = wsp_getworkspan();
-    wsp_t elapsed = wsp_sub(end, start);
-    if (zoid.num == 0) {
-        wsp_dump(elapsed, "compute");
-    }
-    */
-
-    // *num_eval += num_edges;
-
     // try new reduce
     if (nthreads_to_use == 1) {
         return;
@@ -289,19 +281,13 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     constexpr int CHUNK_SIZE = 1024;
 
     // start = wsp_getworkspan();
+    /*
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
         for (int n = 1; n < nthreads_to_use; n++) {
             for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
                 f[j] += f[n * nvals + j];
             }
         }
-    }
-
-    /*
-    end = wsp_getworkspan();
-    elapsed = wsp_sub(end, start);
-    if (zoid.num == 0) {
-        wsp_dump(elapsed, "reduce");
     }
     */
 
@@ -381,7 +367,6 @@ void PairLJCutOMP::eval(int iifrom, int iito, ThrData * const thr)
       jtype = type[j];
 
       if (rsq < cutsqi[jtype]) {
-        // num_accepted_edges++;
         r2inv = 1.0/rsq;
         r6inv = r2inv*r2inv*r2inv;
         forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
@@ -467,7 +452,6 @@ __attribute__((always_inline)) void PairLJCutOMP::eval_stencil_md(int iifrom, in
             int jtype = type[j];
 
             if (rsq < cutsqi[jtype]) {
-                // num_accepted_edges++;
                 double r2inv = 1.0/rsq;
                 double r6inv = r2inv*r2inv*r2inv;
                 double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);

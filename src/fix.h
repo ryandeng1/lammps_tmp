@@ -259,6 +259,10 @@ class Fix : protected Pointers {
       assert(false);
   }
 
+  virtual void post_force_stencil_md(int, Atom*) {
+      assert(false);
+  }
+
   virtual void setup_stencil_md(int, Atom*) {
       assert(false);
   }

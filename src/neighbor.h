@@ -173,6 +173,7 @@ class Neighbor : protected Pointers {
   void setup_bins_stencil_md(Atom*, Domain*, Comm*);
   virtual void build_stencil_md(int, Atom*, Domain*, Comm*, queue_info&);          // build all perpetual neighbor lists
   virtual void init_stencil_md(Domain*);
+  virtual void build_topology_stencil_md(Atom*, Domain*, queue_info&);    // pairwise topology neighbor lists
 
  protected:
   int me, nprocs;

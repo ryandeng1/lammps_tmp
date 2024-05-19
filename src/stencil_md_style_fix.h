@@ -4,6 +4,7 @@
 
 #include "fix_nvt.h"
 #include "fix_nve.h"
+#include "fix_langevin.h"
 
 #ifdef LMP_OPENMP
 #include "fix_nve_omp.h"

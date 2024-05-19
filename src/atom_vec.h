@@ -111,8 +111,10 @@ class AtomVec : protected Pointers {
   virtual void grow_stencil_md(int, Atom*);
 
   // virtual int pack_border_stencil_md(int, int*, double*, int, int*, Atom*) {return 0;}
-  virtual int pack_border_stencil_md(int, int*, double*, int*, int**);
+  virtual int pack_border_stencil_md(int, double*);
   virtual int unpack_border_stencil_md(int, int, double*, Atom*, int);
+
+  virtual int unpack_border_stencil_md(double *, Atom*);
 
   virtual int pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs, int* total_num_elems_send_force, int* num_send_force, int** force_idx_list, int** force_size_list,
                                               int num_pos_segments, bool* segment_types, int* segment_idxs, int* segment_lengths,
@@ -265,6 +267,10 @@ protected:
   void setup_fields();
   int process_fields(const std::vector<std::string> &, const std::vector<std::string> &, Method *);
   void init_method(int, Method *);
+
+  void setup_fields_stencil_md(Atom* atom_);
+  int process_fields_stencil_md(const std::vector<std::string> &, const std::vector<std::string> &, Method *, Atom* atom_);
+  void init_method_stencil_md(int, Method *, Atom *);
 };
 
 }    // namespace LAMMPS_NS

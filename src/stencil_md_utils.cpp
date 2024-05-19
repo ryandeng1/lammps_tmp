@@ -186,8 +186,7 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
   queue_info initial_zoid;
   cuts_t curr_cuts_t;
 
-  // lattice is equivalent to hi
-  double lattice[3] = {hi[0], hi[1], hi[2]};
+  double lattice[3] = {hi[0] - lo[0], hi[1] - lo[0], hi[2] - lo[2]};
 
   for (int i = 0; i < 3; i++) {
     curr_cuts_t.cuts[i].lower = lo[i];
@@ -278,6 +277,7 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
           left_zoid_info.where[dim] = LEFT;
           if (!(left_zoid.cuts[dim].lower <= left_zoid.cuts[dim].upper)) {
             std::cout << "ERROR ALERT" << std::endl;
+            assert(false);
             // print_cuts_t(left_zoid);
           }
 
@@ -322,7 +322,6 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
           middle_zoid_info.where[dim] = MIDDLE;
           queues[next_dep].push_back(middle_zoid_info);
 
-          // if (std::abs(lb - args.lattice[dim * 3 + dim]) <= 1e-8) {
           if (std::abs(lb - lattice[dim]) <= 1e-8) {
             // initial cut
             cuts_t pbc_zoid = q_info.zoid;
@@ -330,8 +329,8 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
             // pbc_zoid.cuts[dim].upper = 2 * slope;
             // pbc_zoid.cuts[dim].lower = start;
             // pbc_zoid.cuts[dim].upper = start;
-            pbc_zoid.cuts[dim].lower = -MIDDLE_ZOID_WIDTH_RATIO * slope;
-            pbc_zoid.cuts[dim].upper = MIDDLE_ZOID_WIDTH_RATIO * slope;
+            pbc_zoid.cuts[dim].lower = lo[dim] - MIDDLE_ZOID_WIDTH_RATIO * slope;
+            pbc_zoid.cuts[dim].upper = lo[dim] + MIDDLE_ZOID_WIDTH_RATIO * slope;
 
             pbc_zoid.cuts[dim].slope_lower = -slope;
             pbc_zoid.cuts[dim].slope_upper = slope;

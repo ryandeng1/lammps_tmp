@@ -223,6 +223,7 @@ void AtomVec::grow(int n)
   v = memory->grow(atom->v, nmax, 3, "atom:v");
   f = memory->grow(atom->f, nmax * comm->nthreads, 3, "atom:f");
 
+  std::cout << "lammps ngrow: " << ngrow << " nmax: " << nmax << std::endl;
   for (int i = 0; i < ngrow; i++) {
     pdata = mgrow.pdata[i];
     datatype = mgrow.datatype[i];
@@ -258,8 +259,10 @@ void AtomVec::grow(int n)
     }
   }
 
-  for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
-    modify->fix[atom->extra_grow[iextra]]->grow_arrays(nmax);
+  for (int iextra = 0; iextra < atom->nextra_grow; iextra++) {
+      assert(false);
+      modify->fix[atom->extra_grow[iextra]]->grow_arrays(nmax);
+  }
 
   grow_pointers();
 }
@@ -321,8 +324,10 @@ void AtomVec::grow_stencil_md(int n, Atom* atom_)
         }
     }
 
-    for (int iextra = 0; iextra < atom_->nextra_grow; iextra++)
+    for (int iextra = 0; iextra < atom_->nextra_grow; iextra++) {
+        assert(false);
         modify->fix[atom->extra_grow[iextra]]->grow_arrays(nmax);
+    }
 
     grow_pointers_stencil_md(atom_);
 }
@@ -1149,6 +1154,135 @@ void AtomVec::unpack_border(int n, int first, double *buf)
       m += modify->fix[atom->extra_border[iextra]]->unpack_border(n, first, &buf[m]);
 }
 
+int AtomVec::unpack_border_stencil_md(double* buf, Atom* atom_) {
+    int last_idx;
+    last_idx = atom_->nlocal + atom_->nghost;
+
+    if (last_idx == nmax || atom_->nlocal == 0) {
+        grow_stencil_md(0, atom_);
+    }
+
+    int m = 1;
+    double x0 = buf[m++];
+    double x1 = buf[m++];
+    double x2 = buf[m++];
+
+    tagint tag_ = (tagint) ubuf(buf[m++]).i;
+    int type_ = (int) ubuf(buf[m++]).i;
+    int mask_ = (int) ubuf(buf[m++]).i;
+    int image_ = (imageint) ubuf(buf[m++]).i;
+
+    bool found_tag = false;
+    /*
+    for (int i = 0; i < last_idx; i++) {
+        if (atom_->tag[i] == tag_) {
+            found_tag = true;
+            break;
+        }
+    }
+    */
+
+    assert(!found_tag);
+
+    if (!found_tag) {
+        x[last_idx][0] = x0;
+        x[last_idx][1] = x1;
+        x[last_idx][2] = x2;
+
+        tag[last_idx] = tag_;
+        type[last_idx] = type_;
+        mask[last_idx] = mask_;
+        image[last_idx] = image_;
+
+        if (nborder) {
+            for (int nn = 0; nn < nborder; nn++) {
+                void *pdata = mborder.pdata[nn];
+                int datatype = mborder.datatype[nn];
+                int cols = mborder.cols[nn];
+                if (datatype == Atom::DOUBLE) {
+                    if (cols == 0) {
+                        double *vec = *((double **) pdata);
+                        vec[last_idx] = buf[m++];
+                    } else {
+                        double **array = *((double ***) pdata);
+                        for (int mm = 0; mm < cols; mm++) array[last_idx][mm] = buf[m++];
+                    }
+                } else if (datatype == Atom::INT) {
+                    if (cols == 0) {
+                        int *vec = *((int **) pdata);
+                        vec[last_idx] = (int) ubuf(buf[m++]).i;
+                    } else {
+                        int **array = *((int ***) pdata);
+                        for (int mm = 0; mm < cols; mm++) {
+                            array[last_idx][mm] = (int) ubuf(buf[m++]).i;
+                        }
+                    }
+                } else if (datatype == Atom::BIGINT) {
+                    if (cols == 0) {
+                        bigint *vec = *((bigint **) pdata);
+                        vec[last_idx] = (bigint) ubuf(buf[m++]).i;
+                    } else {
+                        bigint **array = *((bigint ***) pdata);
+                        for (int mm = 0; mm < cols; mm++) array[last_idx][mm] = (bigint) ubuf(buf[m++]).i;
+                    }
+                }
+            }
+        }
+
+        atom_->nghost++;
+    } else {
+        assert(false);
+        if (nborder) {
+            for (int nn = 0; nn < nborder; nn++) {
+                void *pdata = mborder.pdata[nn];
+                int datatype = mborder.datatype[nn];
+                int cols = mborder.cols[nn];
+                if (datatype == Atom::DOUBLE) {
+                    if (cols == 0) {
+                        m++;
+                    } else {
+                        for (int mm = 0; mm < cols; mm++) {
+                            m++;
+                        }
+                    }
+                } else if (datatype == Atom::INT) {
+                    if (cols == 0) {
+                        m++;
+                    } else {
+                        for (int mm = 0; mm < cols; mm++) {
+                            m++;
+                        }
+                    }
+                } else if (datatype == Atom::BIGINT) {
+                    if (cols == 0) {
+                        m++;
+                    } else {
+                        for (int mm = 0; mm < cols; mm++) {
+                            m++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (bonus_flag) {
+        assert(false);
+        // m += unpack_border_bonus(n, first, &buf[m]);
+    }
+
+    if (atom->nextra_border) {
+        assert(false);
+        /*
+        for (int iextra = 0; iextra < atom->nextra_border; iextra++)
+            m += modify->fix[atom->extra_border[iextra]]->unpack_border(n, first, &buf[m]);
+        */
+    }
+
+    assert(m == static_cast<int>(buf[0]));
+    return m;
+}
+
 /* ---------------------------------------------------------------------- */
 
 void AtomVec::unpack_border_vel(int n, int first, double *buf)
@@ -1238,12 +1372,12 @@ int AtomVec::pack_exchange(int i, double *buf)
   buf[m++] = ubuf(image[i]).d;
 
   if (nexchange) {
-    assert(false);
     for (nn = 0; nn < nexchange; nn++) {
       pdata = mexchange.pdata[nn];
       datatype = mexchange.datatype[nn];
       cols = mexchange.cols[nn];
       if (datatype == Atom::DOUBLE) {
+        assert(false);
         if (cols == 0) {
           double *vec = *((double **) pdata);
           buf[m++] = vec[i];
@@ -1280,6 +1414,7 @@ int AtomVec::pack_exchange(int i, double *buf)
         }
       }
       if (datatype == Atom::BIGINT) {
+        assert(false);
         if (cols == 0) {
           bigint *vec = *((bigint **) pdata);
           buf[m++] = ubuf(vec[i]).d;
@@ -1300,11 +1435,16 @@ int AtomVec::pack_exchange(int i, double *buf)
     }
   }
 
-  if (bonus_flag) m += pack_exchange_bonus(i, &buf[m]);
+  if (bonus_flag) {
+      assert(false);
+      m += pack_exchange_bonus(i, &buf[m]);
+  }
 
-  if (atom->nextra_grow)
-    for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
-      m += modify->fix[atom->extra_grow[iextra]]->pack_exchange(i, &buf[m]);
+  if (atom->nextra_grow) {
+      assert(false);
+      for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+          m += modify->fix[atom->extra_grow[iextra]]->pack_exchange(i, &buf[m]);
+  }
 
   buf[0] = m;
   return m;
@@ -1314,6 +1454,7 @@ int AtomVec::pack_exchange(int i, double *buf)
 
 int AtomVec::unpack_exchange(double *buf)
 {
+  std::cout << "LAMMPS unpack exchange" << std::endl;
   int mm, nn, datatype, cols, collength, ncols;
   void *pdata, *plength;
 
@@ -1403,6 +1544,7 @@ int AtomVec::unpack_exchange(double *buf)
 }
 
 int AtomVec::pack_exchange_stencil_md(int i, double *buf, int* pbc) {
+    assert(false);
     int m = 1;
     double dx = pbc[0] * domain->prd[0];
     double dy = pbc[1] * domain->prd[1];
@@ -1420,6 +1562,86 @@ int AtomVec::pack_exchange_stencil_md(int i, double *buf, int* pbc) {
     buf[m++] = ubuf(mask[i]).d;
     buf[m++] = ubuf(image[i]).d;
 
+    if (USE_BOND) {
+        if (nexchange) {
+            for (int nn = 0; nn < nexchange; nn++) {
+                void* pdata = mexchange.pdata[nn];
+                int datatype = mexchange.datatype[nn];
+                int cols = mexchange.cols[nn];
+
+                if (datatype == Atom::DOUBLE) {
+                    if (cols == 0) {
+                        double *vec = *((double **) pdata);
+                        buf[m++] = vec[i];
+                    } else if (cols > 0) {
+                        double **array = *((double ***) pdata);
+                        for (int mm = 0; mm < cols; mm++) buf[m++] = array[i][mm];
+                    } else {
+                        int ncols;
+                        double **array = *((double ***) pdata);
+                        int collength = mexchange.collength[nn];
+                        void* plength = mexchange.plength[nn];
+                        if (collength)
+                            ncols = (*((int ***) plength))[i][collength - 1];
+                        else
+                            ncols = (*((int **) plength))[i];
+                        for (int mm = 0; mm < ncols; mm++) buf[m++] = array[i][mm];
+                    }
+                }
+                if (datatype == Atom::INT) {
+                    if (cols == 0) {
+                        int *vec = *((int **) pdata);
+                        buf[m++] = ubuf(vec[i]).d;
+                    } else if (cols > 0) {
+                        int **array = *((int ***) pdata);
+                        for (int mm = 0; mm < cols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+                    } else {
+                        int ncols;
+                        int **array = *((int ***) pdata);
+                        int collength = mexchange.collength[nn];
+                        void* plength = mexchange.plength[nn];
+                        if (collength)
+                            ncols = (*((int ***) plength))[i][collength - 1];
+                        else
+                            ncols = (*((int **) plength))[i];
+                        for (int mm = 0; mm < ncols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+                    }
+                }
+                if (datatype == Atom::BIGINT) {
+                    if (cols == 0) {
+                        bigint *vec = *((bigint **) pdata);
+                        buf[m++] = ubuf(vec[i]).d;
+                    } else if (cols > 0) {
+                        bigint **array = *((bigint ***) pdata);
+                        for (int mm = 0; mm < cols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+                    } else {
+                        int ncols;
+                        bigint **array = *((bigint ***) pdata);
+                        int collength = mexchange.collength[nn];
+                        void* plength = mexchange.plength[nn];
+                        if (collength)
+                            ncols = (*((int ***) plength))[i][collength - 1];
+                        else
+                            ncols = (*((int **) plength))[i];
+                        for (int mm = 0; mm < ncols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+                    }
+                }
+            }
+        }
+
+        if (bonus_flag) {
+            assert(false);
+            m += pack_exchange_bonus(i, &buf[m]);
+        }
+
+        if (atom->nextra_grow) {
+            assert(false);
+            for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+                m += modify->fix[atom->extra_grow[iextra]]->pack_exchange(i, &buf[m]);
+        }
+
+    }
+
     buf[0] = m;
     return m;
 }
@@ -1435,7 +1657,7 @@ int AtomVec::unpack_exchange_stencil_md(double *buf, Atom *atom_, Domain *domain
         assert(false);
     }
 
-    if (last_idx == nmax) {
+    if (last_idx == nmax || atom_->nlocal == 0) {
         grow_stencil_md(0, atom_);
     }
 
@@ -1454,12 +1676,15 @@ int AtomVec::unpack_exchange_stencil_md(double *buf, Atom *atom_, Domain *domain
     int image_ = (imageint) ubuf(buf[m++]).i;
 
     bool found_tag = false;
+    /*
     for (int i = 0; i < last_idx; i++) {
         if (atom_->tag[i] == tag_) {
             found_tag = true;
             break;
         }
     }
+    */
+    assert(!found_tag);
 
     if (!found_tag) {
         x[last_idx][0] = x0;
@@ -1475,7 +1700,79 @@ int AtomVec::unpack_exchange_stencil_md(double *buf, Atom *atom_, Domain *domain
         mask[last_idx] = mask_;
         image[last_idx] = image_;
 
-        if (atom_->nextra_grow) {
+        if (USE_BOND) {
+            if (nexchange) {
+                for (int nn = 0; nn < nexchange; nn++) {
+                    void *pdata = mexchange.pdata[nn];
+                    int datatype = mexchange.datatype[nn];
+                    int cols = mexchange.cols[nn];
+                    if (datatype == Atom::DOUBLE) {
+                        if (cols == 0) {
+                            double *vec = *((double **) pdata);
+                            vec[last_idx] = buf[m++];
+                        } else if (cols > 0) {
+                            double **array = *((double ***) pdata);
+                            for (int mm = 0; mm < cols; mm++) array[last_idx][mm] = buf[m++];
+                        } else {
+                            int ncols;
+                            double **array = *((double ***) pdata);
+                            int collength = mexchange.collength[nn];
+                            void *plength = mexchange.plength[nn];
+                            if (collength)
+                                ncols = (*((int ***) plength))[last_idx][collength - 1];
+                            else
+                                ncols = (*((int **) plength))[last_idx];
+                            for (int mm = 0; mm < ncols; mm++) array[last_idx][mm] = buf[m++];
+                        }
+                    } else if (datatype == Atom::INT) {
+                        if (cols == 0) {
+                            int *vec = *((int **) pdata);
+                            vec[last_idx] = (int) ubuf(buf[m++]).i;
+                        } else if (cols > 0) {
+                            int **array = *((int ***) pdata);
+                            for (int mm = 0; mm < cols; mm++) array[last_idx][mm] = (int) ubuf(buf[m++]).i;
+                        } else {
+                            int ncols;
+                            int **array = *((int ***) pdata);
+                            int collength = mexchange.collength[nn];
+                            void *plength = mexchange.plength[nn];
+                            if (collength)
+                                ncols = (*((int ***) plength))[last_idx][collength - 1];
+                            else
+                                ncols = (*((int **) plength))[last_idx];
+                            for (int mm = 0; mm < ncols; mm++) {
+                                array[last_idx][mm] = (int) ubuf(buf[m++]).i;
+                            }
+                        }
+                    } else if (datatype == Atom::BIGINT) {
+                        if (cols == 0) {
+                            bigint *vec = *((bigint **) pdata);
+                            vec[last_idx] = (bigint) ubuf(buf[m++]).i;
+                        } else if (cols > 0) {
+                            bigint **array = *((bigint ***) pdata);
+                            for (int mm = 0; mm < cols; mm++) array[last_idx][mm] = (bigint) ubuf(buf[m++]).i;
+                        } else {
+                            int ncols;
+                            bigint **array = *((bigint ***) pdata);
+                            int collength = mexchange.collength[nn];
+                            void *plength = mexchange.plength[nn];
+                            if (collength)
+                                ncols = (*((int ***) plength))[last_idx][collength - 1];
+                            else
+                                ncols = (*((int **) plength))[last_idx];
+                            for (int mm = 0; mm < ncols; mm++) array[last_idx][mm] = (bigint) ubuf(buf[m++]).i;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (bonus_flag) {
+            assert(false);
+            m += unpack_exchange_bonus(last_idx, &buf[m]);
+        }
+
+        if (atom->nextra_grow) {
             assert(false);
             for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
                 m += modify->fix[atom->extra_grow[iextra]]->unpack_exchange(last_idx, &buf[m]);
@@ -1486,13 +1783,87 @@ int AtomVec::unpack_exchange_stencil_md(double *buf, Atom *atom_, Domain *domain
         } else if (flag == LAMMPS_SEND_GHOST) {
             atom_->nghost++;
         }
+    } else {
+        // found_tag occurs when sending/receiving ghost atoms
+        if (USE_BOND) {
+            if (nexchange) {
+                for (int nn = 0; nn < nexchange; nn++) {
+                    void *pdata = mexchange.pdata[nn];
+                    int datatype = mexchange.datatype[nn];
+                    int cols = mexchange.cols[nn];
+                    if (datatype == Atom::DOUBLE) {
+                        if (cols == 0) {
+                            double *vec = *((double **) pdata);
+                            m++;
+                        } else if (cols > 0) {
+                            for (int mm = 0; mm < cols; mm++) {
+                                m++;
+                            }
+                        } else {
+                            int ncols;
+                            int collength = mexchange.collength[nn];
+                            void *plength = mexchange.plength[nn];
+                            if (collength)
+                                ncols = (*((int ***) plength))[last_idx][collength - 1];
+                            else
+                                ncols = (*((int **) plength))[last_idx];
+                            for (int mm = 0; mm < ncols; mm++) {
+                                m++;
+                            }
+                        }
+                    } else if (datatype == Atom::INT) {
+                        if (cols == 0) {
+                            int *vec = *((int **) pdata);
+                            m++;
+                        } else if (cols > 0) {
+                            for (int mm = 0; mm < cols; mm++) {
+                                m++;
+                            }
+                        } else {
+                            int ncols;
+                            int collength = mexchange.collength[nn];
+                            void *plength = mexchange.plength[nn];
+                            if (collength)
+                                ncols = (*((int ***) plength))[last_idx][collength - 1];
+                            else
+                                ncols = (*((int **) plength))[last_idx];
+                            for (int mm = 0; mm < ncols; mm++) {
+                                m++;
+                            }
+                        }
+                    } else if (datatype == Atom::BIGINT) {
+                        if (cols == 0) {
+                            bigint *vec = *((bigint **) pdata);
+                            m++;
+                        } else if (cols > 0) {
+                            bigint **array = *((bigint ***) pdata);
+                            for (int mm = 0; mm < cols; mm++) {
+                                m++;
+                            }
+                        } else {
+                            int ncols;
+                            bigint **array = *((bigint ***) pdata);
+                            int collength = mexchange.collength[nn];
+                            void *plength = mexchange.plength[nn];
+                            if (collength)
+                                ncols = (*((int ***) plength))[last_idx][collength - 1];
+                            else
+                                ncols = (*((int **) plength))[last_idx];
+                            for (int mm = 0; mm < ncols; mm++) {
+                                m++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     return m;
 }
 
 int AtomVec::unpack_border_stencil_md(int n, int first, double *buf, Atom *atom_,
-                                                  int zoid_num) {
+                                      int zoid_num) {
     int i, m, last;
 
     m = 0;
@@ -2412,10 +2783,64 @@ void AtomVec::unpack_data_stencil_md(int num_recv_force, int num_recv_pos,
   }
 }
 
-int AtomVec::pack_border_stencil_md(int n, int *list, double *buf, int *pbc_flag,
-                                                int **pbc) {
-  assert(false);
-  return 0;
+int AtomVec::pack_border_stencil_md(int i, double* buf) {
+    // std::cout << "pack exchange: " << &mexchange << std::endl;
+    int mm, nn, datatype, cols, collength, ncols;
+    void *pdata, *plength;
+
+    int m = 1;
+    buf[m++] = x[i][0];
+    buf[m++] = x[i][1];
+    buf[m++] = x[i][2];
+
+    buf[m++] = ubuf(tag[i]).d;
+    buf[m++] = ubuf(type[i]).d;
+    buf[m++] = ubuf(mask[i]).d;
+    buf[m++] = ubuf(image[i]).d;
+
+    if (nborder) {
+        for (nn = 0; nn < nborder; nn++) {
+            pdata = mborder.pdata[nn];
+            datatype = mborder.datatype[nn];
+            cols = mborder.cols[nn];
+            if (datatype == Atom::DOUBLE) {
+                if (cols == 0) {
+                    double *vec = *((double **) pdata);
+                    buf[m++] = vec[i];
+                } else {
+                    double **array = *((double ***) pdata);
+                    for (mm = 0; mm < cols; mm++) buf[m++] = array[i][mm];
+                }
+            } else if (datatype == Atom::INT) {
+                if (cols == 0) {
+                    int *vec = *((int **) pdata);
+                    buf[m++] = ubuf(vec[i]).d;
+                } else {
+                    int **array = *((int ***) pdata);
+                    for (mm = 0; mm < cols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+                }
+            } else if (datatype == Atom::BIGINT) {
+                if (cols == 0) {
+                    bigint *vec = *((bigint **) pdata);
+                    buf[m++] = ubuf(vec[i]).d;
+                } else {
+                    bigint **array = *((bigint ***) pdata);
+                    for (mm = 0; mm < cols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+                }
+            }
+        }
+    }
+
+    if (bonus_flag) {
+        assert(false);
+    }
+
+    if (atom->nextra_border) {
+        assert(false);
+    }
+
+    buf[0] = m;
+    return m;
 }
 
 void AtomVec::add_local_atom_stencil_md(Atom* atom_, Domain* domain_, double* coord, double* vel, tagint tag_, int type_, int mask_, imageint image_) {
@@ -3078,6 +3503,7 @@ void AtomVec::write_vel(FILE *fp, int n, double **buf)
 
 int AtomVec::pack_bond(tagint **buf)
 {
+  assert(false);
   tagint *tag = atom->tag;
   int *num_bond = atom->num_bond;
   int **bond_type = atom->bond_type;
@@ -3498,6 +3924,125 @@ void AtomVec::setup_fields()
   }
 }
 
+void AtomVec::setup_fields_stencil_md(Atom* atom_) {
+    int n, cols;
+
+    if ((fields_data_atom.size() < 1) || (fields_data_atom[0] != "id"))
+        error->all(FLERR, "Atom style fields_data_atom must have 'id' as first field");
+    if ((fields_data_vel.size() < 2) || (fields_data_vel[0] != "id") || (fields_data_vel[1] != "v"))
+        error->all(FLERR, "Atom style fields_data_vel must have 'id' and 'v' as first two fields");
+
+    // process field strings
+    // return # of fields and matching index into atom.peratom (in Method struct)
+
+    ngrow = process_fields_stencil_md(fields_grow, default_grow, &mgrow, atom_);
+    ncopy = process_fields_stencil_md(fields_copy, default_copy, &mcopy, atom_);
+    ncomm = process_fields_stencil_md(fields_comm, default_comm, &mcomm, atom_);
+    ncomm_vel = process_fields_stencil_md(fields_comm_vel, default_comm_vel, &mcomm_vel, atom_);
+    nreverse = process_fields_stencil_md(fields_reverse, default_reverse, &mreverse, atom_);
+    nborder = process_fields_stencil_md(fields_border, default_border, &mborder, atom_);
+    nborder_vel = process_fields_stencil_md(fields_border_vel, default_border_vel, &mborder_vel, atom_);
+    nexchange = process_fields_stencil_md(fields_exchange, default_exchange, &mexchange, atom_);
+    nrestart = process_fields_stencil_md(fields_restart, default_restart, &mrestart, atom_);
+    ncreate = process_fields_stencil_md(fields_create, default_create, &mcreate, atom_);
+    ndata_atom = process_fields_stencil_md(fields_data_atom, default_data_atom, &mdata_atom, atom_);
+    ndata_vel = process_fields_stencil_md(fields_data_vel, default_data_vel, &mdata_vel, atom_);
+
+    // populate field-based data struct for each method to use
+
+    init_method_stencil_md(ngrow, &mgrow, atom_);
+    init_method_stencil_md(ncopy, &mcopy, atom_);
+    init_method_stencil_md(ncomm, &mcomm, atom_);
+    init_method_stencil_md(ncomm_vel, &mcomm_vel, atom_);
+    init_method_stencil_md(nreverse, &mreverse, atom_);
+    init_method_stencil_md(nborder, &mborder, atom_);
+    init_method_stencil_md(nborder_vel, &mborder_vel, atom_);
+    init_method_stencil_md(nexchange, &mexchange, atom_);
+    init_method_stencil_md(nrestart, &mrestart, atom_);
+    init_method_stencil_md(ncreate, &mcreate, atom_);
+    init_method_stencil_md(ndata_atom, &mdata_atom, atom_);
+    init_method_stencil_md(ndata_vel, &mdata_vel, atom_);
+
+    // create threads data struct for grow and memory_usage to use
+
+    if (ngrow)
+        threads = new bool[ngrow];
+    else
+        threads = nullptr;
+    for (int i = 0; i < ngrow; i++) {
+        const auto &field = atom_->peratom[mgrow.index[i]];
+        threads[i] = field.threadflag == 1;
+    }
+
+    // set style-specific sizes
+
+    comm_x_only = 1;
+    if (ncomm) comm_x_only = 0;
+    if (bonus_flag && size_forward_bonus) comm_x_only = 0;
+
+    if (nreverse == 0)
+        comm_f_only = 1;
+    else
+        comm_f_only = 0;
+
+    size_forward = 3;
+    for (n = 0; n < ncomm; n++) {
+        cols = mcomm.cols[n];
+        if (cols == 0)
+            size_forward++;
+        else
+            size_forward += cols;
+    }
+    if (bonus_flag) size_forward += size_forward_bonus;
+
+    size_reverse = 3;
+    for (n = 0; n < nreverse; n++) {
+        cols = mreverse.cols[n];
+        if (cols == 0)
+            size_reverse++;
+        else
+            size_reverse += cols;
+    }
+
+    size_border = 6;
+    for (n = 0; n < nborder; n++) {
+        cols = mborder.cols[n];
+        if (cols == 0)
+            size_border++;
+        else
+            size_border += cols;
+    }
+    if (bonus_flag) size_border += size_border_bonus;
+
+    size_velocity = 3;
+    for (n = 0; n < ncomm_vel; n++) {
+        cols = mcomm_vel.cols[n];
+        if (cols == 0)
+            size_velocity++;
+        else
+            size_velocity += cols;
+    }
+
+    size_data_atom = 0;
+    for (n = 0; n < ndata_atom; n++) {
+        cols = mdata_atom.cols[n];
+        if (atom_->peratom[mdata_atom.index[n]].name == "x") xcol_data = size_data_atom + 1;
+        if (cols == 0)
+            size_data_atom++;
+        else
+            size_data_atom += cols;
+    }
+
+    size_data_vel = 0;
+    for (n = 0; n < ndata_vel; n++) {
+        cols = mdata_vel.cols[n];
+        if (cols == 0)
+            size_data_vel++;
+        else
+            size_data_vel += cols;
+    }
+}
+
 /* ----------------------------------------------------------------------
    process a single field string
 ------------------------------------------------------------------------- */
@@ -3543,6 +4088,47 @@ int AtomVec::process_fields(const std::vector<std::string> &words,
   return nfield;
 }
 
+int AtomVec::process_fields_stencil_md(const std::vector<std::string> &words,
+                                       const std::vector<std::string> &def_words,
+                                       Method *method, Atom* atom_) {
+    int nfield = words.size();
+    int ndef = def_words.size();
+
+    // process fields one by one, add to index vector
+
+    const auto &peratom = atom_->peratom;
+    const int nperatom = peratom.size();
+
+    // allocate memory in method
+    method->resize(nfield);
+
+    std::vector<int> &index = method->index;
+    int match;
+
+    for (int i = 0; i < nfield; i++) {
+        const std::string &field = words[i];
+
+        // find field in master Atom::peratom list
+
+        for (match = 0; match < nperatom; match++)
+            if (field == peratom[match].name) break;
+        if (match == nperatom) error->all(FLERR, "Peratom field {} not recognized", field);
+        index[i] = match;
+
+        // error if field appears multiple times
+
+        for (match = 0; match < i; match++)
+            if (index[i] == index[match]) error->all(FLERR, "Peratom field {} is repeated", field);
+
+        // error if field is in default str
+
+        for (match = 0; match < ndef; match++)
+            if (field == def_words[match]) error->all(FLERR, "Peratom field {} is a default", field);
+    }
+
+    return nfield;
+}
+
 /* ----------------------------------------------------------------------
    init method data structs for processing fields
 ------------------------------------------------------------------------- */
@@ -3560,6 +4146,20 @@ void AtomVec::init_method(int nfield, Method *method)
       method->plength[i] = field.address_length;
     }
   }
+}
+
+void AtomVec::init_method_stencil_md(int nfield, Method *method, Atom* atom_) {
+    for (int i = 0; i < nfield; i++) {
+        const auto &field = atom_->peratom[method->index[i]];
+        method->pdata[i] = (void *) field.address;
+        method->datatype[i] = field.datatype;
+        method->cols[i] = field.cols;
+        if (method->cols[i] < 0) {
+            method->maxcols[i] = field.address_maxcols;
+            method->collength[i] = field.collength;
+            method->plength[i] = field.address_length;
+        }
+    }
 }
 
 /* ----------------------------------------------------------------------

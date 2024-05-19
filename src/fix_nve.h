@@ -44,6 +44,8 @@ class FixNVE : public Fix {
   void init_stencil_md(Atom*, Modify*, Neighbor*) override;
   void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
   void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*) override;
+  void setup_stencil_md(int, Atom*) override {}
+  void post_force_stencil_md(int, Atom*) override {}
 
  protected:
   double dtv, dtf;

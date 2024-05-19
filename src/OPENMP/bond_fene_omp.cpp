@@ -28,10 +28,13 @@
 #include "update.h"
 
 #include <cmath>
+#include <cilk/cilk.h>
 
 #include "suffix.h"
 using namespace LAMMPS_NS;
 using MathConst::MY_CUBEROOT2;
+
+constexpr int target_tag = 12777;
 
 /* ---------------------------------------------------------------------- */
 
@@ -39,6 +42,12 @@ BondFENEOMP::BondFENEOMP(class LAMMPS *lmp)
   : BondFENE(lmp), ThrOMP(lmp,THR_BOND)
 {
   suffix_flag |= Suffix::OMP;
+}
+
+BondFENEOMP::BondFENEOMP(class LAMMPS *lmp, class Modify* modify_)
+        : BondFENE(lmp), ThrOMP(lmp, modify_, THR_BOND)
+{
+    suffix_flag |= Suffix::OMP;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -50,6 +59,57 @@ void BondFENEOMP::compute(int eflag, int vflag)
   const int nall = atom->nlocal + atom->nghost;
   const int nthreads = comm->nthreads;
   const int inum = neighbor->nbondlist;
+
+  if (LAMMPS_USE_CILK) {
+      cilk_for(int tid = 0; tid < nthreads; tid++) {
+          const int idelta = 1 + inum / nthreads;
+          int ifrom = tid * idelta;
+          int ito = ((ifrom + idelta) > inum) ? inum : ifrom + idelta;
+
+          ThrData *thr = fix->get_thr(tid);
+          thr->timer(Timer::START);
+          ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
+
+          if (inum > 0) {
+              if (evflag) {
+                  if (eflag) {
+                      if (force->newton_bond) eval<1,1,1>(ifrom, ito, thr);
+                      else eval<1,1,0>(ifrom, ito, thr);
+                  } else {
+                      if (force->newton_bond) eval<1,0,1>(ifrom, ito, thr);
+                      else eval<1,0,0>(ifrom, ito, thr);
+                  }
+              } else {
+                  if (force->newton_bond) eval<0,0,1>(ifrom, ito, thr);
+                  else eval<0,0,0>(ifrom, ito, thr);
+              }
+          }
+          thr->timer(Timer::BOND);
+      }
+
+      if (comm->nthreads == 1) {
+          return;
+      }
+
+      double* f = &(atom->f[0][0]);
+      int nvals = nall * 3;
+
+      constexpr int CHUNK_SIZE = 512;
+
+      // start = wsp_getworkspan();
+
+      /*
+      cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
+          for (int n = 1; n < comm->nthreads; n++) {
+              for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
+                  f[j] += f[n * nvals + j];
+              }
+          }
+      }
+      */
+
+      return;
+  }
 
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(eflag,vflag)
@@ -79,6 +139,86 @@ void BondFENEOMP::compute(int eflag, int vflag)
     thr->timer(Timer::BOND);
     reduce_thr(this, eflag, vflag, thr);
   } // end of omp parallel region
+}
+
+void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval, Neighbor* neighbor_) {
+    ev_init(eflag,vflag);
+    const int nall = atom_->nlocal + atom_->nghost;
+    const int nlocal = atom_->nlocal;
+    const int nthreads = comm->nthreads;
+    const int inum = neighbor_->nbondlist;
+    double **f_ = atom_->eval_f_stencil_md;
+
+    int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
+
+    if (nthreads_to_use < 1) {
+        nthreads_to_use = 1;
+    }
+
+    if (nthreads_to_use > nthreads) {
+        nthreads_to_use = nthreads;
+    }
+
+    for (int tid = 0; tid < nthreads_to_use; tid++) {
+        // each thread works on a fixed chunk of atoms.
+        const int idelta = 1 + inum / nthreads_to_use;
+        int ifrom = tid * idelta;
+        int ito = ((ifrom + idelta) > inum) ? inum : ifrom + idelta;
+
+        // loop_setup_thr(ifrom, ito, tid, inum, nthreads);
+        ThrData *thr = fix->get_thr(tid);
+        thr->timer(Timer::START);
+        ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
+
+        // pair should init force and do the reduce
+        // thr->init_force(nall,f_, nullptr, nullptr, nullptr, nullptr);
+
+        if (evflag) {
+            if (eflag) {
+                if (force->newton_pair) {
+                    eval_stencil_md<1,1,1>(ifrom, ito, thr, atom_, neighbor_);
+                } else {
+                    eval_stencil_md<1,1,0>(ifrom, ito, thr, atom_, neighbor_);
+                }
+            } else {
+                if (force->newton_pair) {
+                    eval_stencil_md<1,0,1>(ifrom, ito, thr, atom_, neighbor_);
+                } else {
+                    eval_stencil_md<1,0,0>(ifrom, ito, thr, atom_, neighbor_);
+                }
+            }
+        } else {
+            if (force->newton_pair) {
+                eval_stencil_md<0,0,1>(ifrom, ito, thr, atom_, neighbor_);
+            } else {
+                eval_stencil_md<0,0,0>(ifrom, ito, thr, atom_, neighbor_);
+            }
+        }
+        thr->timer(Timer::PAIR);
+    }
+
+    // try new reduce
+    /*
+    if (nthreads_to_use == 1) {
+        return;
+    }
+    */
+
+    double* f = &(atom_->eval_f_stencil_md[0][0]);
+
+    int nvals = nall * 3;
+
+    constexpr int CHUNK_SIZE = 1024;
+
+    // start = wsp_getworkspan();
+    cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
+        // for (int n = 1; n < nthreads_to_use; n++) {
+        for (int n = 1; n < comm->nthreads; n++) {
+            for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
+                f[j] += f[n * nvals + j];
+            }
+        }
+    }
 }
 
 template <int EVFLAG, int EFLAG, int NEWTON_BOND>
@@ -132,7 +272,6 @@ void BondFENEOMP::eval(int nfrom, int nto, ThrData * const thr)
     }
 
     // energy
-
     if (EFLAG) {
       ebond = -0.5 * k[type]*r0sq*log(rlogarg);
       if (rsq < MY_CUBEROOT2*sigma[type]*sigma[type])
@@ -156,4 +295,80 @@ void BondFENEOMP::eval(int nfrom, int nto, ThrData * const thr)
     if (EVFLAG) ev_tally_thr(this,i1,i2,nlocal,NEWTON_BOND,
                              ebond,fbond,delx,dely,delz,thr);
   }
+}
+
+template <int EVFLAG, int EFLAG, int NEWTON_BOND>
+void BondFENEOMP::eval_stencil_md(int nfrom, int nto, ThrData * const thr, Atom* atom_, Neighbor* neighbor_) {
+    int i1,i2,n,type;
+    double delx,dely,delz,ebond,fbond;
+    double rsq,r0sq,rlogarg,sr2,sr6;
+
+    const auto * _noalias const x = (dbl3_t *) atom_->x[0];
+    auto * _noalias const f = (dbl3_t *) thr->get_f()[0];
+    const int3_t * _noalias const bondlist = (int3_t *) neighbor_->bondlist[0];
+    const int nlocal = atom_->nlocal;
+    const int tid = thr->get_tid();
+    ebond = 0.0;
+
+    for (n = nfrom; n < nto; n++) {
+        i1 = bondlist[n].a;
+        i2 = bondlist[n].b;
+        type = bondlist[n].t;
+
+        delx = x[i1].x - x[i2].x;
+        dely = x[i1].y - x[i2].y;
+        delz = x[i1].z - x[i2].z;
+
+        rsq = delx*delx + dely*dely + delz*delz;
+        r0sq = r0[type] * r0[type];
+        rlogarg = 1.0 - rsq/r0sq;
+
+        // if r -> r0, then rlogarg < 0.0 which is an error
+        // issue a warning and reset rlogarg = epsilon
+        // if r > 2*r0 something serious is wrong, abort
+
+        if (rlogarg < 0.1) {
+            error->warning(FLERR,"FENE bond too long: {} {} {} {:.8}",
+                           update->ntimestep,atom->tag[i1],atom->tag[i2],sqrt(rsq));
+            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                return;
+
+            rlogarg = 0.1;
+        }
+
+        fbond = -k[type]/rlogarg;
+
+        // force from LJ term
+
+        if (rsq < MY_CUBEROOT2*sigma[type]*sigma[type]) {
+            sr2 = sigma[type]*sigma[type]/rsq;
+            sr6 = sr2*sr2*sr2;
+            fbond += 48.0*epsilon[type]*sr6*(sr6-0.5)/rsq;
+        }
+
+        // energy
+
+        if (EFLAG) {
+            ebond = -0.5 * k[type]*r0sq*log(rlogarg);
+            if (rsq < MY_CUBEROOT2*sigma[type]*sigma[type])
+                ebond += 4.0*epsilon[type]*sr6*(sr6-1.0) + epsilon[type];
+        }
+
+        // apply force to each of 2 atoms
+
+        if (NEWTON_BOND || i1 < nlocal) {
+            f[i1].x += delx*fbond;
+            f[i1].y += dely*fbond;
+            f[i1].z += delz*fbond;
+        }
+
+        if (NEWTON_BOND || i2 < nlocal) {
+            f[i2].x -= delx*fbond;
+            f[i2].y -= dely*fbond;
+            f[i2].z -= delz*fbond;
+        }
+
+        if (EVFLAG) ev_tally_thr(this,i1,i2,nlocal,NEWTON_BOND,
+                                 ebond,fbond,delx,dely,delz,thr);
+    }
 }

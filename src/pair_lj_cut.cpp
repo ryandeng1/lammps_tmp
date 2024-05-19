@@ -36,6 +36,7 @@ using namespace LAMMPS_NS;
 using namespace MathConst;
 
 static int num_pairs_evaled = 0;
+constexpr int target_tag = 21876;
 
 /* ---------------------------------------------------------------------- */
 

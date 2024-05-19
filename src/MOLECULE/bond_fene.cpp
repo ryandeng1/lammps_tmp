@@ -59,6 +59,8 @@ void BondFENE::compute(int eflag, int vflag)
   int nlocal = atom->nlocal;
   int newton_bond = force->newton_bond;
 
+  assert(newton_bond);
+
   for (n = 0; n < nbondlist; n++) {
     i1 = bondlist[n][0];
     i2 = bondlist[n][1];
@@ -121,6 +123,88 @@ void BondFENE::compute(int eflag, int vflag)
   }
 }
 
+void BondFENE::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval, Neighbor* neighbor_) {
+    int i1, i2, n, type;
+    double delx, dely, delz, ebond, fbond;
+    double rsq, r0sq, rlogarg, sr2, sr6;
+
+    ebond = sr6 = 0.0;
+    ev_init(eflag, vflag);
+
+    double **x = atom_->x;
+    double **f = atom_->eval_f_stencil_md;
+    int **bondlist = neighbor_->bondlist;
+    int nbondlist = neighbor_->nbondlist;
+    int nlocal = atom_->nlocal;
+    int newton_bond = force->newton_bond;
+
+    for (n = 0; n < nbondlist; n++) {
+        i1 = bondlist[n][0];
+        i2 = bondlist[n][1];
+        type = bondlist[n][2];
+
+        delx = x[i1][0] - x[i2][0];
+        dely = x[i1][1] - x[i2][1];
+        delz = x[i1][2] - x[i2][2];
+
+        // force from log term
+
+        rsq = delx * delx + dely * dely + delz * delz;
+        r0sq = r0[type] * r0[type];
+        rlogarg = 1.0 - rsq / r0sq;
+
+        // if r -> r0, then rlogarg < 0.0 which is an error
+        // issue a warning and reset rlogarg = epsilon
+        // if r > 2*r0 something serious is wrong, abort
+
+        if (rlogarg < 0.1) {
+            std::cout << BOLDRED << "zoid: " << zoid.num << " ERROR. " << RESET_COLOR << std::endl;
+            std::cout << "stencil md tag: " << atom_->tag[i1] << " " << atom_->tag[i2] << " idx: " << i1 << " " << i2 << std::endl;
+            std::cout << "pos: " << atom_->x[i1][0] << " " << atom_->x[i1][1] << " " << atom_->x[i1][2]
+                << "pos: " << atom_->x[i2][0] << " " << atom_->x[i2][1] << " " << atom_->x[i2][2] << std::endl;
+            std::cout << "rlogarg: " << rlogarg << " n: " << n << " i1: " << i1 << " i2: " << i2 << " nlocal: " << nlocal << " rsq: " << rsq << std::endl;
+            error->warning(FLERR, "FENE bond too long: {} {} {} {}", update->ntimestep, atom_->tag[i1],
+                           atom_->tag[i2], sqrt(rsq));
+            if (rlogarg <= -3.0) error->one(FLERR, "Bad FENE bond");
+            rlogarg = 0.1;
+        }
+
+        fbond = -k[type] / rlogarg;
+
+        // force from LJ term
+
+        if (rsq < MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+            sr2 = sigma[type] * sigma[type] / rsq;
+            sr6 = sr2 * sr2 * sr2;
+            fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+        }
+
+        // energy
+
+        if (eflag) {
+            ebond = -0.5 * k[type] * r0sq * log(rlogarg);
+            if (rsq < MY_CUBEROOT2 * sigma[type] * sigma[type])
+                ebond += 4.0 * epsilon[type] * sr6 * (sr6 - 1.0) + epsilon[type];
+        }
+
+        // apply force to each of 2 atoms
+
+        if (newton_bond || i1 < nlocal) {
+            f[i1][0] += delx * fbond;
+            f[i1][1] += dely * fbond;
+            f[i1][2] += delz * fbond;
+        }
+
+        if (newton_bond || i2 < nlocal) {
+            f[i2][0] -= delx * fbond;
+            f[i2][1] -= dely * fbond;
+            f[i2][2] -= delz * fbond;
+        }
+
+        if (evflag) ev_tally(i1, i2, nlocal, newton_bond, ebond, fbond, delx, dely, delz);
+    }
+}
+
 /* ---------------------------------------------------------------------- */
 
 void BondFENE::allocate()
@@ -177,6 +261,11 @@ void BondFENE::init_style()
   if (force->special_lj[1] != 0.0 || force->special_lj[2] != 1.0 || force->special_lj[3] != 1.0) {
     if (comm->me == 0) error->warning(FLERR, "Use special bonds = 0,1,1 with bond style fene");
   }
+}
+
+void BondFENE::init_style_stencil_md() {
+    // since this is checking settings, don't need to pass in any parameters
+    init_style();
 }
 
 /* ---------------------------------------------------------------------- */

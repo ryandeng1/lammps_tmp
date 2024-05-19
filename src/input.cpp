@@ -1346,6 +1346,8 @@ void Input::atom_style()
   for (int i = 0; i < narg; i++) {
       strcpy(atom_style_args[i], arg[i]);
   }
+
+  stencilMD->ATOM_STYLE(arg[0], narg - 1, &arg[1], 1);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1359,6 +1361,8 @@ void Input::bond_coeff()
   if (atom->avec->bonds_allow == 0)
     error->all(FLERR,"Bond_coeff command when no bonds allowed");
   force->bond->coeff(narg,arg);
+
+  stencilMD->FORCE_BOND_COEFF(narg, arg);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1370,6 +1374,9 @@ void Input::bond_style()
     error->all(FLERR,"Bond_style command when no bonds allowed");
   force->create_bond(arg[0],1);
   if (force->bond) force->bond->settings(narg-1,&arg[1]);
+
+  stencilMD->FORCE_CREATE_BOND(arg[0], 1);
+  stencilMD->FORCE_BOND_SETTINGS(narg - 1, &arg[1]);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1845,10 +1852,13 @@ void Input::special_bonds()
         coul2 != force->special_coul[2] || coul3 != force->special_coul[3] ||
         angle != force->special_angle ||
         dihedral != force->special_dihedral) {
+      assert(false);
       Special special(lmp);
       special.build();
     }
   }
+
+  stencilMD->FORCE_SET_SPECIAL(narg, arg);
 }
 
 /* ---------------------------------------------------------------------- */

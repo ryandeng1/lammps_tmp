@@ -155,7 +155,7 @@ class Modify : protected Pointers {
   virtual void setup_pre_force_stencil_md(int, Atom*);
   virtual void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*);
   virtual void final_integrate_stencil_md(Atom*, Atom*, Neighbor*, int*, bool*);
-
+  virtual void post_force_stencil_md(int, Atom*);
 
  protected:
   // internal fix counts

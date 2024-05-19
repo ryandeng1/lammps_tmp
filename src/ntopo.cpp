@@ -110,6 +110,28 @@ void NTopo::bond_check()
   if (flag_all) error->all(FLERR,"Bond extent > half of periodic box length");
 }
 
+void NTopo::bond_check_stencil_md(Atom* atom_) {
+    int i,j;
+    double dx,dy,dz,dxstart,dystart,dzstart;
+
+    double **x = atom_->x;
+    int flag = 0;
+
+    for (int m = 0; m < nbondlist; m++) {
+        i = bondlist[m][0];
+        j = bondlist[m][1];
+        dxstart = dx = x[i][0] - x[j][0];
+        dystart = dy = x[i][1] - x[j][1];
+        dzstart = dz = x[i][2] - x[j][2];
+        domain->minimum_image(dx,dy,dz);
+        if (dx != dxstart || dy != dystart || dz != dzstart) flag = 1;
+    }
+
+    int flag_all;
+    MPI_Allreduce(&flag,&flag_all,1,MPI_INT,MPI_SUM,world);
+    if (flag_all) error->all(FLERR,"Bond extent > half of periodic box length");
+}
+
 /* ---------------------------------------------------------------------- */
 
 void NTopo::angle_check()

@@ -3,6 +3,7 @@
 //
 
 #include "pair_lj_cut.h"
+#include "pair_eam_fs.h"
 
 #ifdef LMP_OPENMP
 #include "pair_lj_cut_omp.h"

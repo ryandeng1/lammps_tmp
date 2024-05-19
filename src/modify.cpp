@@ -674,6 +674,18 @@ void Modify::post_force(int vflag)
   }
 }
 
+void Modify::post_force_stencil_md(int vflag, Atom* atom_)
+{
+    if (n_post_force_group) {
+        assert(false);
+        for (int i = 0; i < n_post_force_group; i++) fix[list_post_force_group[i]]->post_force(vflag);
+    }
+
+    if (n_post_force) {
+        for (int i = 0; i < n_post_force; i++) fix[list_post_force[i]]->post_force_stencil_md(vflag, atom_);
+    }
+}
+
 /* ----------------------------------------------------------------------
    2nd half of integrate call, only for relevant fixes
 ------------------------------------------------------------------------- */

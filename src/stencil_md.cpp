@@ -15,6 +15,27 @@
 
 using namespace LAMMPS_NS;
 
+void StencilMD::ATOM_STYLE(const std::string &style, int narg, char **arg, int trysuffix) {
+    for (int i = 0; i < lmp->atom_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
+                lmp->atom_stencil_md[i][j]->create_avec_stencil_md(style, narg, arg, trysuffix);
+            }
+        }
+    }
+}
+
+void StencilMD::ATOM_SETTINGS() {
+    for (int i = 0; i < lmp->atom_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
+                lmp->atom_stencil_md[i][j]->bond_per_atom = atom->bond_per_atom;
+                lmp->atom_stencil_md[i][j]->maxspecial = atom->maxspecial;
+            }
+        }
+    }
+}
+
 void StencilMD::MODIFY_ADD_FIX_STENCIL_MD(int narg, char **arg) {
 #ifdef LMP_OPENMP
     for (int i = 0; i < lmp->modify_stencil_md_omp.size(); i++) {
@@ -69,6 +90,17 @@ void StencilMD::MODIFY_ADD_COMPUTE_STENCIL_MD(int narg, char **arg) {
 #endif
 }
 
+void StencilMD::FORCE_SET_SPECIAL(int narg, char **arg) {
+    for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                lmp->force_stencil_md[i][j]->set_special(narg, arg);
+                lmp->force_stencil_md_next_dt[i][j]->set_special(narg, arg);
+            }
+        }
+    }
+}
+
 void StencilMD::FORCE_PAIR_COEFF(int narg, char **arg) {
     for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
         if (i % comm->nprocs == comm->me) {
@@ -79,12 +111,25 @@ void StencilMD::FORCE_PAIR_COEFF(int narg, char **arg) {
         }
     }
 }
-void StencilMD::FORCE_MODIFY_PARAMS(int narg, char **arg) {
-    assert(false);
+
+void StencilMD::FORCE_BOND_COEFF(int narg, char **arg) {
     for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
-        for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
-            lmp->force_stencil_md[i][j]->pair->modify_params(narg, arg);
-            lmp->force_stencil_md_next_dt[i][j]->pair->modify_params(narg, arg);
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                lmp->force_stencil_md[i][j]->bond->coeff(narg, arg);
+                lmp->force_stencil_md_next_dt[i][j]->bond->coeff(narg, arg);
+            }
+        }
+    }
+}
+
+void StencilMD::FORCE_MODIFY_PARAMS(int narg, char **arg) {
+    for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                lmp->force_stencil_md[i][j]->pair->modify_params(narg, arg);
+                lmp->force_stencil_md_next_dt[i][j]->pair->modify_params(narg, arg);
+            }
         }
     }
 }
@@ -108,6 +153,25 @@ void StencilMD::FORCE_CREATE_PAIR(const std::string& style, int trysuffix) {
     }
 }
 
+void StencilMD::FORCE_CREATE_BOND(const std::string& style, int trysuffix) {
+    for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                // curr-dt and next-dt force use the same modify. Will there be issues? Hopefully not?
+#ifdef LMP_OPENMP
+                lmp->force_stencil_md[i][j]->create_bond(style, trysuffix, true, lmp->modify_stencil_md_omp[i][j]);
+
+                // TODO RYAN: force_stencil_md_next_dt does not behave the same as the other stuff. Since there is no modify_next_dt, we gotta do something about it.
+                lmp->force_stencil_md_next_dt[i][j]->create_bond(style, trysuffix, true, lmp->modify_stencil_md_omp[i][NUM_TIMESTEPS_IN_PARALLEL - j]);
+#else
+                lmp->force_stencil_md[i][j]->create_bond(style, trysuffix, true, lmp->modify_stencil_md[i]);
+                lmp->force_stencil_md_next_dt[i][j]->create_bond(style, trysuffix, true, lmp->modify_stencil_md[i]);
+#endif
+            }
+        }
+    }
+}
+
 void StencilMD::FORCE_PAIR_SETTINGS(int narg, char **arg) {
     for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
         if (i % comm->nprocs == comm->me) {
@@ -115,6 +179,18 @@ void StencilMD::FORCE_PAIR_SETTINGS(int narg, char **arg) {
                 assert(lmp->force_stencil_md[i][j]->pair != nullptr);
                 lmp->force_stencil_md[i][j]->pair->settings(narg, arg);
                 lmp->force_stencil_md_next_dt[i][j]->pair->settings(narg, arg);
+            }
+        }
+    }
+}
+
+void StencilMD::FORCE_BOND_SETTINGS(int narg, char **arg) {
+    for (int i = 0; i < lmp->force_stencil_md.size(); i++) {
+        if (i % comm->nprocs == comm->me) {
+            for (int j = 0; j < lmp->force_stencil_md[i].size(); j++) {
+                assert(lmp->force_stencil_md[i][j]->bond != nullptr);
+                lmp->force_stencil_md[i][j]->bond->settings(narg, arg);
+                lmp->force_stencil_md_next_dt[i][j]->bond->settings(narg, arg);
             }
         }
     }
@@ -170,6 +246,7 @@ void StencilMD::CREATE() {
                 atom_ = nullptr;
             } else {
                 atom_ = new Atom(lmp);
+                // This is to help with some shenanigans?
             }
 
             if (lmp->kokkos) {
@@ -257,9 +334,14 @@ void StencilMD::CREATE_NEXT_DT() {
 }
 
 void StencilMD::INIT_ZOIDS() {
+    if (comm->me == 0) {
+        std::cout << BOLDYELLOW << "INIT ZOIDS. LO: " << domain->boxlo[0] << " " << domain->boxlo[1] << " " << domain->boxlo[2] << RESET_COLOR << std::endl;
+        std::cout << BOLDYELLOW << "INIT ZOIDS. HI: " << domain->boxhi[0] << " " << domain->boxhi[1] << " " << domain->boxhi[2] << RESET_COLOR << std::endl;
+        std::cout << "map size: " << zoid_to_num_map.size() << std::endl;
+    }
+
     get_zoids(ALLEGRO_SLOPE, domain->boxlo, domain->boxhi, lmp->queues);
 
-    std::cout << "map size: " << zoid_to_num_map.size() << std::endl;
     assert(zoid_to_num_map.size() == NUM_ZOIDS);
     std::set<int> zoid_nums;
     for (auto& [k, v] : zoid_to_num_map) {
@@ -749,6 +831,7 @@ void StencilMD::INIT_DOMAIN_BOUNDS() {
                     domain_->boxhi[dim] = zoid.zoid.cuts[dim].upper +
                                           k * zoid.zoid.cuts[dim].slope_upper;
                     domain_->prd[dim] = domain->prd[dim];
+                    assert(domain_->sublo[dim] < domain_->subhi[dim]);
                 }
             }
         }
@@ -874,6 +957,7 @@ void StencilMD::MODIFY_PRE_FORCE_SETUP(int vflag) {
 }
 
 void StencilMD::MODIFY_SETUP(int vflag) {
+    assert(false);
 #ifdef LMP_OPENMP
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
@@ -903,19 +987,34 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                             ->exchange_stencil_md_initial_receive(
                                     first, lmp->domain_stencil_md[zoid_num][t], zoid);
                     first->sort_stencil_md();
+                    if (t == NUM_TIMESTEPS_IN_PARALLEL) {
+                        for (int k = 0; k < first->nlocal; k++) {
+                            if (first->tag[k] == 12777) {
+                                std::cout << "zoid: " << zoid.num << " got target tag. pos: " << first->x[k][0] << " " << first->x[k][1] << " " << first->x[k][2] << std::endl;
+                                for (int dim = 0; dim < 3; dim++) {
+                                    std::cout << "lo: " << zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower << " hi: " << zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper << std::endl;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
+
         MPI_Barrier(world);
         MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
+
+        // std::cout << GREEN << "T: " << t << " OUT OF: " << NUM_TIMESTEPS_IN_PARALLEL + 1 << " GOT LOCAL ATOMS." << RESET_COLOR << std::endl;
     }
+    // std::cout << GREEN << "DONE with local atoms" << RESET_COLOR << std::endl;
 }
 
 void StencilMD::GET_GHOST_ATOMS_ZOID() {
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         std::vector<MPI_Request> r(2 * NUM_ZOIDS, MPI_REQUEST_NULL);
-        comm->exchange_stencil_md_initial_send(r);
+        // comm->exchange_stencil_md_initial_send(r);
+        comm->borders_stencil_md_initial_send(r);
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 queue_info& zoid = lmp->queues[dep][j];
@@ -933,6 +1032,7 @@ void StencilMD::GET_GHOST_ATOMS_ZOID() {
 
         MPI_Barrier(world);
         MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
+        // std::cout << GREEN << "T: " << t << " out of: " << NUM_TIMESTEPS_IN_PARALLEL + 1 << " DONE GETTING GHOST ATOMS" << RESET_COLOR << std::endl;
     }
 }
 
@@ -984,8 +1084,6 @@ void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
                             1, atom_next_dt, domain_next_dt,
                             lmp->comm_stencil_md[zoid_num], zoid);
                     lmp->neighbor_stencil_md_next_dt[zoid_num][t]->ncalls = 0;
-
-                    MPI_Barrier(world);
 
                     Force* force_ = lmp->force_stencil_md_next_dt[zoid_num][t];
                     force_->setup();
@@ -1268,7 +1366,7 @@ void StencilMD::COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* a
                               << std::endl;
                 }
                 std::cout << "idx: " << k
-                          << " out of: " << atom_->nlocal
+                          << " out of: " << atom_->nlocal << " atom: " << atom_
                           << std::endl;
                 std::cout
                         << "Dim: " << dim << " Zoid: " << zoid_num
@@ -1306,22 +1404,18 @@ void StencilMD::COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* a
                           << atom_->x[k][1] << " "
                           << atom_->x[k][2] << std::endl;
 
-                /*
                 for (int tmp = 0; tmp < 3; tmp++) {
                     std::cout
                             << "lo: "
                             << zoid.zoid.cuts[tmp].lower +
-                               zoid.zoid.cuts[tmp].slope_lower *
-                               t
+                               zoid.zoid.cuts[tmp].slope_lower * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
                             << std::endl;
                     std::cout
                             << "hi: "
                             << zoid.zoid.cuts[tmp].upper +
-                               zoid.zoid.cuts[tmp].slope_upper *
-                               t
+                               zoid.zoid.cuts[tmp].slope_upper * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
                             << std::endl;
                 }
-                */
 
                 assert(false);
             }

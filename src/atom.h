@@ -286,6 +286,10 @@ class Atom : protected Pointers {
   typedef std::map<std::string, AtomVecCreator> AtomVecCreatorMap;
   AtomVecCreatorMap *avec_map;
 
+  typedef AtomVec *(*AtomVecCreatorStencilMD)(LAMMPS *, Atom *);
+  typedef std::map<std::string, AtomVecCreatorStencilMD> AtomVecCreatorMapStencilMD;
+  AtomVecCreatorMapStencilMD *avec_map_stencil_md;
+
   std::set<int> fully_eval_ghost_tags;
   std::map<int, std::set<int>> fully_eval_neighbor_to_ghost_tags;
   std::map<std::pair<int, int>, std::set<int>> fully_eval_neighbor_to_ghost_tags_trio;
@@ -304,7 +308,7 @@ class Atom : protected Pointers {
   void create_avec(const std::string &, int, char **, int);
   void create_avec_stencil_md(const std::string &, int, char **, int);
 
-  virtual AtomVec *new_avec(const std::string &, int, int &);
+  virtual AtomVec *new_avec(const std::string &, int, int &, bool use_stencil_md = false);
 
   void init();
   void setup();
@@ -396,6 +400,8 @@ class Atom : protected Pointers {
 
   void setup_stencil_md(Domain*);
   virtual void sort_stencil_md();
+  int map_style_set_stencil_md();
+  virtual void map_init_stencil_md(int check = 1);
 
   std::map<int, int> tag_to_idx;
   std::map<int, std::vector<int>> recv_zoid_to_ghost_idxs;

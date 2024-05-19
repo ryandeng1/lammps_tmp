@@ -15,6 +15,10 @@
 // clang-format off
 FixStyle(langevin,FixLangevin);
 // clang-format on
+#elifdef FIX_CLASS_STENCIL_MD
+// clang-format off
+FixStyleStencilMD(langevin,FixLangevin);
+// clang-format on
 #else
 
 #ifndef LMP_FIX_LANGEVIN_H
@@ -27,6 +31,7 @@ namespace LAMMPS_NS {
 class FixLangevin : public Fix {
  public:
   FixLangevin(class LAMMPS *, int, char **);
+  FixLangevin(class LAMMPS *, class Modify*, int, char **);
   ~FixLangevin() override;
   int setmask() override;
   void init() override;
@@ -45,6 +50,11 @@ class FixLangevin : public Fix {
   void copy_arrays(int, int, int) override;
   int pack_exchange(int, double *) override;
   int unpack_exchange(int, double *) override;
+
+  void init_stencil_md(Atom*, Modify*, Neighbor*) override;
+  void initial_integrate_stencil_md(int, Atom*, Atom*, int*, bool*) override;
+  void setup_stencil_md(int, Atom*) override;
+  void post_force_stencil_md(int, Atom*) override;
 
  protected:
   int gjfflag, nvalues, osflag, oflag, tallyflag, zeroflag, tbiasflag;
@@ -75,6 +85,9 @@ class FixLangevin : public Fix {
 
   template <int Tp_TSTYLEATOM, int Tp_GJF, int Tp_TALLY, int Tp_BIAS, int Tp_RMASS, int Tp_ZERO>
   void post_force_templated();
+
+  template <int Tp_TSTYLEATOM, int Tp_GJF, int Tp_TALLY, int Tp_BIAS, int Tp_RMASS, int Tp_ZERO>
+  void post_force_templated_stencil_md(Atom*);
 
   void omega_thermostat();
   void angmom_thermostat();

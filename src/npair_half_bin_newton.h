@@ -30,6 +30,7 @@ class NPairHalfBinNewton : public NPair {
  public:
   NPairHalfBinNewton(class LAMMPS *);
   void build(class NeighList *) override;
+  void build_stencil_md(class NeighList *, class Atom*, class Domain*, queue_info&) override;
 };
 
 }    // namespace LAMMPS_NS

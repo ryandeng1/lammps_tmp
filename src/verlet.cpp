@@ -265,14 +265,21 @@ void Verlet::setup(int flag) {
     }
 
     if (atom->molecular != Atom::ATOMIC) {
-        if (force->bond)
+        if (force->bond) {
             force->bond->compute(eflag, vflag);
-        if (force->angle)
+        }
+        if (force->angle) {
+            assert(false);
             force->angle->compute(eflag, vflag);
-        if (force->dihedral)
+        }
+        if (force->dihedral) {
+            assert(false);
             force->dihedral->compute(eflag, vflag);
-        if (force->improper)
+        }
+        if (force->improper) {
+            assert(false);
             force->improper->compute(eflag, vflag);
+        }
     }
 
     if (force->kspace) {
@@ -390,9 +397,9 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 double sub = value - domain->prd[dim];
                 double add = value + domain->prd[dim];
 
-                bool at_least_one_curr = (sub >= lo_curr && sub <= hi_curr) ||
-                                         (add >= lo_curr && add <= hi_curr) ||
-                                         (value >= lo_curr && value <= hi_curr);
+                bool at_least_one_curr = (sub >= lo_curr && sub < hi_curr) ||
+                                         (add >= lo_curr && add < hi_curr) ||
+                                         (value >= lo_curr && value < hi_curr);
 
                 in_zoid_curr = in_zoid_curr && at_least_one_curr;
             }
@@ -470,17 +477,17 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 double sub = value - domain->prd[dim];
                 double add = value + domain->prd[dim];
 
-                bool at_least_one_prev = (sub >= lo_prev && sub <= hi_prev) ||
-                                         (add >= lo_prev && add <= hi_prev) ||
-                                         (value >= lo_prev && value <= hi_prev);
+                bool at_least_one_prev = (sub >= lo_prev && sub < hi_prev) ||
+                                         (add >= lo_prev && add < hi_prev) ||
+                                         (value >= lo_prev && value < hi_prev);
 
-                bool at_least_one_curr = (sub >= lo_curr && sub <= hi_curr) ||
-                                         (add >= lo_curr && add <= hi_curr) ||
-                                         (value >= lo_curr && value <= hi_curr);
+                bool at_least_one_curr = (sub >= lo_curr && sub < hi_curr) ||
+                                         (add >= lo_curr && add < hi_curr) ||
+                                         (value >= lo_curr && value < hi_curr);
 
-                bool at_least_one_next = (sub >= lo_next && sub <= hi_next) ||
-                                         (add >= lo_next && add <= hi_next) ||
-                                         (value >= lo_next && value <= hi_next);
+                bool at_least_one_next = (sub >= lo_next && sub < hi_next) ||
+                                         (add >= lo_next && add < hi_next) ||
+                                         (value >= lo_next && value < hi_next);
 
                 /*
                 in_zoid_prev = in_zoid_prev && ((atom_pos_shifted >= lo_prev && atom_pos_shifted <= hi_prev));
@@ -808,9 +815,9 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 double sub = value - domain->prd[dim];
                 double add = value + domain->prd[dim];
 
-                bool at_least_one_prev = (sub >= lo_prev && sub <= hi_prev) ||
-                                         (add >= lo_prev && add <= hi_prev) ||
-                                         (value >= lo_prev && value <= hi_prev);
+                bool at_least_one_prev = (sub >= lo_prev && sub < hi_prev) ||
+                                         (add >= lo_prev && add < hi_prev) ||
+                                         (value >= lo_prev && value < hi_prev);
 
                 double lo_curr = zoid.zoid.cuts[dim].lower +
                                  (timestep)*zoid.zoid.cuts[dim].slope_lower;
@@ -827,7 +834,7 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 }
 
                 // if (!(value >= lo_curr && value <= hi_curr) && zoid.zoid.cuts[dim].slope_lower < 0 && timestep < NUM_TIMESTEPS_IN_PARALLEL) {
-                if (!(value >= lo_curr && value <= hi_curr) &&
+                if (!(value >= lo_curr && value < hi_curr) &&
                     zoid.zoid.cuts[dim].slope_lower < 0 && !PURELY_LOCAL_POTENTIAL) {
                     in_zoid_prev = false;
                 }
@@ -982,9 +989,9 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
                 double sub = value - domain->prd[dim];
                 double add = value + domain->prd[dim];
 
-                bool at_least_one_prev = (sub >= lo_prev && sub <= hi_prev) ||
-                                         (add >= lo_prev && add <= hi_prev) ||
-                                         (value >= lo_prev && value <= hi_prev);
+                bool at_least_one_prev = (sub >= lo_prev && sub < hi_prev) ||
+                                         (add >= lo_prev && add < hi_prev) ||
+                                         (value >= lo_prev && value < hi_prev);
 
                 // if expanding zoid AND other zoid shrinking, use current instead of past, only need values for actual shrinking?
                 // must be a ghost atom that wasn't local last timestep somehow
@@ -1001,7 +1008,7 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
                                  (timestep)*zoid.zoid.cuts[dim].slope_upper;
 
                 // if (!(value >= lo_curr && value <= hi_curr) && zoid.zoid.cuts[dim].slope_lower < 0 && timestep < NUM_TIMESTEPS_IN_PARALLEL) {
-                if (!(value >= lo_curr && value <= hi_curr) &&
+                if (!(value >= lo_curr && value < hi_curr) &&
                     zoid.zoid.cuts[dim].slope_lower < 0 && !PURELY_LOCAL_POTENTIAL) {
                     in_zoid_prev = false;
                 }
@@ -1096,7 +1103,7 @@ void setup_can_eval_center_mapping_stencil_md(
                 double hi = zoid.zoid.cuts[dim].upper +
                             t * zoid.zoid.cuts[dim].slope_upper;
 
-                bool in_bounds = (pos[dim] >= lo && pos[dim] <= hi);
+                bool in_bounds = (pos[dim] >= lo && pos[dim] < hi);
 
                 double diff =
                     std::min(fabs(pos[dim] - lo), fabs(pos[dim] - hi));
@@ -1149,7 +1156,7 @@ void setup_can_eval_center_tag_mapping_stencil_md(
                 double hi = zoid.zoid.cuts[dim].upper +
                             t * zoid.zoid.cuts[dim].slope_upper;
 
-                bool in_bounds = (pos[dim] >= lo && pos[dim] <= hi);
+                bool in_bounds = (pos[dim] >= lo && pos[dim] < hi);
 
                 double diff =
                     std::min(fabs(pos[dim] - lo), fabs(pos[dim] - hi));
@@ -1204,7 +1211,7 @@ void setup_can_eval_center_tag_mapping_stencil_md_next_dt(
                 double hi = zoid.zoid.cuts[dim].upper +
                             t * zoid.zoid.cuts[dim].slope_upper;
 
-                bool in_bounds = (pos[dim] >= lo && pos[dim] <= hi);
+                bool in_bounds = (pos[dim] >= lo && pos[dim] < hi);
 
                 double diff =
                     std::min(fabs(pos[dim] - lo), fabs(pos[dim] - hi));
@@ -1268,7 +1275,7 @@ void setup_can_eval_center_mapping_stencil_md_next_dt(
                 double hi = zoid.zoid.cuts[dim].upper +
                             t * zoid.zoid.cuts[dim].slope_upper;
 
-                bool in_bounds = (pos[dim] >= lo && pos[dim] <= hi);
+                bool in_bounds = (pos[dim] >= lo && pos[dim] < hi);
 
                 double diff =
                     std::min(fabs(pos[dim] - lo), fabs(pos[dim] - hi));
@@ -1578,6 +1585,7 @@ void setup_atom_pos_mapping_stencil_md_next_dt(
 
 void Verlet::setup_stencil_md() {
     // assert(3 * 2 * ALLEGRO_SLOPE * NUM_TIMESTEPS_IN_PARALLEL <= domain->prd[0]);
+    stencilMD->ATOM_SETTINGS();
     stencilMD->INIT_ZOIDS();
     stencilMD->INIT_ZOID_DATA();
     stencilMD->INIT_ZOID_NEIGHBORS();
@@ -1689,14 +1697,93 @@ void Verlet::setup_stencil_md() {
 
     stencilMD->GET_LOCAL_ATOMS_ZOID();
 
+    // check to make sure each timestep has all of the local atoms needed
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        int total = 0;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                if (zoid.num % comm->nprocs == comm->me) {
+                    Atom* atom_ = lmp->atom_stencil_md[zoid.num][t];
+                    total += atom_->nlocal;
+                    std::set<int> tags;
+                    for (int i = 0; i < atom_->nlocal; i++) {
+                        assert(atom_->tag[i] >= 0 && atom_->tag[i] <= atom->natoms);
+                        tags.insert(atom_->tag[i]);
+                    }
+                    assert(tags.size() == atom_->nlocal);
+                }
+            }
+        }
+
+        int* atoms_tags = new int[atom->natoms + 1];
+        for (int i = 0; i < atom->natoms + 1; i++) {
+            atoms_tags[i] = 0;
+        }
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                if (zoid.num % comm->nprocs == comm->me) {
+                    Atom* atom_ = lmp->atom_stencil_md[zoid.num][t];
+                    for (int k = 0; k < atom_->nlocal; k++) {
+                        // TODO: multiple zoids have the same set of local atoms. ok what the fuck.
+                        assert(atoms_tags[atom_->tag[k]] == 0);
+                        atoms_tags[atom_->tag[k]] = 1;
+                    }
+                }
+            }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, atoms_tags, atom->natoms + 1, MPI_INT, MPI_SUM, world);
+
+        if (comm->me == 0) {
+            int num_nonzero = 0;
+            for (int tmp_idx = 0; tmp_idx < atom->natoms + 1; tmp_idx++) {
+                if (atoms_tags[tmp_idx] == 0) {
+                    num_nonzero++;
+                } else {
+                    assert(atoms_tags[tmp_idx] == 1);
+                }
+            }
+        }
+
+        delete[] atoms_tags;
+
+        MPI_Allreduce(MPI_IN_PLACE, &total, 1, MPI_INT, MPI_SUM, world);
+        if (total != atom->natoms) {
+            std::cout << "timestep: " << t << " num atoms I have: " << total
+                      << " num atoms: " << atom->natoms << std::endl;
+        }
+        assert(total == atom->natoms);
+    }
+
+    MPI_Barrier(world);
+
     stencilMD->GET_GHOST_ATOMS_ZOID();
+
+    // check atom map is correct
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                if (zoid.num % comm->nprocs == comm->me) {
+                    Atom* atom_ = lmp->atom_stencil_md[zoid.num][t];
+                    auto map_arr = atom_->get_map_array();
+                    for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+                        assert(atom_->map(atom_->tag[i]) == i);
+                    }
+                }
+            }
+        }
+    }
 
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
             queue_info& zoid = lmp->zoid_num_to_zoid[zoid_num];
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 std::cout << "zoid: " << zoid_num << " time: " << t << " nlocal: " << lmp->atom_stencil_md[zoid_num][t]->nlocal << " num ghost: " << lmp->atom_stencil_md[zoid_num][t]->nghost << std::endl;
-                print_cuts(zoid.zoid);
+                // print_cuts(zoid.zoid);
             }
         }
     }
@@ -1723,28 +1810,6 @@ void Verlet::setup_stencil_md() {
         MPI_Barrier(world);
     }
     */
-
-    // check to make sure each timestep has all of the local atoms needed
-    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-        int total = 0;
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < lmp->queues[dep].size(); j++) {
-                queue_info& zoid = lmp->queues[dep][j];
-                if (zoid.num % comm->nprocs == comm->me) {
-                    total += lmp->atom_stencil_md[zoid.num][t]->nlocal;
-                }
-            }
-        }
-
-        MPI_Allreduce(MPI_IN_PLACE, &total, 1, MPI_INT, MPI_SUM, world);
-        if (total != atom->natoms) {
-            std::cout << "timestep: " << t << " num atoms I have: " << total
-                      << " num atoms: " << atom->natoms << std::endl;
-        }
-        assert(total == atom->natoms);
-    }
-
-    MPI_Barrier(world);
 
     if (comm->me == 0) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -1816,7 +1881,22 @@ void Verlet::setup_stencil_md() {
                   << RESET_COLOR << std::endl;
     }
 
-    stencilMD->MODIFY_SETUP(vflag);
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                assert(zoid_num >= 0 && zoid_num < NUM_ZOIDS);
+                // receive only if the zoid belongs to me
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
+                    atom_->map_init_stencil_md();
+                    atom_->map_set();
+                }
+            }
+        }
+    }
+
     stencilMD->BUILD_NEIGHBOR_LIST();
     stencilMD->BUILD_NEIGHBOR_LIST_NEXT_DT();
 
@@ -1898,6 +1978,22 @@ void Verlet::setup_stencil_md() {
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
                     sort_ghost_atoms_stencil_md(atom_, NULL, zoid, t);
+                }
+            }
+        }
+    }
+
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                assert(zoid_num >= 0 && zoid_num < NUM_ZOIDS);
+                // receive only if the zoid belongs to me
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
+                    atom_->map_init_stencil_md();
+                    atom_->map_set();
                 }
             }
         }
@@ -4539,6 +4635,13 @@ void Verlet::setup_stencil_md() {
             if (zoid_num % comm->nprocs == comm->me) {
                 Atom* atom_ = lmp->atom_stencil_md[zoid_num][0];
                 Force* force_ = lmp->force_stencil_md[zoid_num][0];
+                Neighbor* neighbor_ = lmp->neighbor_stencil_md[zoid_num][0];
+#ifdef LMP_OPENMP
+                Modify* modify_ = lmp->modify_stencil_md_omp[zoid_num][0];
+#else
+                Modify* modify_ = lmp->modify_stencil_md[zoid_num][0];
+#endif
+
                 // todo: eflag and vflag might cause some issues
                 // TODO: compute force for each pair in parallel
 
@@ -4547,6 +4650,29 @@ void Verlet::setup_stencil_md() {
                     eflag, vflag, lmp->atom_stencil_md[zoid_num][0],
                     zoid.can_eval_center[0], lmp->zoid_num_to_zoid[zoid_num],
                     &curr_dt_flag);
+
+                if (atom->molecular != Atom::ATOMIC) {
+                    if (force->bond) {
+                        force_->bond->compute_stencil_md(eflag, vflag, atom_,
+                                                         zoid.can_eval_center[0],
+                                                         lmp->zoid_num_to_zoid[zoid_num],
+                                                         &curr_dt_flag, neighbor_);
+                    }
+                    if (force->angle) {
+                        assert(false);
+                        force->angle->compute(eflag, vflag);
+                    }
+                    if (force->dihedral) {
+                        assert(false);
+                        force->dihedral->compute(eflag, vflag);
+                    }
+                    if (force->improper) {
+                        assert(false);
+                        force->improper->compute(eflag, vflag);
+                    }
+                }
+
+                modify_->setup_stencil_md(vflag, atom_);
 
                 if (dep < NUM_DEPS - 1) {
                     Comm *comm_ = lmp->comm_stencil_md[zoid_num];
@@ -4573,6 +4699,9 @@ void Verlet::setup_stencil_md() {
             MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
         }
     }
+
+    // modify setup after comm of forces
+    // stencilMD->MODIFY_SETUP(vflag);
 
     double* send_f = new double[(atom->natoms + 1) * 3];
     for (int i = 0; i < (atom->natoms + 1) * 3; i++) {
@@ -4707,7 +4836,7 @@ void Verlet::setup_stencil_md() {
 
     double total_temp_for_me = 0;
 
-    stencilMD->MODIFY_SETUP(vflag);
+    // stencilMD->MODIFY_SETUP(vflag);
     /*
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -4918,8 +5047,10 @@ void Verlet::run(int n) {
                 auto end_m = std::chrono::high_resolution_clock::now();
                 auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
                 lammps_modify_duration += duration_m;
-                if (n_post_integrate)
+                if (n_post_integrate) {
+                    assert(false);
                     modify->post_integrate();
+                }
                 timer->stamp(Timer::MODIFY);
 
                 // regular communication vs neighbor list rebuild
@@ -5002,14 +5133,21 @@ void Verlet::run(int n) {
                 }
 
                 if (atom->molecular != Atom::ATOMIC) {
-                    if (force->bond)
+                    if (force->bond) {
                         force->bond->compute(eflag, vflag);
-                    if (force->angle)
+                    }
+                    if (force->angle) {
+                        assert(false);
                         force->angle->compute(eflag, vflag);
-                    if (force->dihedral)
+                    }
+                    if (force->dihedral) {
+                        assert(false);
                         force->dihedral->compute(eflag, vflag);
-                    if (force->improper)
+                    }
+                    if (force->improper) {
+                        assert(false);
                         force->improper->compute(eflag, vflag);
+                    }
                     timer->stamp(Timer::BOND);
                 }
 
@@ -5036,8 +5174,9 @@ void Verlet::run(int n) {
                 }
 
                 // force modifications, final time integration, diagnostics
-                if (n_post_force_any)
+                if (n_post_force_any) {
                     modify->post_force(vflag);
+                }
 
                 auto begin_m2 = std::chrono::high_resolution_clock::now();
                 modify->final_integrate();
@@ -5045,7 +5184,7 @@ void Verlet::run(int n) {
                 auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
                 lammps_modify_duration += duration_m2;
                 if (n_end_of_step) {
-                    modify->end_of_step();
+                    // modify->end_of_step();
                 }
                 timer->stamp(Timer::MODIFY);
 
@@ -5177,6 +5316,20 @@ void Verlet::run(int n) {
                     }
                 }
             }
+        }
+    }
+
+    if (comm->me == 0) {
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            int num_directly_wait_on = 0;
+            for (int idx: dep_to_wait_idxs[dep]) {
+                int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
+                if (get_zoid_dep(recv_zoid_num) == dep - 1 && recv_zoid_num % comm->nprocs != comm->me) {
+                    num_directly_wait_on++;
+                }
+            }
+
+            std::cout << "dep: " << dep << " directly wait on: " << num_directly_wait_on << std::endl;
         }
     }
 
@@ -5421,6 +5574,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
         Atom* atom_next_timestep = curr_dt ? atom_arr[t + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+        Neighbor* neigh_next_timestep = curr_dt ? lmp->neighbor_stencil_md[zoid_num][t + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][t + 1];
+
 #ifdef LMP_OPENMP
         Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][t + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
 #else
@@ -5471,10 +5626,16 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
             // int* atom_idx_mapping_ = zoid.atom_idx_mapping[t + 1];
             auto begin = std::chrono::high_resolution_clock::now();
             int num_edges = 0;
+
+            int timestep_flag = starting_timestep + t + 1;
+            if (!curr_dt) {
+                timestep_flag += NUM_TIMESTEPS_IN_PARALLEL;
+            }
             next_force->pair->compute_stencil_md(
                     eflag, vflag, atom_next_timestep,
                     zoid.can_eval_center[t + 1],
-                    zoid, &num_edges);
+                    zoid, &timestep_flag);
+
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             if (TIME_STENCIL_MD) {
@@ -5486,6 +5647,30 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
             } else {
                 next_dt_compute_dep_time[zoid_num][t + 1] += duration;
                 next_dt_num_edges[zoid_num][t + 1] += num_edges;
+            }
+
+            if (atom->molecular != Atom::ATOMIC) {
+                if (force->bond) {
+                    int timestep_flag = starting_timestep + t + 1;
+                    if (!curr_dt) {
+                        timestep_flag += NUM_TIMESTEPS_IN_PARALLEL;
+                    }
+                    next_force->bond->compute_stencil_md(eflag, vflag, atom_next_timestep,
+                                                         zoid.can_eval_center[t + 1],
+                                                         zoid, &timestep_flag, neigh_next_timestep);
+                }
+                if (force->angle) {
+                    assert(false);
+                    force->angle->compute(eflag, vflag);
+                }
+                if (force->dihedral) {
+                    assert(false);
+                    force->dihedral->compute(eflag, vflag);
+                }
+                if (force->improper) {
+                    assert(false);
+                    force->improper->compute(eflag, vflag);
+                }
             }
         }
 
@@ -5502,8 +5687,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
         // force modifications, final time integration, diagnostics
 
         if (n_post_force_any) {
-            assert(false);
-            modify->post_force(vflag);
+            modify_->post_force_stencil_md(vflag, atom_next_timestep);
+            // modify->post_force(vflag);
         }
 
         auto begin_m2 = std::chrono::high_resolution_clock::now();
@@ -5518,8 +5703,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
         }
 
         if (n_end_of_step) {
-            assert(false);
-            modify->end_of_step();
+            // this doesn't actually do anything
+            // modify->end_of_step();
         }
         // timer->stamp(Timer::MODIFY);
 

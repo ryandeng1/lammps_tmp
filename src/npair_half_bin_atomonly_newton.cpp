@@ -35,6 +35,9 @@ NPairHalfBinAtomonlyNewton::NPairHalfBinAtomonlyNewton(LAMMPS *lmp) :
 
 void NPairHalfBinAtomonlyNewton::build(NeighList *list)
 {
+  std::cout << "LAMMPS npair build half atom only newton on build. rsq: "
+    << cutneighsq[0][0] << " " << cutneighsq[0][1] << " " << cutneighsq[1][0] <<  " " << cutneighsq[1][1] << std::endl;
+
   int i,j,k,n,itype,jtype,ibin;
   double xtmp,ytmp,ztmp,delx,dely,delz,rsq;
   int *neighptr;
@@ -201,7 +204,7 @@ void NPairHalfBinAtomonlyNewton::build_stencil_md(NeighList *list, Atom* atom_, 
                     double lo = domain_->sublo[dim];
                     double hi = domain_->subhi[dim];
                     bool my_dim_shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
-                    bool out_of_bounds = (x[j][dim] < lo || x[j][dim] > hi);
+                    bool out_of_bounds = (x[j][dim] < lo || x[j][dim] >= hi);
                     if (my_dim_shrinking && out_of_bounds) {
                         shrinking_out_of_bounds = true;
                     } else if (!my_dim_shrinking && out_of_bounds) {
@@ -288,7 +291,7 @@ void NPairHalfBinAtomonlyNewton::build_stencil_md(NeighList *list, Atom* atom_, 
                         double lo = domain_->sublo[dim];
                         double hi = domain_->subhi[dim];
                         bool my_dim_shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
-                        bool out_of_bounds = (x[j][dim] < lo || x[j][dim] > hi);
+                        bool out_of_bounds = (x[j][dim] < lo || x[j][dim] >= hi);
                         if (my_dim_shrinking && out_of_bounds) {
                             shrinking_out_of_bounds = true;
                         } else if (!my_dim_shrinking && out_of_bounds) {

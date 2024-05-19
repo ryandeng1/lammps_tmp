@@ -15,6 +15,10 @@
 // clang-format off
 BondStyle(fene, BondFENE);
 // clang-format on
+#elifdef BOND_CLASS_STENCIL_MD
+// clang-format off
+BondStyleStencilMD(fene, BondFENE);
+// clang-format on
 #else
 
 #ifndef LMP_BOND_FENE_H
@@ -27,6 +31,7 @@ namespace LAMMPS_NS {
 class BondFENE : public Bond {
  public:
   BondFENE(class LAMMPS *_lmp) : Bond(_lmp) {}
+  BondFENE(class LAMMPS *_lmp, class Modify* modify_) : BondFENE(_lmp) {}
   ~BondFENE() override;
   void compute(int, int) override;
   void coeff(int, char **) override;
@@ -37,6 +42,9 @@ class BondFENE : public Bond {
   void write_data(FILE *) override;
   double single(int, double, int, int, double &) override;
   void *extract(const char *, int &) override;
+
+  void init_style_stencil_md() override;
+  void compute_stencil_md(int, int, Atom*, bool*, queue_info&, int*, Neighbor*) override;
 
  protected:
   double *k, *r0, *epsilon, *sigma;

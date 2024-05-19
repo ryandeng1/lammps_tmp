@@ -19,6 +19,10 @@
 // clang-format off
 BondStyle(fene/omp,BondFENEOMP);
 // clang-format on
+#elifdef BOND_CLASS_STENCIL_MD
+// clang-format off
+BondStyleStencilMD(fene/omp, BondFENEOMP);
+// clang-format on
 #else
 
 #ifndef LMP_BOND_FENE_OMP_H
@@ -33,11 +37,17 @@ class BondFENEOMP : public BondFENE, public ThrOMP {
 
  public:
   BondFENEOMP(class LAMMPS *lmp);
+  BondFENEOMP(class LAMMPS *_lmp, class Modify* modify_);
   void compute(int, int) override;
+
+  void compute_stencil_md(int, int, Atom*, bool*, queue_info&, int*, Neighbor*) override;
 
  private:
   template <int EVFLAG, int EFLAG, int NEWTON_BOND>
   void eval(int ifrom, int ito, ThrData *const thr);
+
+  template <int EVFLAG, int EFLAG, int NEWTON_BOND>
+  void eval_stencil_md(int ifrom, int ito, ThrData *const thr, Atom* atom_, Neighbor* neighbor_);
 };
 
 }    // namespace LAMMPS_NS

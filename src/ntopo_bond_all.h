@@ -28,6 +28,7 @@ class NTopoBondAll : public NTopo {
  public:
   NTopoBondAll(class LAMMPS *);
   void build() override;
+  void build_stencil_md(Atom*, Domain*, queue_info&) override;
 };
 
 }    // namespace LAMMPS_NS

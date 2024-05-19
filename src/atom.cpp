@@ -61,6 +61,11 @@ template <typename T> static AtomVec *avec_creator(LAMMPS *lmp)
   return new T(lmp);
 }
 
+template <typename T> static AtomVec *avec_creator_stencil_md(LAMMPS *lmp, Atom* atom_)
+{
+    return new T(lmp, atom_);
+}
+
 /* ---------------------------------------------------------------------- */
 
 /** \class LAMMPS_NS::Atom
@@ -272,6 +277,7 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   avec = nullptr;
 
   avec_map = new AtomVecCreatorMap();
+  avec_map_stencil_md = new AtomVecCreatorMapStencilMD();
 
 #define ATOM_CLASS
 #define AtomStyle(key,Class) \
@@ -279,6 +285,13 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
 #include "style_atom.h"  // IWYU pragma: keep
 #undef AtomStyle
 #undef ATOM_CLASS
+
+#define ATOM_CLASS_STENCIL_MD
+#define AtomStyleStencilMD(key,Class) \
+  (*avec_map_stencil_md)[#key] = &avec_creator_stencil_md<Class>;
+#include "stencil_md_style_atom.h"  // IWYU pragma: keep
+#undef AtomStyleStencilMD
+#undef ATOM_CLASS_STENCIL_MD
 }
 
 /* ---------------------------------------------------------------------- */
@@ -288,6 +301,7 @@ Atom::~Atom()
   delete[] atom_style;
   delete avec;
   delete avec_map;
+  delete avec_map_stencil_md;
 
   delete[] firstgroupname;
   memory->destroy(binhead);
@@ -432,8 +446,11 @@ void Atom::peratom_create()
   add_peratom_vary("special",&special,tagintsize,&maxspecial,&nspecial,3);
 
   add_peratom("num_bond",&num_bond,INT,0);
+
   add_peratom_vary("bond_type",&bond_type,INT,&bond_per_atom,&num_bond);
   add_peratom_vary("bond_atom",&bond_atom,tagintsize,&bond_per_atom,&num_bond);
+  // add_peratom_vary("bond_type",&bond_type,INT,&bond_per_atom,&num_bond);
+  // add_peratom_vary("bond_atom",&bond_atom,tagintsize,&bond_per_atom,&num_bond);
 
   add_peratom("num_angle",&num_angle,INT,0);
   add_peratom_vary("angle_type",&angle_type,INT,&angle_per_atom,&num_angle);
@@ -675,6 +692,7 @@ void Atom::create_avec(const std::string &style, int narg, char **arg, int trysu
   // force atom map to be created
   // map style will be reset to array vs hash to by map_init()
 
+  std::cout << "molecular lammps: " << avec->molecular << std::endl;
   molecular = avec->molecular;
   if ((molecular != Atom::ATOMIC) && (tag_enable == 0))
     error->all(FLERR,"Atom IDs must be used for molecular systems");
@@ -698,7 +716,7 @@ void Atom::create_avec_stencil_md(const std::string &style, int narg, char **arg
     //   so that x[0][0] can always be referenced even if proc has no atoms
 
     int sflag;
-    avec = new_avec(style,trysuffix,sflag);
+    avec = new_avec(style,trysuffix,sflag, true);
     avec->store_args(narg,arg);
     avec->process_args(narg,arg);
     avec->grow_stencil_md(1, this);
@@ -727,13 +745,18 @@ void Atom::create_avec_stencil_md(const std::string &style, int narg, char **arg
    generate an AtomVec class, first with suffix appended
 ------------------------------------------------------------------------- */
 
-AtomVec *Atom::new_avec(const std::string &style, int trysuffix, int &sflag)
+AtomVec *Atom::new_avec(const std::string &style, int trysuffix, int &sflag, bool use_stencil_md)
 {
   if (trysuffix && lmp->suffix_enable) {
     if (lmp->suffix) {
       sflag = 1;
       std::string estyle = style + "/" + lmp->suffix;
       if (avec_map->find(estyle) != avec_map->end()) {
+        if (use_stencil_md) {
+            std::cout << "estyle: " << estyle << std::endl;
+            AtomVecCreatorStencilMD &avec_creator_stencil_md = (*avec_map_stencil_md)[estyle];
+            return avec_creator_stencil_md(lmp, this);
+        }
         AtomVecCreator &avec_creator = (*avec_map)[estyle];
         return avec_creator(lmp);
       }
@@ -743,6 +766,10 @@ AtomVec *Atom::new_avec(const std::string &style, int trysuffix, int &sflag)
       sflag = 2;
       std::string estyle = style + "/" + lmp->suffix2;
       if (avec_map->find(estyle) != avec_map->end()) {
+        if (use_stencil_md) {
+            AtomVecCreatorStencilMD &avec_creator_stencil_md = (*avec_map_stencil_md)[estyle];
+            return avec_creator_stencil_md(lmp, this);
+        }
         AtomVecCreator &avec_creator = (*avec_map)[estyle];
         return avec_creator(lmp);
       }
@@ -751,6 +778,10 @@ AtomVec *Atom::new_avec(const std::string &style, int trysuffix, int &sflag)
 
   sflag = 0;
   if (avec_map->find(style) != avec_map->end()) {
+    if (use_stencil_md) {
+        AtomVecCreatorStencilMD &avec_creator_stencil_md = (*avec_map_stencil_md)[style];
+        return avec_creator_stencil_md(lmp, this);
+    }
     AtomVecCreator &avec_creator = (*avec_map)[style];
     return avec_creator(lmp);
   }
@@ -1928,6 +1959,8 @@ int Atom::shape_consistency(int itype, double &shapex, double &shapey, double &s
 
 void Atom::add_molecule(int narg, char **arg)
 {
+  std::cout << "add molecule" << std::endl;
+  assert(false);
   if (narg < 1) utils::missing_cmd_args(FLERR, "molecule", error);
 
   if (find_molecule(arg[0]) >= 0)
@@ -1973,6 +2006,8 @@ int Atom::find_molecule(char *id)
 
 void Atom::add_molecule_atom(Molecule *onemol, int iatom, int ilocal, tagint offset)
 {
+  std::cout << "add molecule atom" << std::endl;
+  assert(false);
   if (onemol->qflag && q_flag) q[ilocal] = onemol->q[iatom];
   if (onemol->radiusflag && radius_flag) radius[ilocal] = onemol->radius[iatom];
   if (onemol->rmassflag && rmass_flag) rmass[ilocal] = onemol->rmass[iatom];
@@ -2061,6 +2096,7 @@ void Atom::add_molecule_atom(Molecule *onemol, int iatom, int ilocal, tagint off
 
 void Atom::first_reorder()
 {
+  assert(false);
   // insure there is one extra atom location at end of arrays for swaps
 
   if (nlocal == nmax) avec->grow(0);

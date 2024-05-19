@@ -47,6 +47,34 @@ AtomVecBond::AtomVecBond(LAMMPS *lmp) : AtomVec(lmp)
   bond_negative = nullptr;
 }
 
+AtomVecBond::AtomVecBond(LAMMPS *lmp, Atom* atom_) : AtomVec(lmp) {
+    molecular = Atom::MOLECULAR;
+    bonds_allow = 1;
+    mass_type = PER_TYPE;
+
+    atom->molecule_flag = 1;
+
+    // strings with peratom variables to include in each AtomVec method
+    // strings cannot contain fields in corresponding AtomVec default strings
+    // order of fields in a string does not matter
+    // except: fields_data_atom & fields_data_vel must match data file
+
+    fields_grow = {"molecule", "num_bond", "bond_type", "bond_atom", "nspecial", "special"};
+    fields_copy = {"molecule", "num_bond", "bond_type", "bond_atom", "nspecial", "special"};
+    fields_border = {"molecule"};
+    fields_border_vel = {"molecule"};
+    fields_exchange = {"molecule", "num_bond", "bond_type", "bond_atom", "nspecial", "special"};
+    fields_restart = {"molecule", "num_bond", "bond_type", "bond_atom"};
+    fields_create = {"molecule", "num_bond", "nspecial"};
+    fields_data_atom = {"id", "molecule", "type", "x"};
+    fields_data_vel = {"id", "v"};
+
+    setup_fields_stencil_md(atom_);
+
+    bond_per_atom = 0;
+    bond_negative = nullptr;
+}
+
 /* ---------------------------------------------------------------------- */
 
 AtomVecBond::~AtomVecBond()
@@ -66,12 +94,19 @@ void AtomVecBond::grow_pointers()
   nspecial = atom->nspecial;
 }
 
+void AtomVecBond::grow_pointers_stencil_md(Atom* atom_) {
+    num_bond = atom_->num_bond;
+    bond_type = atom_->bond_type;
+    nspecial = atom_->nspecial;
+}
+
 /* ----------------------------------------------------------------------
    modify values for AtomVec::pack_restart() to pack
 ------------------------------------------------------------------------- */
 
 void AtomVecBond::pack_restart_pre(int ilocal)
 {
+  assert(false);
   // insure bond_negative vector is needed length
 
   if (bond_per_atom < atom->bond_per_atom) {
@@ -99,6 +134,7 @@ void AtomVecBond::pack_restart_pre(int ilocal)
 
 void AtomVecBond::pack_restart_post(int ilocal)
 {
+  assert(false);
   // restore the flagged types to their negative values
 
   if (any_bond_negative) {
@@ -113,6 +149,7 @@ void AtomVecBond::pack_restart_post(int ilocal)
 
 void AtomVecBond::unpack_restart_init(int ilocal)
 {
+  assert(false);
   nspecial[ilocal][0] = 0;
   nspecial[ilocal][1] = 0;
   nspecial[ilocal][2] = 0;
