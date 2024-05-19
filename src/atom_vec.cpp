@@ -223,7 +223,6 @@ void AtomVec::grow(int n)
   v = memory->grow(atom->v, nmax, 3, "atom:v");
   f = memory->grow(atom->f, nmax * comm->nthreads, 3, "atom:f");
 
-  std::cout << "lammps ngrow: " << ngrow << " nmax: " << nmax << std::endl;
   for (int i = 0; i < ngrow; i++) {
     pdata = mgrow.pdata[i];
     datatype = mgrow.datatype[i];

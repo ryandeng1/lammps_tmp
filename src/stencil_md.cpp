@@ -987,16 +987,6 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                             ->exchange_stencil_md_initial_receive(
                                     first, lmp->domain_stencil_md[zoid_num][t], zoid);
                     first->sort_stencil_md();
-                    if (t == NUM_TIMESTEPS_IN_PARALLEL) {
-                        for (int k = 0; k < first->nlocal; k++) {
-                            if (first->tag[k] == 12777) {
-                                std::cout << "zoid: " << zoid.num << " got target tag. pos: " << first->x[k][0] << " " << first->x[k][1] << " " << first->x[k][2] << std::endl;
-                                for (int dim = 0; dim < 3; dim++) {
-                                    std::cout << "lo: " << zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower << " hi: " << zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper << std::endl;
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }

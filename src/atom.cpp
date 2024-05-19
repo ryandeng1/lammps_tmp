@@ -692,7 +692,6 @@ void Atom::create_avec(const std::string &style, int narg, char **arg, int trysu
   // force atom map to be created
   // map style will be reset to array vs hash to by map_init()
 
-  std::cout << "molecular lammps: " << avec->molecular << std::endl;
   molecular = avec->molecular;
   if ((molecular != Atom::ATOMIC) && (tag_enable == 0))
     error->all(FLERR,"Atom IDs must be used for molecular systems");
