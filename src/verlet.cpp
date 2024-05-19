@@ -74,10 +74,12 @@ static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
 static int64_t unpack_duration = 0;
 static int64_t send_comm_duration = 0;
 static int64_t recv_comm_duration = 0;
-static int64_t compute_duration = 0;
-static int64_t modify_duration = 0;
+static int64_t pair_duration = 0;
+static int64_t bond_duration = 0;
+static int64_t modify_initial_duration = 0;
 static int64_t modify_final_duration = 0;
 static int64_t modify_pre_force_duration = 0;
+static int64_t modify_post_force_duration = 0;
 static int64_t mpi_duration = 0;
 static int64_t curr_dt_comm_duration = 0;
 static int64_t next_dt_comm_duration = 0;
@@ -101,10 +103,13 @@ static int64_t next_dt_num_edges[NUM_ZOIDS][NUM_TIMESTEPS_IN_PARALLEL + 1] = {0}
 static std::vector<int64_t> curr_dt_compute_dep_times_vec[NUM_DEPS];
 static std::vector<int64_t> next_dt_compute_dep_times_vec[NUM_DEPS];
 
-static cilk::opadd_reducer<int64_t> compute_duration_cilk = 0;
-static cilk::opadd_reducer<int64_t> modify_duration_cilk = 0;
+static cilk::opadd_reducer<int64_t> pair_duration_cilk = 0;
+static cilk::opadd_reducer<int64_t> bond_duration_cilk = 0;
+static cilk::opadd_reducer<int64_t> modify_initial_duration_cilk = 0;
 static cilk::opadd_reducer<int64_t> modify_final_duration_cilk = 0;
 static cilk::opadd_reducer<int64_t> modify_pre_force_duration_cilk = 0;
+static cilk::opadd_reducer<int64_t> modify_post_force_duration_cilk = 0;
+
 static cilk::opadd_reducer<int64_t> send_pack_duration_cilk = 0;
 
 static std::vector<int64_t> lammps_forward_comm_times;
@@ -5508,10 +5513,15 @@ void Verlet::run(int n) {
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
-    int64_t stencil_md_total_compute_duration = 0;
-    int64_t stencil_md_total_modify_duration = 0;
+
+    int64_t stencil_md_total_pair_duration = 0;
+    int64_t stencil_md_total_bond_duration = 0;
+
+    int64_t stencil_md_total_modify_initial_duration = 0;
     int64_t stencil_md_total_modify_final_duration = 0;
     int64_t stencil_md_total_modify_pre_force_duration = 0;
+    int64_t stencil_md_total_modify_post_force_duration = 0;
+
     int64_t stencil_md_total_mpi_duration = 0;
     int64_t stencil_md_total_curr_dt_comm_duration = 0;
     int64_t stencil_md_total_next_dt_comm_duration = 0;
@@ -5522,11 +5532,13 @@ void Verlet::run(int n) {
 
     // int64_t my_compute_duration = curr_dt_compute_duration + next_dt_compute_duration;
 
-    MPI_Allreduce(&compute_duration, &stencil_md_total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
-    MPI_Allreduce(&modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
-    MPI_Allreduce(&modify_duration, &stencil_md_total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&pair_duration, &stencil_md_total_pair_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&bond_duration, &stencil_md_total_bond_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&modify_initial_duration, &stencil_md_total_modify_initial_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&modify_final_duration, &stencil_md_total_modify_final_duration, 1, MPI_INT64_T, MPI_SUM, world);
+
     MPI_Allreduce(&modify_pre_force_duration, &stencil_md_total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&modify_post_force_duration, &stencil_md_total_modify_post_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     MPI_Allreduce(&mpi_duration, &stencil_md_total_mpi_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&misc_time, &stencil_md_total_misc_duration, 1, MPI_INT64_T, MPI_SUM, world);
@@ -5543,12 +5555,14 @@ void Verlet::run(int n) {
 
     if (comm->me == 0) {
         std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
-                  << " LOCAL COMPUTE: " << compute_duration
-                  << " TOTAL COMPUTE: " << stencil_md_total_compute_duration
+                  << " LOCAL PAIR: " << pair_duration << " LOCAL BOND: " << bond_duration
+                  << " TOTAL PAIR: " << stencil_md_total_pair_duration << " TOTAL BOND: " << stencil_md_total_bond_duration
                   << " TOTAL COMM: " << stencil_md_total_send_comm_duration + stencil_md_total_recv_comm_duration
                   << " TOTAL SEND COMM: " << stencil_md_total_send_comm_duration << " TOTAL RECV COMM: " << stencil_md_total_recv_comm_duration
-                  << " TOTAL MODIFY: " << stencil_md_total_modify_duration << " TOTAL MODIFY FINAL DURATION: " << stencil_md_total_modify_final_duration
+                  << " TOTAL MODIFY INITIAL: " << stencil_md_total_modify_initial_duration
+                  << " TOTAL MODIFY FINAL DURATION: " << stencil_md_total_modify_final_duration
                   << " TOTAL MODIFY PRE FORCE: " << stencil_md_total_modify_pre_force_duration
+                  << " TOTAL MODIFY POST FORCE: " << stencil_md_total_modify_post_force_duration
                   << " TOTAL MPI DURATION: " << stencil_md_total_mpi_duration
                   << " TOTAL SEND PACK DURATION: " << stencil_md_total_send_pack_duration
                   << " TOTAL MISC DURATION: " << stencil_md_total_misc_duration
@@ -5617,7 +5631,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
         auto end_m = std::chrono::high_resolution_clock::now();
         auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
         if (TIME_STENCIL_MD) {
-            modify_duration_cilk += duration_m;
+            modify_initial_duration_cilk += duration_m;
         }
 
         if (TEST_AGAINST_LAMMPS_LOCAL) {
@@ -5660,8 +5674,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             if (TIME_STENCIL_MD) {
-                compute_duration_cilk += duration;
+               pair_duration_cilk  += duration;
             }
+
+            /*
             if (curr_dt) {
                 curr_dt_compute_dep_time[zoid_num][t + 1] += duration;
                 curr_dt_num_edges[zoid_num][t + 1] += num_edges;
@@ -5669,16 +5685,23 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
                 next_dt_compute_dep_time[zoid_num][t + 1] += duration;
                 next_dt_num_edges[zoid_num][t + 1] += num_edges;
             }
+            */
 
             if (atom->molecular != Atom::ATOMIC) {
                 if (force->bond) {
                     int timestep_flag = starting_timestep + t + 1;
+                    auto begin = std::chrono::high_resolution_clock::now();
                     if (!curr_dt) {
                         timestep_flag += NUM_TIMESTEPS_IN_PARALLEL;
                     }
                     next_force->bond->compute_stencil_md(eflag, vflag, atom_next_timestep,
                                                          zoid.can_eval_center[t + 1],
                                                          zoid, &timestep_flag, neigh_next_timestep);
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    if (TIME_STENCIL_MD) {
+                        bond_duration_cilk += duration;
+                    }
                 }
                 if (force->angle) {
                     assert(false);
@@ -5708,7 +5731,13 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int zoid_num, double** t
         // force modifications, final time integration, diagnostics
 
         if (n_post_force_any) {
+            auto begin = std::chrono::high_resolution_clock::now();
             modify_->post_force_stencil_md(vflag, atom_next_timestep);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            if (TIME_STENCIL_MD) {
+                modify_post_force_duration_cilk += duration;
+            }
             // modify->post_force(vflag);
         }
 
@@ -5859,10 +5888,13 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             recv_comm_duration += duration;
         }
 
-        compute_duration_cilk = 0;
-        modify_duration_cilk = 0;
+        pair_duration_cilk = 0;
+        bond_duration_cilk = 0;
+        modify_initial_duration_cilk = 0;
         modify_final_duration_cilk = 0;
         modify_pre_force_duration_cilk = 0;
+        modify_post_force_duration_cilk = 0;
+
         send_pack_duration_cilk = 0;
 
         cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -5895,12 +5927,15 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
 
         // curr_dt_compute_dep_time[dep] += compute_duration_cilk / SIZES[dep];
         if (TIME_STENCIL_MD) {
-            modify_duration += modify_duration_cilk / SIZES[dep];
+            modify_initial_duration += modify_initial_duration_cilk / SIZES[dep];
             modify_final_duration += modify_final_duration_cilk / SIZES[dep];
-            compute_duration += compute_duration_cilk / SIZES[dep];
+            pair_duration += pair_duration_cilk / SIZES[dep];
+            bond_duration += bond_duration_cilk / SIZES[dep];
             modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
+            modify_post_force_duration += modify_post_force_duration_cilk / SIZES[dep];
             send_pack_duration += send_pack_duration_cilk / SIZES[dep];
 
+            /*
             int num_local_dep = 0;
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 queue_info &zoid = lmp->queues[dep][j];
@@ -5914,6 +5949,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             }
 
             curr_dt_compute_dep_times_vec[dep].push_back(compute_duration_cilk / SIZES[dep]);
+            */
         }
 
         if (dep < NUM_DEPS - 1) {
@@ -6083,8 +6119,9 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
             next_dt_comm_duration += duration;
         }
 
-        compute_duration_cilk = 0;
-        modify_duration_cilk = 0;
+        pair_duration_cilk = 0;
+        bond_duration_cilk = 0;
+        modify_initial_duration_cilk = 0;
         modify_final_duration_cilk = 0;
         modify_pre_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
@@ -6123,10 +6160,20 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         }
 
         if (TIME_STENCIL_MD) {
+            modify_initial_duration += modify_initial_duration_cilk / SIZES[dep];
+            modify_final_duration += modify_final_duration_cilk / SIZES[dep];
+            pair_duration += pair_duration_cilk / SIZES[dep];
+            bond_duration += bond_duration_cilk / SIZES[dep];
+            modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
+            modify_post_force_duration += modify_post_force_duration_cilk / SIZES[dep];
+            send_pack_duration += send_pack_duration_cilk / SIZES[dep];
+            /*
             modify_duration += modify_duration_cilk / SIZES[dep];
             modify_final_duration += modify_final_duration_cilk / SIZES[dep];
-            compute_duration += compute_duration_cilk / SIZES[dep];
+            pair_duration += pair_duration_cilk / SIZES[dep];
+            bond_duration += bond_duration_cilk / SIZES[dep];
             modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
+            modify_post_force_duration += modify_post_force_duration_cilk / SIZES[dep];
             send_pack_duration += send_pack_duration_cilk / SIZES[dep];
 
             int num_local_dep = 0;
@@ -6142,6 +6189,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
                 }
             }
             next_dt_compute_dep_times_vec[dep].push_back(compute_duration_cilk / SIZES[dep]);
+            */
         }
 
         if (dep < NUM_DEPS - 1) {
