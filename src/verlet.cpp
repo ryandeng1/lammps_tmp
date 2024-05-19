@@ -4979,12 +4979,15 @@ void Verlet::run(int n) {
         send_x[i] = 0;
     }
 
-    int64_t lammps_compute_duration = 0;
+    int64_t lammps_pair_duration = 0;
+    int64_t lammps_bond_duration = 0;
     int64_t lammps_comm_duration = 0;
     int64_t lammps_forward_comm_duration = 0;
     int64_t lammps_reverse_comm_duration = 0;
-    int64_t lammps_modify_duration = 0;
+    int64_t lammps_modify_initial_integrate_duration = 0;
+    int64_t lammps_modify_final_integrate_duration = 0;
     int64_t lammps_modify_pre_force_duration = 0;
+    int64_t lammps_modify_post_force_duration = 0;
     int64_t lammps_num_atoms = 0;
 
     // for (int i = 0; i < n; i++) {
@@ -5046,7 +5049,7 @@ void Verlet::run(int n) {
                 modify->initial_integrate(vflag);
                 auto end_m = std::chrono::high_resolution_clock::now();
                 auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-                lammps_modify_duration += duration_m;
+                lammps_modify_initial_integrate_duration += duration_m;
                 if (n_post_integrate) {
                     assert(false);
                     modify->post_integrate();
@@ -5117,7 +5120,6 @@ void Verlet::run(int n) {
                     modify->pre_force(vflag);
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    lammps_modify_duration += duration;
                     lammps_modify_pre_force_duration += duration;
                     timer->stamp(Timer::MODIFY);
                 }
@@ -5127,14 +5129,18 @@ void Verlet::run(int n) {
                     force->pair->compute(eflag, vflag);
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    lammps_compute_duration += duration;
+                    lammps_pair_duration += duration;
                     lammps_num_atoms += atom->nlocal;
                     timer->stamp(Timer::PAIR);
                 }
 
                 if (atom->molecular != Atom::ATOMIC) {
                     if (force->bond) {
+                        auto begin = std::chrono::high_resolution_clock::now();
                         force->bond->compute(eflag, vflag);
+                        auto end = std::chrono::high_resolution_clock::now();
+                        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                        lammps_bond_duration += duration;
                     }
                     if (force->angle) {
                         assert(false);
@@ -5175,14 +5181,18 @@ void Verlet::run(int n) {
 
                 // force modifications, final time integration, diagnostics
                 if (n_post_force_any) {
+                    auto begin = std::chrono::high_resolution_clock::now();
                     modify->post_force(vflag);
+                    auto end = std::chrono::high_resolution_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    lammps_modify_post_force_duration += duration;
                 }
 
                 auto begin_m2 = std::chrono::high_resolution_clock::now();
                 modify->final_integrate();
                 auto end_m2 = std::chrono::high_resolution_clock::now();
                 auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
-                lammps_modify_duration += duration_m2;
+                lammps_modify_final_integrate_duration += duration_m2;
                 if (n_end_of_step) {
                     // modify->end_of_step();
                 }
@@ -5211,18 +5221,23 @@ void Verlet::run(int n) {
     int64_t total_forward_comm_duration = 0;
     int64_t total_reverse_comm_duration = 0;
 
-    int64_t total_compute_duration = 0;
-    int64_t total_modify_duration = 0;
+    int64_t total_pair_duration = 0;
+    int64_t total_bond_duration = 0;
+    int64_t total_modify_initial_integrate_duration = 0;
+    int64_t total_modify_final_integrate_duration = 0;
     int64_t total_modify_pre_force_duration = 0;
-
+    int64_t total_modify_post_force_duration = 0;
 
     MPI_Allreduce(&lammps_comm_duration, &total_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&lammps_forward_comm_duration, &total_forward_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&lammps_reverse_comm_duration, &total_reverse_comm_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
-    MPI_Allreduce(&lammps_compute_duration, &total_compute_duration, 1, MPI_INT64_T, MPI_SUM, world);
-    MPI_Allreduce(&lammps_modify_duration, &total_modify_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&lammps_pair_duration, &total_pair_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&lammps_bond_duration, &total_bond_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&lammps_modify_initial_integrate_duration, &total_modify_initial_integrate_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&lammps_modify_final_integrate_duration, &total_modify_final_integrate_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&lammps_modify_pre_force_duration, &total_modify_pre_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
+    MPI_Allreduce(&lammps_modify_post_force_duration, &total_modify_post_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     if (comm->me == 0) {
         std::cout << GREEN << "process: " << comm->me
@@ -5233,16 +5248,20 @@ void Verlet::run(int n) {
                   << total_reverse_comm_duration << RESET_COLOR << std::endl;
 
         std::cout << YELLOW
-                  << "lammps compute duration: " << lammps_compute_duration << " ratio: " << (double) lammps_num_atoms / lammps_compute_duration
-                  << " " << " total compute duration: " << total_compute_duration << RESET_COLOR
+                  << "lammps pair duration: " << lammps_pair_duration << " bond duration: " << lammps_bond_duration << " ratio: " << (double) lammps_num_atoms / lammps_pair_duration
+                  << " " << " total pair duration: " << total_pair_duration << " total bond duration: " << total_bond_duration << RESET_COLOR
                   << std::endl;
 
         std::cout << YELLOW
-                  << "lammps modify duration: " << lammps_modify_duration << " pre force duration: "
-                  << lammps_modify_pre_force_duration
-                  << " microseconds. " << " total modify duration: " << total_modify_duration
-                  << " total modify pre force duration: " << total_modify_pre_force_duration << RESET_COLOR
-                  << std::endl;
+                  << " lammps modify initial integrate duration: " << lammps_modify_initial_integrate_duration
+                  << " lammps modify final integrate duration: " << lammps_modify_final_integrate_duration
+                  << " pre force duration: " << lammps_modify_pre_force_duration
+                  << " post force duration: " << lammps_modify_post_force_duration
+                  << " total initial integrate: " << total_modify_initial_integrate_duration
+                  << " total final integrate: " << total_modify_final_integrate_duration
+                  << " total modify pre force duration: " << total_modify_pre_force_duration
+                  << " total modify post force duration: " << total_modify_post_force_duration
+                  << RESET_COLOR << std::endl;
     }
 
     /*
