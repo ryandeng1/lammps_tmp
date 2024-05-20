@@ -40,6 +40,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <cilk/cilk.h>
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -933,7 +934,7 @@ template < int Tp_TSTYLEATOM, int Tp_GJF, int Tp_TALLY,
            int Tp_BIAS, int Tp_RMASS, int Tp_ZERO >
 void FixLangevin::post_force_templated()
 {
-  double gamma1,gamma2;
+  // double gamma1,gamma2;
 
   double **v = atom->v;
   double **f = atom->f;
@@ -994,7 +995,8 @@ void FixLangevin::post_force_templated()
 
   if (Tp_BIAS) temperature->compute_scalar();
 
-  for (int i = 0; i < nlocal; i++) {
+  cilk_for (int i = 0; i < nlocal; i++) {
+    double gamma1, gamma2;
     if (mask[i] & groupbit) {
       if (Tp_TSTYLEATOM) tsqrt = sqrt(tforce[i]);
       if (Tp_RMASS) {
