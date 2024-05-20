@@ -6142,6 +6142,7 @@ void Verlet::run_stencil_md(int starting_timestep, std::vector<int>* dep_to_wait
         modify_initial_duration_cilk = 0;
         modify_final_duration_cilk = 0;
         modify_pre_force_duration_cilk = 0;
+        modify_post_force_duration_cilk = 0;
         send_pack_duration_cilk = 0;
 
         cilk_for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
