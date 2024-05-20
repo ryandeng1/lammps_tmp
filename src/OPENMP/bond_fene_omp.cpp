@@ -159,7 +159,7 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
         nthreads_to_use = nthreads;
     }
 
-    for (int tid = 0; tid < nthreads_to_use; tid++) {
+    cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // each thread works on a fixed chunk of atoms.
         const int idelta = 1 + inum / nthreads_to_use;
         int ifrom = tid * idelta;
