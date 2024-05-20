@@ -58,6 +58,7 @@
 #include <unordered_map>
 #include <sstream>
 #include <cilk/opadd_reducer.h>
+#include <iomanip>
 
 #include <CGAL/spatial_sort.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
@@ -375,10 +376,10 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         double new_pos[3] = {atom_->x[idx][0], atom_->x[idx][1],
                              atom_->x[idx][2]};
         for (int dim = 0; dim < 3; dim++) {
-            if (new_pos[dim] < 0) {
+            if (new_pos[dim] < domain->boxlo[dim]) {
                 new_pos[dim] += domain->prd[dim];
             }
-            if (new_pos[dim] > domain->prd[dim]) {
+            if (new_pos[dim] > domain->boxhi[dim]) {
                 new_pos[dim] -= domain->prd[dim];
             }
         }
@@ -420,9 +421,7 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         for (int k = 0; k < NUM_ZOIDS; k++) {
             bool in_zoid_prev = true;
             bool in_zoid_next = true;
-
             bool in_zoid_curr = true;
-
             bool borders_zoid = true;
 
             queue_info& zoid_tmp = lmp->zoid_num_to_zoid[k];
@@ -479,7 +478,7 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                     pbc_ = 1;
                 }
 
-                double atom_pos_shifted = value + pbc_ * domain->prd[dim];
+                // double atom_pos_shifted = value + pbc_ * domain->prd[dim];
 
                 double sub = value - domain->prd[dim];
                 double add = value + domain->prd[dim];
@@ -525,6 +524,25 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             }
 
             if (in_zoid_prev) {
+                if (target_zoid_prev != -1) {
+                    std::cout << "tag: " << atom_->tag[idx] << std::endl;
+                    std::cout << "period: " << domain->prd[0] << " " << domain->prd[1] << " " << domain->prd[2]
+                        << " boxlo: " << domain->boxlo[0] << " " << domain->boxlo[1] << " " << domain->boxlo[2]
+                        << " boxhi: " << domain->boxhi[0] << " " << domain->boxhi[1] << " " << domain->boxhi[2] << std::endl;
+                    std::cout << "old pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1] << " " << atom_->x[idx][2]
+                        << " pos: " << new_pos[0] << " " << new_pos[1] << " " << new_pos[2] << std::endl;
+                    std::cout << "target zoid prev: " << target_zoid_prev << " curr zoid: " << k << " time: " << timestep << std::endl;
+                    queue_info& prev_zoid = lmp->zoid_num_to_zoid[target_zoid_prev];
+                    queue_info& new_zoid = lmp->zoid_num_to_zoid[k];
+                    for (int dim = 0; dim < 3; dim++) {
+                        std::cout << "me: " << comm->me << " prev zoid lo: " << prev_zoid.zoid.cuts[dim].lower + timestep * prev_zoid.zoid.cuts[dim].slope_lower
+                            << " prev zoid hi: " << prev_zoid.zoid.cuts[dim].upper + timestep * prev_zoid.zoid.cuts[dim].slope_upper << std::endl;
+                    }
+                    for (int dim = 0; dim < 3; dim++) {
+                        std::cout << "me: " << comm->me << " new zoid lo: " << new_zoid.zoid.cuts[dim].lower + timestep * new_zoid.zoid.cuts[dim].slope_lower
+                                  << " new zoid hi: " << new_zoid.zoid.cuts[dim].upper + timestep * new_zoid.zoid.cuts[dim].slope_upper << std::endl;
+                    }
+                }
                 assert(target_zoid_prev == -1);
                 target_zoid_prev = k;
             }
