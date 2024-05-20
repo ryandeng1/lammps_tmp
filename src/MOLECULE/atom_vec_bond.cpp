@@ -106,7 +106,6 @@ void AtomVecBond::grow_pointers_stencil_md(Atom* atom_) {
 
 void AtomVecBond::pack_restart_pre(int ilocal)
 {
-  assert(false);
   // insure bond_negative vector is needed length
 
   if (bond_per_atom < atom->bond_per_atom) {
@@ -134,7 +133,6 @@ void AtomVecBond::pack_restart_pre(int ilocal)
 
 void AtomVecBond::pack_restart_post(int ilocal)
 {
-  assert(false);
   // restore the flagged types to their negative values
 
   if (any_bond_negative) {
@@ -149,7 +147,6 @@ void AtomVecBond::pack_restart_post(int ilocal)
 
 void AtomVecBond::unpack_restart_init(int ilocal)
 {
-  assert(false);
   nspecial[ilocal][0] = 0;
   nspecial[ilocal][1] = 0;
   nspecial[ilocal][2] = 0;
