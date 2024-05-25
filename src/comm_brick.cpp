@@ -188,7 +188,6 @@ void CommBrick::init_buffers()
   }
 
   // stencil_md
-  buf_send_stencil_md_ready = false;
   buf_recv_stencil_md = buf_send_stencil_md = nullptr;
   maxsend_stencil_md = maxrecv_stencil_md = nullptr;
   memory->create(maxsend_stencil_md, maxswap, "comm:maxsendlist");
