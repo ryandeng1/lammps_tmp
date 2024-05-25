@@ -133,11 +133,6 @@ class CommBrick : public Comm {
   double *buf_send;        // send buffer for all comm
   double *buf_recv;        // recv buffer for all comm
 
-  Cilksan_fake_mutex buf_send_stencil_md_cilksan_lock;
-  std::mutex buf_send_stencil_md_mutex;
-  bool buf_send_stencil_md_ready;
-  std::condition_variable buf_send_stencil_md_cv;
-
   double** buf_send_stencil_md;
   double** buf_recv_stencil_md;
 
