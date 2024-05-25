@@ -63,7 +63,7 @@ constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
 constexpr bool DEBUG_SEND_RECV_DATA = false;
 
-constexpr bool TEST_AGAINST_LAMMPS = true;
+constexpr bool TEST_AGAINST_LAMMPS = false;
 
 constexpr bool PURELY_LOCAL_POTENTIAL = true;
 
@@ -81,9 +81,9 @@ constexpr int NUM_ATOMS_PER_WORKER = 128;
 
 constexpr bool ONLY_RUN_LAMMPS = false;
 
-constexpr bool ONLY_RUN_STENCIL_MD = false;
+constexpr bool ONLY_RUN_STENCIL_MD = true;
 
-constexpr bool LAMMPS_USE_CILK = false;
+constexpr bool LAMMPS_USE_CILK = true;
 
 constexpr bool TIME_STENCIL_MD = true;
 
