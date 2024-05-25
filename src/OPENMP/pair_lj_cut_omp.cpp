@@ -201,20 +201,19 @@ void PairLJCutOMP::compute(int eflag, int vflag)
     thr->timer(Timer::PAIR);
     reduce_thr(this, eflag, vflag, thr);
   } // end of omp parallel region
-  // std::cout << "num lammps edges: " << num_lammps_edges << std::endl;
 }
 
 void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* can_eval_center, queue_info& zoid, int* num_eval) {
-    // num_edges = 0;
-    // num_accepted_edges = 0;
     ev_init(eflag,vflag);
     const int nall = atom_->nlocal + atom_->nghost;
     const int nlocal = atom_->nlocal;
     const int nthreads = comm->nthreads;
     const int inum = list->inum;
 
-    int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
+    // int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
+    int nthreads_to_use = zoid.inum_per_timestep[*num_eval];
 
+    /*
     if (nthreads_to_use < 1) {
         nthreads_to_use = 1;
     }
@@ -222,17 +221,13 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     if (nthreads_to_use > nthreads) {
         nthreads_to_use = nthreads;
     }
+    */
 
     double **f_ = atom_->eval_f_stencil_md;
     double **torque = atom_->torque;
     double *erforce = atom_->erforce;
     double *desph = atom_->desph;
     double *drho = atom_->drho;
-
-    cilk_for (int tid = 0; tid < comm->nthreads; tid++) {
-        ThrData *thr = fix->get_thr(tid);
-        thr->init_force(nall,f_,torque,erforce,desph,drho);
-    }
 
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // each thread works on a fixed chunk of atoms.
@@ -243,6 +238,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         // loop_setup_thr(ifrom, ito, tid, inum, nthreads);
         ThrData *thr = fix->get_thr(tid);
         thr->timer(Timer::START);
+        thr->init_force(nall,f_,torque,erforce,desph,drho);
         ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
 
         if (evflag) {
@@ -269,6 +265,11 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         thr->timer(Timer::PAIR);
     }
 
+    if (USE_BOND) {
+        return;
+    }
+
+    // In bond computation, no need to do reduce here. Can do it later in one go in bond_fene_omp.cpp.
     // try new reduce
     if (nthreads_to_use == 1) {
         return;
@@ -280,8 +281,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     constexpr int CHUNK_SIZE = 1024;
 
-    // start = wsp_getworkspan();
-    /*
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
         for (int n = 1; n < nthreads_to_use; n++) {
             for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
@@ -289,18 +288,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
         }
     }
-    */
-
-    /*
-    // #pragma cilk grainsize NUM_WORKERS_PER_THREAD
-    cilk_for (int i = 0; i < nvals; i++) {
-        double t0 = f[i];
-        for (int n = 1; n < nthreads_to_use; ++n) {
-            t0 += f[n * nvals + i];
-        }
-        f[i] = t0;
-    }
-    */
 
     // try new reduce
     /*
@@ -308,11 +295,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         ThrData *thr = fix->get_thr(tid);
         reduce_thr_stencil_md(this, eflag, vflag, thr, atom_, nthreads_to_use);
     } // end of omp parallel region
-    */
-    /*
-    if (num_eval != nullptr) {
-        std::cout << CYAN << "nlocal: " << nlocal << " zoid: " << zoid.num << " timestep: " << *num_eval << " num edges: " << num_edges << " num accepted edges: " << num_accepted_edges << RESET_COLOR << std::endl;
-    }
     */
 }
 

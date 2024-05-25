@@ -65,12 +65,6 @@ class CommKokkos : public CommBrick {
   void borders_stencil_md_initial_send(Atom*, Domain*, queue_info&, int) override;
   void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&, int) override;
 
-  void borders_stencil_md_initial_send_to_zoid(Atom*, Domain*, queue_info&, int, int) override;
-  void borders_stencil_md_initial_receive_from_zoid(Atom*, Domain*, queue_info&, int, int) override;
-
-  void exchange_stencil_md_initial_send_to_zoid(Atom*, queue_info&, queue_info&, int timestep) override;
-  void exchange_stencil_md_initial_receive_from_zoid(Atom*, queue_info&, queue_info&, int timestep) override;
-
   void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;
   void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
   void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;

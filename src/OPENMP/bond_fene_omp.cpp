@@ -96,9 +96,6 @@ void BondFENEOMP::compute(int eflag, int vflag)
 
       constexpr int CHUNK_SIZE = 512;
 
-      // start = wsp_getworkspan();
-
-      /*
       cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
           for (int n = 1; n < comm->nthreads; n++) {
               for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
@@ -106,7 +103,6 @@ void BondFENEOMP::compute(int eflag, int vflag)
               }
           }
       }
-      */
 
       return;
   }
@@ -149,6 +145,9 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
     const int inum = neighbor_->nbondlist;
     double **f_ = atom_->eval_f_stencil_md;
 
+    int nthreads_to_use = zoid.inum_per_timestep[*num_eval];
+
+    /*
     int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
 
     if (nthreads_to_use < 1) {
@@ -158,6 +157,7 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
     if (nthreads_to_use > nthreads) {
         nthreads_to_use = nthreads;
     }
+    */
 
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // each thread works on a fixed chunk of atoms.
@@ -198,11 +198,9 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
     }
 
     // try new reduce
-    /*
     if (nthreads_to_use == 1) {
         return;
     }
-    */
 
     double* f = &(atom_->eval_f_stencil_md[0][0]);
 
@@ -210,10 +208,9 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
 
     constexpr int CHUNK_SIZE = 1024;
 
-    // start = wsp_getworkspan();
     cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
-        // for (int n = 1; n < nthreads_to_use; n++) {
-        for (int n = 1; n < comm->nthreads; n++) {
+        for (int n = 1; n < nthreads_to_use; n++) {
+        // for (int n = 1; n < comm->nthreads; n++) {
             for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
                 f[j] += f[n * nvals + j];
             }

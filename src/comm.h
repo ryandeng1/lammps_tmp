@@ -88,14 +88,8 @@ class Comm : protected Pointers {
   virtual void borders_stencil_md_initial_send(std::vector<MPI_Request>& r) { assert(false); };
   virtual void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) { assert(false); }
 
-  virtual void exchange_stencil_md_initial_send_to_zoid(Atom*, queue_info&, queue_info&, int timestep) { assert(false); }
-  virtual void exchange_stencil_md_initial_receive_from_zoid(Atom*, queue_info&, queue_info&, int timestep) { assert(false); }
-
   virtual void borders_stencil_md_initial_send(Atom*, Domain*, queue_info&, int) {assert(false);};
   virtual void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&, int) {assert(false);};
-
-  virtual void borders_stencil_md_initial_send_to_zoid(Atom*, Domain*, queue_info&, int, int) {assert(false);};
-  virtual void borders_stencil_md_initial_receive_from_zoid(Atom*, Domain*, queue_info&, int, int) {assert(false);};
 
   // virtual void borders_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) {};                     // move atoms to new procs, stencil_md version
   virtual void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
@@ -103,12 +97,24 @@ class Comm : protected Pointers {
   virtual void unpack_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
 
   // combine curr_dt and next_dt implementations
-  virtual bool send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*, int, bool is_initial, int64_t* pack_duration) {assert(false);}
-  virtual void receive_data_process_stencil_md(bool curr_dt, MPI_Request*, int, bool is_initial) {assert(false);}
-  virtual void unpack_data_process_stencil_md(bool curr_dt, int, bool is_initial) { assert(false); }
+  virtual bool send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*,
+                                               int proc, bool is_initial, int pipeline_stage=0) {assert(false);}
+  virtual void receive_data_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                               MPI_Request*, int recv_zoid_num, int pipeline_stage=0) {assert(false);}
+  virtual void unpack_data_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                              int recv_zoid_num, int pipeline_stage=0) { assert(false); }
 
-  virtual void pack_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, int, bool is_initial) { assert(false); }
-  virtual bool send_packed_data_to_process_stencil_md(bool curr_dt, queue_info& zoid, MPI_Request* request, int proc) { assert(false); }
+  virtual void unpack_data_process_zoid_stencil_md(bool curr_dt, queue_info& zoid, int start_timestep, int end_timestep,
+                                                   int pipeline_stage) { assert(false); }
+
+  virtual void pack_data_to_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                               std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                               queue_info&, int proc, int pipeline_stage=0) { assert(false); }
+
+  virtual bool send_packed_data_to_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                                      queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage=0) { assert(false); }
+
+  virtual void unpack_self_stencil_md(bool curr_dt, int start_timestep, int end_timestep, queue_info& zoid, int pipeline_stage=0) { assert(false); }
 
   virtual void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
 

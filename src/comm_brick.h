@@ -16,6 +16,7 @@
 
 #include "comm.h"
 #include "stencil_md_utils.h"
+#include <cilk/cilksan.h>
 
 namespace LAMMPS_NS {
 
@@ -40,26 +41,35 @@ class CommBrick : public Comm {
   void borders_stencil_md_initial_send(std::vector<MPI_Request>& r) override;                     // move atoms to new procs, stencil_md version
   void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
 
-  void exchange_stencil_md_initial_send_to_zoid(Atom*, queue_info&, queue_info&, int timestep) override;                     // move atoms to new procs, stencil_md version
-  void exchange_stencil_md_initial_receive_from_zoid(Atom*, queue_info&, queue_info&, int timestep) override;                     // move atoms to new procs, stencil_md version
-
   void borders_stencil_md_initial_send(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
   void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
-
-  void borders_stencil_md_initial_send_to_zoid(Atom*, Domain*, queue_info&, int, int) override;                     // move atoms to new procs, stencil_md version
-  void borders_stencil_md_initial_receive_from_zoid(Atom*, Domain*, queue_info&, int, int) override;                     // move atoms to new procs, stencil_md version
 
   // void borders_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
   void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
   void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
   void unpack_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
 
-  void unpack_data_process_stencil_md(bool curr_dt, int recv_zoid_num, bool is_initial) override;
-  bool send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*, int, bool is_initial, int64_t* pack_duration) override;
-  void receive_data_process_stencil_md(bool curr_dt, MPI_Request*, int, bool is_initial) override;
+  void unpack_data_process_zoid_stencil_md(bool curr_dt, queue_info& zoid, int start_timestep, int end_timestep,
+                                           int pipeline_stage) override;
 
-  void pack_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, int, bool is_initial) override;
-  bool send_packed_data_to_process_stencil_md(bool curr_dt, queue_info& zoid, MPI_Request* request, int proc) override;
+  void unpack_data_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                      int recv_zoid_num, int pipeline_stage=0) override;
+
+  void unpack_self_stencil_md(bool curr_dt, int start_timestep, int end_timestep, queue_info& zoid, int pipeline_stage=0) override;
+
+  bool send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&,
+                                       MPI_Request*, int, bool is_initial, int pipeline_stage=0) override;
+
+  void receive_data_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                       MPI_Request* request, int recv_zoid_num, int pipeline_stage=0) override;
+
+  void pack_data_to_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                       std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                       queue_info& zoid,
+                                       int proc, int pipeline_stage) override;
+
+  bool send_packed_data_to_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                              queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage=0) override;
 
   void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid,
@@ -123,8 +133,14 @@ class CommBrick : public Comm {
   double *buf_send;        // send buffer for all comm
   double *buf_recv;        // recv buffer for all comm
 
+  Cilksan_fake_mutex buf_send_stencil_md_cilksan_lock;
+  std::mutex buf_send_stencil_md_mutex;
+  bool buf_send_stencil_md_ready;
+  std::condition_variable buf_send_stencil_md_cv;
+
   double** buf_send_stencil_md;
   double** buf_recv_stencil_md;
+
   int* maxsend_stencil_md;
   int* maxrecv_stencil_md;
 
@@ -152,19 +168,8 @@ class CommBrick : public Comm {
   virtual void free_multi();              // free multi arrays
   virtual void free_multiold();           // free multi/old arrays
 
-  void grow_send_sendlist_stencil_md(int, int, int);
-  void grow_recv_sendlist_stencil_md(int, int);
-
-  void grow_second_sendlist_stencil_md(int, int, int);
-  void grow_second_sendlist_stencil_md_next_dt(int, int, int);
-  void grow_list_stencil_md(int, int, int);
-  void grow_list_stencil_md_next_dt(int, int, int);
-
   void grow_send_stencil_md(int, int, int);
   void grow_recv_stencil_md(int, int);
-
-  void grow_send2_stencil_md(int, int, int);
-  void grow_recv2_stencil_md(int, int);
 
   int ** sendlist_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
   int ** sendlist_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -196,18 +201,6 @@ class CommBrick : public Comm {
   bool** send_force_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
   bool** send_pos_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
   bool** send_vel_stencil_md_next_dt[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-  double** buf_send2_stencil_md;
-  double** buf_recv2_stencil_md;
-  int* maxsend2_stencil_md;
-  int* maxrecv2_stencil_md;
-
-  int* num_elems_recv_process[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-  // TODO: change this to int*, just use std::vector<int> rn to avoid the headache
-  std::vector<int> sendlist_shared_ghost_stencil_md[NUM_TIMESTEPS_IN_PARALLEL];
-  // int ** sendlist_shared_ghost_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
-  // int* sendnum_shared_ghost_stencil_md[NUM_TIMESTEPS_IN_PARALLEL + 1];
 };
 
 }    // namespace LAMMPS_NS

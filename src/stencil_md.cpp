@@ -411,6 +411,8 @@ void StencilMD::INIT_ZOID_DATA() {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
+                zoid.inum_per_timestep = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 zoid.num_send_process_timestep = new int*[comm->nprocs];
                 for (int proc = 0; proc < comm->nprocs; proc++) {
                     zoid.num_send_process_timestep[proc] = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -535,6 +537,8 @@ void StencilMD::INIT_ZOID_DATA() {
         for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info& zoid = lmp->queues_next_dt[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
+                zoid.inum_per_timestep = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 zoid.num_send_process_timestep = new int*[comm->nprocs];
                 for (int proc = 0; proc < comm->nprocs; proc++) {
                     zoid.num_send_process_timestep[proc] = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -1083,6 +1087,66 @@ void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
     }
 }
 
+// TODO: what to do with inum per timestep
+void StencilMD::SET_INUM_PER_TIMESTEP() {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
+                    Neighbor* neighbor_ = lmp->neighbor_stencil_md[zoid_num][t];
+
+                    int nlocal = atom_->nlocal;
+                    int inum = neighbor_->nbondlist;
+
+                    auto max_inum = std::max({nlocal, inum});
+
+                    int nthreads_to_use = max_inum / NUM_WORKERS_PER_THREAD;
+                    if (nthreads_to_use < 1) {
+                        nthreads_to_use = 1;
+                    }
+
+                    if (nthreads_to_use > comm->nthreads) {
+                        nthreads_to_use = comm->nthreads;
+                    }
+                    zoid.inum_per_timestep[t] = nthreads_to_use;
+                }
+            }
+        }
+    }
+}
+
+void StencilMD::SET_INUM_PER_TIMESTEP_NEXT_DT() {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+                queue_info& zoid = lmp->queues_next_dt[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t];
+                    Neighbor* neighbor_ = lmp->neighbor_stencil_md[zoid_num][t];
+
+                    int nlocal = atom_->nlocal;
+                    int inum = neighbor_->nbondlist;
+
+                    auto max_inum = std::max({nlocal, inum});
+
+                    int nthreads_to_use = max_inum / NUM_WORKERS_PER_THREAD;
+                    if (nthreads_to_use < 1) {
+                        nthreads_to_use = 1;
+                    }
+
+                    if (nthreads_to_use > comm->nthreads) {
+                        nthreads_to_use = comm->nthreads;
+                    }
+                    zoid.inum_per_timestep[t] = nthreads_to_use;
+                }
+            }
+        }
+    }
+}
 
 void StencilMD::COMPUTE_NUM_SEND_RECV_PROCESS() {
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {

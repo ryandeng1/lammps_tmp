@@ -852,24 +852,6 @@ void CommKokkos::borders()
     copy_swap_info();
 }
 
-void CommKokkos::exchange_stencil_md_initial_send_to_zoid(Atom* atom_, queue_info& zoid, queue_info& send_zoid, int timestep) {
-    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
-    atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
-    k_sendlist.sync<LMPHostType>();
-    CommBrick::exchange_stencil_md_initial_send_to_zoid(atom_, zoid, send_zoid, timestep);
-    k_sendlist.modify<LMPHostType>();
-    atomKK_->modified_stencil_md(Host,ALL_MASK, atom_);
-}
-
-void CommKokkos::exchange_stencil_md_initial_receive_from_zoid(Atom* atom_, queue_info& zoid, queue_info& recv_from_zoid, int timestep) {
-    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
-    atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
-    k_sendlist.sync<LMPHostType>();
-    CommBrick::exchange_stencil_md_initial_receive_from_zoid(atom_, zoid, recv_from_zoid, timestep);
-    k_sendlist.modify<LMPHostType>();
-    atomKK_->modified_stencil_md(Host,ALL_MASK, atom_);
-}
-
 void CommKokkos::borders_stencil_md_initial_receive(Atom* atom_, Domain* domain_, queue_info& zoid, int timestep) {
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
     atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
@@ -879,29 +861,11 @@ void CommKokkos::borders_stencil_md_initial_receive(Atom* atom_, Domain* domain_
     atomKK_->modified_stencil_md(Host,ALL_MASK, atom_);
 }
 
-void CommKokkos::borders_stencil_md_initial_receive_from_zoid(Atom* atom_, Domain* domain_, queue_info& zoid, int timestep, int recv_zoid_num) {
-    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
-    atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
-    k_sendlist.sync<LMPHostType>();
-    CommBrick::borders_stencil_md_initial_receive_from_zoid(atom_, domain_, zoid, timestep, recv_zoid_num);
-    k_sendlist.modify<LMPHostType>();
-    atomKK_->modified_stencil_md(Host,ALL_MASK, atom_);
-}
-
 void CommKokkos::borders_stencil_md_initial_send(Atom* atom_, Domain* domain_, queue_info& zoid, int timestep_idx) {
     AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
     atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
     k_sendlist.sync<LMPHostType>();
     CommBrick::borders_stencil_md_initial_send(atom_, domain_, zoid, timestep_idx);
-    k_sendlist.modify<LMPHostType>();
-    atomKK_->modified_stencil_md(Host,ALL_MASK, atom_);
-}
-
-void CommKokkos::borders_stencil_md_initial_send_to_zoid(Atom* atom_, Domain* domain_, queue_info& zoid, int timestep_idx, int send_zoid_num) {
-    AtomKokkos* atomKK_ = (AtomKokkos*) atom_;
-    atomKK_->sync_stencil_md(Host,ALL_MASK, atom_);
-    k_sendlist.sync<LMPHostType>();
-    CommBrick::borders_stencil_md_initial_send_to_zoid(atom_, domain_, zoid, timestep_idx, send_zoid_num);
     k_sendlist.modify<LMPHostType>();
     atomKK_->modified_stencil_md(Host,ALL_MASK, atom_);
 }

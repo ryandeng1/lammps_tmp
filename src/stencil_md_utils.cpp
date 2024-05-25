@@ -428,3 +428,9 @@ uint64_t timeSinceEpochMillisec() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
+
+int get_mpi_tag(int dst_zoid_num, int src_zoid_num, int start_timestep, int end_timestep) {
+    int mpi_tag = (dst_zoid_num << 8 | src_zoid_num);
+    mpi_tag = (mpi_tag << 8) | end_timestep;
+    return mpi_tag;
+}

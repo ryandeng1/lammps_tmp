@@ -995,7 +995,7 @@ void FixLangevin::post_force_templated()
 
   if (Tp_BIAS) temperature->compute_scalar();
 
-  cilk_for (int i = 0; i < nlocal; i++) {
+  for (int i = 0; i < nlocal; i++) {
     double gamma1, gamma2;
     if (mask[i] & groupbit) {
       if (Tp_TSTYLEATOM) tsqrt = sqrt(tforce[i]);
@@ -1144,8 +1144,6 @@ void FixLangevin::post_force_templated()
 template < int Tp_TSTYLEATOM, int Tp_GJF, int Tp_TALLY,
         int Tp_BIAS, int Tp_RMASS, int Tp_ZERO >
 void FixLangevin::post_force_templated_stencil_md(Atom* atom_) {
-    double gamma1,gamma2;
-
     double **v = atom_->v;
     double **f = atom_->eval_f_stencil_md;
     double *rmass = atom_->rmass;
@@ -1174,7 +1172,8 @@ void FixLangevin::post_force_templated_stencil_md(Atom* atom_) {
     //   sum random force over all atoms in group
     //   subtract sum/count from each atom in group
 
-    double fdrag[3],fran[3],fsum[3],fsumall[3];
+    // double fdrag[3],fran[3],fsum[3],fsumall[3];
+    double fsum[3], fsumall[3];
     bigint count;
     double fswap;
 
@@ -1205,7 +1204,11 @@ void FixLangevin::post_force_templated_stencil_md(Atom* atom_) {
 
     if (Tp_BIAS) temperature->compute_scalar();
 
-    for (int i = 0; i < nlocal; i++) {
+    cilk_for (int i = 0; i < nlocal; i++) {
+        // these are per-atom variables that get updated. Need to put them here to avoid races.
+        double fdrag[3],fran[3];
+        double gamma1, gamma2;
+
         if (mask[i] & groupbit) {
             if (Tp_TSTYLEATOM) tsqrt = sqrt(tforce[i]);
             if (Tp_RMASS) {

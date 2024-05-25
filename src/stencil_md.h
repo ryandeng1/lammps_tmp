@@ -78,6 +78,9 @@ public:
     void COMPARE_POS_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_x);
 
     void COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_f);
+
+    void SET_INUM_PER_TIMESTEP();
+    void SET_INUM_PER_TIMESTEP_NEXT_DT();
 };
 
 }

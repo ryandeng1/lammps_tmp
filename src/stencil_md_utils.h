@@ -63,7 +63,7 @@ constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
 constexpr bool DEBUG_SEND_RECV_DATA = false;
 
-constexpr bool TEST_AGAINST_LAMMPS = false;
+constexpr bool TEST_AGAINST_LAMMPS = true;
 
 constexpr bool PURELY_LOCAL_POTENTIAL = true;
 
@@ -77,15 +77,19 @@ constexpr bool DEBUG = true;
 
 constexpr int NUM_WORKERS_PER_THREAD = 64;
 
+constexpr int NUM_ATOMS_PER_WORKER = 128;
+
 constexpr bool ONLY_RUN_LAMMPS = false;
 
-constexpr bool ONLY_RUN_STENCIL_MD = true;
+constexpr bool ONLY_RUN_STENCIL_MD = false;
 
-constexpr bool LAMMPS_USE_CILK = true;
+constexpr bool LAMMPS_USE_CILK = false;
 
 constexpr bool TIME_STENCIL_MD = true;
 
 constexpr bool USE_BOND = true;
+
+constexpr int NUM_PIPELINE_STAGES = 2;
 
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
@@ -320,6 +324,7 @@ typedef struct cuts cuts_t;
 
 // struct that holds information for queue
 struct queue_info {
+  int* inum_per_timestep;
   int debug_int;
   int t0;
   int t1;
@@ -422,5 +427,7 @@ void print_cuts(const cuts_t &);
 int get_segments(const std::vector<int>&, std::vector<int>&, std::vector<int>&, bool print=false);
 
 uint64_t timeSinceEpochMillisec();
+
+int get_mpi_tag(int dst, int src, int start_timestep=0, int end_timestep=0);
 
 #endif    //LAMMPS_STENCIL_MD_UTILS_H
