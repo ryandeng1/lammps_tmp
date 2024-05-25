@@ -6461,7 +6461,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
             Atom *atom_ = curr_dt ? lmp->atom_stencil_md[i][t] : lmp->atom_stencil_md[i][NUM_TIMESTEPS_IN_PARALLEL - t];
             int nall = atom_->nlocal + atom_->nghost;
             memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
-            memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
+            // memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
         }
     }
 }
