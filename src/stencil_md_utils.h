@@ -91,6 +91,8 @@ constexpr bool USE_BOND = true;
 
 constexpr int NUM_PIPELINE_STAGES = 2;
 
+constexpr bool USE_ATOMICS = true;
+
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
         {std::make_tuple(RIGHT, RIGHT, RIGHT), 1},

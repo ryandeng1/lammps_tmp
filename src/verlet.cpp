@@ -6415,7 +6415,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                                    send_requests2, receive_requests2,
                                                    dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, 1);
 
-            cilk_spawn run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, start_t, mid_t, dep_to_idx,
+            run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, start_t, mid_t, dep_to_idx,
                                                              send_requests, receive_requests,
                                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, 0);
     }
@@ -6425,7 +6425,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                                              send_requests2, receive_requests2,
                                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, 1);
 
-            cilk_spawn run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, start_t, mid_t, dep_to_idx,
+            run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, start_t, mid_t, dep_to_idx,
                                                              send_requests, receive_requests,
                                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, 0);
     }
@@ -6435,7 +6435,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                                              send_requests2, receive_requests2,
                                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, 1);
 
-            cilk_spawn run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, start_t, mid_t, dep_to_idx,
+            run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, start_t, mid_t, dep_to_idx,
                                                              send_requests, receive_requests,
                                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, 0);
     }
@@ -6461,7 +6461,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
             Atom *atom_ = curr_dt ? lmp->atom_stencil_md[i][t] : lmp->atom_stencil_md[i][NUM_TIMESTEPS_IN_PARALLEL - t];
             int nall = atom_->nlocal + atom_->nghost;
             memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
-            // memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
+            memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
         }
     }
 }
