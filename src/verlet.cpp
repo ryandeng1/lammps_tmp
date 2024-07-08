@@ -1247,10 +1247,6 @@ void Verlet::construct_send_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid
                 double* pos = atom_->x[idx];
                 auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
                 bins.insert(bin);
-
-                if (zoid.num == 0 && send_zoid_num == 10 && timestep == 10) {
-                    std::cout << "RECV GHOST BIN: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << " bin idx: " << get_bin_idx(bin) << " type: " << segment_type << " i: " << i << std::endl;
-                }
             }
         }
 
@@ -1263,9 +1259,6 @@ void Verlet::construct_send_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid
                 double* pos = atom_->x[idx];
                 auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
                 bins.insert(bin);
-                if (zoid.num == 0 && send_zoid_num == 10 && timestep == 10) {
-                    std::cout << "RECV LOCAL BIN: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << " bin idx: " << get_bin_idx(bin) << " i: " << i << std::endl;
-                }
             }
         }
 
