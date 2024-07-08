@@ -1436,15 +1436,6 @@ void Verlet::construct_bin_to_idx(bool curr_dt, Atom* atom_, queue_info &zoid, i
 
     std::set<std::tuple<int, int, int>> all_bins;
 
-    if (zoid.num == 56 && timestep == 0) {
-        for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
-            auto bin = get_bin(bounds, atom_->x[i], domain->boxlo, domain->boxhi);
-            int bin_idx = get_bin_idx(bin);
-            std::cout << BOLDGREEN << "i: " << i << " nlocal: " << atom_->nlocal << " bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << " bin idx: " << bin_idx
-                << " pos: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2] << RESET_COLOR << std::endl;
-        }
-    }
-
     auto prev_bin = get_bin(bounds, atom_->x[0], domain->boxlo, domain->boxhi);
     int prev_idx = 0;
     for (int i = 1; i < atom_->nlocal + atom_->nghost; i++) {
@@ -1453,13 +1444,6 @@ void Verlet::construct_bin_to_idx(bool curr_dt, Atom* atom_, queue_info &zoid, i
             // int num_in_prev_bin = i - 1 - prev_idx;
             int num_in_prev_bin = i - prev_idx;
             int bin_idx = get_bin_idx(prev_bin);
-            if (zoid.num == 56 && timestep == 0) {
-                std::cout << "i: " << i
-                    << " curr bin: " << std::get<0>(curr_bin) << " " << std::get<1>(curr_bin) << " " << std::get<2>(curr_bin)
-                    << " curr bin idx: " << get_bin_idx(curr_bin) << " pos: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2]
-                    << " replacing prev bin: " << std::get<0>(prev_bin) << " " << std::get<1>(prev_bin) << " " << std::get<2>(prev_bin)
-                    << " prev bin idx: " << get_bin_idx(prev_bin) << std::endl;
-            }
             assert(bin_idx < NUM_BINS * NUM_BINS * NUM_BINS);
             if (zoid.bin_to_idx[timestep][bin_idx] != -1) {
                 std::cout << "zoid: " << zoid.num << " timestep: " << timestep << " bin idx: " << bin_idx << " curr dt? " << curr_dt << " curr idx: " << i << " existing idx: " << zoid.bin_to_idx[timestep][bin_idx] << " existng size: " << zoid.bin_to_size[timestep][bin_idx] << std::endl;
