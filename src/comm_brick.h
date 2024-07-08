@@ -44,6 +44,12 @@ class CommBrick : public Comm {
   void borders_stencil_md_initial_send(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
   void borders_stencil_md_initial_receive(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
 
+  void send_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                 queue_info&, int start_timestep, int end_timestep) override;
+
+  void recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                 queue_info&, int start_timestep, int end_timestep) override;
+
   // void borders_stencil_md_initial_receive(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, std::array<Domain*, NUM_TIMESTEPS_IN_PARALLEL>, queue_info&) override;                     // move atoms to new procs, stencil_md version
   void send_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;
   void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid, std::vector<MPI_Request>&) override;

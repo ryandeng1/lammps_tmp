@@ -2337,6 +2337,77 @@ void Atom::sort_stencil_md() {
     //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
 }
 
+// sort local atoms based on what bin they belong in
+void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds) {
+    if (domain->box_change) {
+        assert(false);
+        // setup_sort_bins_stencil_md();
+    }
+
+    int* current = new int[nlocal];
+    for (int i = 0; i < nlocal; i++) current[i] = i;
+
+    std::map<tagint, int> tag_to_idx;
+    for (int i = 0; i < nlocal; i++) {
+        tag_to_idx[tag[i]] = i;
+    }
+
+    std::vector<std::tuple<tagint, int, int, int>> atom_bins(nlocal);
+    for (int i = 0; i < nlocal; i++) {
+        double* pos = x[i];
+        auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
+        atom_bins[i] = {tag[i], std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
+    }
+
+    std::sort(atom_bins.begin(), atom_bins.end(), [&](const auto& a, const auto& b) {
+        // compare z coordinates of bounds, then y then x, and then finally compare tag for a consistent global ordering
+        return std::tie(std::get<3>(a), std::get<2>(a), std::get<1>(a), std::get<0>(a)) < std::tie(std::get<3>(b), std::get<2>(b), std::get<1>(b), std::get<0>(b));
+    });
+
+    for (int i = 0; i < nlocal; i++) {
+        int new_idx = tag_to_idx[std::get<0>(atom_bins[i])];
+        permute[i] = new_idx;
+    }
+
+    // current = current permutation, just reuse next vector
+    // current[I] = J means Ith current atom is Jth old atom
+
+    // reorder local atom list, when done, current = permute
+    // perform "in place" using copy() to extra atom location at end of list
+    // inner while loop processes one cycle of the permutation
+    // copy before inner-loop moves an atom to end of atom list
+    // copy after inner-loop moves atom at end of list back into list
+    // empty = location in atom list that is currently empty
+
+    for (int i = 0; i < nlocal; i++) {
+        if (current[i] == permute[i]) continue;
+        avec->copy(i,nlocal,0);
+        int empty = i;
+        while (permute[empty] != i) {
+            avec->copy(permute[empty],empty,0);
+            empty = current[empty] = permute[empty];
+        }
+        avec->copy(nlocal,empty,0);
+        current[empty] = permute[empty];
+    }
+
+    // sanity check that current = permute
+
+    int flag = 0;
+    for (int i = 0; i < nlocal; i++)
+        if (current[i] != permute[i]) flag = 1;
+
+    if (flag) {
+        std::cout << "Sort did not work" << std::endl;
+        assert(false);
+    }
+    //int flagall;
+    //MPI_Allreduce(&flag,&flagall,1,MPI_INT,MPI_SUM,world);
+    //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
+
+    delete[] current;
+}
+
 /* ----------------------------------------------------------------------
    setup bins for spatial sorting of atoms
 ------------------------------------------------------------------------- */

@@ -96,6 +96,12 @@ class Comm : protected Pointers {
   virtual void receive_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
   virtual void unpack_data_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, std::vector<MPI_Request>&) {assert(false);}
 
+  virtual void send_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                         queue_info&, int start_timestep, int end_timestep) { assert(false); }
+
+  virtual void recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                         queue_info&, int start_timestep, int end_timestep) { assert(false); }
+
   // combine curr_dt and next_dt implementations
   virtual bool send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*,
                                                int proc, bool is_initial, int pipeline_stage=0) {assert(false);}

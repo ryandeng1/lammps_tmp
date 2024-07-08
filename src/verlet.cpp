@@ -769,6 +769,51 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
     delete[] permute;
 }
 
+void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int timestep) {
+    int zoid_num = zoid.num;
+
+    int* current = new int[atom_->nghost];
+    int* permute = new int[atom_->nghost];
+
+    for (int i = 0; i < atom_->nghost; i++) {
+        current[i] = i;
+    }
+
+    std::vector<int> ghost_idxs;
+    for (int i = 0; i < atom_->nghost; i++) {
+        ghost_idxs.push_back(i);
+    }
+
+    std::vector<double> bin_bounds;
+    stencilMD->GET_BOUNDS(true, bin_bounds, timestep);
+
+    std::stable_sort(
+            ghost_idxs.begin(), ghost_idxs.end(), [&](const int& a, const int& b) {
+                int idx_a = atom_->nlocal + a;
+                int idx_b = atom_->nlocal + b;
+
+                double* pos_a = atom_->x[idx_a];
+                double* pos_b = atom_->x[idx_b];
+                auto bin_a = get_bin(bin_bounds, pos_a, domain->boxlo, domain->boxhi);
+                auto bin_b = get_bin(bin_bounds, pos_b, domain->boxlo, domain->boxhi);
+
+                tagint tag_a = atom_->tag[idx_a];
+                tagint tag_b = atom_->tag[idx_b];
+
+                return std::tie(std::get<2>(bin_a), std::get<1>(bin_a), std::get<0>(bin_a), tag_a) < std::tie(std::get<2>(bin_b), std::get<1>(bin_b), std::get<0>(bin_b), tag_b);
+            });
+
+    for (int i = 0; i < atom_->nghost; i++) {
+        permute[i] = ghost_idxs[i];
+    }
+
+    atom_reorder_ghost_stencil_md(atom_, current, permute, 0, atom_->nghost,
+                                  atom_->nlocal);
+
+    delete[] current;
+    delete[] permute;
+}
+
 // TODO: Sort ghost atoms by zoid in previous timestep and zoid in next timestep
 // Relay this information to zoids for their sendlists, we only need to ensure ghosts are contiguous. Local atoms we can try to make some compromises since
 // there are so few local atoms compared to ghost. TBD though.
@@ -796,10 +841,6 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         bool next_dt_relevant = (next_dt_set.find(tag) != next_dt_set.end());
     }
 
-    std::vector<int> test_segment_idxs;
-    std::vector<int> test_segment_sizes;
-    int test_num_segments = get_segments(test_nonrelevant_idxs,
-                                         test_segment_idxs, test_segment_sizes);
 
     for (int i = 0; i < atom_->nghost; i++) {
         int actual_idx = i + atom_->nlocal;
@@ -885,19 +926,10 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         }
     }
 
-    bool debug = (zoid.num == 18 && timestep == 1);
-    if (false) {
-        for (auto& [recv_zoid_num, idxs] : neighbor_to_idxs) {
-            std::stringstream debug_idx;
-            for (auto& idx : idxs) {
-                std::cout << "zoid: " << zoid.num << " recv from: " << recv_zoid_num << " idx: " << idx << " pos: " << atom_->x[idx][0] << " " << atom_->x[idx][1] << " " << atom_->x[idx][2]
-                    << " relevant? " << std::endl;
-            }
-        }
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(true, bounds, timestep);
 
-        assert(false);
-    }
-
+    std::set<std::tuple<int, int, int>> all_ranges;
 
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_from_zoid_num = recv_from[i];
@@ -916,19 +948,6 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             int num_segments =
                 get_segments(idx_vec, segment_idxs, segment_lengths);
 
-            /*
-            if (num_segments > 10) {
-                std::cout << GREEN << "CURR DT zoid: " << zoid_num
-                          << " recv from: " << recv_from_zoid_num
-                          << " time: " << timestep
-                          << " num segments: " << num_segments << RESET_COLOR
-                          << std::endl;
-                std::cout << "segment idxs: " << segment_idxs << std::endl;
-                std::cout << "segment lengths? " << segment_lengths
-                          << std::endl;
-            }
-            */
-
             zoid.recv_ghost_idxs[timestep][i] = new int[num_segments];
             zoid.recv_ghost_sizes[timestep][i] = new int[num_segments];
             zoid.recv_ghost_num_segments[timestep][i] = num_segments;
@@ -937,6 +956,47 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 zoid.recv_ghost_idxs[timestep][i][j] = segment_idxs[j];
                 zoid.recv_ghost_sizes[timestep][i][j] = segment_lengths[j];
             }
+
+            if (bounds.size() > 0) {
+                std::set<std::tuple<int, int, int>> ranges;
+                for (int idx : neighbor_to_idxs[recv_from_zoid_num]) {
+                    assert(idx >= atom_->nlocal);
+                    double* pos = atom_->x[idx];
+                    auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+                    ranges.insert(range);
+                    all_ranges.insert(range);
+                }
+                if (zoid.num == 39 && timestep == 1) {
+                    std::cout << GREEN << "zoid: " << zoid.num << " recv from: " << recv_from_zoid_num << " timestep: " << timestep << " num segments: " << num_segments << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
+                    for (auto& r: ranges) {
+                        std::cout << BOLDMAGENTA << "RANGE: " << std::get<0>(r) << " " << std::get<1>(r) << " " << std::get<2>(r) << RESET_COLOR << std::endl;
+                    }
+                }
+            }
+        }
+    }
+
+    if (bounds.size() > 0) {
+        std::set<std::tuple<int, int, int>> all_ghost_ranges;
+        for (int k = atom_->nlocal; k < atom_->nlocal + atom_->nghost; k++) {
+            double* pos = atom_->x[k];
+            auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+            all_ghost_ranges.insert(range);
+            if (zoid.num == 39 && timestep == 1) {
+                // std::cout << "ALL RANGES idx: " << k << " range: " << check_range_x << " " << check_range_y << " " << check_range_z << std::endl;
+            }
+        }
+
+        if (zoid.num == 39 && timestep == 1) {
+            /*
+            for (auto& r: all_ranges) {
+                std::cout << BOLDYELLOW << "ALL RANGES: " << std::get<0>(r) << " " << std::get<1>(r) << " " << std::get<2>(r) << RESET_COLOR << std::endl;
+            }
+            for (auto& r: all_ghost_ranges) {
+                std::cout << BOLDCYAN << "ALL GHOST RANGES: " << std::get<0>(r) << " " << std::get<1>(r) << " " << std::get<2>(r) << RESET_COLOR << std::endl;
+            }
+            */
+            std::cout << "ALL RANGES USED: " << all_ranges.size() << " ALL GHOST RANGES: " << all_ghost_ranges.size() << std::endl;
         }
     }
 }
@@ -1060,6 +1120,11 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
         }
     }
 
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(false, bounds, timestep);
+
+    std::set<std::tuple<int, int, int>> all_ranges;
+
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_from_zoid_num = recv_from[i];
         if (neighbor_to_idxs[recv_from_zoid_num].size() == 0) {
@@ -1077,18 +1142,6 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
             int num_segments =
                 get_segments(idx_vec, segment_idxs, segment_lengths);
 
-            /*
-            if (num_segments > 10) {
-                std::cout << MAGENTA << "NEXT DT zoid: " << zoid.num
-                          << " recv from: " << recv_from_zoid_num
-                          << " time: " << timestep
-                          << " num segments: " << num_segments
-                          << "segment idxs: " << segment_idxs
-                          << " segment lengths? " << segment_lengths
-                          << RESET_COLOR << std::endl;
-            }
-            */
-
             zoid.recv_ghost_idxs[timestep][i] = new int[num_segments];
             zoid.recv_ghost_sizes[timestep][i] = new int[num_segments];
             zoid.recv_ghost_num_segments[timestep][i] = num_segments;
@@ -1097,8 +1150,341 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
                 zoid.recv_ghost_idxs[timestep][i][j] = segment_idxs[j];
                 zoid.recv_ghost_sizes[timestep][i][j] = segment_lengths[j];
             }
+
+            if (bounds.size() > 0) {
+                std::set<std::tuple<int, int, int>> ranges;
+                for (int idx : neighbor_to_idxs[recv_from_zoid_num]) {
+                    double* pos = atom_->x[idx];
+                    auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+                    ranges.insert(range);
+                    all_ranges.insert(range);
+                }
+                if (zoid.num == 39 && timestep == NUM_TIMESTEPS_IN_PARALLEL - 1) {
+                    std::cout << GREEN << "NEXT DT zoid: " << zoid.num << " recv from: " << recv_from_zoid_num << " timestep: " << timestep << " num segments: " << num_segments << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
+                    for (auto& r: ranges) {
+                        std::cout << BOLDMAGENTA << "RANGE: " << std::get<0>(r) << " " << std::get<1>(r) << " " << std::get<2>(r) << RESET_COLOR << std::endl;
+                    }
+                }
+            }
         }
     }
+
+    if (bounds.size() > 0) {
+        std::set<std::tuple<int, int, int>> all_ghost_ranges;
+        for (int k = atom_->nlocal; k < atom_->nlocal + atom_->nghost; k++) {
+            double* pos = atom_->x[k];
+            auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+            all_ghost_ranges.insert(range);
+        }
+        if (zoid.num == 39 && timestep == NUM_TIMESTEPS_IN_PARALLEL - 1) {
+            std::cout << "NEXT DT ALL RANGES USED: " << all_ranges.size() << " ALL GHOST RANGES: " << all_ghost_ranges.size() << std::endl;
+        }
+    }
+}
+
+void Verlet::construct_send_force_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
+    int zoid_num = zoid.num;
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+
+    zoid.send_force_num_bins[timestep] = new int[send_to.size()];
+    zoid.send_force_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+
+    for (int i = 0; i < send_to.size(); i++) {
+        std::set<std::tuple<int, int, int>> bins;
+        int send_zoid_num = send_to[i];
+        int num_send_force_segments = zoid.send_force_num_segments[timestep][i];
+        for (int j = 0; j < num_send_force_segments; j++) {
+            int segment_idx = zoid.send_force_idxs[timestep][i][j];
+            int segment_size = zoid.send_force_sizes[timestep][i][j];
+            for (int h = 0; h < segment_size; h++) {
+                int idx = segment_idx + h;
+                double* pos = atom_->x[idx];
+                auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+                bins.insert(bin);
+            }
+        }
+        int num_bins = bins.size();
+        zoid.send_force_num_bins[timestep][i] = num_bins;
+        zoid.send_force_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+
+        for (int j = 0; j < num_bins; j++) {
+            zoid.send_force_bins[timestep][i][j] = bins_vec[j];
+        }
+    }
+}
+
+void Verlet::construct_send_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
+    int zoid_num = zoid.num;
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+
+    zoid.send_pos_num_bins[timestep] = new int[send_to.size()];
+    zoid.send_pos_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+
+    // first gather local_to_ghost
+    for (int i = 0; i < send_to.size(); i++) {
+        std::set<std::tuple<int, int, int>> bins;
+        int send_zoid_num = send_to[i];
+        int num_recv_ghost_segments = zoid.send_num_segments[timestep][i];
+
+        int local_idx = 0;
+        for (int j = 0; j < num_recv_ghost_segments; j++) {
+            int segment_type = zoid.send_segment_types[timestep][i][j];
+            int segment_idx = zoid.send_segment_idxs[timestep][i][j];
+            int segment_size = zoid.send_segment_sizes[timestep][i][j];
+            for (int h = 0; h < segment_size; h++) {
+                int idx;
+                if (segment_type == LOCAL_SEGMENT_TYPE) {
+                    idx = zoid.send_local_list[timestep][i][local_idx++];
+                } else {
+                    idx = segment_idx + h;
+                }
+
+                double* pos = atom_->x[idx];
+                auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+                bins.insert(bin);
+
+                if (zoid.num == 0 && send_zoid_num == 10 && timestep == 10) {
+                    std::cout << "RECV GHOST BIN: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << " bin idx: " << get_bin_idx(bin) << " type: " << segment_type << " i: " << i << std::endl;
+                }
+            }
+        }
+
+        int num_ghost_to_local_segments = zoid.send_pos_num_segments[timestep][i];
+        for (int j = 0; j < num_ghost_to_local_segments; j++) {
+            int segment_idx = zoid.send_pos_idxs[timestep][i][j];
+            int segment_size = zoid.send_pos_sizes[timestep][i][j];
+            for (int h = 0; h < segment_size; h++) {
+                int idx = segment_idx + h;
+                double* pos = atom_->x[idx];
+                auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+                bins.insert(bin);
+                if (zoid.num == 0 && send_zoid_num == 10 && timestep == 10) {
+                    std::cout << "RECV LOCAL BIN: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << " bin idx: " << get_bin_idx(bin) << " i: " << i << std::endl;
+                }
+            }
+        }
+
+        int num_bins = bins.size();
+        zoid.send_pos_num_bins[timestep][i] = num_bins;
+        zoid.send_pos_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+
+        for (int j = 0; j < num_bins; j++) {
+            zoid.send_pos_bins[timestep][i][j] = bins_vec[j];
+        }
+    }
+}
+
+void Verlet::construct_send_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
+    int zoid_num = zoid.num;
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+
+    zoid.send_vel_num_bins[timestep] = new int[send_to.size()];
+    zoid.send_vel_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+
+    // first gather local_to_ghost
+    for (int i = 0; i < send_to.size(); i++) {
+        std::set<std::tuple<int, int, int>> bins;
+        int send_zoid_num = send_to[i];
+
+        int num_recv_local_segments = zoid.send_pos_num_segments[timestep][i];
+        for (int j = 0; j < num_recv_local_segments; j++) {
+            int segment_idx = zoid.send_pos_idxs[timestep][i][j];
+            int segment_size = zoid.send_pos_sizes[timestep][i][j];
+            for (int h = 0; h < segment_size; h++) {
+                int idx = segment_idx + h;
+                double* pos = atom_->x[idx];
+                auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+                bins.insert(bin);
+            }
+        }
+
+        int num_bins = bins.size();
+        zoid.send_vel_num_bins[timestep][i] = num_bins;
+        zoid.send_vel_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+
+        for (int j = 0; j < num_bins; j++) {
+            zoid.send_vel_bins[timestep][i][j] = bins_vec[j];
+        }
+    }
+}
+
+void Verlet::construct_recv_force_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
+    int zoid_num = zoid.num;
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+
+    zoid.recv_force_num_bins[timestep] = new int[recv_from.size()];
+    zoid.recv_force_bins[timestep] = new std::tuple<int, int, int>*[recv_from.size()];
+
+    for (int i = 0; i < recv_from.size(); i++) {
+        std::set<std::tuple<int, int, int>> bins;
+        int recv_zoid_num = recv_from[i];
+        int num_recv_force = zoid.recv_list_local_num_force_only[timestep][i];
+
+        for (int j = 0; j < num_recv_force; j++) {
+            int idx = zoid.recv_list_local_force_only[timestep][i][j];
+            double* pos = atom_->x[idx];
+            auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+            bins.insert(bin);
+        }
+
+        int num_bins = bins.size();
+        zoid.recv_force_num_bins[timestep][i] = num_bins;
+        zoid.recv_force_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+
+        for (int j = 0; j < num_bins; j++) {
+            zoid.recv_force_bins[timestep][i][j] = bins_vec[j];
+        }
+    }
+}
+
+void Verlet::construct_recv_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
+    int zoid_num = zoid.num;
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+
+    zoid.recv_vel_num_bins[timestep] = new int[recv_from.size()];
+    zoid.recv_vel_bins[timestep] = new std::tuple<int, int, int>*[recv_from.size()];
+
+    for (int i = 0; i < recv_from.size(); i++) {
+        std::set<std::tuple<int, int, int>> bins;
+        int recv_zoid_num = recv_from[i];
+        int num_recv_vel = zoid.recv_list_local_num_force_pos[timestep][i];
+
+        for (int j = 0; j < num_recv_vel; j++) {
+            int idx = zoid.recv_list_local_force_pos[timestep][i][j];
+            double* pos = atom_->x[idx];
+            auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+            bins.insert(bin);
+        }
+
+        int num_bins = bins.size();
+        zoid.recv_vel_num_bins[timestep][i] = num_bins;
+        zoid.recv_vel_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+
+        for (int j = 0; j < num_bins; j++) {
+            zoid.recv_vel_bins[timestep][i][j] = bins_vec[j];
+        }
+    }
+}
+
+void Verlet::construct_recv_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
+    int zoid_num = zoid.num;
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+
+    zoid.recv_pos_num_bins[timestep] = new int[recv_from.size()];
+    zoid.recv_pos_bins[timestep] = new std::tuple<int, int, int>*[recv_from.size()];
+
+    // first gather local_to_ghost
+    for (int i = 0; i < recv_from.size(); i++) {
+        std::set<std::tuple<int, int, int>> bins;
+        int send_zoid_num = recv_from[i];
+
+        int num_recv_ghost_segments = zoid.recv_ghost_num_segments[timestep][i];
+        for (int j = 0; j < num_recv_ghost_segments; j++) {
+            int segment_idx = zoid.recv_ghost_idxs[timestep][i][j];
+            int segment_size = zoid.recv_ghost_sizes[timestep][i][j];
+            for (int h = 0; h < segment_size; h++) {
+                int idx = segment_idx + h;
+
+                double* pos = atom_->x[idx];
+                auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+                bins.insert(bin);
+            }
+        }
+
+        int num_recv_local = zoid.recv_list_local_num_force_pos[timestep][i];
+        for (int j = 0; j < num_recv_local; j++) {
+            int idx = zoid.recv_list_local_force_pos[timestep][i][j];
+            double* pos = atom_->x[idx];
+            auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
+            bins.insert(bin);
+        }
+
+        int num_bins = bins.size();
+        zoid.recv_pos_num_bins[timestep][i] = num_bins;
+        zoid.recv_pos_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+
+        for (int j = 0; j < num_bins; j++) {
+            zoid.recv_pos_bins[timestep][i][j] = bins_vec[j];
+        }
+    }
+}
+
+void Verlet::construct_bin_to_idx(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
+    int zoid_num = zoid.num;
+    std::vector<double> bounds;
+    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+
+    assert(atom_->nlocal + atom_->nghost > 0);
+
+    std::set<std::tuple<int, int, int>> all_bins;
+
+    if (zoid.num == 56 && timestep == 0) {
+        for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+            auto bin = get_bin(bounds, atom_->x[i], domain->boxlo, domain->boxhi);
+            int bin_idx = get_bin_idx(bin);
+            std::cout << BOLDGREEN << "i: " << i << " nlocal: " << atom_->nlocal << " bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << " bin idx: " << bin_idx
+                << " pos: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2] << RESET_COLOR << std::endl;
+        }
+    }
+
+    auto prev_bin = get_bin(bounds, atom_->x[0], domain->boxlo, domain->boxhi);
+    int prev_idx = 0;
+    for (int i = 1; i < atom_->nlocal + atom_->nghost; i++) {
+        auto curr_bin = get_bin(bounds, atom_->x[i], domain->boxlo, domain->boxhi);
+        if (curr_bin != prev_bin) {
+            // int num_in_prev_bin = i - 1 - prev_idx;
+            int num_in_prev_bin = i - prev_idx;
+            int bin_idx = get_bin_idx(prev_bin);
+            if (zoid.num == 56 && timestep == 0) {
+                std::cout << "i: " << i
+                    << " curr bin: " << std::get<0>(curr_bin) << " " << std::get<1>(curr_bin) << " " << std::get<2>(curr_bin)
+                    << " curr bin idx: " << get_bin_idx(curr_bin) << " pos: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2]
+                    << " replacing prev bin: " << std::get<0>(prev_bin) << " " << std::get<1>(prev_bin) << " " << std::get<2>(prev_bin)
+                    << " prev bin idx: " << get_bin_idx(prev_bin) << std::endl;
+            }
+            assert(bin_idx < NUM_BINS * NUM_BINS * NUM_BINS);
+            if (zoid.bin_to_idx[timestep][bin_idx] != -1) {
+                std::cout << "zoid: " << zoid.num << " timestep: " << timestep << " bin idx: " << bin_idx << " curr dt? " << curr_dt << " curr idx: " << i << " existing idx: " << zoid.bin_to_idx[timestep][bin_idx] << " existng size: " << zoid.bin_to_size[timestep][bin_idx] << std::endl;
+            }
+            assert(zoid.bin_to_idx[timestep][bin_idx] == -1);
+            assert(zoid.bin_to_size[timestep][bin_idx] == -1);
+            zoid.bin_to_idx[timestep][bin_idx] = prev_idx;
+            zoid.bin_to_size[timestep][bin_idx] = num_in_prev_bin;
+
+            if (all_bins.find(prev_bin) != all_bins.end()) {
+                std::cout << "curr_dt? " << curr_dt << " zoid: " << zoid.num << " t: " << timestep << " bin already found" << std::endl;
+                assert(false);
+            }
+
+            all_bins.insert(prev_bin);
+
+            prev_bin = curr_bin;
+            prev_idx = i;
+        }
+    }
+
+    auto last_bin = get_bin(bounds, atom_->x[atom_->nlocal + atom_->nghost - 1], domain->boxlo, domain->boxhi);
+    int last_bin_idx = get_bin_idx(last_bin);
+    zoid.bin_to_idx[timestep][last_bin_idx] = prev_idx;
+    zoid.bin_to_size[timestep][last_bin_idx] = atom_->nlocal + atom_->nghost - prev_idx;
 }
 
 void setup_can_eval_center_mapping_stencil_md(
@@ -2009,7 +2395,12 @@ void Verlet::setup_stencil_md() {
                 // receive only if the zoid belongs to me
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
-                    sort_ghost_atoms_stencil_md(atom_, NULL, zoid, t);
+                    if (comm->nprocs == 1) {
+                        // currently this is only tested for local
+                        sort_ghost_atoms_stencil_md_bins(atom_, zoid, t);
+                    } else {
+                        sort_ghost_atoms_stencil_md(atom_, NULL, zoid, t);
+                    }
                 }
             }
         }
@@ -2435,6 +2826,52 @@ void Verlet::setup_stencil_md() {
             // receive only if the zoid belongs to me
             if (zoid_num % comm->nprocs == comm->me) {
                 MPI_Waitall(r2_next_dt[zoid_num].size(), r2_next_dt[zoid_num].data(), MPI_STATUSES_IGNORE);
+            }
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            int zoid_num = zoid.num;
+            if (zoid_num % comm->nprocs == comm->me) {
+                if (comm->nprocs == 1) {
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
+                        construct_send_force_bins(true, atom_, zoid, t);
+                        construct_send_pos_bins(true, atom_, zoid, t);
+                        construct_send_vel_bins(true, atom_, zoid, t);
+
+                        construct_recv_force_bins(true, atom_, zoid, t);
+                        construct_recv_pos_bins(true, atom_, zoid, t);
+                        construct_recv_vel_bins(true, atom_, zoid, t);
+
+                        construct_bin_to_idx(true, atom_, zoid, t);
+                    }
+                }
+            }
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            queue_info& zoid = lmp->queues_next_dt[dep][j];
+            int zoid_num = zoid.num;
+            if (zoid_num % comm->nprocs == comm->me) {
+                if (comm->nprocs == 1) {
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        Atom* atom_ = lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t];
+                        construct_send_force_bins(false, atom_, zoid, t);
+                        construct_send_pos_bins(false, atom_, zoid, t);
+                        construct_send_vel_bins(false, atom_, zoid, t);
+
+                        construct_recv_force_bins(false, atom_, zoid, t);
+                        construct_recv_pos_bins(false, atom_, zoid, t);
+                        construct_recv_vel_bins(false, atom_, zoid, t);
+
+                        construct_bin_to_idx(false, atom_, zoid, t);
+                    }
+                }
             }
         }
     }
@@ -4518,11 +4955,13 @@ void Verlet::setup_stencil_md() {
     }
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
-        if (dep > 0) {
-            for (int idx : dep_to_wait_idxs[dep]) {
-                int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
-                MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
-                comm->unpack_data_process_stencil_md(true, 0, NUM_TIMESTEPS_IN_PARALLEL + 1, recv_zoid_num);
+        if (comm->nprocs != 1) {
+            if (dep > 0) {
+                for (int idx : dep_to_wait_idxs[dep]) {
+                    int recv_zoid_num = lmp->recv_from_neighbors_procs[idx];
+                    MPI_Wait(&receive_requests[idx], MPI_STATUS_IGNORE);
+                    comm->unpack_data_process_stencil_md(true, 0, NUM_TIMESTEPS_IN_PARALLEL + 1, recv_zoid_num);
+                }
             }
         }
 
@@ -4539,6 +4978,12 @@ void Verlet::setup_stencil_md() {
 #else
                 Modify* modify_ = lmp->modify_stencil_md[zoid_num][0];
 #endif
+
+                if (comm->nprocs == 1) {
+                    comm_->recv_data_bins_stencil_md(true, lmp->atom_stencil_md[zoid_num],
+                                                     lmp->zoid_num_to_zoid[zoid_num],
+                                                     0, NUM_TIMESTEPS_IN_PARALLEL + 1);
+                }
 
                 // todo: eflag and vflag might cause some issues
                 // TODO: compute force for each pair in parallel
@@ -4572,18 +5017,26 @@ void Verlet::setup_stencil_md() {
 
                 modify_->setup_stencil_md(vflag, atom_);
 
+
                 if (dep < NUM_DEPS - 1) {
+                    if (comm->nprocs == 1) {
+                        /*
+                        comm_->send_data_bins_stencil_md(true, lmp->atom_stencil_md[zoid_num],
+                                                         lmp->zoid_num_to_zoid[zoid_num],
+                                                         0, NUM_TIMESTEPS_IN_PARALLEL + 1);
+                        */
+                    } else {
+                        int vec_idx = 0;
 
-                    int vec_idx = 0;
-
-                    for (int proc = 0; proc < comm->nprocs; proc++) {
-                        bool sent = comm_->send_data_to_process_stencil_md(true,
-                                                                           lmp->atom_stencil_md[zoid_num],
-                                                                           lmp->zoid_num_to_zoid[zoid_num],
-                                                                           &send_requests[zoid_num][vec_idx], proc,
-                                                                           true);
-                        if (sent) {
-                            vec_idx++;
+                        for (int proc = 0; proc < comm->nprocs; proc++) {
+                            bool sent = comm_->send_data_to_process_stencil_md(true,
+                                                                               lmp->atom_stencil_md[zoid_num],
+                                                                               lmp->zoid_num_to_zoid[zoid_num],
+                                                                               &send_requests[zoid_num][vec_idx], proc,
+                                                                               true);
+                            if (sent) {
+                                vec_idx++;
+                            }
                         }
                     }
                 }
@@ -5611,19 +6064,21 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                                           std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
                                           double **test_f, double **test_x, int pipeline_stage) {
     auto& recv_neighbor_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
-    if (dep > 0) {
-        auto begin = std::chrono::high_resolution_clock::now();
-        auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
-        int recv_idx = dep_to_recv_idx[dep];
+    if (comm->nprocs != 1) {
+        if (dep > 0) {
+            auto begin = std::chrono::high_resolution_clock::now();
+            auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
+            int recv_idx = dep_to_recv_idx[dep];
 
-        for (int idx: wait_idxs) {
-            int recv_zoid_num = recv_neighbor_procs[idx];
-            auto begin_mpi = std::chrono::high_resolution_clock::now();
-            MPI_Wait(&receive_requests[recv_idx++], MPI_STATUS_IGNORE);
-            auto end_mpi = std::chrono::high_resolution_clock::now();
-            auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
-            mpi_duration += duration_mpi;
-            // comm->unpack_data_process_stencil_md(curr_dt, start_t, end_t, recv_zoid_num, pipeline_stage);
+            for (int idx: wait_idxs) {
+                int recv_zoid_num = recv_neighbor_procs[idx];
+                auto begin_mpi = std::chrono::high_resolution_clock::now();
+                MPI_Wait(&receive_requests[recv_idx++], MPI_STATUS_IGNORE);
+                auto end_mpi = std::chrono::high_resolution_clock::now();
+                auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
+                mpi_duration += duration_mpi;
+                // comm->unpack_data_process_stencil_md(curr_dt, start_t, end_t, recv_zoid_num, pipeline_stage);
+            }
         }
     }
 
@@ -5645,7 +6100,13 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
 
         auto comm_ = lmp->comm_stencil_md[zoid_num];
         auto begin_unpack = std::chrono::high_resolution_clock::now();
-        comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
+        if (comm->nprocs == 1) {
+            comm_->recv_data_bins_stencil_md(curr_dt, lmp->atom_stencil_md[zoid_num],
+                                             zoid, start_t, end_t);
+        } else {
+            comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
+        }
+
         auto end_unpack = std::chrono::high_resolution_clock::now();
         auto duration_unpack = std::chrono::duration_cast<std::chrono::microseconds>(
                 end_unpack - begin_unpack).count();
@@ -5680,45 +6141,47 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
         send_pack_duration += send_pack_duration_cilk / SIZES[dep];
     }
 
-    if (dep < NUM_DEPS - 1) {
-        for (int j = 0; j < zoid_queue.size(); j++) {
-            queue_info &zoid = zoid_queue[j];
-            int zoid_num = zoid.num;
-            if (zoid_num % comm->nprocs != comm->me) {
-                continue;
-            }
-
-            Comm *comm_ = lmp->comm_stencil_md[zoid_num];
-            auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
-                                                    : lmp->send_to_neighbors_procs_next_dt[zoid_num];
-
-            auto begin = std::chrono::high_resolution_clock::now();
-            int vec_idx = 0;
-            // TODO: parallelize
-            for (int proc = 0; proc < comm->nprocs; proc++) {
-                if (proc != comm->me
-                    && send_to_neighbors_procs.find(proc) !=
-                       send_to_neighbors_procs.end()) {
-                    bool sent = comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t,
-                                                                              end_t,
-                                                                              zoid,
-                                                                              &send_requests[zoid_num][proc],
-                                                                              proc, pipeline_stage);
+    if (comm->nprocs != 1) {
+        if (dep < NUM_DEPS - 1) {
+            for (int j = 0; j < zoid_queue.size(); j++) {
+                queue_info &zoid = zoid_queue[j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs != comm->me) {
+                    continue;
                 }
-            }
 
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            send_comm_duration += duration;
+                Comm *comm_ = lmp->comm_stencil_md[zoid_num];
+                auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
+                                                        : lmp->send_to_neighbors_procs_next_dt[zoid_num];
 
-            auto begin2 = std::chrono::high_resolution_clock::now();
-            if (send_to_neighbors_procs.find(comm->me) != send_to_neighbors_procs.end()) {
-                comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t, end_t, zoid,
-                                                              nullptr, comm->me, pipeline_stage);
+                auto begin = std::chrono::high_resolution_clock::now();
+                int vec_idx = 0;
+                // TODO: parallelize
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    if (proc != comm->me
+                        && send_to_neighbors_procs.find(proc) !=
+                           send_to_neighbors_procs.end()) {
+                        bool sent = comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t,
+                                                                                  end_t,
+                                                                                  zoid,
+                                                                                  &send_requests[zoid_num][proc],
+                                                                                  proc, pipeline_stage);
+                    }
+                }
+
+                auto end = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                send_comm_duration += duration;
+
+                auto begin2 = std::chrono::high_resolution_clock::now();
+                if (send_to_neighbors_procs.find(comm->me) != send_to_neighbors_procs.end()) {
+                    comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t, end_t, zoid,
+                                                                  nullptr, comm->me, pipeline_stage);
+                }
+                auto end2 = std::chrono::high_resolution_clock::now();
+                auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
+                unpack_self_time += duration2;
             }
-            auto end2 = std::chrono::high_resolution_clock::now();
-            auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
-            unpack_self_time += duration2;
         }
     }
 }

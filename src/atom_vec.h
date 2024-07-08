@@ -116,6 +116,24 @@ class AtomVec : protected Pointers {
 
   virtual int unpack_border_stencil_md(double *, Atom*);
 
+  virtual void send_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size, int* recv_bin_to_idx, int* recv_bin_to_size,
+                                         int send_force_num_bins, std::tuple<int, int, int>* send_force_bins,
+                                         int send_pos_num_bins, std::tuple<int, int, int>* send_pos_bins,
+                                         int send_vel_num_bins, std::tuple<int, int, int>* send_vel_bins,
+                                         int recv_force_num_bins, std::tuple<int, int, int>* recv_force_bins,
+                                         int recv_pos_num_bins, std::tuple<int, int, int>* recv_pos_bins,
+                                         int recv_vel_num_bins, std::tuple<int, int, int>* recv_vel_bins,
+                                         tagint* recv_tag, double** recv_f, double** recv_x, double** recv_v, int* pbc_flags);
+
+  virtual void recv_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size, int* recv_bin_to_idx, int* recv_bin_to_size,
+                                         int send_force_num_bins, std::tuple<int, int, int>* send_force_bins,
+                                         int send_pos_num_bins, std::tuple<int, int, int>* send_pos_bins,
+                                         int send_vel_num_bins, std::tuple<int, int, int>* send_vel_bins,
+                                         int recv_force_num_bins, std::tuple<int, int, int>* recv_force_bins,
+                                         int recv_pos_num_bins, std::tuple<int, int, int>* recv_pos_bins,
+                                         int recv_vel_num_bins, std::tuple<int, int, int>* recv_vel_bins,
+                                         tagint* send_tag, double** send_f, double** send_x, double** send_v, int* pbc_flags);
+
   virtual int pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs, int* total_num_elems_send_force, int* num_send_force, int** force_idx_list, int** force_size_list,
                                               int num_pos_segments, bool* segment_types, int* segment_idxs, int* segment_lengths,
                                               int* total_num_elems_send_vel, int* num_send_vel, int** vel_idx_list, int** vel_size_list,

@@ -2176,6 +2176,231 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
     }
 }
 
+void AtomVec::send_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size, int* recv_bin_to_idx, int* recv_bin_to_size,
+                                        int send_force_num_bins, std::tuple<int, int, int>* send_force_bins,
+                                        int send_pos_num_bins, std::tuple<int, int, int>* send_pos_bins,
+                                        int send_vel_num_bins, std::tuple<int, int, int>* send_vel_bins,
+                                        int recv_force_num_bins, std::tuple<int, int, int>* recv_force_bins,
+                                        int recv_pos_num_bins, std::tuple<int, int, int>* recv_pos_bins,
+                                        int recv_vel_num_bins, std::tuple<int, int, int>* recv_vel_bins,
+                                        tagint* recv_tag, double** recv_f, double** recv_x, double** recv_v, int* pbc_flags) {
+
+    if (DEBUG_SEND_RECV_DATA) {
+        for (int i = 0; i < send_force_num_bins; i++) {
+            auto send_bin = send_force_bins[i];
+            int bin_idx = get_bin_idx(send_bin);
+            int send_size = send_bin_to_size[bin_idx];
+            int send_arr_idx = send_bin_to_idx[bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[bin_idx];
+            assert(send_arr_idx != -1);
+            assert(recv_arr_idx != -1);
+            assert(send_size != -1);
+            if (send_size != recv_bin_to_size[bin_idx]) {
+                std::cout << "sizes do not match up send size: " << send_size << " recv bin size: " << recv_bin_to_size[bin_idx] << std::endl;
+            }
+            assert(send_size == recv_bin_to_size[bin_idx]);
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+
+                tagint src_tag = tag[send_idx];
+                tagint dst_tag = recv_tag[recv_idx];
+
+                assert(src_tag == dst_tag);
+                recv_f[recv_idx][0] += eval_f_stencil_md[send_idx][0];
+                recv_f[recv_idx][1] += eval_f_stencil_md[send_idx][1];
+                recv_f[recv_idx][2] += eval_f_stencil_md[send_idx][2];
+            }
+        }
+
+        for (int i = 0; i < send_pos_num_bins; i++) {
+            auto send_bin = send_pos_bins[i];
+            int bin_idx = get_bin_idx(send_bin);
+            int send_size = send_bin_to_size[bin_idx];
+            int send_arr_idx = send_bin_to_idx[bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[bin_idx];
+            std::cout << "send pos bin: " << std::get<0>(send_bin) << " " << std::get<1>(send_bin) << " " << std::get<2>(send_bin) << " bin idx: " << bin_idx << " send size: " << send_size << " recv size: " << recv_bin_to_size[bin_idx] << " send arr idx: " << send_arr_idx << " recv array idx: " << recv_arr_idx << std::endl;
+            assert(send_arr_idx != -1);
+            assert(recv_arr_idx != -1);
+            assert(send_size != -1);
+            assert(send_size == recv_bin_to_size[bin_idx]);
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+                tagint src_tag = tag[send_idx];
+                tagint dst_tag = recv_tag[recv_idx];
+                assert(src_tag == dst_tag);
+                recv_x[recv_idx][0] = x[send_idx][0] + pbc_flags[0] * domain->prd[0];
+                recv_x[recv_idx][1] = x[send_idx][1] + pbc_flags[1] * domain->prd[1];
+                recv_x[recv_idx][2] = x[send_idx][2] + pbc_flags[2] * domain->prd[2];
+            }
+        }
+
+        for (int i = 0; i < send_vel_num_bins; i++) {
+            auto send_bin = send_vel_bins[i];
+            int send_bin_idx = get_bin_idx(send_bin);
+            int send_size = send_bin_to_size[send_bin_idx];
+            int send_arr_idx = send_bin_to_idx[send_bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[send_bin_idx];
+            assert(send_size != -1);
+            assert(send_size == recv_bin_to_size[send_bin_idx]);
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+                tagint src_tag = tag[send_idx];
+                tagint dst_tag = recv_tag[recv_idx];
+                assert(src_tag == dst_tag);
+                recv_v[recv_idx][0] = v[send_idx][0];
+                recv_v[recv_idx][1] = v[send_idx][1];
+                recv_v[recv_idx][2] = v[send_idx][2];
+            }
+        }
+    } else {
+
+    }
+}
+
+void AtomVec::recv_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size,
+                                        int* recv_bin_to_idx, int* recv_bin_to_size,
+                                        int send_force_num_bins, std::tuple<int, int, int>* send_force_bins,
+                                        int send_pos_num_bins, std::tuple<int, int, int>* send_pos_bins,
+                                        int send_vel_num_bins, std::tuple<int, int, int>* send_vel_bins,
+                                        int recv_force_num_bins, std::tuple<int, int, int>* recv_force_bins,
+                                        int recv_pos_num_bins, std::tuple<int, int, int>* recv_pos_bins,
+                                        int recv_vel_num_bins, std::tuple<int, int, int>* recv_vel_bins,
+                                        tagint* send_tag, double** send_f, double** send_x, double** send_v, int* pbc_flags) {
+
+    if (DEBUG_SEND_RECV_DATA) {
+        for (int i = 0; i < recv_force_num_bins; i++) {
+            auto recv_bin = recv_force_bins[i];
+            int bin_idx = get_bin_idx(recv_bin);
+            int send_size = send_bin_to_size[bin_idx];
+            int send_arr_idx = send_bin_to_idx[bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[bin_idx];
+
+            assert(send_arr_idx != -1);
+            assert(recv_arr_idx != -1);
+            assert(send_size != -1);
+            assert(send_size == recv_bin_to_size[bin_idx]);
+
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+                tagint src_tag = send_tag[send_idx];
+                tagint dst_tag = tag[recv_idx];
+                assert(src_tag == dst_tag);
+                f[recv_idx][0] += send_f[send_idx][0];
+                f[recv_idx][1] += send_f[send_idx][1];
+                f[recv_idx][2] += send_f[send_idx][2];
+            }
+        }
+
+        for (int i = 0; i < recv_pos_num_bins; i++) {
+            auto recv_bin = recv_pos_bins[i];
+            int bin_idx = get_bin_idx(recv_bin);
+            int send_size = send_bin_to_size[bin_idx];
+            int send_arr_idx = send_bin_to_idx[bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[bin_idx];
+            // std::cout << "recv pos bin: " << std::get<0>(send_bin) << " " << std::get<1>(send_bin) << " " << std::get<2>(send_bin) << " bin idx: " << bin_idx << " send size: " << send_size << " recv size: " << recv_bin_to_size[bin_idx] << " send arr idx: " << send_arr_idx << " recv array idx: " << recv_arr_idx << std::endl;
+            assert(send_arr_idx != -1);
+            assert(recv_arr_idx != -1);
+            assert(send_size != -1);
+            assert(send_size == recv_bin_to_size[bin_idx]);
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+                tagint src_tag = send_tag[send_idx];
+                tagint dst_tag = tag[recv_idx];
+                assert(src_tag == dst_tag);
+                x[recv_idx][0] = send_x[send_idx][0] + pbc_flags[0] * domain->prd[0];
+                x[recv_idx][1] = send_x[send_idx][1] + pbc_flags[1] * domain->prd[1];
+                x[recv_idx][2] = send_x[send_idx][2] + pbc_flags[2] * domain->prd[2];
+            }
+        }
+
+        for (int i = 0; i < recv_vel_num_bins; i++) {
+            auto recv_bin = recv_vel_bins[i];
+            int bin_idx = get_bin_idx(recv_bin);
+            int send_size = send_bin_to_size[bin_idx];
+            int send_arr_idx = send_bin_to_idx[bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[bin_idx];
+            assert(send_size != -1);
+            assert(send_size == recv_bin_to_size[bin_idx]);
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+                tagint src_tag = send_tag[send_idx];
+                tagint dst_tag = tag[recv_idx];
+                assert(src_tag == dst_tag);
+                v[recv_idx][0] = send_v[send_idx][0];
+                v[recv_idx][1] = send_v[send_idx][1];
+                v[recv_idx][2] = send_v[send_idx][2];
+            }
+        }
+    } else {
+        for (int i = 0; i < recv_force_num_bins; i++) {
+            auto recv_bin = recv_force_bins[i];
+            int bin_idx = get_bin_idx(recv_bin);
+            int send_size = send_bin_to_size[bin_idx];
+            int send_arr_idx = send_bin_to_idx[bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[bin_idx];
+
+            assert(send_arr_idx != -1);
+            assert(recv_arr_idx != -1);
+            assert(send_size != -1);
+            assert(send_size == recv_bin_to_size[bin_idx]);
+
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+                f[recv_idx][0] += send_f[send_idx][0];
+                f[recv_idx][1] += send_f[send_idx][1];
+                f[recv_idx][2] += send_f[send_idx][2];
+            }
+        }
+
+        for (int i = 0; i < recv_pos_num_bins; i++) {
+            auto recv_bin = recv_pos_bins[i];
+            int bin_idx = get_bin_idx(recv_bin);
+            int send_size = send_bin_to_size[bin_idx];
+            int send_arr_idx = send_bin_to_idx[bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[bin_idx];
+
+            assert(send_arr_idx != -1);
+            assert(recv_arr_idx != -1);
+            assert(send_size != -1);
+            assert(send_size == recv_bin_to_size[bin_idx]);
+
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+                x[recv_idx][0] = send_x[send_idx][0] + pbc_flags[0] * domain->prd[0];
+                x[recv_idx][1] = send_x[send_idx][1] + pbc_flags[1] * domain->prd[1];
+                x[recv_idx][2] = send_x[send_idx][2] + pbc_flags[2] * domain->prd[2];
+            }
+        }
+
+        for (int i = 0; i < recv_vel_num_bins; i++) {
+            auto recv_bin = recv_vel_bins[i];
+            int bin_idx = get_bin_idx(recv_bin);
+            int send_size = send_bin_to_size[bin_idx];
+            int send_arr_idx = send_bin_to_idx[bin_idx];
+            int recv_arr_idx = recv_bin_to_idx[bin_idx];
+
+            assert(send_size != -1);
+            assert(send_size == recv_bin_to_size[bin_idx]);
+
+            for (int j = 0; j < send_size; j++) {
+                int send_idx = send_arr_idx + j;
+                int recv_idx = recv_arr_idx + j;
+                v[recv_idx][0] = send_v[send_idx][0];
+                v[recv_idx][1] = send_v[send_idx][1];
+                v[recv_idx][2] = send_v[send_idx][2];
+            }
+        }
+    }
+}
+
 void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos,
                                          int force_offset_buf, int num_recv_force, int* recv_force_list,
                                          int num_pos_segments_buf, bool* segment_types_buf, int* segment_idxs_buf, int* segment_sizes_buf,

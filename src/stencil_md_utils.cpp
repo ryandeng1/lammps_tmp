@@ -434,3 +434,47 @@ int get_mpi_tag(int dst_zoid_num, int src_zoid_num, int start_timestep, int end_
     mpi_tag = (mpi_tag << 8) | end_timestep;
     return mpi_tag;
 }
+
+std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi) {
+    std::vector<int> res(3);
+
+    for (int dim = 0; dim < 3; dim++) {
+        double new_pos = pos[dim];
+        double period = hi[dim] - lo[dim];
+
+        if (pos[dim] > hi[dim]) {
+            new_pos -= period;
+        }
+        if (pos[dim] < lo[dim]) {
+            new_pos += period;
+        }
+        int idx = -1;
+        for (int i = 0; i < bounds.size() - 1; i++) {
+            double bound_lo = bounds[i];
+            double bound_hi = bounds[i + 1];
+            if (new_pos >= bound_lo && new_pos < bound_hi) {
+                idx = i;
+            }
+        }
+
+        if (idx == -1) {
+            idx = bounds.size();
+
+            double last_bound = bounds[bounds.size() - 1];
+            double first_bound = bounds[0];
+
+            double last_bound_sub = bounds[bounds.size() - 1] - period;
+            double first_bound_add = bounds[bounds.size() - 1] + period;
+
+            if ((new_pos >= last_bound_sub && new_pos < first_bound) || (new_pos >= last_bound && new_pos < first_bound_add)) {
+
+            } else {
+                assert(false);
+            }
+        }
+
+        res[dim] = idx;
+    }
+
+    return std::make_tuple(res[0], res[1], res[2]);
+}

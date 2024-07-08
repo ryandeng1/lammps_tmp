@@ -12,6 +12,7 @@
 #include "neigh_list.h"
 #include "modify.h"
 #include <unordered_set>
+#include <sstream>
 
 using namespace LAMMPS_NS;
 
@@ -411,6 +412,39 @@ void StencilMD::INIT_ZOID_DATA() {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
+                int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
+                zoid.bin_to_idx = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bin_to_size = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.bin_to_idx[t] = new int[num_bins_3d];
+                    zoid.bin_to_size[t] = new int[num_bins_3d];
+                    for (int i = 0; i < num_bins_3d; i++) {
+                        zoid.bin_to_idx[t][i] = -1;
+                        zoid.bin_to_size[t][i] = -1;
+                    }
+                }
+                // memset(zoid.bin_to_idx, -1, num_bins_3d);
+                // memset(zoid.bin_to_size, -1, num_bins_3d);
+
+                zoid.send_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_pos_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_vel_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_pos_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_vel_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 zoid.inum_per_timestep = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.num_send_process_timestep = new int*[comm->nprocs];
@@ -537,6 +571,39 @@ void StencilMD::INIT_ZOID_DATA() {
         for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
             queue_info& zoid = lmp->queues_next_dt[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
+                int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
+                zoid.bin_to_idx = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bin_to_size = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.bin_to_idx[t] = new int[num_bins_3d];
+                    zoid.bin_to_size[t] = new int[num_bins_3d];
+                    for (int i = 0; i < num_bins_3d; i++) {
+                        zoid.bin_to_idx[t][i] = -1;
+                        zoid.bin_to_size[t][i] = -1;
+                    }
+                }
+                // memset(zoid.bin_to_idx, -1, num_bins_3d);
+                // memset(zoid.bin_to_size, -1, num_bins_3d);
+
+                zoid.send_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_pos_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_vel_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_pos_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.recv_vel_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 zoid.inum_per_timestep = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.num_send_process_timestep = new int*[comm->nprocs];
@@ -991,17 +1058,19 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                             ->exchange_stencil_md_initial_receive(
                                     first, lmp->domain_stencil_md[zoid_num][t], zoid);
                     first->sort_stencil_md();
+
+                    std::vector<double> bin_bounds;
+                    stencilMD->GET_BOUNDS(true, bin_bounds, t);
+                    if (comm->nprocs == 1) {
+                        first->sort_local_stencil_md_bins(bin_bounds);
+                    }
                 }
             }
         }
 
-
         MPI_Barrier(world);
         MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
-
-        // std::cout << GREEN << "T: " << t << " OUT OF: " << NUM_TIMESTEPS_IN_PARALLEL + 1 << " GOT LOCAL ATOMS." << RESET_COLOR << std::endl;
     }
-    // std::cout << GREEN << "DONE with local atoms" << RESET_COLOR << std::endl;
 }
 
 void StencilMD::GET_GHOST_ATOMS_ZOID() {
@@ -1475,4 +1544,91 @@ void StencilMD::COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* a
             }
         }
     }
+}
+
+void StencilMD::GET_BOUNDS(bool curr_dt, std::vector<double> &bounds, int timestep) {
+    std::vector<int> check_domains = {-1, 0, 1};
+    std::vector<int> ts;
+    /*
+    if (timestep != 0) {
+        ts.push_back(timestep - 1);
+    }
+    */
+    // ts.push_back(timestep);
+    // if (timestep != NUM_TIMESTEPS_IN_PARALLEL) {
+    // ts.push_back(timestep + 1);
+    // }
+    // std::vector<int> ts = {timestep - 1, timestep, timestep + 1};
+
+    // insert current bounds
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        queue_info& zoid = curr_dt ? lmp->zoid_num_to_zoid[i] : lmp->zoid_num_to_zoid_next_dt[i];
+
+        double lo_curr = zoid.zoid.cuts[0].lower + zoid.zoid.cuts[0].slope_lower * timestep;
+        double hi_curr = zoid.zoid.cuts[0].upper + zoid.zoid.cuts[0].slope_upper * timestep;
+
+        std::vector<double> try_bounds = {lo_curr, lo_curr - ALLEGRO_SLOPE, lo_curr + ALLEGRO_SLOPE, hi_curr, hi_curr - ALLEGRO_SLOPE, hi_curr + ALLEGRO_SLOPE};
+
+
+        for (auto& try_val : try_bounds) {
+            bool close_to_existing = false;
+            for (auto& bound : bounds) {
+                if (fabs(try_val - bound) <= 1e-5) {
+                    close_to_existing = true;
+                }
+            }
+
+            if (!close_to_existing) {
+                bounds.push_back(try_val);
+            }
+        }
+
+        /*
+        for (double lo : try_lo) {
+            for (double hi: try_hi) {
+                bool close_to_existing_lower = false;
+                bool close_to_existing_upper = false;
+
+                for (int check : check_domains) {
+                    double check_lo = lo + check * domain->prd[0];
+                    for (auto& bound : bounds) {
+                        if (fabs(lo - bound) <= 1e-5) {
+                            close_to_existing_lower = true;
+                        }
+                    }
+
+                    double check_hi = hi + check * domain->prd[0];
+                    for (auto& bound : bounds) {
+                        if (fabs(hi - bound) <= 1e-5) {
+                            close_to_existing_upper = true;
+                        }
+                    }
+
+                }
+
+
+                if (!close_to_existing_lower) {
+                    bounds.push_back(lo_curr);
+                }
+
+                if (!close_to_existing_upper) {
+                    bounds.push_back(hi_curr);
+                }
+            }
+        }
+        */
+    }
+
+    std::sort(bounds.begin(), bounds.end());
+
+    /*
+    std::stringstream s;
+    for (auto& b : bounds) {
+        s << b << " ";
+    }
+
+    std::cout << "bounds: " << s.str() << std::endl;
+    */
+
+    assert(bounds.size() <= NUM_BINS);
 }

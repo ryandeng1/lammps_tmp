@@ -37,6 +37,17 @@ class Verlet : public Integrate {
 
   void setup_stencil_md();
 
+  void sort_ghost_atoms_stencil_md_bins(Atom*, queue_info&, int);
+  void construct_send_force_bins(bool curr_dt, Atom*, queue_info& zoid, int);
+  void construct_send_pos_bins(bool curr_dt, Atom*, queue_info& zoid, int);
+  void construct_send_vel_bins(bool curr_dt, Atom*, queue_info& zoid, int);
+
+  void construct_recv_force_bins(bool curr_dt, Atom*, queue_info& zoid, int);
+  void construct_recv_pos_bins(bool curr_dt, Atom*, queue_info& zoid, int);
+  void construct_recv_vel_bins(bool curr_dt, Atom*, queue_info& zoid, int);
+
+  void construct_bin_to_idx(bool curr_dt, Atom*, queue_info& zoid, int);
+
   void sort_ghost_atoms_stencil_md(Atom*, Atom*, queue_info&, int);
   void group_ghost_atoms_stencil_md(Atom*, Atom*, queue_info&, int);
   void group_ghost_atoms_stencil_md_next_dt(Atom*, Atom*, queue_info&, int);
@@ -44,7 +55,6 @@ class Verlet : public Integrate {
   // void setup_bins_stencil_md(Atom*, queue_info&, int);
   void setup_atom_arr_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, Domain*);
 
-  void sort_ghost_atoms_by_prev_and_next_zoid(Atom*, queue_info&, int);
   void cleanup_stencil_md();
 
   template <bool curr_dt>

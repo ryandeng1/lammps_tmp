@@ -400,6 +400,7 @@ class Atom : protected Pointers {
 
   void setup_stencil_md(Domain*);
   virtual void sort_stencil_md();
+  virtual void sort_local_stencil_md_bins(std::vector<double>& bin_bounds);
   int map_style_set_stencil_md();
   virtual void map_init_stencil_md(int check = 1);
 

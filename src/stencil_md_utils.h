@@ -2,8 +2,7 @@
 // Created by Ryan Deng on 5/7/23.
 //
 
-#ifndef LAMMPS_STENCIL_MD_UTILS_H
-#define LAMMPS_STENCIL_MD_UTILS_H
+#pragma once
 
 #include <mpi.h>
 #include <map>
@@ -63,7 +62,7 @@ constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
 constexpr bool DEBUG_SEND_RECV_DATA = false;
 
-constexpr bool TEST_AGAINST_LAMMPS = false;
+constexpr bool TEST_AGAINST_LAMMPS = true;
 
 constexpr bool PURELY_LOCAL_POTENTIAL = true;
 
@@ -81,7 +80,7 @@ constexpr int NUM_ATOMS_PER_WORKER = 128;
 
 constexpr bool ONLY_RUN_LAMMPS = false;
 
-constexpr bool ONLY_RUN_STENCIL_MD = true;
+constexpr bool ONLY_RUN_STENCIL_MD = false;
 
 constexpr bool LAMMPS_USE_CILK = true;
 
@@ -92,6 +91,8 @@ constexpr bool USE_BOND = true;
 constexpr int NUM_PIPELINE_STAGES = 2;
 
 constexpr bool USE_ATOMICS = true;
+
+constexpr int NUM_BINS = 16;
 
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
@@ -326,6 +327,27 @@ typedef struct cuts cuts_t;
 
 // struct that holds information for queue
 struct queue_info {
+  int** bin_to_idx;
+  int** bin_to_size;
+
+  int** send_force_num_bins;
+  std::tuple<int, int, int>*** send_force_bins;
+
+  int** send_pos_num_bins;
+  std::tuple<int, int, int>*** send_pos_bins;
+
+  int** send_vel_num_bins;
+  std::tuple<int, int, int>*** send_vel_bins;
+
+  int** recv_force_num_bins;
+  std::tuple<int, int, int>*** recv_force_bins;
+
+  int** recv_pos_num_bins;
+  std::tuple<int, int, int>*** recv_pos_bins;
+
+  int** recv_vel_num_bins;
+  std::tuple<int, int, int>*** recv_vel_bins;
+
   int* inum_per_timestep;
   int debug_int;
   int t0;
@@ -432,4 +454,14 @@ uint64_t timeSinceEpochMillisec();
 
 int get_mpi_tag(int dst, int src, int start_timestep=0, int end_timestep=0);
 
-#endif    //LAMMPS_STENCIL_MD_UTILS_H
+std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi);
+
+inline __attribute__((always_inline)) int get_bin_idx(std::tuple<int, int, int>& bin) {
+    int x = std::get<0>(bin);
+    int y = std::get<1>(bin);
+    int z = std::get<2>(bin);
+    assert(x < NUM_BINS && x >= 0);
+    assert(y < NUM_BINS && y >= 0);
+    assert(z < NUM_BINS && z >= 0);
+    return z * NUM_BINS * NUM_BINS + y * NUM_BINS + x;
+}
