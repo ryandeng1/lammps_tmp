@@ -784,8 +784,7 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
         ghost_idxs.push_back(i);
     }
 
-    std::vector<double> bin_bounds;
-    stencilMD->GET_BOUNDS(true, bin_bounds, timestep);
+    auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
 
     std::stable_sort(
             ghost_idxs.begin(), ghost_idxs.end(), [&](const int& a, const int& b) {
@@ -926,8 +925,7 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         }
     }
 
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(true, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(true, timestep);
 
     std::set<std::tuple<int, int, int>> all_ranges;
 
@@ -1120,8 +1118,7 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
         }
     }
 
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(false, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(false, timestep);
 
     std::set<std::tuple<int, int, int>> all_ranges;
 
@@ -1184,8 +1181,7 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
 
 void Verlet::construct_send_force_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
     int zoid_num = zoid.num;
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(curr_dt, timestep);
     auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
 
     zoid.send_force_num_bins[timestep] = new int[send_to.size()];
@@ -1218,8 +1214,7 @@ void Verlet::construct_send_force_bins(bool curr_dt, Atom* atom_, queue_info &zo
 
 void Verlet::construct_send_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
     int zoid_num = zoid.num;
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(curr_dt, timestep);
     auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
 
     zoid.send_pos_num_bins[timestep] = new int[send_to.size()];
@@ -1275,8 +1270,7 @@ void Verlet::construct_send_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid
 
 void Verlet::construct_send_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
     int zoid_num = zoid.num;
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(curr_dt, timestep);
     auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
 
     zoid.send_vel_num_bins[timestep] = new int[send_to.size()];
@@ -1312,8 +1306,7 @@ void Verlet::construct_send_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid
 
 void Verlet::construct_recv_force_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
     int zoid_num = zoid.num;
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(curr_dt, timestep);
     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
 
     zoid.recv_force_num_bins[timestep] = new int[recv_from.size()];
@@ -1344,8 +1337,7 @@ void Verlet::construct_recv_force_bins(bool curr_dt, Atom* atom_, queue_info &zo
 
 void Verlet::construct_recv_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
     int zoid_num = zoid.num;
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(curr_dt, timestep);
     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
 
     zoid.recv_vel_num_bins[timestep] = new int[recv_from.size()];
@@ -1376,8 +1368,7 @@ void Verlet::construct_recv_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid
 
 void Verlet::construct_recv_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
     int zoid_num = zoid.num;
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(curr_dt, timestep);
     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
 
     zoid.recv_pos_num_bins[timestep] = new int[recv_from.size()];
@@ -1422,8 +1413,7 @@ void Verlet::construct_recv_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid
 
 void Verlet::construct_bin_to_idx(bool curr_dt, Atom* atom_, queue_info &zoid, int timestep) {
     int zoid_num = zoid.num;
-    std::vector<double> bounds;
-    stencilMD->GET_BOUNDS(curr_dt, bounds, timestep);
+    auto& bounds = stencilMD->GET_BOUNDS(curr_dt, timestep);
 
     assert(atom_->nlocal + atom_->nghost > 0);
 

@@ -1059,8 +1059,7 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                                     first, lmp->domain_stencil_md[zoid_num][t], zoid);
                     first->sort_stencil_md();
 
-                    std::vector<double> bin_bounds;
-                    stencilMD->GET_BOUNDS(true, bin_bounds, t);
+                    auto& bin_bounds = stencilMD->GET_BOUNDS(true, t);
                     if (comm->nprocs == 1) {
                         first->sort_local_stencil_md_bins(bin_bounds);
                     }
@@ -1546,7 +1545,13 @@ void StencilMD::COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* a
     }
 }
 
-void StencilMD::GET_BOUNDS(bool curr_dt, std::vector<double> &bounds, int timestep) {
+std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
+    auto& bounds_at_timestep = curr_dt ? bounds[timestep] : bounds[NUM_TIMESTEPS_IN_PARALLEL - timestep];
+
+    if (bounds_at_timestep.size() > 0) {
+        return bounds_at_timestep;
+    }
+
     std::vector<int> check_domains = {-1, 0, 1};
     std::vector<int> ts;
     /*
@@ -1572,14 +1577,14 @@ void StencilMD::GET_BOUNDS(bool curr_dt, std::vector<double> &bounds, int timest
 
         for (auto& try_val : try_bounds) {
             bool close_to_existing = false;
-            for (auto& bound : bounds) {
-                if (fabs(try_val - bound) <= 1e-5) {
+            for (auto& b : bounds_at_timestep) {
+                if (fabs(try_val - b) <= 1e-5) {
                     close_to_existing = true;
                 }
             }
 
             if (!close_to_existing) {
-                bounds.push_back(try_val);
+                bounds_at_timestep.push_back(try_val);
             }
         }
 
@@ -1619,7 +1624,7 @@ void StencilMD::GET_BOUNDS(bool curr_dt, std::vector<double> &bounds, int timest
         */
     }
 
-    std::sort(bounds.begin(), bounds.end());
+    std::sort(bounds_at_timestep.begin(), bounds_at_timestep.end());
 
     /*
     std::stringstream s;
@@ -1630,5 +1635,6 @@ void StencilMD::GET_BOUNDS(bool curr_dt, std::vector<double> &bounds, int timest
     std::cout << "bounds: " << s.str() << std::endl;
     */
 
-    assert(bounds.size() <= NUM_BINS);
+    assert(bounds_at_timestep.size() <= NUM_BINS);
+    return bounds_at_timestep;
 }

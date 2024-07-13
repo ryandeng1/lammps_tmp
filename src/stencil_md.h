@@ -82,7 +82,9 @@ public:
     void SET_INUM_PER_TIMESTEP();
     void SET_INUM_PER_TIMESTEP_NEXT_DT();
 
-    void GET_BOUNDS(bool curr_dt, std::vector<double>& bounds, int timestep);
+    std::vector<double>& GET_BOUNDS(bool curr_dt, int timestep);
+
+    std::vector<double> bounds[NUM_TIMESTEPS_IN_PARALLEL + 1];
 };
 
 }

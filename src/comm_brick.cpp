@@ -1644,8 +1644,7 @@ void CommBrick::construct_send_list_stencil_md_send(
             std::vector<int> segment_lengths_force;
             int num_force_segments = get_segments(idx_vec_force[t], segment_idxs_force, segment_lengths_force);
 
-            std::vector<double> bounds;
-            stencilMD->GET_BOUNDS(true, bounds, t);
+            auto& bounds = stencilMD->GET_BOUNDS(true, t);
 
             if (bounds.size() > 0) {
                 std::set<std::tuple<int, int, int>> ranges;
@@ -2012,8 +2011,7 @@ void CommBrick::construct_send_list_stencil_md(
             zoid.recv_list_local_force_only[t][i] = new int[nrecv_force_only];
             zoid.recv_list_local_num_force_only[t][i] = nrecv_force_only;
 
-            std::vector<double> bounds;
-            stencilMD->GET_BOUNDS(true, bounds, t);
+            auto& bounds = stencilMD->GET_BOUNDS(true, t);
             std::set<std::tuple<int, int, int>> ranges;
 
             for (int j = 0; j < nrecv_force_only; j++) {
@@ -2068,8 +2066,7 @@ void CommBrick::construct_send_list_stencil_md(
             zoid.recv_list_local_force_pos[t][i] = new int[nrecv_force_pos];
             zoid.recv_list_local_num_force_pos[t][i] = nrecv_force_pos;
 
-            std::vector<double> bounds;
-            stencilMD->GET_BOUNDS(true, bounds, t);
+            auto& bounds = stencilMD->GET_BOUNDS(true, t);
             std::set<std::tuple<int, int, int>> ranges;
 
             for (int j = 0; j < nrecv_force_pos; j++) {
@@ -3054,8 +3051,7 @@ void CommBrick::send_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
                 if (zoid.where[dim] == PBC && send_zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
             }
 
-            std::vector<double> bounds;
-            stencilMD->GET_BOUNDS(curr_dt, bounds, t);
+            auto& bounds = stencilMD->GET_BOUNDS(curr_dt, t);
             std::cout << BOLDCYAN << "zoid: " << zoid.num << " send to: " << send_zoid_num << " time: " << t << RESET_COLOR << std::endl;
             std::stringstream s;
             for (auto& b: bounds) {
@@ -3132,8 +3128,7 @@ void CommBrick::recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
                 if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
             }
 
-            std::vector<double> bounds;
-            stencilMD->GET_BOUNDS(curr_dt, bounds, t);
+            auto& bounds = stencilMD->GET_BOUNDS(curr_dt, t);
 
             atom_->avec->recv_data_bins_stencil_md(recv_zoid.bin_to_idx[t], recv_zoid.bin_to_size[t],
                                                    zoid.bin_to_idx[t], zoid.bin_to_size[t],
