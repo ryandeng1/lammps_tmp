@@ -2338,7 +2338,7 @@ void AtomVec::recv_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_s
             }
         }
     } else {
-        for (int i = 0; i < recv_force_num_bins; i++) {
+        cilk_for (int i = 0; i < recv_force_num_bins; i++) {
             auto recv_bin = recv_force_bins[i];
             int bin_idx = get_bin_idx(recv_bin);
             int send_size = send_bin_to_size[bin_idx];
@@ -2359,7 +2359,7 @@ void AtomVec::recv_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_s
             }
         }
 
-        for (int i = 0; i < recv_pos_num_bins; i++) {
+        cilk_for (int i = 0; i < recv_pos_num_bins; i++) {
             auto recv_bin = recv_pos_bins[i];
             int bin_idx = get_bin_idx(recv_bin);
             int send_size = send_bin_to_size[bin_idx];
@@ -2380,7 +2380,7 @@ void AtomVec::recv_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_s
             }
         }
 
-        for (int i = 0; i < recv_vel_num_bins; i++) {
+        cilk_for (int i = 0; i < recv_vel_num_bins; i++) {
             auto recv_bin = recv_vel_bins[i];
             int bin_idx = get_bin_idx(recv_bin);
             int send_size = send_bin_to_size[bin_idx];
