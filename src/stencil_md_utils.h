@@ -13,6 +13,44 @@
 #include <deque>
 #include <iostream>
 
+// Used for spatial sorting
+#include <CGAL/spatial_sort.h>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/point_generators_3.h>
+#include <CGAL/hilbert_sort.h>
+#include <CGAL/Spatial_sort_traits_adapter_3.h>
+
+typedef CGAL::Simple_cartesian<double> K;
+typedef K::Point_3                                          Point;
+typedef CGAL::Spatial_sort_traits_adapter_3<K,
+        CGAL::Pointer_property_map<Point>::type> Search_traits;
+typedef std::pair<Point,int>              Point_with_info;
+typedef std::vector<Point_with_info>      Data_vector;
+
+typedef CGAL::Spatial_sort_traits_adapter_3<K,
+        CGAL::First_of_pair_property_map<Point_with_info>
+> Search_traits_pair;
+
+/*
+//property map and get as friend
+// to be allowed to use private member
+class Vect_ppmap{
+    const Data_vector& points;
+public:
+    //classical typedefs
+    typedef Data_vector::size_type key_type;
+    typedef Point_d value_type;
+    typedef const value_type& reference;
+    typedef boost::readable_property_map_tag category;
+    Vect_ppmap(const Data_vector& points_):points(points_){}
+    friend reference get(const Vect_ppmap& vmap, key_type i) {
+        return vmap.points[i].first;
+    }
+};
+
+typedef CGAL::Spatial_sort_traits_adapter_3<K,Vect_ppmap>   Search_traits_pair;
+*/
+
 //the following are UBUNTU/LINUX, and MacOS ONLY terminal color codes.
 #define RESET_COLOR   "\033[0m"
 #define BLACK   "\033[30m"      /* Black */
@@ -60,7 +98,7 @@ constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
-constexpr bool DEBUG_SEND_RECV_DATA = false;
+constexpr bool DEBUG_SEND_RECV_DATA = true;
 
 constexpr bool TEST_AGAINST_LAMMPS = true;
 
@@ -82,7 +120,7 @@ constexpr bool ONLY_RUN_LAMMPS = false;
 
 constexpr bool ONLY_RUN_STENCIL_MD = false;
 
-constexpr bool LAMMPS_USE_CILK = true;
+constexpr bool LAMMPS_USE_CILK = false;
 
 constexpr bool TIME_STENCIL_MD = true;
 
@@ -90,9 +128,9 @@ constexpr bool USE_BOND = true;
 
 constexpr int NUM_PIPELINE_STAGES = 2;
 
-constexpr bool USE_ATOMICS = true;
+constexpr bool USE_ATOMICS = false;
 
-constexpr int NUM_BINS = 16;
+constexpr int NUM_BINS = 48;
 
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
@@ -456,12 +494,23 @@ int get_mpi_tag(int dst, int src, int start_timestep=0, int end_timestep=0);
 
 std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi);
 
-inline __attribute__((always_inline)) int get_bin_idx(std::tuple<int, int, int>& bin) {
+inline __attribute__((always_inline)) int get_bin_idx(const std::tuple<int, int, int>& bin) {
     int x = std::get<0>(bin);
     int y = std::get<1>(bin);
     int z = std::get<2>(bin);
+    if (x >= NUM_BINS || x < 0) {
+        std::cout << "bin x: " << x << std::endl;
+    }
+    if (y >= NUM_BINS || y < 0) {
+        std::cout << "bin y: " << y << std::endl;
+    }
+    if (z >= NUM_BINS || z < 0) {
+        std::cout << "bin z: " << z << std::endl;
+    }
     assert(x < NUM_BINS && x >= 0);
     assert(y < NUM_BINS && y >= 0);
     assert(z < NUM_BINS && z >= 0);
     return z * NUM_BINS * NUM_BINS + y * NUM_BINS + x;
 }
+
+

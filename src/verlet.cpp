@@ -60,15 +60,6 @@
 #include <cilk/opadd_reducer.h>
 #include <iomanip>
 
-#include <CGAL/spatial_sort.h>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/point_generators_3.h>
-#include <CGAL/hilbert_sort.h>
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef K::Point_3                                          Point;
-typedef CGAL::Creator_uniform_3<double,Point>               Creator;
-
 using namespace LAMMPS_NS;
 
 static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
@@ -785,8 +776,54 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
     }
 
     auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
+    auto& sorted_bin_indices = stencilMD->sorted_bin_indices[timestep];
 
-    std::stable_sort(
+    std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
+
+    for (int i = atom_->nlocal; i < atom_->nlocal + atom_->nghost; i++) {
+        double* pos = atom_->x[i];
+        double new_pos[3];
+        for (int j = 0; j < 3; j++) {
+            double new_pos_dim = pos[j];
+            if (new_pos_dim < domain->boxlo[j]) {
+                new_pos_dim += domain->prd[j];
+            }
+            if (new_pos_dim >= domain->boxhi[j]) {
+                new_pos_dim -= domain->prd[j];
+            }
+            new_pos[j] = new_pos_dim;
+        }
+        auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
+        // bin_to_data_points[bin].push_back(std::make_pair(Point(pos[0], pos[1], pos[2]), i));
+        bin_to_data_points[bin].push_back(std::make_pair(Point(new_pos[0], new_pos[1], new_pos[2]), i));
+    }
+
+    /*
+    for (auto& [bin, data_points] : bin_to_data_points) {
+        std::sort(data_points.begin(), data_points.end(), [&](const auto& left, const auto& right) {
+            return atom_->tag[left.second] < atom_->tag[right.second];
+        });
+        Search_traits_pair traits;
+        CGAL::spatial_sort(data_points.begin(),
+                           data_points.end(),
+                           traits);
+        if (get_bin_idx(bin) == 1811 && timestep == 0) {
+            for (auto& d : data_points) {
+                int idx = d.second;
+                double* pos = atom_->x[idx];
+                std::cout << "GHOST IDX: " << idx << " tag: " << atom_->tag[idx] << " pos: " << pos[0] << " " << pos[1] << " " << pos[2]
+                          << " pos in the data: " << d.first.x() << " " << d.first.y() << " " << d.first.z() << std::endl;
+            }
+        }
+    }
+    */
+
+    std::map<int, int> bin_to_idx;
+    for (int i = 0; i < sorted_bin_indices.size(); i++) {
+        bin_to_idx[sorted_bin_indices[i]] = i;
+    }
+
+    std::sort(
             ghost_idxs.begin(), ghost_idxs.end(), [&](const int& a, const int& b) {
                 int idx_a = atom_->nlocal + a;
                 int idx_b = atom_->nlocal + b;
@@ -796,10 +833,74 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
                 auto bin_a = get_bin(bin_bounds, pos_a, domain->boxlo, domain->boxhi);
                 auto bin_b = get_bin(bin_bounds, pos_b, domain->boxlo, domain->boxhi);
 
-                tagint tag_a = atom_->tag[idx_a];
-                tagint tag_b = atom_->tag[idx_b];
+                int bin_idx_a = get_bin_idx(bin_a);
+                int bin_idx_b = get_bin_idx(bin_b);
 
-                return std::tie(std::get<2>(bin_a), std::get<1>(bin_a), std::get<0>(bin_a), tag_a) < std::tie(std::get<2>(bin_b), std::get<1>(bin_b), std::get<0>(bin_b), tag_b);
+                // int find_idx_a = std::distance(sorted_bin_indices.begin(), std::find(sorted_bin_indices.begin(), sorted_bin_indices.end(), bin_idx_a));
+                // assert(find_idx_a < sorted_bin_indices.size());
+
+                // int find_idx_b = std::distance(sorted_bin_indices.begin(), std::find(sorted_bin_indices.begin(), sorted_bin_indices.end(), bin_idx_b));
+                // assert(find_idx_b < sorted_bin_indices.size());
+                int find_idx_a = bin_to_idx[bin_idx_a];
+                int find_idx_b = bin_to_idx[bin_idx_b];
+
+                /*
+                if (bin_a < bin_b) {
+                    return true;
+                } else if (bin_a > bin_b) {
+                    return false;
+                }
+                */
+
+                if (find_idx_a < find_idx_b) {
+                    return true;
+                } else if (find_idx_a > find_idx_b) {
+                    return false;
+                }
+
+                return atom_->tag[idx_a] < atom_->tag[idx_b];
+
+                /*
+                assert(bin_a == bin_b);
+
+                auto& data_points = bin_to_data_points[bin_a];
+
+                find_idx_a = std::distance(data_points.begin(), std::find_if(data_points.begin(), data_points.end(), [&](auto& elem) {
+                    return elem.second == idx_a;
+                }));
+
+                assert(find_idx_a < data_points.size());
+
+                find_idx_b = std::distance(data_points.begin(), std::find_if(data_points.begin(), data_points.end(), [&](auto& elem) {
+                    return elem.second == idx_b;
+                }));
+
+                assert(find_idx_b < data_points.size());
+
+                return find_idx_a < find_idx_b;
+                */
+
+                /*
+                bool close = fabs(pos_a[0] - pos_b[0]) <= 1e-5 && fabs(pos_a[1] - pos_b[1]) <= 1e-5 && fabs(pos_a[2] - pos_b[2]) <= 1e-5;
+                if (close) {
+                    assert(idx_a == idx_b);
+                    return false;
+                }
+
+                return atom_->tag[idx_a] < atom_->tag[idx_b];
+
+                /*
+                std::vector<Point> p(2);
+                Point p_a(pos_a[0], pos_a[1], pos_a[2]);
+                Point p_b(pos_b[0], pos_b[1], pos_b[2]);
+                p[0] = p_a;
+                p[1] = p_b;
+
+                CGAL::hilbert_sort(p.begin(), p.end());
+
+                bool compare = fabs(p[0].x() - p_a.x()) <= 1e-5 && fabs(p[0].y() - p_a.y()) <= 1e-5 && fabs(p[0].z() - p_a.z()) <= 1e-5;
+                return compare;
+                */
             });
 
     for (int i = 0; i < atom_->nghost; i++) {
@@ -1429,7 +1530,18 @@ void Verlet::construct_bin_to_idx(bool curr_dt, Atom* atom_, queue_info &zoid, i
             int bin_idx = get_bin_idx(prev_bin);
             assert(bin_idx < NUM_BINS * NUM_BINS * NUM_BINS);
             if (zoid.bin_to_idx[timestep][bin_idx] != -1) {
+                std::stringstream bounds_str;
+                for (auto& b: bounds) {
+                    bounds_str << b << " ";
+                }
+                std::cout << "BOUNDS: " << bounds_str.str() << std::endl;
                 std::cout << "zoid: " << zoid.num << " timestep: " << timestep << " bin idx: " << bin_idx << " curr dt? " << curr_dt << " curr idx: " << i << " existing idx: " << zoid.bin_to_idx[timestep][bin_idx] << " existng size: " << zoid.bin_to_size[timestep][bin_idx] << std::endl;
+                for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
+                    double* tmp_pos = atom_->x[k];
+                    auto tmp_bin = get_bin(bounds, tmp_pos, domain->boxlo, domain->boxhi);
+                    std::cout << "idx: " << k << " nlocal: " << atom_->nlocal << " bin: " << std::get<0>(tmp_bin) << " " << std::get<1>(tmp_bin) << " " << std::get<2>(tmp_bin)
+                        << " pos: " << tmp_pos[0] << " " << tmp_pos[1] << " " << tmp_pos[2] << std::endl;
+                }
             }
             assert(zoid.bin_to_idx[timestep][bin_idx] == -1);
             assert(zoid.bin_to_size[timestep][bin_idx] == -1);
@@ -2365,6 +2477,26 @@ void Verlet::setup_stencil_md() {
                     if (comm->nprocs == 1) {
                         // currently this is only tested for local
                         sort_ghost_atoms_stencil_md_bins(atom_, zoid, t);
+                        if (zoid_num == 0 && t == NUM_TIMESTEPS_IN_PARALLEL) {
+                            auto& bin_bounds = stencilMD->GET_BOUNDS(true, t);
+                            for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+                                double *pos = atom_->x[i];
+                                auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
+                                std::cout << "SEND idx: " << i << " nlocal: " << atom_->nlocal << " tag: " << atom_->tag[i] << " bin: " << std::get<0>(bin) << " " << std::get<1>(bin)
+                                          << " " << std::get<2>(bin) << " pos: " << pos[0] << " " << pos[1] << " "
+                                          << pos[2] << std::endl;
+                            }
+                        }
+                        if (zoid_num == 16 && t == NUM_TIMESTEPS_IN_PARALLEL) {
+                            auto& bin_bounds = stencilMD->GET_BOUNDS(true, t);
+                            for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+                                double *pos = atom_->x[i];
+                                auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
+                                std::cout << "RECV idx: " << i << " nlocal : " << atom_->nlocal << " tag: " << atom_->tag[i] << " bin: " << std::get<0>(bin) << " " << std::get<1>(bin)
+                                          << " " << std::get<2>(bin) << " pos: " << pos[0] << " " << pos[1] << " "
+                                          << pos[2] << std::endl;
+                            }
+                        }
                     } else {
                         sort_ghost_atoms_stencil_md(atom_, NULL, zoid, t);
                     }

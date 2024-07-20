@@ -2337,8 +2337,8 @@ void Atom::sort_stencil_md() {
     //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
 }
 
-// sort local atoms based on what bin they belong in
-void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds) {
+// sort local atoms based on what bin they belong in, then within the bin, sort based on a space-filling curve on all of the local atoms
+void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vector<std::size_t>& sorted_bin_indices) {
     if (domain->box_change) {
         assert(false);
         // setup_sort_bins_stencil_md();
@@ -2352,22 +2352,210 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds) {
         tag_to_idx[tag[i]] = i;
     }
 
-    std::vector<std::tuple<tagint, int, int, int>> atom_bins(nlocal);
+    /*
+    std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
+
     for (int i = 0; i < nlocal; i++) {
         double* pos = x[i];
+        double new_pos[3];
+        for (int j = 0; j < 3; j++) {
+            double new_pos_dim = pos[j];
+            if (new_pos_dim < domain->boxlo[j]) {
+                new_pos_dim += domain->prd[j];
+            }
+            if (new_pos_dim >= domain->boxhi[j]) {
+                new_pos_dim -= domain->prd[j];
+            }
+            new_pos[j] = new_pos_dim;
+        }
         auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
-        atom_bins[i] = {tag[i], std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
+        // bin_to_data_points[bin].push_back(std::make_pair(Point(pos[0], pos[1], pos[2]), i));
+        bin_to_data_points[bin].push_back(std::make_pair(Point(new_pos[0], new_pos[1], new_pos[2]), i));
+    }
+    */
+
+    /*
+    for (auto& [bin, data_points] : bin_to_data_points) {
+        std::sort(data_points.begin(), data_points.end(), [&](const auto& left, const auto& right) {
+            return tag[left.second] < tag[right.second];
+        });
+
+        Search_traits_pair traits;
+        CGAL::spatial_sort(data_points.begin(),
+                           data_points.end(),
+                           traits);
+        if (get_bin_idx(bin) == 1811) {
+            for (auto& d : data_points) {
+                int idx = d.second;
+                double* pos = x[idx];
+                std::cout << "LOCAL IDX: " << idx << " tag: " << tag[idx] << " pos: " << pos[0] << " " << pos[1] << " " << pos[2]
+                    << " pos in data: " << d.first.x() << " " << d.first.y() << " " << d.first.z() << std::endl;
+            }
+        }
+    }
+    */
+
+    std::vector<int> local_idxs(nlocal);
+    for (int i = 0; i < nlocal; i++) {
+        local_idxs[i] = i;
     }
 
+    std::map<int, int> bin_to_idx;
+    for (int i = 0; i < sorted_bin_indices.size(); i++) {
+        bin_to_idx[sorted_bin_indices[i]] = i;
+    }
+
+    std::sort(local_idxs.begin(), local_idxs.end(), [&](const auto& idx_a, const auto& idx_b) {
+        // compare z coordinates of bounds, then y then x, and then finally compare tag for a consistent global ordering
+        // return std::tie(std::get<3>(a), std::get<2>(a), std::get<1>(a), std::get<0>(a)) < std::tie(std::get<3>(b), std::get<2>(b), std::get<1>(b), std::get<0>(b));
+
+        assert(idx_a < nlocal && idx_a >= 0);
+        assert(idx_b < nlocal && idx_b >= 0);
+
+        double* pos_a = x[idx_a];
+        double* pos_b = x[idx_b];
+
+        auto bin_a = get_bin(bin_bounds, pos_a, domain->boxlo, domain->boxhi);
+        auto bin_b = get_bin(bin_bounds, pos_b, domain->boxlo, domain->boxhi);
+
+        int bin_idx_a = get_bin_idx(bin_a);
+        int bin_idx_b = get_bin_idx(bin_b);
+
+        int find_idx_a = bin_to_idx[bin_idx_a];
+        // int find_idx_a = std::distance(sorted_bin_indices.begin(), std::find(sorted_bin_indices.begin(), sorted_bin_indices.end(), bin_idx_a));
+        // assert(find_idx_a_test == find_idx_a);
+        // assert(find_idx_a < sorted_bin_indices.size());
+        int find_idx_b = bin_to_idx[bin_idx_b];
+        // int find_idx_b = std::distance(sorted_bin_indices.begin(), std::find(sorted_bin_indices.begin(), sorted_bin_indices.end(), bin_idx_b));
+        // assert(find_idx_b < sorted_bin_indices.size());
+
+        /*
+        if (bin_a < bin_b) {
+            return true;
+        } else if (bin_a > bin_b) {
+            return false;
+        }
+        */
+
+        if (find_idx_a < find_idx_b) {
+            return true;
+        } else if (find_idx_a > find_idx_b) {
+            return false;
+        }
+
+        assert(bin_a == bin_b);
+
+        return tag[idx_a] < tag[idx_b];
+
+        /*
+        auto& data_points = bin_to_data_points[bin_a];
+
+        find_idx_a = std::distance(data_points.begin(), std::find_if(data_points.begin(), data_points.end(), [&](auto& elem) {
+            return elem.second == idx_a;
+        }));
+
+        assert(find_idx_a < data_points.size());
+
+        find_idx_b = std::distance(data_points.begin(), std::find_if(data_points.begin(), data_points.end(), [&](auto& elem) {
+            return elem.second == idx_b;
+        }));
+
+        assert(find_idx_b < data_points.size());
+
+        return find_idx_a < find_idx_b;
+        */
+
+        /*
+        Point p_a(pos_a[0], pos_a[1], pos_a[2]);
+        Point p_b(pos_b[0], pos_b[1], pos_b[2]);
+
+        std::vector<Point> p(2);
+        p[0] = p_a;
+        p[1] = p_b;
+
+        CGAL::hilbert_sort(p.begin(), p.end());
+
+        bool compare = fabs(p[0].x() - p_a.x()) <= 1e-5 && fabs(p[0].y() - p_a.y()) <= 1e-5 && fabs(p[0].z() - p_a.z()) <= 1e-5;
+        return compare;
+        */
+    });
+
+    for (int i = 0; i < nlocal; i++) {
+        int new_idx = local_idxs[i];
+        assert(new_idx >= 0 && new_idx < nlocal);
+        permute[i] = new_idx;
+    }
+
+    /*
     std::sort(atom_bins.begin(), atom_bins.end(), [&](const auto& a, const auto& b) {
         // compare z coordinates of bounds, then y then x, and then finally compare tag for a consistent global ordering
-        return std::tie(std::get<3>(a), std::get<2>(a), std::get<1>(a), std::get<0>(a)) < std::tie(std::get<3>(b), std::get<2>(b), std::get<1>(b), std::get<0>(b));
+        // return std::tie(std::get<3>(a), std::get<2>(a), std::get<1>(a), std::get<0>(a)) < std::tie(std::get<3>(b), std::get<2>(b), std::get<1>(b), std::get<0>(b));
+        std::cout << "start" << std::endl;
+
+        tagint tag_a = std::get<0>(a);
+        tagint tag_b = std::get<0>(a);
+
+        std::cout << "got tag" << std::endl;
+
+        int idx_a = std::get<4>(a);
+        int idx_b = std::get<4>(b);
+
+        if (idx_a == idx_b) {
+            std::cout << "idx: " << idx_a << " tag: " << tag_a << " " << tag_b << std::endl;
+        }
+        assert(idx_a != idx_b);
+
+        std::cout << "got idx" << std::endl;
+
+        const auto& tup_a = std::tie(std::get<3>(a), std::get<2>(a), std::get<1>(a));
+        const auto& tup_b = std::tie(std::get<3>(b), std::get<2>(b), std::get<1>(b));
+
+        std::cout << "before tup compare, created tie" << std::endl;
+
+        if (tup_a < tup_b) {
+            return true;
+        } else if (tup_a > tup_b) {
+            return false;
+        }
+
+        return false;
+
+        std::cout << "after tup" << std::endl;
+
+        double* pos_a = x[idx_a];
+        double* pos_b = x[idx_b];
+        Point p_a(pos_a[0], pos_a[1], pos_a[2]);
+        Point p_b(pos_b[0], pos_b[1], pos_b[2]);
+
+        std::cout << "POS A:" << pos_a[0] << " " << pos_a[1] << " " << pos_a[2] << std::endl;
+        std::cout << "POS B:" << pos_b[0] << " " << pos_b[1] << " " << pos_b[2] << std::endl;
+
+        std::vector<Point> p(2);
+        p[0] = p_a;
+        p[1] = p_b;
+        // p.push_back(p_a);
+        // p.push_back(p_b);
+
+        std::cout << "before sorting" << std::endl;
+
+        CGAL::hilbert_sort(p.begin(), p.end());
+
+        std::cout << "finished sorting" << std::endl;
+
+        bool compare = fabs(p[0].x() - p_a.x()) <= 1e-5 && fabs(p[0].y() - p_a.y()) <= 1e-5 && fabs(p[0].z() - p_a.z()) <= 1e-5;
+        std::cout << "finished comparing" << std::endl;
+
+        if (fabs(p[0].x() - p_a.x()) <= 1e-5 && fabs(p[0].y() - p_a.y()) <= 1e-5 && fabs(p[0].z() - p_a.z()) <= 1e-5) {
+            return true;
+        }
+        return false;
     });
 
     for (int i = 0; i < nlocal; i++) {
         int new_idx = tag_to_idx[std::get<0>(atom_bins[i])];
         permute[i] = new_idx;
     }
+    */
 
     // current = current permutation, just reuse next vector
     // current[I] = J means Ith current atom is Jth old atom

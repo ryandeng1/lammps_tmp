@@ -448,6 +448,31 @@ std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, doub
         if (pos[dim] < lo[dim]) {
             new_pos += period;
         }
+
+        auto it = std::upper_bound(bounds.begin(), bounds.end(), new_pos);
+        int idx;
+        if (it == bounds.end() || it == bounds.begin()) {
+            idx = bounds.size() - 1;
+            double last_bound = bounds[bounds.size() - 1];
+            double first_bound = bounds[0];
+
+            double last_bound_sub = bounds[bounds.size() - 1] - period;
+            double first_bound_add = bounds[bounds.size() - 1] + period;
+
+            if ((new_pos >= last_bound_sub && new_pos < first_bound) || (new_pos >= last_bound && new_pos < first_bound_add)) {
+
+            } else {
+                assert(false);
+            }
+        } else {
+            if (it != bounds.begin()) {
+                it--;
+            }
+            idx = std::distance(bounds.begin(), it);
+            assert(new_pos >= bounds[idx] && new_pos < bounds[idx + 1]);
+        }
+
+        /*
         int idx = -1;
         for (int i = 0; i < bounds.size() - 1; i++) {
             double bound_lo = bounds[i];
@@ -458,6 +483,7 @@ std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, doub
         }
 
         if (idx == -1) {
+            assert(test_idx == bounds.size());
             idx = bounds.size();
 
             double last_bound = bounds[bounds.size() - 1];
@@ -471,7 +497,10 @@ std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, doub
             } else {
                 assert(false);
             }
+        } else {
+            assert(test_idx == idx);
         }
+        */
 
         res[dim] = idx;
     }

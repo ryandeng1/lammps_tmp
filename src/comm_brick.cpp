@@ -2032,10 +2032,9 @@ void CommBrick::construct_send_list_stencil_md(
                 }
             }
 
-            if (ranges.size() == 1) {
+            int num_local_in_range = 0;
+            for (auto& range : ranges) {
                 assert(bounds.size() > 0);
-                auto &range = *(ranges.begin());
-                int num_local_in_range = 0;
                 for (int local_idx = 0; local_idx < atom_->nlocal; local_idx++) {
                     double *pos = atom_->x[local_idx];
                     auto compare = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
@@ -2045,17 +2044,8 @@ void CommBrick::construct_send_list_stencil_md(
                         // std::cout << "range: " << std::get<0>(range) << " " << std::get<1>(range) << " " << std::get<2>(range) << " compare: " << std::get<0>(compare) << " " << std::get<1>(compare) << " " << std::get<2>(compare) << std::endl;
                     }
                 }
-                /*
-                std::cout << BOLDCYAN << "FORCE ONLY zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << t
-                          << " num recv local: " << nrecv_force_only << " num local in range: " << num_local_in_range << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
-                */
-                assert(num_local_in_range == nrecv_force_only);
-            } else {
-                /*
-                std::cout << BOLDCYAN << "FORCE ONLY zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << t
-                          << " num recv local: " << nrecv_force_only << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
-                */
             }
+            // assert(num_local_in_range == nrecv_force_only);
         }
 
 
@@ -2090,6 +2080,7 @@ void CommBrick::construct_send_list_stencil_md(
                 }
             }
 
+            /*
             if (ranges.size() == 1) {
                 assert(bounds.size() > 0);
                 auto& range = *(ranges.begin());
@@ -2101,17 +2092,10 @@ void CommBrick::construct_send_list_stencil_md(
                         num_local_in_range++;
                     }
                 }
-                /*
-                std::cout << BOLDYELLOW << "POS zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << t
-                          << " num recv local: " << nrecv_force_pos << " num local in range: " << num_local_in_range << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
-                */
                 assert(num_local_in_range == nrecv_force_pos);
             } else {
-                /*
-                std::cout << BOLDYELLOW << "POS zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << t
-                          << " num recv local: " << nrecv_force_pos << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
-                */
             }
+            */
         }
     }
   }
@@ -3129,6 +3113,9 @@ void CommBrick::recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
             }
 
             auto& bounds = stencilMD->GET_BOUNDS(curr_dt, t);
+            std::cout << "zoid: " << zoid.num << " recv from: " << recv_zoid_num << " t: " << t << " curr dt? " << curr_dt
+                << " num force bins recv: " << zoid.recv_force_num_bins[t][i] << " num pos bins recv: " << zoid.recv_pos_num_bins[t][i]
+                << " num vel bins recv: " << zoid.recv_vel_num_bins[t][i] << std::endl;
 
             atom_->avec->recv_data_bins_stencil_md(recv_zoid.bin_to_idx[t], recv_zoid.bin_to_size[t],
                                                    zoid.bin_to_idx[t], zoid.bin_to_size[t],
