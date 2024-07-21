@@ -1065,12 +1065,6 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                     ranges.insert(range);
                     all_ranges.insert(range);
                 }
-                if (zoid.num == 39 && timestep == 1) {
-                    std::cout << GREEN << "zoid: " << zoid.num << " recv from: " << recv_from_zoid_num << " timestep: " << timestep << " num segments: " << num_segments << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
-                    for (auto& r: ranges) {
-                        std::cout << BOLDMAGENTA << "RANGE: " << std::get<0>(r) << " " << std::get<1>(r) << " " << std::get<2>(r) << RESET_COLOR << std::endl;
-                    }
-                }
             }
         }
     }
@@ -1256,12 +1250,6 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
                     auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
                     ranges.insert(range);
                     all_ranges.insert(range);
-                }
-                if (zoid.num == 39 && timestep == NUM_TIMESTEPS_IN_PARALLEL - 1) {
-                    std::cout << GREEN << "NEXT DT zoid: " << zoid.num << " recv from: " << recv_from_zoid_num << " timestep: " << timestep << " num segments: " << num_segments << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
-                    for (auto& r: ranges) {
-                        std::cout << BOLDMAGENTA << "RANGE: " << std::get<0>(r) << " " << std::get<1>(r) << " " << std::get<2>(r) << RESET_COLOR << std::endl;
-                    }
                 }
             }
         }
@@ -2477,26 +2465,6 @@ void Verlet::setup_stencil_md() {
                     if (comm->nprocs == 1) {
                         // currently this is only tested for local
                         sort_ghost_atoms_stencil_md_bins(atom_, zoid, t);
-                        if (zoid_num == 0 && t == NUM_TIMESTEPS_IN_PARALLEL) {
-                            auto& bin_bounds = stencilMD->GET_BOUNDS(true, t);
-                            for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
-                                double *pos = atom_->x[i];
-                                auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
-                                std::cout << "SEND idx: " << i << " nlocal: " << atom_->nlocal << " tag: " << atom_->tag[i] << " bin: " << std::get<0>(bin) << " " << std::get<1>(bin)
-                                          << " " << std::get<2>(bin) << " pos: " << pos[0] << " " << pos[1] << " "
-                                          << pos[2] << std::endl;
-                            }
-                        }
-                        if (zoid_num == 16 && t == NUM_TIMESTEPS_IN_PARALLEL) {
-                            auto& bin_bounds = stencilMD->GET_BOUNDS(true, t);
-                            for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
-                                double *pos = atom_->x[i];
-                                auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
-                                std::cout << "RECV idx: " << i << " nlocal : " << atom_->nlocal << " tag: " << atom_->tag[i] << " bin: " << std::get<0>(bin) << " " << std::get<1>(bin)
-                                          << " " << std::get<2>(bin) << " pos: " << pos[0] << " " << pos[1] << " "
-                                          << pos[2] << std::endl;
-                            }
-                        }
                     } else {
                         sort_ghost_atoms_stencil_md(atom_, NULL, zoid, t);
                     }

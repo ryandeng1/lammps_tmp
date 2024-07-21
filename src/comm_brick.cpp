@@ -1654,12 +1654,6 @@ void CommBrick::construct_send_list_stencil_md_send(
                     ranges.insert(range);
                     all_ranges.insert(range);
                 }
-                if (zoid.num == 39 && t == 1) {
-                    std::cout << GREEN << "CURR DT zoid: " << zoid.num << " send to: " << send_zoid_num << " timestep: " << t << " num segments: " << num_force_segments << " num ranges: " << ranges.size() << RESET_COLOR << std::endl;
-                    for (auto& r_: ranges) {
-                        std::cout << BOLDMAGENTA << "RANGE: " << std::get<0>(r_) << " " << std::get<1>(r_) << " " << std::get<2>(r_) << RESET_COLOR << std::endl;
-                    }
-                }
             }
 
             if (num_force_segments > 10) {
