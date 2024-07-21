@@ -290,9 +290,9 @@ class Atom : protected Pointers {
   typedef std::map<std::string, AtomVecCreatorStencilMD> AtomVecCreatorMapStencilMD;
   AtomVecCreatorMapStencilMD *avec_map_stencil_md;
 
-  std::set<int> fully_eval_ghost_tags;
-  std::map<int, std::set<int>> fully_eval_neighbor_to_ghost_tags;
-  std::map<std::pair<int, int>, std::set<int>> fully_eval_neighbor_to_ghost_tags_trio;
+  std::map<std::tuple<int, int, int>, std::vector<int>> bin_to_local_idxs;
+  std::vector<std::tuple<int, int, int>> pair_bins[27];
+  std::vector<std::tuple<int, int, int>> special_pair_bins[27];
 
   // --------------------------------------------------------------------
   // functions
@@ -405,8 +405,9 @@ class Atom : protected Pointers {
   int map_style_set_stencil_md();
   virtual void map_init_stencil_md(int check = 1);
 
+  virtual void setup_stencil_md_pair_bins();
+
   std::map<int, int> tag_to_idx;
-  std::map<int, std::vector<int>> recv_zoid_to_ghost_idxs;
 
 protected:
   // global to local ID mapping

@@ -3113,9 +3113,11 @@ void CommBrick::recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
             }
 
             auto& bounds = stencilMD->GET_BOUNDS(curr_dt, t);
+            /*
             std::cout << "zoid: " << zoid.num << " recv from: " << recv_zoid_num << " t: " << t << " curr dt? " << curr_dt
                 << " num force bins recv: " << zoid.recv_force_num_bins[t][i] << " num pos bins recv: " << zoid.recv_pos_num_bins[t][i]
                 << " num vel bins recv: " << zoid.recv_vel_num_bins[t][i] << std::endl;
+            */
 
             atom_->avec->recv_data_bins_stencil_md(recv_zoid.bin_to_idx[t], recv_zoid.bin_to_size[t],
                                                    zoid.bin_to_idx[t], zoid.bin_to_size[t],

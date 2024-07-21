@@ -1059,9 +1059,10 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                                     first, lmp->domain_stencil_md[zoid_num][t], zoid);
                     first->sort_stencil_md();
 
-                    auto& bin_bounds = stencilMD->GET_BOUNDS(true, t);
+                    auto& bin_bounds = GET_BOUNDS(true, t);
                     if (comm->nprocs == 1) {
-                        first->sort_local_stencil_md_bins(bin_bounds);
+                        first->sort_local_stencil_md_bins(bin_bounds, sorted_bin_indices[t]);
+                        first->setup_stencil_md_pair_bins();
                     }
                 }
             }
@@ -1105,16 +1106,18 @@ void StencilMD::BUILD_NEIGHBOR_LIST() {
                 queue_info& zoid = lmp->queues[dep][j];
                 int zoid_num = zoid.num;
                 if (zoid_num % comm->nprocs == comm->me) {
-                    lmp->neighbor_stencil_md[zoid_num][t]
-                            ->setup_bins_stencil_md(
-                                    lmp->atom_stencil_md[zoid_num][t],
-                                    lmp->domain_stencil_md[zoid_num][t],
-                                    lmp->comm_stencil_md[zoid_num]);
-                    lmp->neighbor_stencil_md[zoid_num][t]->build_stencil_md(
-                            1, lmp->atom_stencil_md[zoid_num][t],
-                            lmp->domain_stencil_md[zoid_num][t],
-                            lmp->comm_stencil_md[zoid_num], zoid);
-                    lmp->neighbor_stencil_md[zoid_num][t]->ncalls = 0;
+                    Neighbor* neigh = lmp->neighbor_stencil_md[zoid_num][t];
+                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
+                    Domain* domain_ = lmp->domain_stencil_md[zoid_num][t];
+                    Comm* comm_ = lmp->comm_stencil_md[zoid_num];
+                    neigh->setup_bins_stencil_md(atom_, domain_, comm_);
+                    neigh->build_stencil_md(1, atom_, domain_,
+                                            comm_, zoid);
+                    neigh->ncalls = 0;
+
+                    if (comm->nprocs == 1) {
+                        neigh->setup_stencil_md_bond_bins(atom_);
+                    }
 
                     MPI_Barrier(world);
 
@@ -1135,17 +1138,19 @@ void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_next_dt = lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t];
                     Domain* domain_next_dt = lmp->domain_stencil_md_next_dt[zoid_num][t];
+                    Neighbor* neigh_next_dt = lmp->neighbor_stencil_md_next_dt[zoid_num][t];
+                    Comm* comm_ = lmp->comm_stencil_md[zoid_num];
+                    neigh_next_dt->setup_bins_stencil_md(atom_next_dt,
+                                                 domain_next_dt,
+                                                 comm_);
 
-                    lmp->neighbor_stencil_md_next_dt[zoid_num][t]
-                            ->setup_bins_stencil_md(
-                                    atom_next_dt,
-                                    domain_next_dt,
-                                    lmp->comm_stencil_md[zoid_num]);
+                    neigh_next_dt->build_stencil_md(1, atom_next_dt, domain_next_dt,
+                                                    comm_, zoid);
+                    neigh_next_dt->ncalls = 0;
 
-                    lmp->neighbor_stencil_md_next_dt[zoid_num][t]->build_stencil_md(
-                            1, atom_next_dt, domain_next_dt,
-                            lmp->comm_stencil_md[zoid_num], zoid);
-                    lmp->neighbor_stencil_md_next_dt[zoid_num][t]->ncalls = 0;
+                    if (comm->nprocs == 1) {
+                        neigh_next_dt->setup_stencil_md_bond_bins(atom_next_dt);
+                    }
 
                     Force* force_ = lmp->force_stencil_md_next_dt[zoid_num][t];
                     force_->setup();
@@ -1554,87 +1559,131 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
 
     std::vector<int> check_domains = {-1, 0, 1};
     std::vector<int> ts;
-    /*
-    if (timestep != 0) {
-        ts.push_back(timestep - 1);
-    }
-    */
-    // ts.push_back(timestep);
-    // if (timestep != NUM_TIMESTEPS_IN_PARALLEL) {
-    // ts.push_back(timestep + 1);
-    // }
-    // std::vector<int> ts = {timestep - 1, timestep, timestep + 1};
 
     // insert current bounds
+    std::vector<double> try_bounds;
     for (int i = 0; i < NUM_ZOIDS; i++) {
         queue_info& zoid = curr_dt ? lmp->zoid_num_to_zoid[i] : lmp->zoid_num_to_zoid_next_dt[i];
 
         double lo_curr = zoid.zoid.cuts[0].lower + zoid.zoid.cuts[0].slope_lower * timestep;
         double hi_curr = zoid.zoid.cuts[0].upper + zoid.zoid.cuts[0].slope_upper * timestep;
 
-        std::vector<double> try_bounds = {lo_curr, lo_curr - ALLEGRO_SLOPE, lo_curr + ALLEGRO_SLOPE, hi_curr, hi_curr - ALLEGRO_SLOPE, hi_curr + ALLEGRO_SLOPE};
-
-
-        for (auto& try_val : try_bounds) {
-            bool close_to_existing = false;
-            for (auto& b : bounds_at_timestep) {
-                if (fabs(try_val - b) <= 1e-5) {
-                    close_to_existing = true;
-                }
-            }
-
-            if (!close_to_existing) {
-                bounds_at_timestep.push_back(try_val);
+        // std::vector<double> try_bounds = {lo_curr, lo_curr - ALLEGRO_SLOPE, lo_curr + ALLEGRO_SLOPE, hi_curr, hi_curr - ALLEGRO_SLOPE, hi_curr + ALLEGRO_SLOPE};
+        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            std::vector<int> try_different_vals = {-1, 0, 1};
+            for (int try_val : try_different_vals) {
+                double lo = zoid.zoid.cuts[0].lower + zoid.zoid.cuts[0].slope_lower * t + try_val * ALLEGRO_SLOPE;
+                double hi = zoid.zoid.cuts[0].upper + zoid.zoid.cuts[0].slope_upper * t + try_val * ALLEGRO_SLOPE;
+                try_bounds.push_back(lo);
+                try_bounds.push_back(hi);
             }
         }
-
-        /*
-        for (double lo : try_lo) {
-            for (double hi: try_hi) {
-                bool close_to_existing_lower = false;
-                bool close_to_existing_upper = false;
-
-                for (int check : check_domains) {
-                    double check_lo = lo + check * domain->prd[0];
-                    for (auto& bound : bounds) {
-                        if (fabs(lo - bound) <= 1e-5) {
-                            close_to_existing_lower = true;
-                        }
-                    }
-
-                    double check_hi = hi + check * domain->prd[0];
-                    for (auto& bound : bounds) {
-                        if (fabs(hi - bound) <= 1e-5) {
-                            close_to_existing_upper = true;
-                        }
-                    }
-
-                }
-
-
-                if (!close_to_existing_lower) {
-                    bounds.push_back(lo_curr);
-                }
-
-                if (!close_to_existing_upper) {
-                    bounds.push_back(hi_curr);
-                }
-            }
-        }
-        */
     }
+
+    for (int i = 0; i < try_bounds.size(); i++) {
+        if (try_bounds[i] < domain->boxlo[0]) {
+            try_bounds[i] += domain->prd[0];
+        }
+        if (try_bounds[i] >= domain->boxhi[0]) {
+            try_bounds[i] -= domain->prd[0];
+        }
+    }
+
+    for (auto& try_val : try_bounds) {
+        bool close_to_existing = false;
+        for (auto& b : bounds_at_timestep) {
+            if (fabs(try_val - b) <= 1e-5) {
+                close_to_existing = true;
+            }
+        }
+
+        if (!close_to_existing) {
+            bounds_at_timestep.push_back(try_val);
+        }
+    }
+
+    /*
+    for (double lo : try_lo) {
+        for (double hi: try_hi) {
+            bool close_to_existing_lower = false;
+            bool close_to_existing_upper = false;
+
+            for (int check : check_domains) {
+                double check_lo = lo + check * domain->prd[0];
+                for (auto& bound : bounds) {
+                    if (fabs(lo - bound) <= 1e-5) {
+                        close_to_existing_lower = true;
+                    }
+                }
+
+                double check_hi = hi + check * domain->prd[0];
+                for (auto& bound : bounds) {
+                    if (fabs(hi - bound) <= 1e-5) {
+                        close_to_existing_upper = true;
+                    }
+                }
+
+            }
+
+
+            if (!close_to_existing_lower) {
+                bounds.push_back(lo_curr);
+            }
+
+            if (!close_to_existing_upper) {
+                bounds.push_back(hi_curr);
+            }
+        }
+    }
+    */
 
     std::sort(bounds_at_timestep.begin(), bounds_at_timestep.end());
 
-    /*
-    std::stringstream s;
-    for (auto& b : bounds) {
-        s << b << " ";
+    std::vector<double> points_coords;
+    for (int i = 0; i < bounds_at_timestep.size() - 1; i++) {
+        double lo = bounds_at_timestep[i];
+        double hi = bounds_at_timestep[i + 1];
+        assert(hi - lo > 1e-5);
+        double avg = (lo + hi) / 2;
+        points_coords.push_back(avg);
     }
 
-    std::cout << "bounds: " << s.str() << std::endl;
-    */
+    // last one
+    double last_lo = bounds_at_timestep[bounds_at_timestep.size() - 1];
+    double last_hi = bounds_at_timestep[0] + domain->prd[0];
+    assert(last_hi - last_lo > 1e-5);
+    double last_avg = (last_lo + last_hi) / 2;
+    points_coords.push_back(last_avg);
 
-    assert(bounds_at_timestep.size() <= NUM_BINS);
+    std::vector<Point> points(NUM_BINS * NUM_BINS * NUM_BINS);
+    // points.reserve(points_coords.size() * points_coords.size() * points_coords.size());
+    for (int bin_x = 0; bin_x < points_coords.size(); bin_x++) {
+        for (int bin_y = 0; bin_y < points_coords.size(); bin_y++) {
+            for (int bin_z = 0; bin_z < points_coords.size(); bin_z++) {
+                auto bin = std::make_tuple(bin_x, bin_y, bin_z);
+                int bin_idx = get_bin_idx(bin);
+                // points.emplace_back(points_coords[bin_x], points_coords[bin_y], points_coords[bin_z]);
+                points[bin_idx] = Point(points_coords[bin_x], points_coords[bin_y], points_coords[bin_z]);
+            }
+        }
+    }
+
+    auto& indices = curr_dt ? sorted_bin_indices[timestep] : sorted_bin_indices[NUM_TIMESTEPS_IN_PARALLEL - timestep];
+    assert(indices.size() == 0);
+    indices.reserve(points.size());
+    for (int i = 0; i < points.size(); i++) {
+        indices.push_back(i);
+    }
+
+    CGAL::spatial_sort(indices.begin(),
+                       indices.end(),
+                       Search_traits(CGAL::make_property_map(points)));
+
+    for (int i = 0; i < bounds_at_timestep.size() - 1; i++) {
+        if (bounds_at_timestep[i + 1] - bounds_at_timestep[i] < ALLEGRO_SLOPE - 0.01) {
+            std::cout << "idx: " << i << " bounds: " << bounds_at_timestep[i] << " " << bounds_at_timestep[i + 1] << " diff: " << bounds_at_timestep[i + 1] - bounds_at_timestep[i] << std::endl;
+        }
+    }
+    // assert(false);
     return bounds_at_timestep;
 }

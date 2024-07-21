@@ -232,6 +232,189 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
         return;
     }
 
+    if (PAIR_USE_BINS) {
+        const auto * _noalias const x = (dbl3_t *) atom_->x[0];
+        auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
+        double ebond = 0.0;
+
+        for (int dep = 0; dep < 27; dep++) {
+            auto &special_bins_at_dep = atom_->special_pair_bins[dep];
+
+            for (int bin_idx = 0; bin_idx < special_bins_at_dep.size(); bin_idx++) {
+                auto &bin = special_bins_at_dep[bin_idx];
+                auto &idxs = atom_->bin_to_local_idxs[bin];
+
+                for (int idx = 0; idx < idxs.size(); idx++) {
+                    int i1 = idxs[idx];
+                    assert(i1 >= 0 && i1 < nlocal);
+
+                    auto &lst_bonds = neighbor_->atom_bondlist[i1];
+                    for (int j = 0; j < lst_bonds.size(); j++) {
+                        auto &bond_info = lst_bonds[j];
+                        int i2 = bond_info.first;
+                        int type = bond_info.second;
+
+                        double delx = x[i1].x - x[i2].x;
+                        double dely = x[i1].y - x[i2].y;
+                        double delz = x[i1].z - x[i2].z;
+
+                        double rsq = delx * delx + dely * dely + delz * delz;
+                        double r0sq = r0[type] * r0[type];
+                        double rlogarg = 1.0 - rsq / r0sq;
+
+                        if (rlogarg < 0.1) {
+                            error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                           update->ntimestep, atom->tag[i1], atom->tag[i2], sqrt(rsq));
+                            /*
+                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                                return;
+                            */
+                            assert(false);
+
+                            rlogarg = 0.1;
+                        }
+
+                        double fbond = -k[type] / rlogarg;
+
+                        // force from LJ term
+                        double sr2 = 0.0;
+                        double sr6 = 0.0;
+
+                        if (rsq < MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                            sr2 = sigma[type] * sigma[type] / rsq;
+                            sr6 = sr2 * sr2 * sr2;
+                            fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                        }
+
+                        // energy
+
+                        if (eflag) {
+                            ebond = -0.5 * k[type] * r0sq * log(rlogarg);
+                            if (rsq < MY_CUBEROOT2 * sigma[type] * sigma[type])
+                                ebond += 4.0 * epsilon[type] * sr6 * (sr6 - 1.0) + epsilon[type];
+                        }
+
+                        // apply force to each of 2 atoms
+
+                        if (newton || i1 < nlocal) {
+                            f[i1].x += delx * fbond;
+                            f[i1].y += dely * fbond;
+                            f[i1].z += delz * fbond;
+                        }
+
+                        if (newton || i2 < nlocal) {
+                            f[i2].x -= delx * fbond;
+                            f[i2].y -= dely * fbond;
+                            f[i2].z -= delz * fbond;
+                        }
+                    }
+                }
+            }
+
+            auto &bins_at_dep = atom_->pair_bins[dep];
+
+            /*
+            std::set<int> idxs_touched_at_dep;
+            std::map<int, std::tuple<int, int, int>> idx_to_bin;
+            std::map<int, std::set<int>> idx_to_touched_neighbor;
+            */
+
+            cilk_for (int bin_idx = 0; bin_idx < bins_at_dep.size(); bin_idx++) {
+                auto &bin = bins_at_dep[bin_idx];
+                auto &idxs = atom_->bin_to_local_idxs[bin];
+                for (int idx = 0; idx < idxs.size(); idx++) {
+                    int i1 = idxs[idx];
+                    assert(i1 >= 0 && i1 < nlocal);
+
+                    auto &lst_bonds = neighbor_->atom_bondlist[i1];
+                    for (int j = 0; j < lst_bonds.size(); j++) {
+                        auto &bond_info = lst_bonds[j];
+                        int i2 = bond_info.first;
+                        int type = bond_info.second;
+
+                        double delx = x[i1].x - x[i2].x;
+                        double dely = x[i1].y - x[i2].y;
+                        double delz = x[i1].z - x[i2].z;
+
+                        double rsq = delx * delx + dely * dely + delz * delz;
+                        double r0sq = r0[type] * r0[type];
+                        double rlogarg = 1.0 - rsq / r0sq;
+
+                        if (rlogarg < 0.1) {
+                            error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                           update->ntimestep, atom->tag[i1], atom->tag[i2], sqrt(rsq));
+                            /*
+                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                                return;
+                            */
+                            assert(false);
+
+                            rlogarg = 0.1;
+                        }
+
+                        double fbond = -k[type] / rlogarg;
+
+                        // force from LJ term
+                        double sr2 = 0.0;
+                        double sr6 = 0.0;
+
+                        if (rsq < MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                            sr2 = sigma[type] * sigma[type] / rsq;
+                            sr6 = sr2 * sr2 * sr2;
+                            fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                        }
+
+                        // energy
+
+                        if (eflag) {
+                            ebond = -0.5 * k[type] * r0sq * log(rlogarg);
+                            if (rsq < MY_CUBEROOT2 * sigma[type] * sigma[type])
+                                ebond += 4.0 * epsilon[type] * sr6 * (sr6 - 1.0) + epsilon[type];
+                        }
+
+                        // apply force to each of 2 atoms
+
+                        if (newton || i1 < nlocal) {
+                            f[i1].x += delx * fbond;
+                            f[i1].y += dely * fbond;
+                            f[i1].z += delz * fbond;
+
+                            /*
+                            if (idxs_touched_at_dep.find(i1) != idxs_touched_at_dep.end() && bin != idx_to_bin[i1]) {
+                                auto& overlap_bin = idx_to_bin[i1];
+                                std::cout << "zoid: " << zoid.num << " dep: " << dep << " center idx: " << i1 << " neighbor idx: " << i2 << " tag: " << atom_->tag[i1] << " " << atom_->tag[i2]
+                                          << " overlap. bin: " << std::get<0>(overlap_bin) << " " << std::get<1>(overlap_bin) << " " << std::get<2>(overlap_bin)
+                                          << " curr bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << std::endl;
+                                std::cout << "pos: " << atom_->x[i1][0] << " " << atom_->x[i1][1] << " " << atom_->x[i1][2] << " other pos: " << atom_->x[i2][0] << " " << atom_->x[i2][1] << " " << atom_->x[i2][2] << std::endl;
+
+                                auto& other_neighbor_idxs = idx_to_touched_neighbor[j];
+                                for (auto& other_neighbor_idx : other_neighbor_idxs) {
+                                    std::cout << "other neighbor: " << atom_->x[other_neighbor_idx][0] << " " << atom_->x[other_neighbor_idx][1] << " " << atom_->x[other_neighbor_idx][2]
+                                              << " tag: " << atom_->tag[other_neighbor_idx] << std::endl;
+                                }
+                                assert(false);
+                            }
+
+                            idxs_touched_at_dep.insert(i1);
+                            idx_to_bin[i1] = bin;
+                            idx_to_touched_neighbor[i1].insert(i2);
+                            */
+                        }
+
+                        if (newton || i2 < nlocal) {
+                            f[i2].x -= delx * fbond;
+                            f[i2].y -= dely * fbond;
+                            f[i2].z -= delz * fbond;
+                        }
+                    }
+                }
+            }
+        }
+
+        return;
+    }
+
+
     /*
     int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
 

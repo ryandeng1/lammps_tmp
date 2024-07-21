@@ -2347,54 +2347,6 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
     int* current = new int[nlocal];
     for (int i = 0; i < nlocal; i++) current[i] = i;
 
-    std::map<tagint, int> tag_to_idx;
-    for (int i = 0; i < nlocal; i++) {
-        tag_to_idx[tag[i]] = i;
-    }
-
-    /*
-    std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
-
-    for (int i = 0; i < nlocal; i++) {
-        double* pos = x[i];
-        double new_pos[3];
-        for (int j = 0; j < 3; j++) {
-            double new_pos_dim = pos[j];
-            if (new_pos_dim < domain->boxlo[j]) {
-                new_pos_dim += domain->prd[j];
-            }
-            if (new_pos_dim >= domain->boxhi[j]) {
-                new_pos_dim -= domain->prd[j];
-            }
-            new_pos[j] = new_pos_dim;
-        }
-        auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
-        // bin_to_data_points[bin].push_back(std::make_pair(Point(pos[0], pos[1], pos[2]), i));
-        bin_to_data_points[bin].push_back(std::make_pair(Point(new_pos[0], new_pos[1], new_pos[2]), i));
-    }
-    */
-
-    /*
-    for (auto& [bin, data_points] : bin_to_data_points) {
-        std::sort(data_points.begin(), data_points.end(), [&](const auto& left, const auto& right) {
-            return tag[left.second] < tag[right.second];
-        });
-
-        Search_traits_pair traits;
-        CGAL::spatial_sort(data_points.begin(),
-                           data_points.end(),
-                           traits);
-        if (get_bin_idx(bin) == 1811) {
-            for (auto& d : data_points) {
-                int idx = d.second;
-                double* pos = x[idx];
-                std::cout << "LOCAL IDX: " << idx << " tag: " << tag[idx] << " pos: " << pos[0] << " " << pos[1] << " " << pos[2]
-                    << " pos in data: " << d.first.x() << " " << d.first.y() << " " << d.first.z() << std::endl;
-            }
-        }
-    }
-    */
-
     std::vector<int> local_idxs(nlocal);
     for (int i = 0; i < nlocal; i++) {
         local_idxs[i] = i;
@@ -2422,20 +2374,7 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         int bin_idx_b = get_bin_idx(bin_b);
 
         int find_idx_a = bin_to_idx[bin_idx_a];
-        // int find_idx_a = std::distance(sorted_bin_indices.begin(), std::find(sorted_bin_indices.begin(), sorted_bin_indices.end(), bin_idx_a));
-        // assert(find_idx_a_test == find_idx_a);
-        // assert(find_idx_a < sorted_bin_indices.size());
         int find_idx_b = bin_to_idx[bin_idx_b];
-        // int find_idx_b = std::distance(sorted_bin_indices.begin(), std::find(sorted_bin_indices.begin(), sorted_bin_indices.end(), bin_idx_b));
-        // assert(find_idx_b < sorted_bin_indices.size());
-
-        /*
-        if (bin_a < bin_b) {
-            return true;
-        } else if (bin_a > bin_b) {
-            return false;
-        }
-        */
 
         if (find_idx_a < find_idx_b) {
             return true;
@@ -2446,38 +2385,6 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         assert(bin_a == bin_b);
 
         return tag[idx_a] < tag[idx_b];
-
-        /*
-        auto& data_points = bin_to_data_points[bin_a];
-
-        find_idx_a = std::distance(data_points.begin(), std::find_if(data_points.begin(), data_points.end(), [&](auto& elem) {
-            return elem.second == idx_a;
-        }));
-
-        assert(find_idx_a < data_points.size());
-
-        find_idx_b = std::distance(data_points.begin(), std::find_if(data_points.begin(), data_points.end(), [&](auto& elem) {
-            return elem.second == idx_b;
-        }));
-
-        assert(find_idx_b < data_points.size());
-
-        return find_idx_a < find_idx_b;
-        */
-
-        /*
-        Point p_a(pos_a[0], pos_a[1], pos_a[2]);
-        Point p_b(pos_b[0], pos_b[1], pos_b[2]);
-
-        std::vector<Point> p(2);
-        p[0] = p_a;
-        p[1] = p_b;
-
-        CGAL::hilbert_sort(p.begin(), p.end());
-
-        bool compare = fabs(p[0].x() - p_a.x()) <= 1e-5 && fabs(p[0].y() - p_a.y()) <= 1e-5 && fabs(p[0].z() - p_a.z()) <= 1e-5;
-        return compare;
-        */
     });
 
     for (int i = 0; i < nlocal; i++) {
@@ -2485,77 +2392,6 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         assert(new_idx >= 0 && new_idx < nlocal);
         permute[i] = new_idx;
     }
-
-    /*
-    std::sort(atom_bins.begin(), atom_bins.end(), [&](const auto& a, const auto& b) {
-        // compare z coordinates of bounds, then y then x, and then finally compare tag for a consistent global ordering
-        // return std::tie(std::get<3>(a), std::get<2>(a), std::get<1>(a), std::get<0>(a)) < std::tie(std::get<3>(b), std::get<2>(b), std::get<1>(b), std::get<0>(b));
-        std::cout << "start" << std::endl;
-
-        tagint tag_a = std::get<0>(a);
-        tagint tag_b = std::get<0>(a);
-
-        std::cout << "got tag" << std::endl;
-
-        int idx_a = std::get<4>(a);
-        int idx_b = std::get<4>(b);
-
-        if (idx_a == idx_b) {
-            std::cout << "idx: " << idx_a << " tag: " << tag_a << " " << tag_b << std::endl;
-        }
-        assert(idx_a != idx_b);
-
-        std::cout << "got idx" << std::endl;
-
-        const auto& tup_a = std::tie(std::get<3>(a), std::get<2>(a), std::get<1>(a));
-        const auto& tup_b = std::tie(std::get<3>(b), std::get<2>(b), std::get<1>(b));
-
-        std::cout << "before tup compare, created tie" << std::endl;
-
-        if (tup_a < tup_b) {
-            return true;
-        } else if (tup_a > tup_b) {
-            return false;
-        }
-
-        return false;
-
-        std::cout << "after tup" << std::endl;
-
-        double* pos_a = x[idx_a];
-        double* pos_b = x[idx_b];
-        Point p_a(pos_a[0], pos_a[1], pos_a[2]);
-        Point p_b(pos_b[0], pos_b[1], pos_b[2]);
-
-        std::cout << "POS A:" << pos_a[0] << " " << pos_a[1] << " " << pos_a[2] << std::endl;
-        std::cout << "POS B:" << pos_b[0] << " " << pos_b[1] << " " << pos_b[2] << std::endl;
-
-        std::vector<Point> p(2);
-        p[0] = p_a;
-        p[1] = p_b;
-        // p.push_back(p_a);
-        // p.push_back(p_b);
-
-        std::cout << "before sorting" << std::endl;
-
-        CGAL::hilbert_sort(p.begin(), p.end());
-
-        std::cout << "finished sorting" << std::endl;
-
-        bool compare = fabs(p[0].x() - p_a.x()) <= 1e-5 && fabs(p[0].y() - p_a.y()) <= 1e-5 && fabs(p[0].z() - p_a.z()) <= 1e-5;
-        std::cout << "finished comparing" << std::endl;
-
-        if (fabs(p[0].x() - p_a.x()) <= 1e-5 && fabs(p[0].y() - p_a.y()) <= 1e-5 && fabs(p[0].z() - p_a.z()) <= 1e-5) {
-            return true;
-        }
-        return false;
-    });
-
-    for (int i = 0; i < nlocal; i++) {
-        int new_idx = tag_to_idx[std::get<0>(atom_bins[i])];
-        permute[i] = new_idx;
-    }
-    */
 
     // current = current permutation, just reuse next vector
     // current[I] = J means Ith current atom is Jth old atom
@@ -2579,6 +2415,12 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         current[empty] = permute[empty];
     }
 
+    for (int i = 0; i < nlocal; i++) {
+        double* pos = x[i];
+        auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
+        bin_to_local_idxs[bin].push_back(i);
+    }
+
     // sanity check that current = permute
 
     int flag = 0;
@@ -2594,6 +2436,56 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
     //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
 
     delete[] current;
+}
+
+void Atom::setup_stencil_md_pair_bins() {
+    std::vector<int> special_bins = {10, 11, 12, 13};
+    std::vector<int> special_bins2 = {34, 35, 36, 37};
+    for (auto& [bin, idxs] : bin_to_local_idxs) {
+        std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
+        int sum = 0;
+        bool special_bin = false;
+        std::vector<int> new_bin;
+        new_bin.reserve(3);
+        for (int dim = 0; dim < 3; dim++) {
+            int bin_val = bin_vals[dim];
+            // TODO: hardcoded here, needs to change something here
+            if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
+                bin_val = 10;
+                special_bin = true;
+            } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
+                bin_val = 34 - 3;
+                special_bin = true;
+            } else if (bin_val > 13 && bin_val < 34) {
+                bin_val -= 3;
+            } else if (bin_val > 37) {
+                bin_val -= 6;
+            } else {
+                assert(bin_val < 10);
+            }
+
+            int idx_set_dim = bin_val % 3;
+            sum += idx_set_dim;
+            new_bin.push_back(idx_set_dim);
+        }
+
+        // int new_bin_idx = new_bin_to_idx[std::make_tuple(new_bin[0], new_bin[1], new_bin[2])];
+        int new_bin_idx = new_bin[0] * 3 * 3 + new_bin[1] * 3 + new_bin[2];
+        assert(new_bin_idx >= 0 && new_bin_idx < 27);
+        if (special_bin) {
+            special_pair_bins[new_bin_idx].push_back(bin);
+        } else {
+            pair_bins[new_bin_idx].push_back(bin);
+        }
+
+        /*
+        if (special_bin) {
+            special_pair_bins[sum].push_back(bin);
+        } else {
+            pair_bins[sum].push_back(bin);
+        }
+        */
+    }
 }
 
 /* ----------------------------------------------------------------------

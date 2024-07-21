@@ -2607,6 +2607,24 @@ void Neighbor::setup_bins_stencil_md(Atom* atom_, Domain* domain_, Comm* comm_) 
     last_setup_bins = update->ntimestep;
 }
 
+void Neighbor::setup_stencil_md_bond_bins(Atom* atom_) {
+    atom_bondlist = new std::vector<std::pair<int, int>>[atom_->nlocal];
+
+    for (int i = 0; i < nbondlist; i++) {
+        int* bond_info = bondlist[i];
+        int bond_src = bond_info[0];
+        int bond_dst = bond_info[1];
+        int bond_type_ = bond_info[2];
+
+        assert(bond_src < atom_->nlocal || bond_dst < atom_->nlocal);
+        if (bond_src < bond_dst) {
+            atom_bondlist[bond_src].emplace_back(std::make_pair(bond_dst, bond_type_));
+        } else {
+            atom_bondlist[bond_dst].emplace_back(std::make_pair(bond_src, bond_type_));
+        }
+    }
+}
+
 /* ---------------------------------------------------------------------- */
 
 int Neighbor::decide()

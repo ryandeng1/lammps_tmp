@@ -306,6 +306,197 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         return;
     }
 
+    if (PAIR_USE_BINS) {
+        const auto * _noalias const x = (dbl3_t *) atom_->x[0];
+        auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
+        const int * _noalias const type = atom_->type;
+        const double * _noalias const special_lj = force->special_lj;
+        const int * _noalias const ilist = list->ilist;
+        const int * _noalias const numneigh = list->numneigh;
+        const int * const * const firstneigh = list->firstneigh;
+
+        for (int dep = 0; dep < 27; dep++) {
+            auto& special_bins_at_dep = atom_->special_pair_bins[dep];
+
+            for (int bin_idx = 0; bin_idx < special_bins_at_dep.size(); bin_idx++) {
+                auto &bin = special_bins_at_dep[bin_idx];
+                auto &idxs = atom_->bin_to_local_idxs[bin];
+
+                for (int idx = 0; idx < idxs.size(); idx++) {
+                    int ii = idxs[idx];
+                    assert(ii >= 0 && ii < nlocal);
+                    const int i = ilist[ii];
+                    const int itype = type[i];
+
+                    const int *_noalias const jlist = firstneigh[i];
+                    const double *_noalias const cutsqi = cutsq[itype];
+                    const double *_noalias const offseti = offset[itype];
+                    const double *_noalias const lj1i = lj1[itype];
+                    const double *_noalias const lj2i = lj2[itype];
+                    const double *_noalias const lj3i = lj3[itype];
+                    const double *_noalias const lj4i = lj4[itype];
+
+                    double xtmp = x[i].x;
+                    double ytmp = x[i].y;
+                    double ztmp = x[i].z;
+                    int jnum = numneigh[i];
+
+                    double fxtmp = 0.0;
+                    double fytmp = 0.0;
+                    double fztmp = 0.0;
+
+                    for (int jj = 0; jj < jnum; jj++) {
+                        double evdwl = 0.0;
+                        int j = jlist[jj];
+                        double factor_lj = special_lj[sbmask(j)];
+                        j &= NEIGHMASK;
+
+                        double delx = xtmp - x[j].x;
+                        double dely = ytmp - x[j].y;
+                        double delz = ztmp - x[j].z;
+                        double rsq = delx * delx + dely * dely + delz * delz;
+                        int jtype = type[j];
+
+                        if (rsq < cutsqi[jtype]) {
+                            double r2inv = 1.0 / rsq;
+                            double r6inv = r2inv * r2inv * r2inv;
+                            double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                            double fpair = factor_lj * forcelj * r2inv;
+
+                            fxtmp += delx * fpair;
+                            fytmp += dely * fpair;
+                            fztmp += delz * fpair;
+
+                            if (newton_pair || j < nlocal) {
+                                f[j].x -= delx * fpair;
+                                f[j].y -= dely * fpair;
+                                f[j].z -= delz * fpair;
+                            }
+
+                            /*
+                            if (EFLAG) {
+                                evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+                                evdwl *= factor_lj;
+                            }
+
+                            if (EVFLAG) {
+                                ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
+                                             evdwl, 0.0, fpair, delx, dely, delz, thr);
+                            }
+                            */
+                        }
+                    }
+
+                    f[i].x += fxtmp;
+                    f[i].y += fytmp;
+                    f[i].z += fztmp;
+                }
+            }
+
+            auto& bins_at_dep = atom_->pair_bins[dep];
+
+            cilk_for (int bin_idx = 0; bin_idx < bins_at_dep.size(); bin_idx++) {
+                auto& bin = bins_at_dep[bin_idx];
+                auto& idxs = atom_->bin_to_local_idxs[bin];
+                for (int idx = 0; idx < idxs.size(); idx++) {
+                    int ii = idxs[idx];
+                    assert(ii >= 0 && ii < nlocal);
+                    const int i = ilist[ii];
+                    const int itype = type[i];
+
+                    const int    * _noalias const jlist = firstneigh[i];
+                    const double * _noalias const cutsqi = cutsq[itype];
+                    const double * _noalias const offseti = offset[itype];
+                    const double * _noalias const lj1i = lj1[itype];
+                    const double * _noalias const lj2i = lj2[itype];
+                    const double * _noalias const lj3i = lj3[itype];
+                    const double * _noalias const lj4i = lj4[itype];
+
+                    double xtmp = x[i].x;
+                    double ytmp = x[i].y;
+                    double ztmp = x[i].z;
+                    int jnum = numneigh[i];
+
+                    double fxtmp = 0.0;
+                    double fytmp = 0.0;
+                    double fztmp = 0.0;
+
+                    for (int jj = 0; jj < jnum; jj++) {
+                        double evdwl = 0.0;
+                        int j = jlist[jj];
+                        double factor_lj = special_lj[sbmask(j)];
+                        j &= NEIGHMASK;
+
+                        double delx = xtmp - x[j].x;
+                        double dely = ytmp - x[j].y;
+                        double delz = ztmp - x[j].z;
+                        double rsq = delx*delx + dely*dely + delz*delz;
+                        int jtype = type[j];
+
+                        if (rsq < cutsqi[jtype]) {
+                            double r2inv = 1.0/rsq;
+                            double r6inv = r2inv*r2inv*r2inv;
+                            double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
+                            double fpair = factor_lj*forcelj*r2inv;
+
+                            fxtmp += delx*fpair;
+                            fytmp += dely*fpair;
+                            fztmp += delz*fpair;
+
+                            if (newton_pair || j < nlocal) {
+                                f[j].x -= delx*fpair;
+                                f[j].y -= dely*fpair;
+                                f[j].z -= delz*fpair;
+
+                                /*
+                                if (idxs_touched_at_dep.find(j) != idxs_touched_at_dep.end() && bin != idx_to_bin[j]) {
+                                    auto& overlap_bin = idx_to_bin[j];
+                                    std::cout << "zoid: " << zoid.num << " dep: " << dep << " center idx: " << i << " neighbor idx: " << j << " tag: " << atom_->tag[i] << " " << atom_->tag[j]
+                                    << " overlap. bin: " << std::get<0>(overlap_bin) << " " << std::get<1>(overlap_bin) << " " << std::get<2>(overlap_bin)
+                                    << " curr bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << std::endl;
+                                    std::cout << "pos: " << atom_->x[j][0] << " " << atom_->x[j][1] << " " << atom_->x[j][2] << std::endl;
+                                    std::cout << "pos center neighbor: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2] << std::endl;
+                                    std::cout << "rsq: " << rsq << " other cutsq: " << idx_to_rsq[j] << " cutsq: " << cutsqi[jtype] << std::endl;
+
+                                    auto& other_neighbor_idxs = idx_to_touched_neighbor[j];
+                                    for (auto& other_neighbor_idx : other_neighbor_idxs) {
+                                        std::cout << "other neighbor: " << atom_->x[other_neighbor_idx][0] << " " << atom_->x[other_neighbor_idx][1] << " " << atom_->x[other_neighbor_idx][2]
+                                            << " tag: " << atom_->tag[other_neighbor_idx] << std::endl;
+                                    }
+                                    assert(false);
+                                }
+
+                                idxs_touched_at_dep.insert(j);
+                                idx_to_bin[j] = bin;
+                                idx_to_touched_neighbor[j].insert(i);
+                                idx_to_rsq[j] = rsq;
+                                */
+                            }
+
+                            /*
+                            if (EFLAG) {
+                                evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+                                evdwl *= factor_lj;
+                            }
+
+                            if (EVFLAG) {
+                                ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
+                                             evdwl, 0.0, fpair, delx, dely, delz, thr);
+                            }
+                            */
+                        }
+                    }
+
+                    f[i].x += fxtmp;
+                    f[i].y += fytmp;
+                    f[i].z += fztmp;
+                }
+            }
+        }
+
+        return;
+    }
+
     // int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
     int nthreads_to_use = zoid.inum_per_timestep[*num_eval];
 

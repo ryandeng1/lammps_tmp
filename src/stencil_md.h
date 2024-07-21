@@ -85,6 +85,7 @@ public:
     std::vector<double>& GET_BOUNDS(bool curr_dt, int timestep);
 
     std::vector<double> bounds[NUM_TIMESTEPS_IN_PARALLEL + 1];
+    std::vector<std::size_t> sorted_bin_indices[NUM_TIMESTEPS_IN_PARALLEL + 1];
 };
 
 }

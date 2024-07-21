@@ -118,6 +118,8 @@ class Neighbor : protected Pointers {
   double **cutcollectionsq;        // cutoffs for each combination of collections
   int *collection;                 // local per-atom array to store collection id
 
+  std::vector<std::pair<int, int>>* atom_bondlist;
+
   // public methods
 
   Neighbor(class LAMMPS *);
@@ -174,6 +176,7 @@ class Neighbor : protected Pointers {
   virtual void build_stencil_md(int, Atom*, Domain*, Comm*, queue_info&);          // build all perpetual neighbor lists
   virtual void init_stencil_md(Domain*);
   virtual void build_topology_stencil_md(Atom*, Domain*, queue_info&);    // pairwise topology neighbor lists
+  virtual void setup_stencil_md_bond_bins(Atom*);
 
  protected:
   int me, nprocs;

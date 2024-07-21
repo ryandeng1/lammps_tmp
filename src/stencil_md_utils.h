@@ -132,6 +132,8 @@ constexpr bool USE_ATOMICS = false;
 
 constexpr int NUM_BINS = 48;
 
+constexpr bool PAIR_USE_BINS = true;
+
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
         {std::make_tuple(RIGHT, RIGHT, RIGHT), 1},
