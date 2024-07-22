@@ -313,12 +313,6 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
 
             auto &bins_at_dep = atom_->pair_bins[dep];
 
-            /*
-            std::set<int> idxs_touched_at_dep;
-            std::map<int, std::tuple<int, int, int>> idx_to_bin;
-            std::map<int, std::set<int>> idx_to_touched_neighbor;
-            */
-
             cilk_for (int bin_idx = 0; bin_idx < bins_at_dep.size(); bin_idx++) {
                 auto &bin = bins_at_dep[bin_idx];
                 auto &idxs = atom_->bin_to_local_idxs[bin];
@@ -378,27 +372,6 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
                             f[i1].x += delx * fbond;
                             f[i1].y += dely * fbond;
                             f[i1].z += delz * fbond;
-
-                            /*
-                            if (idxs_touched_at_dep.find(i1) != idxs_touched_at_dep.end() && bin != idx_to_bin[i1]) {
-                                auto& overlap_bin = idx_to_bin[i1];
-                                std::cout << "zoid: " << zoid.num << " dep: " << dep << " center idx: " << i1 << " neighbor idx: " << i2 << " tag: " << atom_->tag[i1] << " " << atom_->tag[i2]
-                                          << " overlap. bin: " << std::get<0>(overlap_bin) << " " << std::get<1>(overlap_bin) << " " << std::get<2>(overlap_bin)
-                                          << " curr bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << std::endl;
-                                std::cout << "pos: " << atom_->x[i1][0] << " " << atom_->x[i1][1] << " " << atom_->x[i1][2] << " other pos: " << atom_->x[i2][0] << " " << atom_->x[i2][1] << " " << atom_->x[i2][2] << std::endl;
-
-                                auto& other_neighbor_idxs = idx_to_touched_neighbor[j];
-                                for (auto& other_neighbor_idx : other_neighbor_idxs) {
-                                    std::cout << "other neighbor: " << atom_->x[other_neighbor_idx][0] << " " << atom_->x[other_neighbor_idx][1] << " " << atom_->x[other_neighbor_idx][2]
-                                              << " tag: " << atom_->tag[other_neighbor_idx] << std::endl;
-                                }
-                                assert(false);
-                            }
-
-                            idxs_touched_at_dep.insert(i1);
-                            idx_to_bin[i1] = bin;
-                            idx_to_touched_neighbor[i1].insert(i2);
-                            */
                         }
 
                         if (newton || i2 < nlocal) {

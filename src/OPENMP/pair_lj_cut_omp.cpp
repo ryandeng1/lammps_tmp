@@ -447,30 +447,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                                 f[j].x -= delx*fpair;
                                 f[j].y -= dely*fpair;
                                 f[j].z -= delz*fpair;
-
-                                /*
-                                if (idxs_touched_at_dep.find(j) != idxs_touched_at_dep.end() && bin != idx_to_bin[j]) {
-                                    auto& overlap_bin = idx_to_bin[j];
-                                    std::cout << "zoid: " << zoid.num << " dep: " << dep << " center idx: " << i << " neighbor idx: " << j << " tag: " << atom_->tag[i] << " " << atom_->tag[j]
-                                    << " overlap. bin: " << std::get<0>(overlap_bin) << " " << std::get<1>(overlap_bin) << " " << std::get<2>(overlap_bin)
-                                    << " curr bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << std::endl;
-                                    std::cout << "pos: " << atom_->x[j][0] << " " << atom_->x[j][1] << " " << atom_->x[j][2] << std::endl;
-                                    std::cout << "pos center neighbor: " << atom_->x[i][0] << " " << atom_->x[i][1] << " " << atom_->x[i][2] << std::endl;
-                                    std::cout << "rsq: " << rsq << " other cutsq: " << idx_to_rsq[j] << " cutsq: " << cutsqi[jtype] << std::endl;
-
-                                    auto& other_neighbor_idxs = idx_to_touched_neighbor[j];
-                                    for (auto& other_neighbor_idx : other_neighbor_idxs) {
-                                        std::cout << "other neighbor: " << atom_->x[other_neighbor_idx][0] << " " << atom_->x[other_neighbor_idx][1] << " " << atom_->x[other_neighbor_idx][2]
-                                            << " tag: " << atom_->tag[other_neighbor_idx] << std::endl;
-                                    }
-                                    assert(false);
-                                }
-
-                                idxs_touched_at_dep.insert(j);
-                                idx_to_bin[j] = bin;
-                                idx_to_touched_neighbor[j].insert(i);
-                                idx_to_rsq[j] = rsq;
-                                */
                             }
 
                             /*
