@@ -315,7 +315,117 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         const int * _noalias const numneigh = list->numneigh;
         const int * const * const firstneigh = list->firstneigh;
 
-        for (int dep = 0; dep < 27; dep++) {
+        for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+            auto& partitions_at_dep = atom_->dep_to_partitions[dep];
+
+            std::set<int> idxs_touched_at_dep;
+            std::map<int, std::array<int, 3>> idx_to_partition;
+            std::map<int, int> idx_to_touched_neighbor;
+            std::map<int, std::tuple<int, int, int>> idx_to_bin;
+
+            cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
+                auto& partition = partitions_at_dep[d];
+                auto& bins = atom_->partition_to_bins[partition[0]][partition[1]][partition[2]];
+                for (int b = 0; b < bins.size(); b++) {
+                    auto& bin = bins[b];
+                    auto &idxs = atom_->bin_to_local_idxs[bin];
+                    for (int idx = 0; idx < idxs.size(); idx++) {
+                        int ii = idxs[idx];
+                        assert(ii >= 0 && ii < nlocal);
+                        const int i = ilist[ii];
+                        const int itype = type[i];
+
+                        const int *_noalias const jlist = firstneigh[i];
+                        const double *_noalias const cutsqi = cutsq[itype];
+                        const double *_noalias const offseti = offset[itype];
+                        const double *_noalias const lj1i = lj1[itype];
+                        const double *_noalias const lj2i = lj2[itype];
+                        const double *_noalias const lj3i = lj3[itype];
+                        const double *_noalias const lj4i = lj4[itype];
+
+                        double xtmp = x[i].x;
+                        double ytmp = x[i].y;
+                        double ztmp = x[i].z;
+                        int jnum = numneigh[i];
+
+                        double fxtmp = 0.0;
+                        double fytmp = 0.0;
+                        double fztmp = 0.0;
+
+                        for (int jj = 0; jj < jnum; jj++) {
+                            double evdwl = 0.0;
+                            int j = jlist[jj];
+                            double factor_lj = special_lj[sbmask(j)];
+                            j &= NEIGHMASK;
+
+                            double delx = xtmp - x[j].x;
+                            double dely = ytmp - x[j].y;
+                            double delz = ztmp - x[j].z;
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            int jtype = type[j];
+
+                            if (rsq < cutsqi[jtype]) {
+                                double r2inv = 1.0 / rsq;
+                                double r6inv = r2inv * r2inv * r2inv;
+                                double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                                double fpair = factor_lj * forcelj * r2inv;
+
+                                fxtmp += delx * fpair;
+                                fytmp += dely * fpair;
+                                fztmp += delz * fpair;
+
+                                if (newton_pair || j < nlocal) {
+                                    f[j].x -= delx * fpair;
+                                    f[j].y -= dely * fpair;
+                                    f[j].z -= delz * fpair;
+                                    /*
+                                    if (idxs_touched_at_dep.find(j) != idxs_touched_at_dep.end() && idx_to_partition[j] != partition) {
+                                        std::cout << "zoid num: " << zoid.num << " timestep: " << *num_eval << std::endl;
+                                        std::cout << "curr pos: " << x[j].x << " " << x[j].y << " " << x[j].z << std::endl;
+                                        std::cout << "neighbor pos: " << x[i].x << " " << x[i].y << " " << x[i].z << std::endl;
+                                        int other_neighbor_idx = idx_to_touched_neighbor[j];
+                                        std::map<int, std::string> m;
+                                        m[LEFT] = "LEFT";
+                                        m[RIGHT] = "RIGHT";
+                                        m[MIDDLE] = "MIDDLE";
+                                        std::cout << "other neighbor pos: " << x[other_neighbor_idx].x << " " << x[other_neighbor_idx].y << " " << x[other_neighbor_idx].z << std::endl;
+                                        std::cout << "curr partition: " << m[partition[0]] << " " << m[partition[1]] << " " << m[partition[2]] << std::endl;
+                                        std::cout << "other partition: " << m[idx_to_partition[j][0]] << " " << m[idx_to_partition[j][1]] << " " << m[idx_to_partition[j][2]] << std::endl;
+                                        std::cout << "curr bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << std::endl;
+                                        std::cout << "other bin: " << std::get<0>(idx_to_bin[j]) << " " << std::get<1>(idx_to_bin[j]) << " " << std::get<2>(idx_to_bin[j]) << std::endl;
+                                        std::cout << "curr idx: " << j << " nlocal: " << nlocal << std::endl;
+                                        assert(false);
+                                    }
+
+                                    idxs_touched_at_dep.insert(j);
+                                    idx_to_partition[j] = partition;
+                                    idx_to_bin[j] = bin;
+                                    idx_to_touched_neighbor[j] = i;
+                                    */
+                                }
+
+//                            if (EFLAG) {
+//                                evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+//                                evdwl *= factor_lj;
+//                            }
+//
+//                            if (EVFLAG) {
+//                                ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
+//                                             evdwl, 0.0, fpair, delx, dely, delz, thr);
+//                            }
+                            }
+                        }
+
+                        f[i].x += fxtmp;
+                        f[i].y += fytmp;
+                        f[i].z += fztmp;
+                    }
+                }
+            }
+        }
+
+        /*
+        for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
             auto& special_bins_at_dep = atom_->special_pair_bins[dep];
 
             for (int bin_idx = 0; bin_idx < special_bins_at_dep.size(); bin_idx++) {
@@ -373,17 +483,15 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                                 f[j].z -= delz * fpair;
                             }
 
-                            /*
-                            if (EFLAG) {
-                                evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
-                                evdwl *= factor_lj;
-                            }
-
-                            if (EVFLAG) {
-                                ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
-                                             evdwl, 0.0, fpair, delx, dely, delz, thr);
-                            }
-                            */
+//                            if (EFLAG) {
+//                                evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+//                                evdwl *= factor_lj;
+//                            }
+//
+//                            if (EVFLAG) {
+//                                ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
+//                                             evdwl, 0.0, fpair, delx, dely, delz, thr);
+//                            }
                         }
                     }
 
@@ -394,10 +502,19 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
 
             auto& bins_at_dep = atom_->pair_bins[dep];
+            if (bins_at_dep.size() == 0) {
+                continue;
+            }
 
-            cilk_for (int bin_idx = 0; bin_idx < bins_at_dep.size(); bin_idx++) {
+            std::set<int> idxs_touched_at_dep;
+            std::map<int, std::tuple<int, int, int>> idx_to_bin;
+            std::map<int, int> idx_to_touched_neighbor;
+
+            int total_num_idxs = 0;
+            for (int bin_idx = 0; bin_idx < bins_at_dep.size(); bin_idx++) {
                 auto& bin = bins_at_dep[bin_idx];
                 auto& idxs = atom_->bin_to_local_idxs[bin];
+                // total_num_idxs += idxs.size();
                 for (int idx = 0; idx < idxs.size(); idx++) {
                     int ii = idxs[idx];
                     assert(ii >= 0 && ii < nlocal);
@@ -449,17 +566,29 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                                 f[j].z -= delz*fpair;
                             }
 
-                            /*
-                            if (EFLAG) {
-                                evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
-                                evdwl *= factor_lj;
+                            if (idxs_touched_at_dep.find(j) != idxs_touched_at_dep.end() && idx_to_bin[j] != bin) {
+                                std::cout << "curr idx: " << j << " neighbor: " << i << " other neighbor: " << idx_to_touched_neighbor[j] << std::endl;
+                                std::cout << "curr bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << std::endl;
+                                std::cout << "other bin: " << std::get<0>(idx_to_bin[j]) << " " << std::get<1>(idx_to_bin[j]) << " " << std::get<2>(idx_to_bin[j]) << std::endl;
+                                std::cout << "my pos: " << x[j].x << " " << x[j].y << " " << x[j].z << std::endl;
+                                std::cout << "curr neighbor pos: " << x[i].x << " " << x[i].y << " " << x[i].z << std::endl;
+                                std::cout << "other neighbor pos: " << x[idx_to_touched_neighbor[j]].x << " " << x[idx_to_touched_neighbor[j]].y << " " << x[idx_to_touched_neighbor[j]].z << std::endl;
+                                assert(false);
                             }
 
-                            if (EVFLAG) {
-                                ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
-                                             evdwl, 0.0, fpair, delx, dely, delz, thr);
-                            }
-                            */
+                            idxs_touched_at_dep.insert(j);
+                            idx_to_bin[j] = bin;
+                            idx_to_touched_neighbor[j] = i;
+
+//                            if (EFLAG) {
+//                                evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+//                                evdwl *= factor_lj;
+//                            }
+//
+//                            if (EVFLAG) {
+//                                ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
+//                                             evdwl, 0.0, fpair, delx, dely, delz, thr);
+//                            }
                         }
                     }
 
@@ -468,7 +597,9 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                     f[i].z += fztmp;
                 }
             }
+            std::cout << "PAIR zoid num: " << zoid.num << " dep: " << dep << " num bins: " << bins_at_dep.size() << " total idxs: " << total_num_idxs << " nlocal: " << nlocal << std::endl;
         }
+        */
 
         return;
     }

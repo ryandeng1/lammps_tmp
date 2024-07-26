@@ -89,6 +89,8 @@ constexpr bool RECV_DATA_PROCESS_GHOST = false;
 
 constexpr int NUM_DEPS = 4;
 
+constexpr int NUM_DEPS_BINS = 8;
+
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 10;

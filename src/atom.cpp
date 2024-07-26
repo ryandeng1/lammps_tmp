@@ -34,6 +34,7 @@
 #include "variable.h"
 
 #include "stencil_md_utils.h"
+#include "stencil_md.h"
 
 #include "library.h"
 
@@ -2438,9 +2439,158 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
     delete[] current;
 }
 
-void Atom::setup_stencil_md_pair_bins() {
+void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
     std::vector<int> special_bins = {10, 11, 12, 13};
     std::vector<int> special_bins2 = {34, 35, 36, 37};
+
+    auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
+
+    // assign bin to left, right, middle??
+    std::map<std::tuple<int, int, int>, std::array<int, 3>> bin_to_partition;
+
+    for (int dim = 0; dim < 3; dim++) {
+        double zoid_lo = zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower;
+        double zoid_hi = zoid.zoid.cuts[dim].upper + timestep * zoid.zoid.cuts[dim].slope_upper;
+        double mid_point = (zoid_lo + zoid_hi) / 2;
+        std::set<int> bin_vals_dim;
+        for (auto& [bin, idxs] : bin_to_local_idxs) {
+            std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
+            int bin_val = bin_vals[dim];
+            // TODO: hardcoded here, needs to change something here
+            if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
+                bin_val = 10;
+            } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
+                bin_val = 34 - 3;
+            } else if (bin_val > 13 && bin_val < 34) {
+                bin_val -= 3;
+            } else if (bin_val > 37) {
+                bin_val -= 6;
+            } else {
+                assert(bin_val < 10);
+            }
+            bin_vals_dim.insert(bin_val);
+        }
+
+        std::vector<int> bin_vals_dim_vec(bin_vals_dim.begin(), bin_vals_dim.end());
+        int middle_bin_num = bin_vals_dim_vec.size() / 2;
+        int other_middle_bin_num = bin_vals_dim_vec.size() / 2 - 1;
+
+        if (zoid.num == 20 && timestep == 1) {
+            std::stringstream s;
+            for (auto& b : bin_vals_dim_vec) {
+                s << b << " ";
+            }
+            std::cout << "bin vals at dim: " << dim << " : " << s.str() << std::endl;
+        }
+
+        for (auto& [bin, idxs] : bin_to_local_idxs) {
+            std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
+            int bin_val = bin_vals[dim];
+            // TODO: hardcoded here, needs to change something here
+            if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
+                bin_val = 10;
+            } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
+                bin_val = 34 - 3;
+            } else if (bin_val > 13 && bin_val < 34) {
+                bin_val -= 3;
+            } else if (bin_val > 37) {
+                bin_val -= 6;
+            } else {
+                assert(bin_val < 10);
+            }
+
+            if (bin_vals_dim_vec.size() < 4) {
+                bin_to_partition[bin][dim] = MIDDLE;
+            } else if (bin_val < bin_vals_dim_vec[other_middle_bin_num]) {
+                bin_to_partition[bin][dim] = LEFT;
+            } else if (bin_val > bin_vals_dim_vec[middle_bin_num]) {
+                bin_to_partition[bin][dim] = LEFT;
+            } else {
+                bin_to_partition[bin][dim] = MIDDLE;
+            }
+        }
+    }
+
+    for (auto& [bin, partition] : bin_to_partition) {
+        // partition_to_bins[partition].push_back(bin);
+        partition_to_bins[partition[0]][partition[1]][partition[2]].push_back(bin);
+    }
+
+    std::map<std::array<int, 3>, int> partition_to_dep;
+    partition_to_dep[{LEFT, LEFT, LEFT}] = 0;
+    partition_to_dep[{LEFT, LEFT, RIGHT}] = 0;
+    partition_to_dep[{LEFT, RIGHT, LEFT}] = 0;
+    partition_to_dep[{RIGHT, LEFT, LEFT}] = 0;
+    partition_to_dep[{RIGHT, RIGHT, RIGHT}] = 0;
+    partition_to_dep[{RIGHT, RIGHT, LEFT}] = 0;
+    partition_to_dep[{RIGHT, LEFT, RIGHT}] = 0;
+    partition_to_dep[{LEFT, RIGHT, RIGHT}] = 0;
+
+    partition_to_dep[{LEFT, LEFT, MIDDLE}] = 1;
+    partition_to_dep[{LEFT, RIGHT, MIDDLE}] = 1;
+    partition_to_dep[{RIGHT, LEFT, MIDDLE}] = 1;
+    partition_to_dep[{RIGHT, RIGHT, MIDDLE}] = 1;
+
+    partition_to_dep[{LEFT, MIDDLE, LEFT}] = 2;
+    partition_to_dep[{LEFT, MIDDLE, RIGHT}] = 2;
+    partition_to_dep[{RIGHT, MIDDLE, LEFT}] = 2;
+    partition_to_dep[{RIGHT, MIDDLE, RIGHT}] = 2;
+
+    partition_to_dep[{MIDDLE, LEFT, LEFT}] = 3;
+    partition_to_dep[{MIDDLE, LEFT, RIGHT}] = 3;
+    partition_to_dep[{MIDDLE, RIGHT, LEFT}] = 3;
+    partition_to_dep[{MIDDLE, RIGHT, RIGHT}] = 3;
+
+    partition_to_dep[{MIDDLE, MIDDLE, LEFT}] = 4;
+    partition_to_dep[{MIDDLE, MIDDLE, RIGHT}] = 4;
+
+    partition_to_dep[{MIDDLE, LEFT, MIDDLE}] = 5;
+    partition_to_dep[{MIDDLE, RIGHT, MIDDLE}] = 5;
+
+    partition_to_dep[{LEFT, MIDDLE, MIDDLE}] = 6;
+    partition_to_dep[{RIGHT, MIDDLE, MIDDLE}] = 6;
+
+    partition_to_dep[{MIDDLE, MIDDLE, MIDDLE}] = 7;
+
+    for (auto& [partition, dep] : partition_to_dep) {
+        dep_to_partitions[dep].push_back(partition);
+    }
+
+    /*
+    for (auto& [bin, idxs] : bin_to_local_idxs) {
+        std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
+        int sum = 0;
+        bool special_bin = false;
+        std::vector<int> new_bin;
+        new_bin.reserve(3);
+        for (int dim = 0; dim < 3; dim++) {
+            int bin_val = bin_vals[dim];
+            // TODO: hardcoded here, needs to change something here
+            if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
+                bin_val = 10;
+                special_bin = true;
+            } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
+                bin_val = 34 - 3;
+                special_bin = true;
+            } else if (bin_val > 13 && bin_val < 34) {
+                bin_val -= 3;
+            } else if (bin_val > 37) {
+                bin_val -= 6;
+            } else {
+                assert(bin_val < 10);
+            }
+        }
+
+        int new_bin_idx = partition_to_dep[bin_to_partition[bin]];
+        if (special_bin) {
+            special_pair_bins[new_bin_idx].push_back(bin);
+        } else {
+            pair_bins[new_bin_idx].push_back(bin);
+        }
+    }
+    */
+
+    /*
     for (auto& [bin, idxs] : bin_to_local_idxs) {
         std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
         int sum = 0;
@@ -2470,22 +2620,16 @@ void Atom::setup_stencil_md_pair_bins() {
         }
 
         // int new_bin_idx = new_bin_to_idx[std::make_tuple(new_bin[0], new_bin[1], new_bin[2])];
-        int new_bin_idx = new_bin[0] * 3 * 3 + new_bin[1] * 3 + new_bin[2];
-        assert(new_bin_idx >= 0 && new_bin_idx < 27);
+        // int new_bin_idx = new_bin[0] * 3 * 3 + new_bin[1] * 3 + new_bin[2];
+        // assert(new_bin_idx >= 0 && new_bin_idx < 27);
+        int new_bin_idx = sum;
         if (special_bin) {
             special_pair_bins[new_bin_idx].push_back(bin);
         } else {
             pair_bins[new_bin_idx].push_back(bin);
         }
-
-        /*
-        if (special_bin) {
-            special_pair_bins[sum].push_back(bin);
-        } else {
-            pair_bins[sum].push_back(bin);
-        }
-        */
     }
+    */
 }
 
 /* ----------------------------------------------------------------------

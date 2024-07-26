@@ -1062,7 +1062,7 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                     auto& bin_bounds = GET_BOUNDS(true, t);
                     if (comm->nprocs == 1) {
                         first->sort_local_stencil_md_bins(bin_bounds, sorted_bin_indices[t]);
-                        first->setup_stencil_md_pair_bins();
+                        first->setup_stencil_md_pair_bins(zoid, t);
                     }
                 }
             }
@@ -1679,11 +1679,6 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
                        indices.end(),
                        Search_traits(CGAL::make_property_map(points)));
 
-    for (int i = 0; i < bounds_at_timestep.size() - 1; i++) {
-        if (bounds_at_timestep[i + 1] - bounds_at_timestep[i] < ALLEGRO_SLOPE - 0.01) {
-            std::cout << "idx: " << i << " bounds: " << bounds_at_timestep[i] << " " << bounds_at_timestep[i + 1] << " diff: " << bounds_at_timestep[i + 1] - bounds_at_timestep[i] << std::endl;
-        }
-    }
     // assert(false);
     return bounds_at_timestep;
 }

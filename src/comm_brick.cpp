@@ -3078,7 +3078,20 @@ void CommBrick::recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
 
         auto& send_to = curr_dt ? lmp->send_to_neighbors[recv_zoid_num] : lmp->send_to_neighbors_next_dt[recv_zoid_num];
         auto it = std::find(send_to.begin(), send_to.end(), zoid_num);
-        assert(it != recv_from.end());
+        if (it == send_to.end()) {
+            std::cout << "zoid: " << zoid_num << " recv from: " << recv_zoid_num << std::endl;
+            std::stringstream s1;
+            for (auto& s : send_to) {
+                s1 << s << " ";
+            }
+            std::stringstream s2;
+            for (auto& r : recv_from) {
+                s2 << r << " ";
+            }
+            std::cout << "recv send to: " << s1.str() << std::endl;
+            std::cout << "zoid recv from: " << s2.str() << std::endl;
+        }
+        assert(it != send_to.end());
         int send_idx = -1;
         send_idx = std::distance(send_to.begin(), it);
         assert(send_idx != -1);

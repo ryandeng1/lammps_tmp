@@ -34,8 +34,6 @@
 using namespace LAMMPS_NS;
 using MathConst::MY_CUBEROOT2;
 
-constexpr int target_tag = 12777;
-
 /* ---------------------------------------------------------------------- */
 
 BondFENEOMP::BondFENEOMP(class LAMMPS *lmp)
@@ -237,7 +235,84 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
         auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
         double ebond = 0.0;
 
-        for (int dep = 0; dep < 27; dep++) {
+        for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+            auto &partitions_at_dep = atom_->dep_to_partitions[dep];
+            cilk_for (int i = 0; i < partitions_at_dep.size(); i++) {
+                auto &partition = partitions_at_dep[i];
+                // auto &bins = atom_->partition_to_bins[partition];
+                auto& bins = atom_->partition_to_bins[partition[0]][partition[1]][partition[2]];
+                for (int b = 0; b < bins.size(); b++) {
+                    auto &bin = bins[b];
+                    auto &idxs = atom_->bin_to_local_idxs[bin];
+                    for (int idx = 0; idx < idxs.size(); idx++) {
+                        int i1 = idxs[idx];
+                        assert(i1 >= 0 && i1 < nlocal);
+
+                        auto &lst_bonds = neighbor_->atom_bondlist[i1];
+                        for (int j = 0; j < lst_bonds.size(); j++) {
+                            auto &bond_info = lst_bonds[j];
+                            int i2 = bond_info.first;
+                            int type = bond_info.second;
+
+                            double delx = x[i1].x - x[i2].x;
+                            double dely = x[i1].y - x[i2].y;
+                            double delz = x[i1].z - x[i2].z;
+
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            double r0sq = r0[type] * r0[type];
+                            double rlogarg = 1.0 - rsq / r0sq;
+
+                            if (rlogarg < 0.1) {
+                                error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                               update->ntimestep, atom->tag[i1], atom->tag[i2], sqrt(rsq));
+//                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+//                                return;
+                                assert(false);
+
+                                rlogarg = 0.1;
+                            }
+
+                            double fbond = -k[type] / rlogarg;
+
+                            // force from LJ term
+                            double sr2 = 0.0;
+                            double sr6 = 0.0;
+
+                            if (rsq < MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                                sr2 = sigma[type] * sigma[type] / rsq;
+                                sr6 = sr2 * sr2 * sr2;
+                                fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                            }
+
+                            // energy
+
+                            if (eflag) {
+                                ebond = -0.5 * k[type] * r0sq * log(rlogarg);
+                                if (rsq < MY_CUBEROOT2 * sigma[type] * sigma[type])
+                                    ebond += 4.0 * epsilon[type] * sr6 * (sr6 - 1.0) + epsilon[type];
+                            }
+
+                            // apply force to each of 2 atoms
+
+                            if (newton || i1 < nlocal) {
+                                f[i1].x += delx * fbond;
+                                f[i1].y += dely * fbond;
+                                f[i1].z += delz * fbond;
+                            }
+
+                            if (newton || i2 < nlocal) {
+                                f[i2].x -= delx * fbond;
+                                f[i2].y -= dely * fbond;
+                                f[i2].z -= delz * fbond;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /*
+        for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
             auto &special_bins_at_dep = atom_->special_pair_bins[dep];
 
             for (int bin_idx = 0; bin_idx < special_bins_at_dep.size(); bin_idx++) {
@@ -265,10 +340,8 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
                         if (rlogarg < 0.1) {
                             error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
                                            update->ntimestep, atom->tag[i1], atom->tag[i2], sqrt(rsq));
-                            /*
-                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                                return;
-                            */
+//                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+//                                return;
                             assert(false);
 
                             rlogarg = 0.1;
@@ -313,9 +386,15 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
 
             auto &bins_at_dep = atom_->pair_bins[dep];
 
-            cilk_for (int bin_idx = 0; bin_idx < bins_at_dep.size(); bin_idx++) {
+            if (bins_at_dep.size() == 0) {
+                continue;
+            }
+
+            int total_num_idxs = 0;
+            for (int bin_idx = 0; bin_idx < bins_at_dep.size(); bin_idx++) {
                 auto &bin = bins_at_dep[bin_idx];
                 auto &idxs = atom_->bin_to_local_idxs[bin];
+                total_num_idxs += idxs.size();
                 for (int idx = 0; idx < idxs.size(); idx++) {
                     int i1 = idxs[idx];
                     assert(i1 >= 0 && i1 < nlocal);
@@ -337,10 +416,8 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
                         if (rlogarg < 0.1) {
                             error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
                                            update->ntimestep, atom->tag[i1], atom->tag[i2], sqrt(rsq));
-                            /*
-                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                                return;
-                            */
+//                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+//                                return;
                             assert(false);
 
                             rlogarg = 0.1;
@@ -383,6 +460,7 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
                 }
             }
         }
+        */
 
         return;
     }

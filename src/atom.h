@@ -291,8 +291,13 @@ class Atom : protected Pointers {
   AtomVecCreatorMapStencilMD *avec_map_stencil_md;
 
   std::map<std::tuple<int, int, int>, std::vector<int>> bin_to_local_idxs;
-  std::vector<std::tuple<int, int, int>> pair_bins[27];
-  std::vector<std::tuple<int, int, int>> special_pair_bins[27];
+  std::vector<std::tuple<int, int, int>> pair_bins[NUM_DEPS_BINS];
+  std::vector<std::tuple<int, int, int>> special_pair_bins[NUM_DEPS_BINS];
+
+  // new set of data structures
+  // loop structure, iterate over dep level --> partitions at dep --> partitions to bins --> bins to idxs
+  std::vector<std::tuple<int, int, int>> partition_to_bins[3][3][3];
+  std::vector<std::array<int, 3>> dep_to_partitions[NUM_DEPS_BINS];
 
   // --------------------------------------------------------------------
   // functions
@@ -405,7 +410,7 @@ class Atom : protected Pointers {
   int map_style_set_stencil_md();
   virtual void map_init_stencil_md(int check = 1);
 
-  virtual void setup_stencil_md_pair_bins();
+  virtual void setup_stencil_md_pair_bins(queue_info& zoid, int timestep);
 
   std::map<int, int> tag_to_idx;
 

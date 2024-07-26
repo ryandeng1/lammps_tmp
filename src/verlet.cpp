@@ -778,6 +778,7 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
     auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
     auto& sorted_bin_indices = stencilMD->sorted_bin_indices[timestep];
 
+    // std::map<std::array<int, 3>, Data_vector> bin_to_data_points;
     std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
 
     for (int i = atom_->nlocal; i < atom_->nlocal + atom_->nghost; i++) {
