@@ -353,8 +353,7 @@ void StencilMD::INIT_ZOIDS() {
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
-            auto key =
-                    std::make_tuple(zoid.where[0], zoid.where[1], zoid.where[2]);
+            IDX_3D key = {zoid.where[0], zoid.where[1], zoid.where[2]};
             if (zoid_to_num_map.find(key) == zoid_to_num_map.end()) {
                 std::cout << "error. key: " << std::get<0>(key) << " "
                           << std::get<1>(key) << " " << std::get<2>(key)
@@ -428,22 +427,28 @@ void StencilMD::INIT_ZOID_DATA() {
                 // memset(zoid.bin_to_size, -1, num_bins_3d);
 
                 zoid.send_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.send_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_force_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.send_pos_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.send_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.send_vel_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.send_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_vel_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.recv_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_force_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_pos_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.recv_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_pos_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_vel_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.recv_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_vel_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.inum_per_timestep = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
@@ -587,22 +592,28 @@ void StencilMD::INIT_ZOID_DATA() {
                 // memset(zoid.bin_to_size, -1, num_bins_3d);
 
                 zoid.send_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.send_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_force_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.send_pos_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.send_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_pos_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.send_vel_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.send_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.send_vel_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.recv_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_force_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_pos_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.recv_pos_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_pos_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_vel_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.recv_vel_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_vel_bins = new IDX_3D**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.inum_per_timestep = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
@@ -1660,7 +1671,7 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
     for (int bin_x = 0; bin_x < points_coords.size(); bin_x++) {
         for (int bin_y = 0; bin_y < points_coords.size(); bin_y++) {
             for (int bin_z = 0; bin_z < points_coords.size(); bin_z++) {
-                auto bin = std::make_tuple(bin_x, bin_y, bin_z);
+                IDX_3D bin = {bin_x, bin_y, bin_z};
                 int bin_idx = get_bin_idx(bin);
                 // points.emplace_back(points_coords[bin_x], points_coords[bin_y], points_coords[bin_z]);
                 points[bin_idx] = Point(points_coords[bin_x], points_coords[bin_y], points_coords[bin_z]);

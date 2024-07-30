@@ -2177,12 +2177,12 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
 }
 
 void AtomVec::send_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size, int* recv_bin_to_idx, int* recv_bin_to_size,
-                                        int send_force_num_bins, std::tuple<int, int, int>* send_force_bins,
-                                        int send_pos_num_bins, std::tuple<int, int, int>* send_pos_bins,
-                                        int send_vel_num_bins, std::tuple<int, int, int>* send_vel_bins,
-                                        int recv_force_num_bins, std::tuple<int, int, int>* recv_force_bins,
-                                        int recv_pos_num_bins, std::tuple<int, int, int>* recv_pos_bins,
-                                        int recv_vel_num_bins, std::tuple<int, int, int>* recv_vel_bins,
+                                        int send_force_num_bins, IDX_3D* send_force_bins,
+                                        int send_pos_num_bins, IDX_3D* send_pos_bins,
+                                        int send_vel_num_bins, IDX_3D* send_vel_bins,
+                                        int recv_force_num_bins, IDX_3D* recv_force_bins,
+                                        int recv_pos_num_bins, IDX_3D* recv_pos_bins,
+                                        int recv_vel_num_bins, IDX_3D* recv_vel_bins,
                                         tagint* recv_tag, double** recv_f, double** recv_x, double** recv_v, int* pbc_flags) {
 
     if (DEBUG_SEND_RECV_DATA) {
@@ -2262,12 +2262,12 @@ void AtomVec::send_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_s
 
 void AtomVec::recv_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size,
                                         int* recv_bin_to_idx, int* recv_bin_to_size,
-                                        int send_force_num_bins, std::tuple<int, int, int>* send_force_bins,
-                                        int send_pos_num_bins, std::tuple<int, int, int>* send_pos_bins,
-                                        int send_vel_num_bins, std::tuple<int, int, int>* send_vel_bins,
-                                        int recv_force_num_bins, std::tuple<int, int, int>* recv_force_bins,
-                                        int recv_pos_num_bins, std::tuple<int, int, int>* recv_pos_bins,
-                                        int recv_vel_num_bins, std::tuple<int, int, int>* recv_vel_bins,
+                                        int send_force_num_bins, IDX_3D* send_force_bins,
+                                        int send_pos_num_bins, IDX_3D* send_pos_bins,
+                                        int send_vel_num_bins, IDX_3D* send_vel_bins,
+                                        int recv_force_num_bins, IDX_3D* recv_force_bins,
+                                        int recv_pos_num_bins, IDX_3D* recv_pos_bins,
+                                        int recv_vel_num_bins, IDX_3D* recv_vel_bins,
                                         tagint* send_tag, double** send_f, double** send_x, double** send_v, int* pbc_flags) {
 
     if (DEBUG_SEND_RECV_DATA) {

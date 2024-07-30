@@ -1561,7 +1561,7 @@ void CommBrick::construct_send_list_stencil_md_send(
         upper_bound += atom_arr[t]->nghost;
     }
 
-    std::set<std::tuple<int, int, int>> all_ranges;
+    std::set<IDX_3D> all_ranges;
 
     int idx = 0;
     for (int i = 0; i < send_to.size(); i++) {
@@ -1647,7 +1647,7 @@ void CommBrick::construct_send_list_stencil_md_send(
             auto& bounds = stencilMD->GET_BOUNDS(true, t);
 
             if (bounds.size() > 0) {
-                std::set<std::tuple<int, int, int>> ranges;
+                std::set<IDX_3D> ranges;
                 for (int idx : idx_vec_force[t]) {
                     double* pos = atom_->x[idx];
                     auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
@@ -2006,7 +2006,7 @@ void CommBrick::construct_send_list_stencil_md(
             zoid.recv_list_local_num_force_only[t][i] = nrecv_force_only;
 
             auto& bounds = stencilMD->GET_BOUNDS(true, t);
-            std::set<std::tuple<int, int, int>> ranges;
+            std::set<IDX_3D> ranges;
 
             for (int j = 0; j < nrecv_force_only; j++) {
                 tagint tag_ = (tagint) ubuf(buf_recv_stencil_md[i][idx_in_buf++]).i;
@@ -2051,7 +2051,7 @@ void CommBrick::construct_send_list_stencil_md(
             zoid.recv_list_local_num_force_pos[t][i] = nrecv_force_pos;
 
             auto& bounds = stencilMD->GET_BOUNDS(true, t);
-            std::set<std::tuple<int, int, int>> ranges;
+            std::set<IDX_3D> ranges;
 
             for (int j = 0; j < nrecv_force_pos; j++) {
                 tagint tag_ = (tagint) ubuf(buf_recv_stencil_md[i][idx_in_buf++]).i;

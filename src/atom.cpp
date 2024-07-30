@@ -2446,7 +2446,7 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
     auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
 
     // assign bin to left, right, middle??
-    std::map<std::tuple<int, int, int>, std::array<int, 3>> bin_to_partition;
+    std::map<IDX_3D, std::array<int, 3>> bin_to_partition;
 
     for (int dim = 0; dim < 3; dim++) {
         double zoid_lo = zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower;

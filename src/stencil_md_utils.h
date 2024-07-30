@@ -136,6 +136,120 @@ constexpr int NUM_BINS = 48;
 
 constexpr bool PAIR_USE_BINS = true;
 
+using IDX_3D = std::array<int, 3>;
+
+const std::map<IDX_3D, int> zoid_to_num_map = {
+        {{LEFT,  LEFT,  LEFT},  0},
+        {{RIGHT, RIGHT, RIGHT}, 1},
+        {{LEFT,  LEFT,  RIGHT}, 2},
+        {{RIGHT, RIGHT, LEFT},     3},
+        {{LEFT, RIGHT, LEFT},      4},
+        {{RIGHT, LEFT, LEFT},      5},
+        {{LEFT, RIGHT, RIGHT},     6},
+        {{RIGHT, LEFT, RIGHT},     7},
+
+        // begin dep 1
+        // group 0
+        {{LEFT, LEFT, MIDDLE},     8},
+        {{LEFT, MIDDLE, LEFT},     16},
+        {{MIDDLE, LEFT, LEFT},     24},
+
+        // group 1
+        {{RIGHT, RIGHT, PBC},      9},
+        {{RIGHT, PBC, RIGHT},      17},
+        {{PBC, RIGHT, RIGHT},      25},
+
+        // group 2
+        {{LEFT, LEFT, PBC},        10},
+        {{LEFT, MIDDLE, RIGHT},    18},
+        {{MIDDLE, LEFT, RIGHT},    26},
+
+        // group 3
+        {{RIGHT, RIGHT, MIDDLE},   11},
+        {{RIGHT, PBC, LEFT},       19},
+        {{PBC, RIGHT, LEFT},       27},
+
+        // group 4
+        {{LEFT, RIGHT, MIDDLE},    12},
+        {{LEFT, PBC, LEFT},        20},
+        {{MIDDLE, RIGHT, LEFT},    28},
+
+        // group 5
+        {{RIGHT, LEFT, MIDDLE},    13},
+        {{RIGHT, MIDDLE, LEFT},    21},
+        {{PBC, LEFT, LEFT},        29},
+
+        // group 6
+        {{LEFT, RIGHT, PBC},       14},
+        {{LEFT, PBC, RIGHT},       22},
+        {{MIDDLE, RIGHT, RIGHT},   30},
+
+        // group 7
+        {{RIGHT, LEFT, PBC},       15},
+        {{RIGHT, MIDDLE, RIGHT},   23},
+        {{PBC, LEFT, RIGHT},       31},
+
+        // begin dep 2
+        // group 0
+        {{LEFT, MIDDLE, MIDDLE},   32},
+        {{MIDDLE, LEFT, MIDDLE},   40},
+        {{MIDDLE, MIDDLE, LEFT},   48},
+
+        // group 1
+        {{RIGHT, PBC, PBC},        33},
+        {{PBC, RIGHT, PBC},        41},
+        {{PBC, PBC, RIGHT},        49},
+
+        // group 2
+        {{LEFT, MIDDLE, PBC},      34},
+        {{MIDDLE, LEFT, PBC},      42},
+        {{MIDDLE, MIDDLE, RIGHT},  50},
+
+        // group 3
+        {{RIGHT, PBC, MIDDLE},     35},
+        {{PBC, RIGHT, MIDDLE},     43},
+        {{PBC, PBC, LEFT},         51},
+
+        // group 4
+        {{LEFT, PBC, MIDDLE},      36},
+        {{MIDDLE, RIGHT, MIDDLE},  44},
+        {{MIDDLE, PBC, LEFT},      52},
+
+        // group 5
+        {{RIGHT, MIDDLE, MIDDLE},  37},
+        {{PBC, LEFT, MIDDLE},      45},
+        {{PBC, MIDDLE, LEFT},      53},
+
+        // group 6
+        {{LEFT, PBC, PBC},         38},
+        {{MIDDLE, RIGHT, PBC},     46},
+        {{MIDDLE, PBC, RIGHT},     54},
+
+
+        // group 7
+        {{RIGHT, MIDDLE, PBC},     39},
+        {{PBC, LEFT, PBC},         47},
+        {{PBC, MIDDLE, RIGHT},     55},
+
+        // begin dep3
+        {{MIDDLE, MIDDLE, MIDDLE}, 56},
+
+        {{PBC, PBC, PBC},          57},
+
+        {{MIDDLE, MIDDLE, PBC},    58},
+
+        {{PBC, PBC, MIDDLE},       59},
+
+        {{MIDDLE, PBC, MIDDLE},    60},
+
+        {{PBC, MIDDLE, MIDDLE},    61},
+
+        {{MIDDLE, PBC, PBC},       62},
+
+        {{PBC, MIDDLE, PBC},       63},
+};
+
+/*
 const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(LEFT, LEFT, LEFT), 0},
         {std::make_tuple(RIGHT, RIGHT, RIGHT), 1},
@@ -245,114 +359,9 @@ const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
         {std::make_tuple(MIDDLE, PBC, PBC), 62},
 
         {std::make_tuple(PBC, MIDDLE, PBC), 63},
-
-        /*
-        // group 0
-        {std::make_tuple(LEFT, LEFT, MIDDLE), 8},
-        {std::make_tuple(LEFT, MIDDLE, LEFT), 16},
-        {std::make_tuple(MIDDLE, LEFT, LEFT), 24},
-
-        // group 1
-        {std::make_tuple(RIGHT, RIGHT, MIDDLE), 9},
-        {std::make_tuple(RIGHT, MIDDLE, RIGHT), 17},
-        {std::make_tuple(MIDDLE, RIGHT, RIGHT), 25},
-
-        // group 2
-        {std::make_tuple(LEFT, LEFT, PBC), 10},
-        {std::make_tuple(LEFT, PBC, LEFT), 18},
-        {std::make_tuple(PBC, LEFT, LEFT), 26},
-
-        // group 3
-        {std::make_tuple(RIGHT, RIGHT, PBC), 11},
-        {std::make_tuple(RIGHT, PBC, RIGHT), 19},
-        {std::make_tuple(PBC, RIGHT, RIGHT), 27},
-
-        // group 4
-        {std::make_tuple(LEFT, RIGHT, MIDDLE), 12},
-        {std::make_tuple(LEFT, MIDDLE, RIGHT), 20},
-        {std::make_tuple(MIDDLE, LEFT, RIGHT), 28},
-
-        // group 5
-        {std::make_tuple(RIGHT, LEFT, MIDDLE), 13},
-        {std::make_tuple(RIGHT, MIDDLE, LEFT), 21},
-        {std::make_tuple(MIDDLE, RIGHT, LEFT), 29},
-
-        // group 6
-        {std::make_tuple(LEFT, RIGHT, PBC), 14},
-        {std::make_tuple(LEFT, PBC, RIGHT), 22},
-        {std::make_tuple(PBC, LEFT, RIGHT), 30},
-
-        // group 7
-        {std::make_tuple(RIGHT, LEFT, PBC), 15},
-        {std::make_tuple(RIGHT, PBC, LEFT), 23},
-        {std::make_tuple(PBC, RIGHT, LEFT), 31},
-
-        // end dep 1
-
-        // begin dep 2
-        {std::make_tuple(LEFT, MIDDLE, MIDDLE), 32},
-        {std::make_tuple(RIGHT, MIDDLE, MIDDLE), 40},
-        {std::make_tuple(MIDDLE, LEFT, MIDDLE), 48},
-
-        // group 1
-        {std::make_tuple(MIDDLE, MIDDLE, LEFT), 33},
-        {std::make_tuple(MIDDLE, MIDDLE, RIGHT), 41},
-        {std::make_tuple(MIDDLE, RIGHT, MIDDLE), 49},
-
-        // group 2
-        {std::make_tuple(LEFT, PBC, PBC), 34},
-        {std::make_tuple(RIGHT, PBC, PBC), 42},
-        {std::make_tuple(PBC, LEFT, PBC), 50},
-
-        // group 3
-        {std::make_tuple(PBC, PBC, RIGHT), 35},
-        {std::make_tuple(PBC, PBC, LEFT), 43},
-        {std::make_tuple(PBC, RIGHT, PBC), 51},
-
-        // group 4
-        {std::make_tuple(MIDDLE, PBC, LEFT), 36},
-        {std::make_tuple(MIDDLE, PBC, RIGHT), 44},
-        {std::make_tuple(MIDDLE, RIGHT, PBC), 52},
-
-        // group 5
-        {std::make_tuple(PBC, LEFT, MIDDLE), 37},
-        {std::make_tuple(PBC, RIGHT, MIDDLE), 45},
-        {std::make_tuple(PBC, MIDDLE, LEFT), 53},
-
-        // group 6
-        {std::make_tuple(RIGHT, MIDDLE, PBC), 38},
-        {std::make_tuple(LEFT, MIDDLE, PBC), 46},
-        {std::make_tuple(PBC, MIDDLE, RIGHT), 54},
-
-
-        // group 7
-        {std::make_tuple(LEFT, PBC, MIDDLE), 39},
-        {std::make_tuple(RIGHT, PBC, MIDDLE), 47},
-        {std::make_tuple(MIDDLE, LEFT, PBC), 55},
-
-        // end dep 2
-
-        // begin dep 3
-        // good
-        {std::make_tuple(MIDDLE, MIDDLE, MIDDLE), 56},
-
-        {std::make_tuple(MIDDLE, MIDDLE, PBC), 57},
-
-        {std::make_tuple(PBC, PBC, PBC), 58},
-
-        {std::make_tuple(PBC, PBC, MIDDLE), 59},
-
-        {std::make_tuple(MIDDLE, PBC, MIDDLE), 60},
-
-        {std::make_tuple(PBC, MIDDLE, MIDDLE), 61},
-
-        {std::make_tuple(PBC, MIDDLE, PBC), 62},
-
-        {std::make_tuple(MIDDLE, PBC, PBC), 63},
-        */
-
         // end dep 3
 };
+*/
 
 struct cut_info {
   double lower;
@@ -373,22 +382,28 @@ struct queue_info {
   int** bin_to_size;
 
   int** send_force_num_bins;
-  std::tuple<int, int, int>*** send_force_bins;
+  // std::tuple<int, int, int>*** send_force_bins;
+  IDX_3D*** send_force_bins;
 
   int** send_pos_num_bins;
-  std::tuple<int, int, int>*** send_pos_bins;
+  // std::tuple<int, int, int>*** send_pos_bins;
+  IDX_3D*** send_pos_bins;
 
   int** send_vel_num_bins;
-  std::tuple<int, int, int>*** send_vel_bins;
+  // std::tuple<int, int, int>*** send_vel_bins;
+  IDX_3D*** send_vel_bins;
 
   int** recv_force_num_bins;
-  std::tuple<int, int, int>*** recv_force_bins;
+  // std::tuple<int, int, int>*** recv_force_bins;
+  IDX_3D*** recv_force_bins;
 
   int** recv_pos_num_bins;
-  std::tuple<int, int, int>*** recv_pos_bins;
+  // std::tuple<int, int, int>*** recv_pos_bins;
+  IDX_3D*** recv_pos_bins;
 
   int** recv_vel_num_bins;
-  std::tuple<int, int, int>*** recv_vel_bins;
+  // std::tuple<int, int, int>*** recv_vel_bins;
+  IDX_3D*** recv_vel_bins;
 
   int* inum_per_timestep;
   int debug_int;
@@ -492,16 +507,17 @@ void print_cuts(const cuts_t &);
 
 int get_segments(const std::vector<int>&, std::vector<int>&, std::vector<int>&, bool print=false);
 
-uint64_t timeSinceEpochMillisec();
-
 int get_mpi_tag(int dst, int src, int start_timestep=0, int end_timestep=0);
 
-std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi);
+IDX_3D get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi);
 
-inline __attribute__((always_inline)) int get_bin_idx(const std::tuple<int, int, int>& bin) {
-    int x = std::get<0>(bin);
-    int y = std::get<1>(bin);
-    int z = std::get<2>(bin);
+inline __attribute__((always_inline)) int get_bin_idx(const IDX_3D& bin) {
+    // int x = std::get<0>(bin);
+    // int y = std::get<1>(bin);
+    // int z = std::get<2>(bin);
+    int x = bin[0];
+    int y = bin[1];
+    int z = bin[2];
     if (x >= NUM_BINS || x < 0) {
         std::cout << "bin x: " << x << std::endl;
     }

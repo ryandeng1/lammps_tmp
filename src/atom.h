@@ -290,14 +290,14 @@ class Atom : protected Pointers {
   typedef std::map<std::string, AtomVecCreatorStencilMD> AtomVecCreatorMapStencilMD;
   AtomVecCreatorMapStencilMD *avec_map_stencil_md;
 
-  std::map<std::tuple<int, int, int>, std::vector<int>> bin_to_local_idxs;
-  std::vector<std::tuple<int, int, int>> pair_bins[NUM_DEPS_BINS];
-  std::vector<std::tuple<int, int, int>> special_pair_bins[NUM_DEPS_BINS];
+  std::map<IDX_3D, std::vector<int>> bin_to_local_idxs;
+  std::vector<IDX_3D> pair_bins[NUM_DEPS_BINS];
+  std::vector<IDX_3D> special_pair_bins[NUM_DEPS_BINS];
 
   // new set of data structures
   // loop structure, iterate over dep level --> partitions at dep --> partitions to bins --> bins to idxs
-  std::vector<std::tuple<int, int, int>> partition_to_bins[3][3][3];
-  std::vector<std::array<int, 3>> dep_to_partitions[NUM_DEPS_BINS];
+  std::vector<IDX_3D> partition_to_bins[3][3][3];
+  std::vector<IDX_3D> dep_to_partitions[NUM_DEPS_BINS];
 
   // --------------------------------------------------------------------
   // functions

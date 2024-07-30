@@ -779,7 +779,8 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
     auto& sorted_bin_indices = stencilMD->sorted_bin_indices[timestep];
 
     // std::map<std::array<int, 3>, Data_vector> bin_to_data_points;
-    std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
+    // std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
+    std::map<IDX_3D, Data_vector> bin_to_data_points;
 
     for (int i = atom_->nlocal; i < atom_->nlocal + atom_->nghost; i++) {
         double* pos = atom_->x[i];
@@ -1029,7 +1030,8 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
 
     auto& bounds = stencilMD->GET_BOUNDS(true, timestep);
 
-    std::set<std::tuple<int, int, int>> all_ranges;
+    // std::set<std::tuple<int, int, int>> all_ranges;
+    std::set<IDX_3D> all_ranges;
 
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_from_zoid_num = recv_from[i];
@@ -1058,7 +1060,8 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             }
 
             if (bounds.size() > 0) {
-                std::set<std::tuple<int, int, int>> ranges;
+                // std::set<std::tuple<int, int, int>> ranges;
+                std::set<IDX_3D> ranges;
                 for (int idx : neighbor_to_idxs[recv_from_zoid_num]) {
                     assert(idx >= atom_->nlocal);
                     double* pos = atom_->x[idx];
@@ -1071,7 +1074,8 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
     }
 
     if (bounds.size() > 0) {
-        std::set<std::tuple<int, int, int>> all_ghost_ranges;
+        // std::set<std::tuple<int, int, int>> all_ghost_ranges;
+        std::set<IDX_3D> all_ghost_ranges;
         for (int k = atom_->nlocal; k < atom_->nlocal + atom_->nghost; k++) {
             double* pos = atom_->x[k];
             auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
@@ -1216,7 +1220,8 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
 
     auto& bounds = stencilMD->GET_BOUNDS(false, timestep);
 
-    std::set<std::tuple<int, int, int>> all_ranges;
+    // std::set<std::tuple<int, int, int>> all_ranges;
+    std::set<IDX_3D> all_ranges;
 
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_from_zoid_num = recv_from[i];
@@ -1245,7 +1250,8 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
             }
 
             if (bounds.size() > 0) {
-                std::set<std::tuple<int, int, int>> ranges;
+                // std::set<std::tuple<int, int, int>> ranges;
+                std::set<IDX_3D> ranges;
                 for (int idx : neighbor_to_idxs[recv_from_zoid_num]) {
                     double* pos = atom_->x[idx];
                     auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
@@ -1257,7 +1263,8 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
     }
 
     if (bounds.size() > 0) {
-        std::set<std::tuple<int, int, int>> all_ghost_ranges;
+        // std::set<std::tuple<int, int, int>> all_ghost_ranges;
+        std::set<IDX_3D> all_ghost_ranges;
         for (int k = atom_->nlocal; k < atom_->nlocal + atom_->nghost; k++) {
             double* pos = atom_->x[k];
             auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
@@ -1275,10 +1282,12 @@ void Verlet::construct_send_force_bins(bool curr_dt, Atom* atom_, queue_info &zo
     auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
 
     zoid.send_force_num_bins[timestep] = new int[send_to.size()];
-    zoid.send_force_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+    // zoid.send_force_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+    zoid.send_force_bins[timestep] = new IDX_3D*[send_to.size()];
 
     for (int i = 0; i < send_to.size(); i++) {
-        std::set<std::tuple<int, int, int>> bins;
+        // std::set<std::tuple<int, int, int>> bins;
+        std::set<IDX_3D> bins;
         int send_zoid_num = send_to[i];
         int num_send_force_segments = zoid.send_force_num_segments[timestep][i];
         for (int j = 0; j < num_send_force_segments; j++) {
@@ -1293,8 +1302,10 @@ void Verlet::construct_send_force_bins(bool curr_dt, Atom* atom_, queue_info &zo
         }
         int num_bins = bins.size();
         zoid.send_force_num_bins[timestep][i] = num_bins;
-        zoid.send_force_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
-        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        // zoid.send_force_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        zoid.send_force_bins[timestep][i] = new IDX_3D[num_bins];
+        // std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        std::vector<IDX_3D> bins_vec(bins.begin(), bins.end());
 
         for (int j = 0; j < num_bins; j++) {
             zoid.send_force_bins[timestep][i][j] = bins_vec[j];
@@ -1308,11 +1319,13 @@ void Verlet::construct_send_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid
     auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
 
     zoid.send_pos_num_bins[timestep] = new int[send_to.size()];
-    zoid.send_pos_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+    // zoid.send_pos_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+    zoid.send_pos_bins[timestep] = new IDX_3D*[send_to.size()];
 
     // first gather local_to_ghost
     for (int i = 0; i < send_to.size(); i++) {
-        std::set<std::tuple<int, int, int>> bins;
+        // std::set<std::tuple<int, int, int>> bins;
+        std::set<IDX_3D> bins;
         int send_zoid_num = send_to[i];
         int num_recv_ghost_segments = zoid.send_num_segments[timestep][i];
 
@@ -1349,8 +1362,10 @@ void Verlet::construct_send_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid
 
         int num_bins = bins.size();
         zoid.send_pos_num_bins[timestep][i] = num_bins;
-        zoid.send_pos_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
-        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        // zoid.send_pos_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        // std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        zoid.send_pos_bins[timestep][i] = new IDX_3D[num_bins];
+        std::vector<IDX_3D> bins_vec(bins.begin(), bins.end());
 
         for (int j = 0; j < num_bins; j++) {
             zoid.send_pos_bins[timestep][i][j] = bins_vec[j];
@@ -1364,11 +1379,13 @@ void Verlet::construct_send_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid
     auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
 
     zoid.send_vel_num_bins[timestep] = new int[send_to.size()];
-    zoid.send_vel_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+    // zoid.send_vel_bins[timestep] = new std::tuple<int, int, int>*[send_to.size()];
+    zoid.send_vel_bins[timestep] = new IDX_3D*[send_to.size()];
 
     // first gather local_to_ghost
     for (int i = 0; i < send_to.size(); i++) {
-        std::set<std::tuple<int, int, int>> bins;
+        // std::set<std::tuple<int, int, int>> bins;
+        std::set<IDX_3D> bins;
         int send_zoid_num = send_to[i];
 
         int num_recv_local_segments = zoid.send_pos_num_segments[timestep][i];
@@ -1385,8 +1402,10 @@ void Verlet::construct_send_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid
 
         int num_bins = bins.size();
         zoid.send_vel_num_bins[timestep][i] = num_bins;
-        zoid.send_vel_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
-        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        // zoid.send_vel_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        zoid.send_vel_bins[timestep][i] = new IDX_3D[num_bins];
+        // std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        std::vector<IDX_3D> bins_vec(bins.begin(), bins.end());
 
         for (int j = 0; j < num_bins; j++) {
             zoid.send_vel_bins[timestep][i][j] = bins_vec[j];
@@ -1400,10 +1419,12 @@ void Verlet::construct_recv_force_bins(bool curr_dt, Atom* atom_, queue_info &zo
     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
 
     zoid.recv_force_num_bins[timestep] = new int[recv_from.size()];
-    zoid.recv_force_bins[timestep] = new std::tuple<int, int, int>*[recv_from.size()];
+    // zoid.recv_force_bins[timestep] = new std::tuple<int, int, int>*[recv_from.size()];
+    zoid.recv_force_bins[timestep] = new IDX_3D*[recv_from.size()];
 
     for (int i = 0; i < recv_from.size(); i++) {
-        std::set<std::tuple<int, int, int>> bins;
+        // std::set<std::tuple<int, int, int>> bins;
+        std::set<IDX_3D> bins;
         int recv_zoid_num = recv_from[i];
         int num_recv_force = zoid.recv_list_local_num_force_only[timestep][i];
 
@@ -1416,8 +1437,10 @@ void Verlet::construct_recv_force_bins(bool curr_dt, Atom* atom_, queue_info &zo
 
         int num_bins = bins.size();
         zoid.recv_force_num_bins[timestep][i] = num_bins;
-        zoid.recv_force_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
-        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        // zoid.recv_force_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        // std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        zoid.recv_force_bins[timestep][i] = new IDX_3D[num_bins];
+        std::vector<IDX_3D> bins_vec(bins.begin(), bins.end());
 
         for (int j = 0; j < num_bins; j++) {
             zoid.recv_force_bins[timestep][i][j] = bins_vec[j];
@@ -1431,10 +1454,12 @@ void Verlet::construct_recv_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid
     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
 
     zoid.recv_vel_num_bins[timestep] = new int[recv_from.size()];
-    zoid.recv_vel_bins[timestep] = new std::tuple<int, int, int>*[recv_from.size()];
+    // zoid.recv_vel_bins[timestep] = new std::tuple<int, int, int>*[recv_from.size()];
+    zoid.recv_vel_bins[timestep] = new IDX_3D*[recv_from.size()];
 
     for (int i = 0; i < recv_from.size(); i++) {
-        std::set<std::tuple<int, int, int>> bins;
+        // std::set<std::tuple<int, int, int>> bins;
+        std::set<IDX_3D> bins;
         int recv_zoid_num = recv_from[i];
         int num_recv_vel = zoid.recv_list_local_num_force_pos[timestep][i];
 
@@ -1447,8 +1472,10 @@ void Verlet::construct_recv_vel_bins(bool curr_dt, Atom* atom_, queue_info &zoid
 
         int num_bins = bins.size();
         zoid.recv_vel_num_bins[timestep][i] = num_bins;
-        zoid.recv_vel_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
-        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        // zoid.recv_vel_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
+        zoid.recv_vel_bins[timestep][i] = new IDX_3D[num_bins];
+        // std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        std::vector<IDX_3D> bins_vec(bins.begin(), bins.end());
 
         for (int j = 0; j < num_bins; j++) {
             zoid.recv_vel_bins[timestep][i][j] = bins_vec[j];
@@ -1462,11 +1489,11 @@ void Verlet::construct_recv_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid
     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
 
     zoid.recv_pos_num_bins[timestep] = new int[recv_from.size()];
-    zoid.recv_pos_bins[timestep] = new std::tuple<int, int, int>*[recv_from.size()];
+    zoid.recv_pos_bins[timestep] = new IDX_3D*[recv_from.size()];
 
     // first gather local_to_ghost
     for (int i = 0; i < recv_from.size(); i++) {
-        std::set<std::tuple<int, int, int>> bins;
+        std::set<IDX_3D> bins;
         int send_zoid_num = recv_from[i];
 
         int num_recv_ghost_segments = zoid.recv_ghost_num_segments[timestep][i];
@@ -1492,8 +1519,8 @@ void Verlet::construct_recv_pos_bins(bool curr_dt, Atom* atom_, queue_info &zoid
 
         int num_bins = bins.size();
         zoid.recv_pos_num_bins[timestep][i] = num_bins;
-        zoid.recv_pos_bins[timestep][i] = new std::tuple<int, int, int>[num_bins];
-        std::vector<std::tuple<int, int, int>> bins_vec(bins.begin(), bins.end());
+        zoid.recv_pos_bins[timestep][i] = new IDX_3D[num_bins];
+        std::vector<IDX_3D> bins_vec(bins.begin(), bins.end());
 
         for (int j = 0; j < num_bins; j++) {
             zoid.recv_pos_bins[timestep][i][j] = bins_vec[j];
@@ -1507,7 +1534,7 @@ void Verlet::construct_bin_to_idx(bool curr_dt, Atom* atom_, queue_info &zoid, i
 
     assert(atom_->nlocal + atom_->nghost > 0);
 
-    std::set<std::tuple<int, int, int>> all_bins;
+    std::set<IDX_3D> all_bins;
 
     auto prev_bin = get_bin(bounds, atom_->x[0], domain->boxlo, domain->boxhi);
     int prev_idx = 0;

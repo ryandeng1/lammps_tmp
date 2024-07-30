@@ -424,18 +424,13 @@ void print_cuts(const cuts_t &c)
   }
 }
 
-uint64_t timeSinceEpochMillisec() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-}
-
 int get_mpi_tag(int dst_zoid_num, int src_zoid_num, int start_timestep, int end_timestep) {
     int mpi_tag = (dst_zoid_num << 8 | src_zoid_num);
     mpi_tag = (mpi_tag << 8) | end_timestep;
     return mpi_tag;
 }
 
-std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi) {
+IDX_3D  get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi) {
     std::vector<int> res(3);
 
     for (int dim = 0; dim < 3; dim++) {
@@ -505,5 +500,6 @@ std::tuple<int, int, int> get_bin(std::vector<double>& bounds, double* pos, doub
         res[dim] = idx;
     }
 
-    return std::make_tuple(res[0], res[1], res[2]);
+    // return std::make_tuple(res[0], res[1], res[2]);
+    return {res[0], res[1], res[2]};
 }
