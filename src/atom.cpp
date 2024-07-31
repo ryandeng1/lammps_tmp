@@ -2446,7 +2446,7 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
     auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
 
     // assign bin to left, right, middle??
-    std::map<IDX_3D, std::array<int, 3>> bin_to_partition;
+    std::map<IDX_3D, IDX_3D> bin_to_partition;
 
     for (int dim = 0; dim < 3; dim++) {
         double zoid_lo = zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower;
@@ -2454,8 +2454,8 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
         double mid_point = (zoid_lo + zoid_hi) / 2;
         std::set<int> bin_vals_dim;
         for (auto& [bin, idxs] : bin_to_local_idxs) {
-            std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
-            int bin_val = bin_vals[dim];
+            int bin_val = bin[dim];
+
             // TODO: hardcoded here, needs to change something here
             if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
                 bin_val = 10;
@@ -2468,20 +2468,17 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
             } else {
                 assert(bin_val < 10);
             }
+            if (zoid.where[dim] == PBC) {
+                if (bin_val > (NUM_BINS - 6) / 2) {
+                    bin_val -= (NUM_BINS - 6);
+                }
+            }
             bin_vals_dim.insert(bin_val);
         }
 
         std::vector<int> bin_vals_dim_vec(bin_vals_dim.begin(), bin_vals_dim.end());
         int middle_bin_num = bin_vals_dim_vec.size() / 2;
         int other_middle_bin_num = bin_vals_dim_vec.size() / 2 - 1;
-
-        if (zoid.num == 20 && timestep == 1) {
-            std::stringstream s;
-            for (auto& b : bin_vals_dim_vec) {
-                s << b << " ";
-            }
-            std::cout << "bin vals at dim: " << dim << " : " << s.str() << std::endl;
-        }
 
         for (auto& [bin, idxs] : bin_to_local_idxs) {
             std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
@@ -2504,7 +2501,7 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
             } else if (bin_val < bin_vals_dim_vec[other_middle_bin_num]) {
                 bin_to_partition[bin][dim] = LEFT;
             } else if (bin_val > bin_vals_dim_vec[middle_bin_num]) {
-                bin_to_partition[bin][dim] = LEFT;
+                bin_to_partition[bin][dim] = RIGHT;
             } else {
                 bin_to_partition[bin][dim] = MIDDLE;
             }
