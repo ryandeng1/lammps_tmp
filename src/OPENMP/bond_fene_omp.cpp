@@ -230,6 +230,84 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
         return;
     }
 
+    if (nlocal < 4096) {
+        const auto * _noalias const x = (dbl3_t *) atom_->x[0];
+        auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
+        const int3_t * _noalias const bondlist = (int3_t *) neighbor_->bondlist[0];
+        double ebond = 0.0;
+
+        for (int n = 0; n < inum; n++) {
+            int i1 = bondlist[n].a;
+            int i2 = bondlist[n].b;
+            int type = bondlist[n].t;
+
+            double delx = x[i1].x - x[i2].x;
+            double dely = x[i1].y - x[i2].y;
+            double delz = x[i1].z - x[i2].z;
+
+            double rsq = delx*delx + dely*dely + delz*delz;
+            double r0sq = r0[type] * r0[type];
+            double rlogarg = 1.0 - rsq/r0sq;
+
+            // if r -> r0, then rlogarg < 0.0 which is an error
+            // issue a warning and reset rlogarg = epsilon
+            // if r > 2*r0 something serious is wrong, abort
+
+            if (rlogarg < 0.1) {
+                error->warning(FLERR,"FENE bond too long: {} {} {} {:.8}",
+                               update->ntimestep,atom->tag[i1],atom->tag[i2],sqrt(rsq));
+                /*
+                if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                    return;
+                */
+                assert(false);
+
+                rlogarg = 0.1;
+            }
+
+            double fbond = -k[type]/rlogarg;
+
+            // force from LJ term
+            double sr2 = 0.0;
+            double sr6 = 0.0;
+
+            if (rsq < MY_CUBEROOT2*sigma[type]*sigma[type]) {
+                sr2 = sigma[type]*sigma[type]/rsq;
+                sr6 = sr2*sr2*sr2;
+                fbond += 48.0*epsilon[type]*sr6*(sr6-0.5)/rsq;
+            }
+
+            // energy
+
+            if (eflag) {
+                ebond = -0.5 * k[type]*r0sq*log(rlogarg);
+                if (rsq < MY_CUBEROOT2*sigma[type]*sigma[type])
+                    ebond += 4.0*epsilon[type]*sr6*(sr6-1.0) + epsilon[type];
+            }
+
+            // apply force to each of 2 atoms
+
+            if (newton || i1 < nlocal) {
+                f[i1].x += delx*fbond;
+                f[i1].y += dely*fbond;
+                f[i1].z += delz*fbond;
+            }
+
+            if (newton || i2 < nlocal) {
+                f[i2].x -= delx*fbond;
+                f[i2].y -= dely*fbond;
+                f[i2].z -= delz*fbond;
+            }
+
+            /*
+            if (evflag) ev_tally_thr(this,i1,i2,nlocal,newton,
+                                     ebond,fbond,delx,dely,delz,thr);
+            */
+        }
+
+        return;
+    }
+
     if (PAIR_USE_BINS) {
         const auto * _noalias const x = (dbl3_t *) atom_->x[0];
         auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
