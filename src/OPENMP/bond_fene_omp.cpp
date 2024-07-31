@@ -230,7 +230,7 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
         return;
     }
 
-    if (nlocal < 4096) {
+    if (inum < 4096) {
         const auto * _noalias const x = (dbl3_t *) atom_->x[0];
         auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
         const int3_t * _noalias const bondlist = (int3_t *) neighbor_->bondlist[0];
