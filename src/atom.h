@@ -298,6 +298,7 @@ class Atom : protected Pointers {
   // loop structure, iterate over dep level --> partitions at dep --> partitions to bins --> bins to idxs
   std::vector<IDX_3D> partition_to_bins[3][3][3];
   std::vector<IDX_3D> dep_to_partitions[NUM_DEPS_BINS];
+  int num_deps;
 
   // --------------------------------------------------------------------
   // functions

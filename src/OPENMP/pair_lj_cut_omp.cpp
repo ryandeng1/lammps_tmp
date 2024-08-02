@@ -402,15 +402,14 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         const int * _noalias const numneigh = list->numneigh;
         const int * const * const firstneigh = list->firstneigh;
 
-        for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+        // for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+        for (int dep = 0; dep < atom_->num_deps; dep++) {
             auto& partitions_at_dep = atom_->dep_to_partitions[dep];
 
-            /*
             std::set<int> idxs_touched_at_dep;
             std::map<int, std::array<int, 3>> idx_to_partition;
             std::map<int, int> idx_to_touched_neighbor;
             std::map<int, std::tuple<int, int, int>> idx_to_bin;
-            */
 
             cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
                 auto& partition = partitions_at_dep[d];
@@ -467,6 +466,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                                     f[j].x -= delx * fpair;
                                     f[j].y -= dely * fpair;
                                     f[j].z -= delz * fpair;
+
                                     /*
                                     if (idxs_touched_at_dep.find(j) != idxs_touched_at_dep.end() && idx_to_partition[j] != partition) {
                                         std::cout << "zoid num: " << zoid.num << " timestep: " << *num_eval << std::endl;

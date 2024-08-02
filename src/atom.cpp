@@ -2440,6 +2440,7 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
 }
 
 void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
+    assert(partition_to_dep.size() == 3 * 3 * 3);
     std::vector<int> special_bins = {10, 11, 12, 13};
     std::vector<int> special_bins2 = {34, 35, 36, 37};
 
@@ -2447,6 +2448,21 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
 
     // assign bin to left, right, middle??
     std::map<IDX_3D, IDX_3D> bin_to_partition;
+
+    int num_dims_split = 0;
+
+    double threshold = 8 * ALLEGRO_SLOPE;
+    std::vector<int> dims_not_split;
+    for (int dim = 0; dim < 3; dim++) {
+        double zoid_lo = zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower;
+        double zoid_hi = zoid.zoid.cuts[dim].upper + timestep * zoid.zoid.cuts[dim].slope_upper;
+        assert(zoid_hi - zoid_lo > 0);
+        if (zoid_hi - zoid_lo >= threshold) {
+            num_dims_split++;
+        } else {
+            dims_not_split.push_back(dim);
+        }
+    }
 
     for (int dim = 0; dim < 3; dim++) {
         double zoid_lo = zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower;
@@ -2496,61 +2512,83 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
                 assert(bin_val < 10);
             }
 
-            if (bin_vals_dim_vec.size() < 4) {
+            if (zoid.where[dim] == PBC) {
+                if (bin_val > (NUM_BINS - 6) / 2) {
+                    bin_val -= (NUM_BINS - 6);
+                }
+            }
+
+            if (std::find(dims_not_split.begin(), dims_not_split.end(), dim) != dims_not_split.end()) {
                 bin_to_partition[bin][dim] = MIDDLE;
-            } else if (bin_val < bin_vals_dim_vec[other_middle_bin_num]) {
-                bin_to_partition[bin][dim] = LEFT;
-            } else if (bin_val > bin_vals_dim_vec[middle_bin_num]) {
-                bin_to_partition[bin][dim] = RIGHT;
+                assert(num_dims_split < 3);
             } else {
-                bin_to_partition[bin][dim] = MIDDLE;
+                if (bin_vals_dim_vec.size() < 4) {
+                    bin_to_partition[bin][dim] = MIDDLE;
+                } else if (bin_val < bin_vals_dim_vec[other_middle_bin_num]) {
+                    bin_to_partition[bin][dim] = LEFT;
+                } else if (bin_val > bin_vals_dim_vec[middle_bin_num]) {
+                    bin_to_partition[bin][dim] = RIGHT;
+                } else {
+                    bin_to_partition[bin][dim] = MIDDLE;
+                }
             }
         }
     }
 
+    std::set<IDX_3D> partitions;
     for (auto& [bin, partition] : bin_to_partition) {
         // partition_to_bins[partition].push_back(bin);
         partition_to_bins[partition[0]][partition[1]][partition[2]].push_back(bin);
+        partitions.insert(partition);
     }
 
-    std::map<std::array<int, 3>, int> partition_to_dep;
-    partition_to_dep[{LEFT, LEFT, LEFT}] = 0;
-    partition_to_dep[{LEFT, LEFT, RIGHT}] = 0;
-    partition_to_dep[{LEFT, RIGHT, LEFT}] = 0;
-    partition_to_dep[{RIGHT, LEFT, LEFT}] = 0;
-    partition_to_dep[{RIGHT, RIGHT, RIGHT}] = 0;
-    partition_to_dep[{RIGHT, RIGHT, LEFT}] = 0;
-    partition_to_dep[{RIGHT, LEFT, RIGHT}] = 0;
-    partition_to_dep[{LEFT, RIGHT, RIGHT}] = 0;
-
-    partition_to_dep[{LEFT, LEFT, MIDDLE}] = 1;
-    partition_to_dep[{LEFT, RIGHT, MIDDLE}] = 1;
-    partition_to_dep[{RIGHT, LEFT, MIDDLE}] = 1;
-    partition_to_dep[{RIGHT, RIGHT, MIDDLE}] = 1;
-
-    partition_to_dep[{LEFT, MIDDLE, LEFT}] = 2;
-    partition_to_dep[{LEFT, MIDDLE, RIGHT}] = 2;
-    partition_to_dep[{RIGHT, MIDDLE, LEFT}] = 2;
-    partition_to_dep[{RIGHT, MIDDLE, RIGHT}] = 2;
-
-    partition_to_dep[{MIDDLE, LEFT, LEFT}] = 3;
-    partition_to_dep[{MIDDLE, LEFT, RIGHT}] = 3;
-    partition_to_dep[{MIDDLE, RIGHT, LEFT}] = 3;
-    partition_to_dep[{MIDDLE, RIGHT, RIGHT}] = 3;
-
-    partition_to_dep[{MIDDLE, MIDDLE, LEFT}] = 4;
-    partition_to_dep[{MIDDLE, MIDDLE, RIGHT}] = 4;
-
-    partition_to_dep[{MIDDLE, LEFT, MIDDLE}] = 5;
-    partition_to_dep[{MIDDLE, RIGHT, MIDDLE}] = 5;
-
-    partition_to_dep[{LEFT, MIDDLE, MIDDLE}] = 6;
-    partition_to_dep[{RIGHT, MIDDLE, MIDDLE}] = 6;
-
-    partition_to_dep[{MIDDLE, MIDDLE, MIDDLE}] = 7;
-
-    for (auto& [partition, dep] : partition_to_dep) {
-        dep_to_partitions[dep].push_back(partition);
+    if (dims_not_split.size() == 0) {
+        // didn't split any dims
+        for (auto& [partition, dep] : partition_to_dep) {
+            dep_to_partitions[dep].push_back(partition);
+        }
+        num_deps = NUM_DEPS_BINS;
+    } else {
+        if (dims_not_split.size() == 3) {
+            for (auto& partition: partitions) {
+                dep_to_partitions[0].push_back(partition);
+            }
+            num_deps = 1;
+        } else if (dims_not_split.size() == 2) {
+            for (auto& partition: partitions) {
+                int num_middle = 0;
+                num_middle += (partition[0] == MIDDLE) + (partition[1] == MIDDLE) + (partition[2] == MIDDLE);
+                if (num_middle == 3) {
+                    dep_to_partitions[1].push_back(partition);
+                } else {
+                    assert(num_middle == 2);
+                    dep_to_partitions[0].push_back(partition);
+                }
+            }
+            num_deps = 2;
+        } else {
+            int dim_not_split = dims_not_split[0];
+            for (auto& partition: partitions) {
+                int num_middle = 0;
+                num_middle += (partition[0] == MIDDLE) + (partition[1] == MIDDLE) + (partition[2] == MIDDLE);
+                if (num_middle == 0) {
+                    assert(false);
+                } else if (num_middle == 1 && partition[dim_not_split] == MIDDLE) {
+                    dep_to_partitions[0].push_back(partition);
+                } else if (num_middle == 2) {
+                    if (partition[(dim_not_split + 1) % 3] == MIDDLE) {
+                        dep_to_partitions[1].push_back(partition);
+                    } else {
+                        dep_to_partitions[2].push_back(partition);
+                    }
+                } else if (num_middle == 3) {
+                    dep_to_partitions[3].push_back(partition);
+                } else {
+                    assert(false);
+                }
+            }
+            num_deps = 4;
+        }
     }
 
     /*

@@ -313,7 +313,7 @@ void BondFENEOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* ca
         auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
         double ebond = 0.0;
 
-        for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+        for (int dep = 0; dep < atom_->num_deps; dep++) {
             auto &partitions_at_dep = atom_->dep_to_partitions[dep];
             cilk_for (int i = 0; i < partitions_at_dep.size(); i++) {
                 auto &partition = partitions_at_dep[i];

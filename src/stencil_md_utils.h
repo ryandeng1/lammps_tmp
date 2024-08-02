@@ -138,6 +138,43 @@ constexpr bool PAIR_USE_BINS = true;
 
 using IDX_3D = std::array<int, 3>;
 
+const std::map<IDX_3D, int> partition_to_dep = {
+        {{LEFT,   LEFT,   LEFT},   0},
+        {{LEFT,   LEFT,   RIGHT},  0},
+        {{LEFT,   RIGHT,  LEFT},   0},
+        {{RIGHT,  LEFT,   LEFT},   0},
+        {{RIGHT,  RIGHT,  RIGHT},  0},
+        {{RIGHT,  RIGHT,  LEFT},   0},
+        {{RIGHT,  LEFT,   RIGHT},  0},
+        {{LEFT,   RIGHT,  RIGHT},  0},
+
+        {{LEFT,   LEFT,   MIDDLE}, 1},
+        {{LEFT,   RIGHT,  MIDDLE}, 1},
+        {{RIGHT,  LEFT,   MIDDLE}, 1},
+        {{RIGHT,  RIGHT,  MIDDLE}, 1},
+
+        {{LEFT,   MIDDLE, LEFT},   2},
+        {{LEFT,   MIDDLE, RIGHT},  2},
+        {{RIGHT,  MIDDLE, LEFT},   2},
+        {{RIGHT,  MIDDLE, RIGHT},  2},
+
+        {{MIDDLE, LEFT,   LEFT},   3},
+        {{MIDDLE, LEFT,   RIGHT},  3},
+        {{MIDDLE, RIGHT,  LEFT},   3},
+        {{MIDDLE, RIGHT,  RIGHT},  3},
+
+        {{MIDDLE, MIDDLE, LEFT},   4},
+        {{MIDDLE, MIDDLE, RIGHT},  4},
+
+        {{MIDDLE, LEFT,   MIDDLE}, 5},
+        {{MIDDLE, RIGHT,  MIDDLE}, 5},
+
+        {{LEFT,   MIDDLE, MIDDLE}, 6},
+        {{RIGHT,  MIDDLE, MIDDLE}, 6},
+
+        {{MIDDLE, MIDDLE, MIDDLE}, 7},
+};
+
 const std::map<IDX_3D, int> zoid_to_num_map = {
         {{LEFT,  LEFT,  LEFT},  0},
         {{RIGHT, RIGHT, RIGHT}, 1},
