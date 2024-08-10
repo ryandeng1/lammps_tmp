@@ -3065,6 +3065,148 @@ void CommBrick::send_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
     }
 }
 
+void CommBrick::recv_vel_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
+                                         queue_info& zoid, int start_timestep, int end_timestep) {
+    int zoid_num = zoid.num;
+    auto &recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+
+    // TODO: parallelize
+    cilk_for (int i = 0; i < recv_from.size(); i++) {
+        int recv_zoid_num = recv_from[i];
+        auto& recv_zoid = curr_dt ? lmp->zoid_num_to_zoid[recv_zoid_num] : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+        auto& other_atom_arr = lmp->atom_stencil_md[recv_zoid_num];
+
+        auto& send_to = curr_dt ? lmp->send_to_neighbors[recv_zoid_num] : lmp->send_to_neighbors_next_dt[recv_zoid_num];
+        auto it = std::find(send_to.begin(), send_to.end(), zoid_num);
+        assert(it != send_to.end());
+        int send_idx = -1;
+        send_idx = std::distance(send_to.begin(), it);
+        assert(send_idx != -1);
+
+        // calculate pbc flags
+        cilk_for (int t = start_timestep; t < end_timestep; t++) {
+            Atom* atom_;
+            if (curr_dt) {
+                atom_ = atom_arr[t];
+            } else {
+                atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+            }
+
+            Atom* other_atom;
+            if (curr_dt) {
+                other_atom = other_atom_arr[t];
+            } else {
+                other_atom = other_atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+            }
+
+            const dbl3_t_stencil_md* _noalias const send_v = (dbl3_t_stencil_md*) other_atom->v[0];
+
+            atom_->avec->recv_vel_bins_stencil_md(recv_zoid.bin_to_idx[t], recv_zoid.bin_to_size[t],
+                                                  zoid.bin_to_idx[t], zoid.bin_to_size[t],
+                                                  recv_zoid.send_vel_num_bins[t][send_idx], recv_zoid.send_vel_bins[t][send_idx],
+                                                  zoid.recv_vel_num_bins[t][i], zoid.recv_vel_bins[t][i],
+                                                  other_atom->tag, send_v);
+        }
+    }
+}
+
+void CommBrick::recv_pos_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
+                                         queue_info& zoid, int start_timestep, int end_timestep) {
+    int zoid_num = zoid.num;
+    auto &recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+
+    // TODO: parallelize
+    cilk_for (int i = 0; i < recv_from.size(); i++) {
+        int recv_zoid_num = recv_from[i];
+        auto& recv_zoid = curr_dt ? lmp->zoid_num_to_zoid[recv_zoid_num] : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+        auto& other_atom_arr = lmp->atom_stencil_md[recv_zoid_num];
+
+        auto& send_to = curr_dt ? lmp->send_to_neighbors[recv_zoid_num] : lmp->send_to_neighbors_next_dt[recv_zoid_num];
+        auto it = std::find(send_to.begin(), send_to.end(), zoid_num);
+        assert(it != send_to.end());
+        int send_idx = -1;
+        send_idx = std::distance(send_to.begin(), it);
+        assert(send_idx != -1);
+
+        // calculate pbc flags
+        cilk_for (int t = start_timestep; t < end_timestep; t++) {
+            Atom* atom_;
+            if (curr_dt) {
+                atom_ = atom_arr[t];
+            } else {
+                atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+            }
+
+            Atom* other_atom;
+            if (curr_dt) {
+                other_atom = other_atom_arr[t];
+            } else {
+                other_atom = other_atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+            }
+
+            int pbc_flag_[3] = {0};
+            for (int dim = 0; dim < 3; dim++) {
+                if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+
+                if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+            }
+
+            const dbl3_t_stencil_md* _noalias const send_x = (dbl3_t_stencil_md*) other_atom->x[0];
+
+            atom_->avec->recv_pos_bins_stencil_md(recv_zoid.bin_to_idx[t], recv_zoid.bin_to_size[t],
+                                                  zoid.bin_to_idx[t], zoid.bin_to_size[t],
+                                                  recv_zoid.send_pos_num_bins[t][send_idx], recv_zoid.send_pos_bins[t][send_idx],
+                                                  zoid.recv_pos_num_bins[t][i], zoid.recv_pos_bins[t][i],
+                                                  other_atom->tag, send_x, pbc_flag_);
+        }
+    }
+}
+
+void CommBrick::recv_force_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
+                                           queue_info& zoid, int start_timestep, int end_timestep) {
+    int zoid_num = zoid.num;
+    auto &recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+
+    // TODO: parallelize
+    for (int i = 0; i < recv_from.size(); i++) {
+        int recv_zoid_num = recv_from[i];
+        auto& recv_zoid = curr_dt ? lmp->zoid_num_to_zoid[recv_zoid_num] : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+        auto& other_atom_arr = lmp->atom_stencil_md[recv_zoid_num];
+
+        auto& send_to = curr_dt ? lmp->send_to_neighbors[recv_zoid_num] : lmp->send_to_neighbors_next_dt[recv_zoid_num];
+        auto it = std::find(send_to.begin(), send_to.end(), zoid_num);
+        assert(it != send_to.end());
+        int send_idx = -1;
+        send_idx = std::distance(send_to.begin(), it);
+        assert(send_idx != -1);
+
+        // calculate pbc flags
+        cilk_for (int t = start_timestep; t < end_timestep; t++) {
+            Atom* atom_;
+            if (curr_dt) {
+                atom_ = atom_arr[t];
+            } else {
+                atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+            }
+
+            Atom* other_atom;
+            if (curr_dt) {
+                other_atom = other_atom_arr[t];
+            } else {
+                other_atom = other_atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+            }
+
+            const dbl3_t_stencil_md* _noalias const send_f = (dbl3_t_stencil_md*) other_atom->eval_f_stencil_md[0];
+
+            atom_->avec->recv_force_bins_stencil_md(recv_zoid.bin_to_idx[t], recv_zoid.bin_to_size[t],
+                                                    zoid.bin_to_idx[t], zoid.bin_to_size[t],
+                                                    recv_zoid.send_force_num_bins[t][send_idx], recv_zoid.send_force_bins[t][send_idx],
+                                                    zoid.recv_force_num_bins[t][i], zoid.recv_force_bins[t][i],
+                                                    other_atom->tag, send_f);
+        }
+    }
+}
+
 void CommBrick::recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
                                           queue_info& zoid, int start_timestep, int end_timestep) {
     int zoid_num = zoid.num;

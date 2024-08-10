@@ -1799,16 +1799,20 @@ void StencilMD::post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* mo
 
     assert(n_post_force == 1);
 
-    auto fix_post_force = (FixLangevin*) modify_->fix[modify_->list_post_force[0]];
+    // auto fix_post_force = (FixLangevin*) modify_->fix[modify_->list_post_force[0]];
+    auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
 
     auto gfactor1 = fix_post_force->gfactor1;
     auto gfactor2 = fix_post_force->gfactor2;
-    fix_post_force->compute_target();
+    // fix_post_force->compute_target();
     auto tsqrt = fix_post_force->tsqrt;
 
     auto& local_idxs = atom_->bin_to_local_idxs[bin];
+    int start = local_idxs[0];
     for (int i = 0; i < local_idxs.size(); i++) {
-        int idx = local_idxs[i];
+        int idx = start + i;
+        // int idx = local_idxs[i];
+        assert(idx == local_idxs[i]);
         // these are per-atom variables that get updated. Need to put them here to avoid races.
         // double fdrag[3],fran[3];
         dbl3_t_stencil_md fdrag, fran;

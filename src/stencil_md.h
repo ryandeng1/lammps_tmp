@@ -221,7 +221,6 @@ public:
 
                                     /*
                                     if (idxs_touched_at_dep.find(j) != idxs_touched_at_dep.end() && idx_to_partition[j] != partition) {
-                                        std::cout << "zoid num: " << zoid.num << " timestep: " << timestep << std::endl;
                                         std::cout << "curr pos: " << x[j].x << " " << x[j].y << " " << x[j].z << std::endl;
                                         std::cout << "neighbor pos: " << x[i].x << " " << x[i].y << " " << x[i].z << std::endl;
                                         int other_neighbor_idx = idx_to_touched_neighbor[j];
@@ -325,6 +324,30 @@ public:
                                 f[i2].x -= delx * fbond;
                                 f[i2].y -= dely * fbond;
                                 f[i2].z -= delz * fbond;
+
+                                /*
+                                if (idxs_touched_at_dep.find(i2) != idxs_touched_at_dep.end() && idx_to_partition[i2] != partition) {
+                                    std::cout << "curr pos: " << x[i2].x << " " << x[i2].y << " " << x[i2].z << std::endl;
+                                    std::cout << "neighbor pos: " << x[i].x << " " << x[i].y << " " << x[i].z << std::endl;
+                                    int other_neighbor_idx = idx_to_touched_neighbor[i2];
+                                    std::map<int, std::string> m;
+                                    m[LEFT] = "LEFT";
+                                    m[RIGHT] = "RIGHT";
+                                    m[MIDDLE] = "MIDDLE";
+                                    std::cout << "other neighbor pos: " << x[other_neighbor_idx].x << " " << x[other_neighbor_idx].y << " " << x[other_neighbor_idx].z << std::endl;
+                                    std::cout << "curr partition: " << m[partition[0]] << " " << m[partition[1]] << " " << m[partition[2]] << std::endl;
+                                    std::cout << "other partition: " << m[idx_to_partition[i2][0]] << " " << m[idx_to_partition[i2][1]] << " " << m[idx_to_partition[i2][2]] << std::endl;
+                                    std::cout << "curr bin: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << std::endl;
+                                    std::cout << "other bin: " << std::get<0>(idx_to_bin[i2]) << " " << std::get<1>(idx_to_bin[i2]) << " " << std::get<2>(idx_to_bin[i2]) << std::endl;
+                                    std::cout << "curr idx: " << i2 << " nlocal: " << nlocal << std::endl;
+                                    assert(false);
+                                }
+
+                                idxs_touched_at_dep.insert(i2);
+                                idx_to_partition[i2] = partition;
+                                idx_to_bin[i2] = bin;
+                                idx_to_touched_neighbor[i2] = i;
+                                */
                             }
                         }
 

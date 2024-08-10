@@ -99,6 +99,16 @@ class Comm : protected Pointers {
   virtual void send_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
                                          queue_info&, int start_timestep, int end_timestep) { assert(false); }
 
+
+  virtual void recv_pos_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                        queue_info&, int start_timestep, int end_timestep) { assert(false); }
+
+  virtual void recv_vel_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                        queue_info&, int start_timestep, int end_timestep) { assert(false); }
+
+  virtual void recv_force_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                          queue_info&, int start_timestep, int end_timestep) { assert(false); }
+
   virtual void recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
                                          queue_info&, int start_timestep, int end_timestep) { assert(false); }
 
