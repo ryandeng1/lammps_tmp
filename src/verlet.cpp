@@ -6113,6 +6113,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             stencilMD->COMPARE_POS_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_next_timestep, zoid, test_x);
         }
 
+        int nall = atom_->nlocal + atom_->nghost;
+        memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
+        memset(&atom_->eval_f_stencil_md[0][0], 0, (atom_->nlocal) * 3 * sizeof(double));
+
         if (n_pre_force) {
             // auto begin_m = std::chrono::high_resolution_clock::now();
             // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
@@ -6181,7 +6185,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
             // stencilMD->fuse_force_computation<curr_dt>(zoid, t + 1);
             // stencilMD->fuse_force_computation<curr_dt>(zoid, t);
-            stencilMD->fuse_force_computation<curr_dt>(atom_, atom_next_timestep, neigh_next_timestep, next_force);
+            stencilMD->fuse_force_computation<curr_dt>(atom_next_timestep, neigh_next_timestep, next_force);
         }
 
         // reverse communication of forces
@@ -6248,8 +6252,8 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                                           std::vector<MPI_Request> *send_requests, std::vector<MPI_Request>& receive_requests,
                                           std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
                                           double **test_f, double **test_x, int pipeline_stage) {
-    auto& recv_neighbor_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
     if (comm->nprocs != 1) {
+        auto& recv_neighbor_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
         if (dep > 0) {
             auto begin = std::chrono::high_resolution_clock::now();
             auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
@@ -7054,9 +7058,12 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
 
     std::vector<MPI_Request> send_requests[NUM_ZOIDS];
     std::vector<MPI_Request> send_requests2[NUM_ZOIDS];
-    for (int zoid_num = comm->me; zoid_num < NUM_ZOIDS; zoid_num += comm->nprocs) {
-        send_requests[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
-        send_requests2[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
+
+    if (comm->nprocs != 1) {
+        for (int zoid_num = comm->me; zoid_num < NUM_ZOIDS; zoid_num += comm->nprocs) {
+            send_requests[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
+            send_requests2[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
+        }
     }
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -7104,26 +7111,31 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                           dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, 1);
     */
 
-    for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
-        if (send_requests[i].size() > 0) {
-            MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
-        }
-        if (send_requests2[i].size() > 0) {
-            MPI_Waitall(send_requests2[i].size(), send_requests2[i].data(), MPI_STATUSES_IGNORE);
+    if (comm->nprocs != 1) {
+        for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
+            if (send_requests[i].size() > 0) {
+                MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
+            }
+            if (send_requests2[i].size() > 0) {
+                MPI_Waitall(send_requests2[i].size(), send_requests2[i].data(), MPI_STATUSES_IGNORE);
+            }
         }
     }
 
     int memset_start = 0;
     int memset_end = NUM_TIMESTEPS_IN_PARALLEL;
 
+    /*
     cilk_for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
         cilk_for(int t = memset_start; t < memset_end; t++) {
             Atom *atom_ = curr_dt ? lmp->atom_stencil_md[i][t] : lmp->atom_stencil_md[i][NUM_TIMESTEPS_IN_PARALLEL - t];
             int nall = atom_->nlocal + atom_->nghost;
-            memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
-            memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
+            // memset(&atom_->f[0][0], 0, (nall) * 3 * sizeof(double));
+            // memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
+            memset(&atom_->eval_f_stencil_md[atom_->nlocal][0], 0, (atom_->nghost) * 3 * sizeof(double));
         }
     }
+    */
 }
 
 void Verlet::run_stencil_md_pipelined(int num_timesteps, std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,

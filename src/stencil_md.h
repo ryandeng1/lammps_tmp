@@ -101,7 +101,8 @@ public:
     void post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_);
 
     template <bool curr_dt>
-    void fuse_force_computation(Atom* curr, Atom* next, Neighbor* neigh_next, Force* next_force) {
+    void fuse_force_computation(Atom* next, Neighbor* neigh_next, Force* next_force) {
+        memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
 //        int zoid_num = zoid.num;
 //        auto& atom_arr = lmp->atom_stencil_md[zoid_num];
 //        Atom* curr = curr_dt ? atom_arr[timestep] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];

@@ -2474,9 +2474,9 @@ void AtomVec::recv_data_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_s
                                             send_pos_num_bins, send_pos_bins, recv_pos_num_bins, recv_pos_bins,
                                             send_tag, send_x, pbc_flags);
 
-        cilk_spawn recv_vel_bins_stencil_md(send_bin_to_idx, send_bin_to_size, recv_bin_to_idx, recv_bin_to_size,
-                                            send_vel_num_bins, send_vel_bins, recv_vel_num_bins, recv_vel_bins,
-                                            send_tag, send_v);
+        recv_vel_bins_stencil_md(send_bin_to_idx, send_bin_to_size, recv_bin_to_idx, recv_bin_to_size,
+                                 send_vel_num_bins, send_vel_bins, recv_vel_num_bins, recv_vel_bins,
+                                 send_tag, send_v);
     }
 
     /*
