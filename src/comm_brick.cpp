@@ -3126,6 +3126,10 @@ void CommBrick::recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
                 << " num vel bins recv: " << zoid.recv_vel_num_bins[t][i] << std::endl;
             */
 
+            const dbl3_t_stencil_md* _noalias const send_f = (dbl3_t_stencil_md*) other_atom->eval_f_stencil_md[0];
+            const dbl3_t_stencil_md* _noalias const send_x = (dbl3_t_stencil_md*) other_atom->x[0];
+            const dbl3_t_stencil_md* _noalias const send_v = (dbl3_t_stencil_md*) other_atom->v[0];
+
             atom_->avec->recv_data_bins_stencil_md(recv_zoid.bin_to_idx[t], recv_zoid.bin_to_size[t],
                                                    zoid.bin_to_idx[t], zoid.bin_to_size[t],
                                                    recv_zoid.send_force_num_bins[t][send_idx], recv_zoid.send_force_bins[t][send_idx],
@@ -3134,7 +3138,7 @@ void CommBrick::recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
                                                    zoid.recv_force_num_bins[t][i], zoid.recv_force_bins[t][i],
                                                    zoid.recv_pos_num_bins[t][i], zoid.recv_pos_bins[t][i],
                                                    zoid.recv_vel_num_bins[t][i], zoid.recv_vel_bins[t][i],
-                                                   other_atom->tag, other_atom->eval_f_stencil_md, other_atom->x, other_atom->v, pbc_flag_
+                                                   other_atom->tag, send_f, send_x, send_v, pbc_flag_
             );
         }
     }

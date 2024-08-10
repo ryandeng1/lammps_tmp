@@ -93,7 +93,7 @@ constexpr int NUM_DEPS_BINS = 8;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 10;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 constexpr double ADDITIONAL_CUTOFF = 0.401;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
@@ -132,9 +132,11 @@ constexpr int NUM_PIPELINE_STAGES = 2;
 
 constexpr bool USE_ATOMICS = false;
 
-constexpr int NUM_BINS = 48;
+constexpr int NUM_BINS = 24;
 
 constexpr bool PAIR_USE_BINS = true;
+
+using dbl3_t_stencil_md = struct { double x,y,z; };
 
 using IDX_3D = std::array<int, 3>;
 
@@ -417,6 +419,9 @@ typedef struct cuts cuts_t;
 struct queue_info {
   int** bin_to_idx;
   int** bin_to_size;
+
+  int** bin_to_num_send_zoids;
+  int*** bin_to_send_zoids;
 
   int** send_force_num_bins;
   // std::tuple<int, int, int>*** send_force_bins;

@@ -29,6 +29,7 @@ PairStyleStencilMD(lj/cut, PairLJCut);
 namespace LAMMPS_NS {
 
 class PairLJCut : public Pair {
+ friend class StencilMD;
  public:
   PairLJCut(class LAMMPS *);
   PairLJCut(class LAMMPS *, class Modify *);

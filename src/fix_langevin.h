@@ -29,6 +29,8 @@ FixStyleStencilMD(langevin,FixLangevin);
 namespace LAMMPS_NS {
 
 class FixLangevin : public Fix {
+ friend class StencilMD;
+
  public:
   FixLangevin(class LAMMPS *, int, char **);
   FixLangevin(class LAMMPS *, class Modify*, int, char **);

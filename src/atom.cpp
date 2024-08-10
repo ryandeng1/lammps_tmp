@@ -2441,8 +2441,10 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
 
 void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
     assert(partition_to_dep.size() == 3 * 3 * 3);
-    std::vector<int> special_bins = {10, 11, 12, 13};
-    std::vector<int> special_bins2 = {34, 35, 36, 37};
+    // std::vector<int> special_bins = {10, 11, 12, 13};
+    // std::vector<int> special_bins2 = {34, 35, 36, 37};
+    std::vector<int> special_bins = {5, 6, 7};
+    std::vector<int> special_bins2 = {17, 18, 19};
 
     auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
 
@@ -2474,19 +2476,20 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
 
             // TODO: hardcoded here, needs to change something here
             if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
-                bin_val = 10;
+                bin_val = special_bins[0];
             } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
-                bin_val = 34 - 3;
-            } else if (bin_val > 13 && bin_val < 34) {
-                bin_val -= 3;
-            } else if (bin_val > 37) {
-                bin_val -= 6;
+                // bin_val = 34 - 3;
+                bin_val = special_bins2[0] - (special_bins.size() - 1);
+            } else if (bin_val > special_bins[special_bins.size() - 1] && bin_val < special_bins2[0]) {
+                bin_val -= (special_bins.size() - 1);
+            } else if (bin_val > special_bins2[special_bins2.size() - 1]) {
+                bin_val -= (special_bins.size() - 1 + special_bins2.size() - 1);
             } else {
-                assert(bin_val < 10);
+                assert(bin_val < special_bins[0]);
             }
             if (zoid.where[dim] == PBC) {
-                if (bin_val > (NUM_BINS - 6) / 2) {
-                    bin_val -= (NUM_BINS - 6);
+                if (bin_val > (NUM_BINS - (special_bins.size() - 1 + special_bins2.size()  - 1)) / 2) {
+                    bin_val -= (NUM_BINS - (special_bins.size() - 1 + special_bins2.size() - 1));
                 }
             }
             bin_vals_dim.insert(bin_val);
@@ -2499,22 +2502,21 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
         for (auto& [bin, idxs] : bin_to_local_idxs) {
             std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
             int bin_val = bin_vals[dim];
-            // TODO: hardcoded here, needs to change something here
             if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
-                bin_val = 10;
+                bin_val = special_bins[0];
             } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
-                bin_val = 34 - 3;
-            } else if (bin_val > 13 && bin_val < 34) {
-                bin_val -= 3;
-            } else if (bin_val > 37) {
-                bin_val -= 6;
+                // bin_val = 34 - 3;
+                bin_val = special_bins2[0] - (special_bins.size() - 1);
+            } else if (bin_val > special_bins[special_bins.size() - 1] && bin_val < special_bins2[0]) {
+                bin_val -= (special_bins.size() - 1);
+            } else if (bin_val > special_bins2[special_bins2.size() - 1]) {
+                bin_val -= (special_bins.size() - 1 + special_bins2.size() - 1);
             } else {
-                assert(bin_val < 10);
+                assert(bin_val < special_bins[0]);
             }
-
             if (zoid.where[dim] == PBC) {
-                if (bin_val > (NUM_BINS - 6) / 2) {
-                    bin_val -= (NUM_BINS - 6);
+                if (bin_val > (NUM_BINS - (special_bins.size() - 1 + special_bins2.size()  - 1)) / 2) {
+                    bin_val -= (NUM_BINS - (special_bins.size() - 1 + special_bins2.size() - 1));
                 }
             }
 

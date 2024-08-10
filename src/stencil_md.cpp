@@ -9,8 +9,10 @@
 #include "comm_brick.h"
 #include "domain.h"
 #include "accelerator_omp.h"
-#include "neigh_list.h"
 #include "modify.h"
+#include "fix_langevin.h"
+#include "bond_fene.h"
+#include "pair_lj_cut.h"
 #include <unordered_set>
 #include <sstream>
 
@@ -412,19 +414,25 @@ void StencilMD::INIT_ZOID_DATA() {
             queue_info& zoid = lmp->queues[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
                 int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
+                zoid.bin_to_num_send_zoids = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bin_to_send_zoids = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 zoid.bin_to_idx = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bin_to_size = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.bin_to_idx[t] = new int[num_bins_3d];
                     zoid.bin_to_size[t] = new int[num_bins_3d];
+
+                    zoid.bin_to_num_send_zoids[t] = new int[num_bins_3d];
+                    zoid.bin_to_send_zoids[t] = new int*[num_bins_3d];
+
                     for (int i = 0; i < num_bins_3d; i++) {
                         zoid.bin_to_idx[t][i] = -1;
                         zoid.bin_to_size[t][i] = -1;
+                        zoid.bin_to_num_send_zoids[t][i] = -1;
                     }
                 }
-                // memset(zoid.bin_to_idx, -1, num_bins_3d);
-                // memset(zoid.bin_to_size, -1, num_bins_3d);
 
                 zoid.send_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 // zoid.send_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -577,19 +585,25 @@ void StencilMD::INIT_ZOID_DATA() {
             queue_info& zoid = lmp->queues_next_dt[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
                 int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
+                zoid.bin_to_num_send_zoids = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bin_to_send_zoids = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 zoid.bin_to_idx = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bin_to_size = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.bin_to_idx[t] = new int[num_bins_3d];
                     zoid.bin_to_size[t] = new int[num_bins_3d];
+
+                    zoid.bin_to_num_send_zoids[t] = new int[num_bins_3d];
+                    zoid.bin_to_send_zoids[t] = new int*[num_bins_3d];
+
                     for (int i = 0; i < num_bins_3d; i++) {
                         zoid.bin_to_idx[t][i] = -1;
                         zoid.bin_to_size[t][i] = -1;
+                        zoid.bin_to_num_send_zoids[t][i] = -1;
                     }
                 }
-                // memset(zoid.bin_to_idx, -1, num_bins_3d);
-                // memset(zoid.bin_to_size, -1, num_bins_3d);
 
                 zoid.send_force_num_bins = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 // zoid.send_force_bins = new std::tuple<int, int, int>**[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -1692,4 +1706,131 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
 
     // assert(false);
     return bounds_at_timestep;
+}
+
+void StencilMD::initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping) {
+    auto * _noalias const x = (dbl3_t_stencil_md *) atom_->x[0];
+    auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
+    auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
+    auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
+    const auto * _noalias const f = (dbl3_t_stencil_md *) atom_->f[0];
+    const auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
+
+    const int * const mask = atom_->mask;
+    const int nlocal = atom_->nlocal;
+
+    const double * const mass = atom->mass;
+    const int * const type = atom_->type;
+
+    double dtv = update->dt;
+    double dtf = 0.5 * update->dt * force->ftm2v;
+
+    auto& local_idxs = atom_->bin_to_local_idxs[bin];
+    for (int i = 0; i < local_idxs.size(); i++) {
+        int idx = local_idxs[i];
+        if (mask[idx]) {
+            const double dtfm = dtf / mass[type[idx]];
+
+            v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
+            v[idx].y += dtfm * (f[idx].y + eval_f[idx].y);
+            v[idx].z += dtfm * (f[idx].z + eval_f[idx].z);
+
+            int next_idx = atom_idx_mapping[idx];
+            next_x[next_idx].x = x[idx].x + dtv * v[idx].x;
+            next_x[next_idx].y = x[idx].y + dtv * v[idx].y;
+            next_x[next_idx].z = x[idx].z + dtv * v[idx].z;
+            assert(atom_->tag[idx] == next->tag[next_idx]);
+            assert(next_idx != -1);
+
+            next_v[next_idx].x = v[idx].x;
+            next_v[next_idx].y = v[idx].y;
+            next_v[next_idx].z = v[idx].z;
+        }
+    }
+}
+
+void StencilMD::final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping) {
+    // update v of atoms in group
+
+    // auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
+    auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
+
+    const auto * _noalias const f = (dbl3_t_stencil_md *) next->f[0];
+    const auto * _noalias const eval_f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
+    const int * const mask = next->mask;
+    // const int nlocal = atom_->nlocal;
+    const int next_nlocal = next->nlocal;
+
+    const double * const mass = atom->mass;
+    const int * const type = next->type;
+
+    auto& local_idxs = next->bin_to_local_idxs[bin];
+
+    double dtf = 0.5 * update->dt * force->ftm2v;
+
+    for (int i = 0; i < local_idxs.size(); i++) {
+        int idx = local_idxs[i];
+        if (mask[idx]) {
+            const double dtfm = dtf / mass[type[i]];
+            next_v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
+            next_v[idx].y += dtfm * (f[idx].y + eval_f[idx].y);
+            next_v[idx].z += dtfm * (f[idx].z + eval_f[idx].z);
+        }
+    }
+}
+
+void StencilMD::post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_) {
+    auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
+    auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
+    // auto * _noalias const f = (dbl3_t *) atom_->v[0];
+    // double **v = atom_->v;
+    // double **f = atom_->eval_f_stencil_md;
+    // double *rmass = atom_->rmass;
+    int *type = atom_->type;
+    int *mask = atom_->mask;
+
+    int n_post_force = modify_->n_post_force;
+
+    assert(n_post_force == 1);
+
+    auto fix_post_force = (FixLangevin*) modify_->fix[modify_->list_post_force[0]];
+
+    auto gfactor1 = fix_post_force->gfactor1;
+    auto gfactor2 = fix_post_force->gfactor2;
+    fix_post_force->compute_target();
+    auto tsqrt = fix_post_force->tsqrt;
+
+    auto& local_idxs = atom_->bin_to_local_idxs[bin];
+    for (int i = 0; i < local_idxs.size(); i++) {
+        int idx = local_idxs[i];
+        // these are per-atom variables that get updated. Need to put them here to avoid races.
+        // double fdrag[3],fran[3];
+        dbl3_t_stencil_md fdrag, fran;
+        double gamma1, gamma2;
+
+        if (mask[idx]) {
+            gamma1 = gfactor1[type[idx]];
+            gamma2 = gfactor2[type[idx]] * tsqrt;
+
+            double rand_x = 0.6;
+            double rand_y = 0.6;
+            double rand_z = 0.6;
+            fran.x = gamma2*(rand_x-0.5);
+            fran.y = gamma2*(rand_y-0.5);
+            fran.z = gamma2*(rand_z-0.5);
+            /*
+            fran[0] = gamma2*(random->uniform()-0.5);
+            fran[1] = gamma2*(random->uniform()-0.5);
+            fran[2] = gamma2*(random->uniform()-0.5);
+            */
+
+            fdrag.x = gamma1*v[idx].x;
+            fdrag.y = gamma1*v[idx].y;
+            fdrag.z = gamma1*v[idx].z;
+
+            eval_f[idx].x += fdrag.x + fran.x;
+            eval_f[idx].y += fdrag.y + fran.y;
+            eval_f[idx].z += fdrag.z + fran.z;
+        }
+    }
 }

@@ -29,6 +29,7 @@ BondStyleStencilMD(fene, BondFENE);
 namespace LAMMPS_NS {
 
 class BondFENE : public Bond {
+ friend class StencilMD;
  public:
   BondFENE(class LAMMPS *_lmp) : Bond(_lmp) {}
   BondFENE(class LAMMPS *_lmp, class Modify* modify_) : BondFENE(_lmp) {}

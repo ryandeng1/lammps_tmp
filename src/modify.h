@@ -30,6 +30,8 @@ class Modify : protected Pointers {
   friend class Respa;
   friend class RespaOMP;
 
+  friend class StencilMD;
+
  public:
   int n_initial_integrate, n_post_integrate, n_pre_exchange;
   int n_pre_neighbor, n_post_neighbor;

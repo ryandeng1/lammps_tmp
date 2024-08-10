@@ -48,6 +48,8 @@ class Verlet : public Integrate {
 
   void construct_bin_to_idx(bool curr_dt, Atom*, queue_info& zoid, int);
 
+  void construct_bin_to_send_zoids(bool curr_dt, Atom*, queue_info& zoid, int);
+
   void sort_ghost_atoms_stencil_md(Atom*, Atom*, queue_info&, int);
   void group_ghost_atoms_stencil_md(Atom*, Atom*, queue_info&, int);
   void group_ghost_atoms_stencil_md_next_dt(Atom*, Atom*, queue_info&, int);

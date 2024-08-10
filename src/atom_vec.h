@@ -132,7 +132,26 @@ class AtomVec : protected Pointers {
                                          int recv_force_num_bins, IDX_3D* recv_force_bins,
                                          int recv_pos_num_bins, IDX_3D* recv_pos_bins,
                                          int recv_vel_num_bins, IDX_3D* recv_vel_bins,
-                                         tagint* send_tag, double** send_f, double** send_x, double** send_v, int* pbc_flags);
+                                         tagint* send_tag,
+                                         const dbl3_t_stencil_md* _noalias const send_f,
+                                         const dbl3_t_stencil_md* _noalias const send_x,
+                                         const dbl3_t_stencil_md* _noalias const send_v,
+                                         int* pbc_flags);
+
+  void recv_force_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size, int* recv_bin_to_idx, int* recv_bin_to_size,
+                                  int send_force_num_bins, IDX_3D* send_force_bins,
+                                  int recv_force_num_bins, IDX_3D* recv_force_bins,
+                                  tagint* send_tag, const dbl3_t_stencil_md* _noalias const send_f);
+
+  void recv_pos_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size, int* recv_bin_to_idx, int* recv_bin_to_size,
+                                int send_pos_num_bins, IDX_3D* send_pos_bins,
+                                int recv_pos_num_bins, IDX_3D* recv_pos_bins,
+                                tagint* send_tag, const dbl3_t_stencil_md* _noalias const send_x, int* pbc_flags);
+
+  void recv_vel_bins_stencil_md(int* send_bin_to_idx, int* send_bin_to_size, int* recv_bin_to_idx, int* recv_bin_to_size,
+                                int send_vel_num_bins, IDX_3D* send_vel_bins,
+                                int recv_vel_num_bins, IDX_3D* recv_vel_bins,
+                                tagint* send_tag, const dbl3_t_stencil_md* _noalias const send_v);
 
   virtual int pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs, int* total_num_elems_send_force, int* num_send_force, int** force_idx_list, int** force_size_list,
                                               int num_pos_segments, bool* segment_types, int* segment_idxs, int* segment_lengths,
