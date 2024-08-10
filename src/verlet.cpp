@@ -6180,7 +6180,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             }
 
             // stencilMD->fuse_force_computation<curr_dt>(zoid, t + 1);
-            stencilMD->fuse_force_computation<curr_dt>(zoid, t);
+            // stencilMD->fuse_force_computation<curr_dt>(zoid, t);
+            stencilMD->fuse_force_computation<curr_dt>(atom_, atom_next_timestep, neigh_next_timestep, next_force);
         }
 
         // reverse communication of forces
@@ -6206,7 +6207,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             }
             // modify->post_force(vflag);
 
-            stencilMD->fuse_post_force_stencil_md<curr_dt>(zoid, t);
+            // stencilMD->fuse_post_force_stencil_md<curr_dt>(zoid, t);
+            stencilMD->fuse_post_force_stencil_md<curr_dt>(atom_, atom_next_timestep, modify_);
         }
 
         auto begin_m2 = std::chrono::high_resolution_clock::now();

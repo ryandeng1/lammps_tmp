@@ -97,28 +97,28 @@ public:
     // typedef struct { double x,y,z; } dbl3_t;
 
     void initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping);
-    void final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping);
+    void final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next);
     void post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_);
 
     template <bool curr_dt>
-    void fuse_force_computation(queue_info& zoid, int timestep) {
-        int zoid_num = zoid.num;
-        auto& atom_arr = lmp->atom_stencil_md[zoid_num];
-        Atom* curr = curr_dt ? atom_arr[timestep] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];
-        Atom* next = curr_dt ? atom_arr[timestep + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
-        Neighbor* neigh_next = curr_dt ? lmp->neighbor_stencil_md[zoid_num][timestep + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][timestep + 1];
-        int* atom_idx_mapping = zoid.atom_idx_mapping[timestep];
-
-#ifdef LMP_OPENMP
-        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][timestep + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
-#else
-        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
-#endif
+    void fuse_force_computation(Atom* curr, Atom* next, Neighbor* neigh_next, Force* next_force) {
+//        int zoid_num = zoid.num;
+//        auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+//        Atom* curr = curr_dt ? atom_arr[timestep] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];
+//        Atom* next = curr_dt ? atom_arr[timestep + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
+//        Neighbor* neigh_next = curr_dt ? lmp->neighbor_stencil_md[zoid_num][timestep + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][timestep + 1];
+//        int* atom_idx_mapping = zoid.atom_idx_mapping[timestep];
+//
+//#ifdef LMP_OPENMP
+//        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][timestep + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
+//#else
+//        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
+//#endif
 
         // begin force computation, inline lj_cut and bond_fene
         assert(PURELY_LOCAL_POTENTIAL);
 
-        Force* next_force = curr_dt ? lmp->force_stencil_md[zoid_num][timestep + 1] : lmp->force_stencil_md_next_dt[zoid_num][timestep + 1];
+        // Force* next_force = curr_dt ? lmp->force_stencil_md[zoid_num][timestep + 1] : lmp->force_stencil_md_next_dt[zoid_num][timestep + 1];
 
         // const auto * _noalias const x = (dbl3_t_stencil_md *) atom_->x[0];
         // auto * _noalias const f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
@@ -163,7 +163,7 @@ public:
                 auto& bins = next->partition_to_bins[partition[0]][partition[1]][partition[2]];
                 for (int b = 0; b < bins.size(); b++) {
                     auto& bin = bins[b];
-                    auto &idxs = next->bin_to_local_idxs[bin];
+                    auto& idxs = next->bin_to_local_idxs[bin];
                     for (int idx = 0; idx < idxs.size(); idx++) {
                         int ii = idxs[idx];
                         assert(ii >= 0 && ii < nlocal);
@@ -257,9 +257,9 @@ public:
                         f[i].y += fytmp;
                         f[i].z += fztmp;
 
-                        auto &lst_bonds = neigh_next->atom_bondlist[i];
+                        auto& lst_bonds = neigh_next->atom_bondlist[i];
                         for (int j = 0; j < lst_bonds.size(); j++) {
-                            auto &bond_info = lst_bonds[j];
+                            auto& bond_info = lst_bonds[j];
                             int i2 = bond_info.first;
                             int type = bond_info.second;
 
@@ -324,18 +324,19 @@ public:
     }
 
     template <bool curr_dt>
-    void fuse_post_force_stencil_md(queue_info& zoid, int timestep) {
-        int zoid_num = zoid.num;
-        auto& atom_arr = lmp->atom_stencil_md[zoid_num];
-        Atom* curr = curr_dt ? atom_arr[timestep] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];
-        Atom* next = curr_dt ? atom_arr[timestep + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
-        int* atom_idx_mapping = zoid.atom_idx_mapping[timestep];
+    void fuse_post_force_stencil_md(Atom* curr, Atom* next, Modify* modify_) {
+        // int zoid_num = zoid.num;
+        // auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+        // Atom* curr = curr_dt ? atom_arr[timestep] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];
+        // Atom* next = curr_dt ? atom_arr[timestep + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
+        // int* atom_idx_mapping = zoid.atom_idx_mapping[timestep];
 
-#ifdef LMP_OPENMP
-        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][timestep + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
-#else
-        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
-#endif
+
+//#ifdef LMP_OPENMP
+//        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][timestep + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
+//#else
+//        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
+//#endif
 
         for (int dep = 0; dep < next->num_deps; dep++) {
             auto& partitions_at_dep = next->dep_to_partitions[dep];
@@ -346,7 +347,7 @@ public:
                 for (int b = 0; b < bins.size(); b++) {
                     auto& bin = bins[b];
                     post_force_stencil_md(bin, next, modify_);
-                    final_integrate_stencil_md(bin, curr, next, atom_idx_mapping);
+                    final_integrate_stencil_md(bin, curr, next);
                     // send_vel_bin_stencil_md<curr_dt>(zoid, timestep + 1, bin);
                 }
             }

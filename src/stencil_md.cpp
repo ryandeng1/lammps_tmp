@@ -1749,7 +1749,7 @@ void StencilMD::initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Ato
     }
 }
 
-void StencilMD::final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping) {
+void StencilMD::final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next) {
     // update v of atoms in group
 
     // auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
