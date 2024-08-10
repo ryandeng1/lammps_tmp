@@ -165,8 +165,11 @@ public:
                 for (int b = 0; b < bins.size(); b++) {
                     auto& bin = bins[b];
                     auto& idxs = next->bin_to_local_idxs[bin];
+                    int start = idxs[0];
                     for (int idx = 0; idx < idxs.size(); idx++) {
-                        int ii = idxs[idx];
+                        // int ii = idxs[idx];
+                        int ii = start + idx;
+                        assert(ii == idxs[0] + idx);
                         assert(ii >= 0 && ii < nlocal);
                         const int i = ilist[ii];
                         assert(i == ii);
@@ -254,9 +257,9 @@ public:
                             }
                         }
 
-                        f[i].x += fxtmp;
-                        f[i].y += fytmp;
-                        f[i].z += fztmp;
+                        // f[i].x += fxtmp;
+                        // f[i].y += fytmp;
+                        // f[i].z += fztmp;
 
                         auto& lst_bonds = neigh_next->atom_bondlist[i];
                         for (int j = 0; j < lst_bonds.size(); j++) {
@@ -264,9 +267,12 @@ public:
                             int i2 = bond_info.first;
                             int type = bond_info.second;
 
-                            double delx = x[i].x - x[i2].x;
-                            double dely = x[i].y - x[i2].y;
-                            double delz = x[i].z - x[i2].z;
+                            // double delx = x[i].x - x[i2].x;
+                            // double dely = x[i].y - x[i2].y;
+                            // double delz = x[i].z - x[i2].z;
+                            double delx = xtmp - x[i2].x;
+                            double dely = ytmp - x[i2].y;
+                            double delz = ztmp - x[i2].z;
 
                             double rsq = delx * delx + dely * dely + delz * delz;
                             double r0sq = r0[type] * r0[type];
@@ -307,9 +313,12 @@ public:
                             // apply force to each of 2 atoms
 
                             if (newton_pair || i < nlocal) {
-                                f[i].x += delx * fbond;
-                                f[i].y += dely * fbond;
-                                f[i].z += delz * fbond;
+                                // f[i].x += delx * fbond;
+                                // f[i].y += dely * fbond;
+                                // f[i].z += delz * fbond;
+                                fxtmp += delx * fbond;
+                                fytmp += dely * fbond;
+                                fztmp += delz * fbond;
                             }
 
                             if (newton_pair || i2 < nlocal) {
@@ -318,6 +327,10 @@ public:
                                 f[i2].z -= delz * fbond;
                             }
                         }
+
+                        f[i].x += fxtmp;
+                        f[i].y += fytmp;
+                        f[i].z += fztmp;
                     }
                 }
             }
