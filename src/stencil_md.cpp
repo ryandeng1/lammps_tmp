@@ -1726,8 +1726,11 @@ void StencilMD::initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Ato
     double dtf = 0.5 * update->dt * force->ftm2v;
 
     auto& local_idxs = atom_->bin_to_local_idxs[bin];
+    int start = local_idxs[0];
     for (int i = 0; i < local_idxs.size(); i++) {
-        int idx = local_idxs[i];
+        // int idx = local_idxs[i];
+        int idx = start + i;
+        assert(local_idxs[i] == start + i);
         if (mask[idx]) {
             const double dtfm = dtf / mass[type[idx]];
 
@@ -1765,11 +1768,14 @@ void StencilMD::final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom*
     const int * const type = next->type;
 
     auto& local_idxs = next->bin_to_local_idxs[bin];
+    int start = local_idxs[0];
 
     double dtf = 0.5 * update->dt * force->ftm2v;
 
     for (int i = 0; i < local_idxs.size(); i++) {
-        int idx = local_idxs[i];
+        // int idx = local_idxs[i];
+        int idx = start + i;
+        assert(idx == local_idxs[i]);
         if (mask[idx]) {
             const double dtfm = dtf / mass[type[i]];
             next_v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
