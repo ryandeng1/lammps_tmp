@@ -130,6 +130,7 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
             if (mask[i] & groupbit) {
                 const double dtfm = dtf / mass[type[i]];
 
+                /*
                 v[i].x += dtfm * (f[i].x + eval_f[i].x);
                 v[i].y += dtfm * (f[i].y + eval_f[i].y);
                 v[i].z += dtfm * (f[i].z + eval_f[i].z);
@@ -144,6 +145,18 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
                 next_v[next_idx].x = v[i].x;
                 next_v[next_idx].y = v[i].y;
                 next_v[next_idx].z = v[i].z;
+                */
+
+                int next_idx = atom_idx_mapping[i];
+                next_v[next_idx].x = v[i].x + dtfm * (f[i].x + eval_f[i].x);
+                next_v[next_idx].y = v[i].y + dtfm * (f[i].z + eval_f[i].y);
+                next_v[next_idx].z = v[i].z + dtfm * (f[i].y + eval_f[i].z);
+
+                next_x[next_idx].x = x[i].x + dtv * next_v[next_idx].x;
+                next_x[next_idx].y = x[i].y + dtv * next_v[next_idx].y;
+                next_x[next_idx].z = x[i].z + dtv * next_v[next_idx].z;
+                assert(atom_->tag[i] == next->tag[next_idx]);
+                assert(next_idx != -1);
             }
         }
     }
