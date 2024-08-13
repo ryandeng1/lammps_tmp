@@ -293,6 +293,7 @@ class Atom : protected Pointers {
   std::map<IDX_3D, std::vector<int>> bin_to_local_idxs;
   std::vector<IDX_3D> local_bins;
   std::vector<std::vector<int>> local_bins_idxs;
+  std::map<IDX_3D, int> bin_to_local_bins_idx;
 
   std::vector<double> local_dtfm;
 

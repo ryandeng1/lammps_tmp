@@ -2429,6 +2429,10 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         local_bins_idxs.push_back(bin_to_local_idxs[local_bins[i]]);
     }
 
+    for (int i = 0; i < local_bins.size(); i++) {
+        bin_to_local_bins_idx[local_bins[i]] = i;
+    }
+
     // sanity check that current = permute
 
     int flag = 0;
@@ -2450,8 +2454,10 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
     assert(partition_to_dep.size() == 3 * 3 * 3);
     // std::vector<int> special_bins = {10, 11, 12, 13};
     // std::vector<int> special_bins2 = {34, 35, 36, 37};
-    std::vector<int> special_bins = {5, 6, 7};
-    std::vector<int> special_bins2 = {17, 18, 19};
+    // std::vector<int> special_bins = {5, 6, 7};
+    // std::vector<int> special_bins2 = {17, 18, 19};
+    std::vector<int> special_bins = {-1};
+    std::vector<int> special_bins2 = {-1};
 
     auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
 
@@ -2597,6 +2603,18 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
                 }
             }
             num_deps = 4;
+        }
+    }
+
+    if (SORT_BINS_BASED_ON_LOCAL_IDX) {
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                for (int k = 0; k < 3; k++) {
+                    std::sort(partition_to_bins[i][j][k].begin(), partition_to_bins[i][j][k].end(), [&](const auto& bin_lhs, const auto& bin_rhs) {
+                        return bin_to_local_idxs[bin_lhs][0] < bin_to_local_idxs[bin_rhs][0];
+                    });
+                }
+            }
         }
     }
 

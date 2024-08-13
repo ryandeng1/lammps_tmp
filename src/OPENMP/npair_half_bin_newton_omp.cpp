@@ -385,10 +385,16 @@ void NPairHalfBinNewtonOmp::build_stencil_md(NeighList *list, Atom* atom_, Domai
             */
 
             if (j < nlocal) {
-                if (x[j][2] < ztmp) continue;
-                if (x[j][2] == ztmp) {
-                    if (x[j][1] < ytmp) continue;
-                    if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
+                if (SORT_BINS_BASED_ON_LOCAL_IDX) {
+                    if (j < i) {
+                        continue;
+                    }
+                } else {
+                    if (x[j][2] < ztmp) continue;
+                    if (x[j][2] == ztmp) {
+                        if (x[j][1] < ytmp) continue;
+                        if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
+                    }
                 }
             }
 
@@ -483,10 +489,16 @@ void NPairHalfBinNewtonOmp::build_stencil_md(NeighList *list, Atom* atom_, Domai
                 }
                 // add an edge if the ghost atom is ghost in a shrinking dimension
                 if (j < nlocal) {
-                    if (x[j][2] < ztmp) continue;
-                    if (x[j][2] == ztmp) {
-                        if (x[j][1] < ytmp) continue;
-                        if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
+                    if (SORT_BINS_BASED_ON_LOCAL_IDX) {
+                        if (j < i) {
+                            continue;
+                        }
+                    } else {
+                        if (x[j][2] < ztmp) continue;
+                        if (x[j][2] == ztmp) {
+                            if (x[j][1] < ytmp) continue;
+                            if (x[j][1] == ytmp && x[j][0] < xtmp) continue;
+                        }
                     }
                 }
 

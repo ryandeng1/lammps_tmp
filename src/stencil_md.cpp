@@ -1652,6 +1652,20 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
     auto& bounds_at_timestep = curr_dt ? bounds[timestep] : bounds[NUM_TIMESTEPS_IN_PARALLEL - timestep];
 
     if (bounds_at_timestep.size() > 0) {
+        /*
+        std::stringstream s;
+        for (auto& b : bounds_at_timestep) {
+            s << b << " ";
+        }
+        std::stringstream s2;
+        for (int i = 1; i < bounds_at_timestep.size(); i++) {
+            s2 << bounds_at_timestep[i] - bounds_at_timestep[i - 1] << " ";
+        }
+        std::cout << "num bounds: " << bounds_at_timestep.size() << std::endl;
+        std::cout << "bounds: " << s.str() << std::endl;
+        std::cout << "diffs: " << s2.str() << std::endl;
+        assert(false);
+        */
         return bounds_at_timestep;
     }
 
@@ -1842,98 +1856,6 @@ void StencilMD::initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Ato
             eval_f[idx].x = 0.0;
             eval_f[idx].y = 0.0;
             eval_f[idx].z = 0.0;
-        }
-    }
-}
-
-void StencilMD::final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next) {
-    // update v of atoms in group
-
-    // auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
-    auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
-
-    const auto * _noalias const f = (dbl3_t_stencil_md *) next->f[0];
-    const auto * _noalias const eval_f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
-    const int * const mask = next->mask;
-    // const int nlocal = atom_->nlocal;
-    const int next_nlocal = next->nlocal;
-
-    const double * const mass = atom->mass;
-    const int * const type = next->type;
-
-    auto& local_idxs = next->bin_to_local_idxs[bin];
-    int start = local_idxs[0];
-
-    double dtf = 0.5 * update->dt * force->ftm2v;
-
-    for (int i = 0; i < local_idxs.size(); i++) {
-        // int idx = local_idxs[i];
-        int idx = start + i;
-        assert(idx == local_idxs[i]);
-        if (mask[idx]) {
-            // const double dtfm = dtf / mass[type[i]];
-            const double dtfm = next->local_dtfm[i];
-            next_v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
-            next_v[idx].y += dtfm * (f[idx].y + eval_f[idx].y);
-            next_v[idx].z += dtfm * (f[idx].z + eval_f[idx].z);
-        }
-    }
-}
-
-void StencilMD::post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_) {
-    auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
-    auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
-
-    int *type = atom_->type;
-    int *mask = atom_->mask;
-
-    int n_post_force = modify_->n_post_force;
-
-    assert(n_post_force == 1);
-
-    // auto fix_post_force = (FixLangevin*) modify_->fix[modify_->list_post_force[0]];
-    auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
-
-    auto gfactor1 = fix_post_force->gfactor1;
-    auto gfactor2 = fix_post_force->gfactor2;
-    // fix_post_force->compute_target();
-    auto tsqrt = fix_post_force->tsqrt;
-
-    auto& local_idxs = atom_->bin_to_local_idxs[bin];
-    int start = local_idxs[0];
-    for (int i = 0; i < local_idxs.size(); i++) {
-        int idx = start + i;
-        // int idx = local_idxs[i];
-        assert(idx == local_idxs[i]);
-        // these are per-atom variables that get updated. Need to put them here to avoid races.
-        // double fdrag[3],fran[3];
-        dbl3_t_stencil_md fdrag, fran;
-        double gamma1, gamma2;
-
-        if (mask[idx]) {
-            gamma1 = gfactor1[type[idx]];
-            gamma2 = gfactor2[type[idx]] * tsqrt;
-
-            double rand_x = 0.6;
-            double rand_y = 0.6;
-            double rand_z = 0.6;
-            fran.x = gamma2*(rand_x-0.5);
-            fran.y = gamma2*(rand_y-0.5);
-            fran.z = gamma2*(rand_z-0.5);
-
-            /*
-            fran[0] = gamma2*(random->uniform()-0.5);
-            fran[1] = gamma2*(random->uniform()-0.5);
-            fran[2] = gamma2*(random->uniform()-0.5);
-            */
-
-            fdrag.x = gamma1*v[idx].x;
-            fdrag.y = gamma1*v[idx].y;
-            fdrag.z = gamma1*v[idx].z;
-
-            eval_f[idx].x += fdrag.x + fran.x;
-            eval_f[idx].y += fdrag.y + fran.y;
-            eval_f[idx].z += fdrag.z + fran.z;
         }
     }
 }

@@ -20,6 +20,7 @@
 #include "update.h"
 #include "error.h"
 #include "domain.h"
+#include "fix_langevin.h"
 
 namespace LAMMPS_NS {
 
@@ -98,8 +99,99 @@ public:
     // typedef struct { double x,y,z; } dbl3_t;
 
     void initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping);
-    void final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next);
-    void post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_);
+
+    inline void final_integrate_stencil_md(const IDX_3D& bin, Atom* next) {
+        // update v of atoms in group
+
+        // auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
+        auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
+
+        const auto * _noalias const f = (dbl3_t_stencil_md *) next->f[0];
+        const auto * _noalias const eval_f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
+        const int * const mask = next->mask;
+        // const int nlocal = atom_->nlocal;
+        const int next_nlocal = next->nlocal;
+
+        const double * const mass = atom->mass;
+        const int * const type = next->type;
+
+        auto& local_idxs = next->bin_to_local_idxs[bin];
+        int start = local_idxs[0];
+
+        double dtf = 0.5 * update->dt * force->ftm2v;
+
+        for (int i = 0; i < local_idxs.size(); i++) {
+            // int idx = local_idxs[i];
+            int idx = start + i;
+            assert(idx == local_idxs[i]);
+            if (mask[idx]) {
+                // const double dtfm = dtf / mass[type[i]];
+                const double dtfm = next->local_dtfm[i];
+                next_v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
+                next_v[idx].y += dtfm * (f[idx].y + eval_f[idx].y);
+                next_v[idx].z += dtfm * (f[idx].z + eval_f[idx].z);
+            }
+        }
+    }
+
+    inline void post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_) {
+        auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
+        auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
+
+        int *type = atom_->type;
+        int *mask = atom_->mask;
+
+        int n_post_force = modify_->n_post_force;
+
+        assert(n_post_force == 1);
+
+        // auto fix_post_force = (FixLangevin*) modify_->fix[modify_->list_post_force[0]];
+        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
+
+        auto gfactor1 = fix_post_force->gfactor1;
+        auto gfactor2 = fix_post_force->gfactor2;
+        // fix_post_force->compute_target();
+        auto tsqrt = fix_post_force->tsqrt;
+
+        auto& local_idxs = atom_->bin_to_local_idxs[bin];
+        int start = local_idxs[0];
+        for (int i = 0; i < local_idxs.size(); i++) {
+            int idx = start + i;
+            // int idx = local_idxs[i];
+            assert(idx == local_idxs[i]);
+            // these are per-atom variables that get updated. Need to put them here to avoid races.
+            // double fdrag[3],fran[3];
+            dbl3_t_stencil_md fdrag, fran;
+            double gamma1, gamma2;
+
+            if (mask[idx]) {
+                gamma1 = gfactor1[type[idx]];
+                gamma2 = gfactor2[type[idx]] * tsqrt;
+
+                double rand_x = 0.6;
+                double rand_y = 0.6;
+                double rand_z = 0.6;
+                fran.x = gamma2*(rand_x-0.5);
+                fran.y = gamma2*(rand_y-0.5);
+                fran.z = gamma2*(rand_z-0.5);
+
+                /*
+                fran[0] = gamma2*(random->uniform()-0.5);
+                fran[1] = gamma2*(random->uniform()-0.5);
+                fran[2] = gamma2*(random->uniform()-0.5);
+                */
+
+                fdrag.x = gamma1*v[idx].x;
+                fdrag.y = gamma1*v[idx].y;
+                fdrag.z = gamma1*v[idx].z;
+
+                eval_f[idx].x += fdrag.x + fran.x;
+                eval_f[idx].y += fdrag.y + fran.y;
+                eval_f[idx].z += fdrag.z + fran.z;
+            }
+        }
+
+    }
 
     template <bool curr_dt>
     void recv_pos_bins_stencil_md_helper(queue_info& zoid, int timestep, Atom* atom_) {
@@ -198,9 +290,6 @@ public:
             int recv_bin_idx = recv_bin_to_idx[bin_idx];
             int recv_size = recv_bin_to_size[bin_idx];
 
-            if (send_size == -1) {
-                std::cout << "zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << timestep << " bin: " << bin[0] << " " << bin[1] << " " << bin[2] << std::endl;
-            }
             assert(recv_bin_idx == start);
             assert(send_size != -1);
             assert(send_size == recv_size);
@@ -280,7 +369,7 @@ public:
     }
 
     template <bool curr_dt>
-    void fuse_force_computation(Atom* next, Neighbor* neigh_next, Force* next_force) {
+    void fuse_force_computation(queue_info& zoid, int timestep, Atom* next, Neighbor* neigh_next, Force* next_force, Modify* modify_) {
         memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
         for (int k = 0; k < next->nlocal + next->nghost; k++) {
             assert(fabs(next->eval_f_stencil_md[k][0]) < 1e-6);
@@ -298,6 +387,10 @@ public:
         auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
         const int * _noalias const type = next->type;
         const double * _noalias const special_lj = force->special_lj;
+
+        auto recv_bin_to_idx = zoid.bin_to_idx[timestep];
+        auto recv_bin_to_size = zoid.bin_to_size[timestep];
+        auto *_noalias const recv_f = (dbl3_t_stencil_md *) next->f[0];
 
         auto pair = (PairLJCut*) next_force->pair;
         auto bond = (BondFENE*) next_force->bond;
@@ -474,11 +567,13 @@ public:
             std::map<int, std::tuple<int, int, int>> idx_to_bin;
             */
 
-            cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
+            for (int d = 0; d < partitions_at_dep.size(); d++) {
                 auto& partition = partitions_at_dep[d];
                 auto& bins = next->partition_to_bins[partition[0]][partition[1]][partition[2]];
+
                 for (int b = 0; b < bins.size(); b++) {
                     auto& bin = bins[b];
+                    auto bin_idx = get_bin_idx(bin);
                     auto& idxs = next->bin_to_local_idxs[bin];
                     int start = idxs[0];
                     for (int idx = 0; idx < idxs.size(); idx++) {
@@ -670,6 +765,46 @@ public:
                         f[i].y += fytmp;
                         f[i].z += fztmp;
                     }
+
+                    /*
+                    post_force_stencil_md(bin, next, modify_);
+
+                    auto& recv_force_zoids = zoid.bin_to_force_comm[timestep][next->bin_to_local_bins_idx[bin]];
+                    for (int j = 0; j < recv_force_zoids.size(); j++) {
+                        int recv_zoid_num = recv_force_zoids[j];
+                        auto& recv_zoid = curr_dt ? lmp->zoid_num_to_zoid[recv_zoid_num]
+                                                  : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+                        Atom* other_atom = curr_dt ? lmp->atom_stencil_md[recv_zoid_num][timestep]
+                                                   : lmp->atom_stencil_md[recv_zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep];
+
+                        const auto *_noalias const send_f = (dbl3_t_stencil_md *) other_atom->eval_f_stencil_md[0];
+
+                        auto send_bin_to_idx = recv_zoid.bin_to_idx[timestep];
+                        auto send_bin_to_size = recv_zoid.bin_to_size[timestep];
+
+                        int send_bin_idx = send_bin_to_idx[bin_idx];
+                        int send_size = send_bin_to_size[bin_idx];
+
+                        int recv_bin_idx = recv_bin_to_idx[bin_idx];
+                        int recv_size = recv_bin_to_size[bin_idx];
+
+                        assert(send_size != -1);
+                        assert(send_size == recv_size);
+
+                        for (int h = 0; h < send_size; h++) {
+                            int send_idx = send_bin_idx + h;
+                            int recv_idx = recv_bin_idx + h;
+                            tagint src_tag = other_atom->tag[send_idx];
+                            tagint dst_tag = next->tag[recv_idx];
+                            assert(src_tag == dst_tag);
+                            recv_f[recv_idx].x += send_f[send_idx].x;
+                            recv_f[recv_idx].y += send_f[send_idx].y;
+                            recv_f[recv_idx].z += send_f[send_idx].z;
+                        }
+                    }
+
+                    final_integrate_stencil_md(bin, next);
+                    */
                 }
             }
         }
@@ -721,7 +856,7 @@ public:
             }
 
             post_force_stencil_md(bin, atom_, modify_);
-            final_integrate_stencil_md(bin, nullptr, atom_);
+            final_integrate_stencil_md(bin, atom_);
         }
     }
 };

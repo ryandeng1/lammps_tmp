@@ -93,7 +93,7 @@ constexpr int NUM_DEPS_BINS = 8;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 3;
 constexpr double ADDITIONAL_CUTOFF = 0.401;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
@@ -132,9 +132,11 @@ constexpr int NUM_PIPELINE_STAGES = 2;
 
 constexpr bool USE_ATOMICS = false;
 
-constexpr int NUM_BINS = 24;
+constexpr int NUM_BINS = 20;
 
 constexpr bool PAIR_USE_BINS = true;
+
+constexpr bool SORT_BINS_BASED_ON_LOCAL_IDX = true;
 
 using dbl3_t_stencil_md = struct { double x,y,z; };
 
