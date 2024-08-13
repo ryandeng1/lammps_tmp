@@ -291,6 +291,17 @@ class Atom : protected Pointers {
   AtomVecCreatorMapStencilMD *avec_map_stencil_md;
 
   std::map<IDX_3D, std::vector<int>> bin_to_local_idxs;
+  std::vector<IDX_3D> local_bins;
+  std::vector<std::vector<int>> local_bins_idxs;
+
+  std::vector<double> local_dtfm;
+
+  std::vector<IDX_3D> bin_no_comm;
+  std::vector<std::vector<int>> bin_force_comm;
+  std::vector<std::vector<int>> bin_pos_vel_comm;
+
+  std::vector<IDX_3D> bin_comm;
+
   std::vector<IDX_3D> pair_bins[NUM_DEPS_BINS];
   std::vector<IDX_3D> special_pair_bins[NUM_DEPS_BINS];
 

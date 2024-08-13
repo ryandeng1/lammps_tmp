@@ -2420,6 +2420,13 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         double* pos = x[i];
         auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
         bin_to_local_idxs[bin].push_back(i);
+        if (std::find(local_bins.begin(), local_bins.end(), bin) == local_bins.end()) {
+            local_bins.push_back(bin);
+        }
+    }
+
+    for (int i = 0; i < local_bins.size(); i++) {
+        local_bins_idxs.push_back(bin_to_local_idxs[local_bins[i]]);
     }
 
     // sanity check that current = permute

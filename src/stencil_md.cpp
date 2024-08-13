@@ -414,6 +414,13 @@ void StencilMD::INIT_ZOID_DATA() {
             queue_info& zoid = lmp->queues[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
                 int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
+
+                zoid.local_bins_comm = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.no_comm_local_bins = new std::vector<IDX_3D>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.comm_local_bins = new std::vector<IDX_3D>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bin_to_force_comm = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bin_to_pos_vel_comm = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 zoid.bin_to_num_send_zoids = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bin_to_send_zoids = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
@@ -585,6 +592,13 @@ void StencilMD::INIT_ZOID_DATA() {
             queue_info& zoid = lmp->queues_next_dt[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
                 int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
+
+                zoid.local_bins_comm = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.no_comm_local_bins = new std::vector<IDX_3D>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.comm_local_bins = new std::vector<IDX_3D>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bin_to_force_comm = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bin_to_pos_vel_comm = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 zoid.bin_to_num_send_zoids = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bin_to_send_zoids = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
@@ -1429,7 +1443,7 @@ void StencilMD::COMPUTE_NUM_SEND_RECV_PROCESS() {
 void StencilMD::COMPARE_POS_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info &zoid,
                                            double **test_x) {
     int zoid_num = zoid.num;
-    for (int k = 0; k < atom_->nlocal; k++) {
+    for (int k = 0; k < atom_->nlocal + atom_->nghost; k++) {
         int tag = atom_->tag[k];
         double *x_ = atom_->x[k];
         for (int dim = 0; dim < 3; dim++) {
@@ -1551,6 +1565,65 @@ void StencilMD::COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* a
                 std::cout
                         << "Diff: "
                         << fabs(my_force - test_f[timestep][tag * 3 + dim])
+                        << std::endl;
+                std::cout << "pos: " << atom_->x[k][0] << " "
+                          << atom_->x[k][1] << " "
+                          << atom_->x[k][2] << std::endl;
+
+                for (int tmp = 0; tmp < 3; tmp++) {
+                    std::cout
+                            << "lo: "
+                            << zoid.zoid.cuts[tmp].lower +
+                               zoid.zoid.cuts[tmp].slope_lower * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                            << std::endl;
+                    std::cout
+                            << "hi: "
+                            << zoid.zoid.cuts[tmp].upper +
+                               zoid.zoid.cuts[tmp].slope_upper * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                            << std::endl;
+                }
+
+                assert(false);
+            }
+        }
+    }
+}
+
+void StencilMD::COMPARE_VEL_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_v) {
+    int zoid_num = zoid.num;
+
+    for (int k = 0; k < atom_->nlocal; k++) {
+        // compare forces on local atoms?
+        int tag = atom_->tag[k];
+        for (int dim = 0; dim < 3; dim++) {
+            double my_vel = atom_->v[k][dim];
+            if (fabs(my_vel - test_v[timestep][tag * 3 + dim]) >
+                1e-6) {
+                if (curr_dt) {
+                    std::cout << "------VEL DIFF--------"
+                              << std::endl;
+                } else {
+                    std::cout << "------NEXT DT VEL DIFF--------"
+                              << std::endl;
+                }
+                std::cout << "idx: " << k
+                          << " out of: " << atom_->nlocal << " atom: " << atom_
+                          << std::endl;
+                std::cout
+                        << "Dim: " << dim << " Zoid: " << zoid_num
+                        << " timestep: " << timestep << " tag: " << tag
+                        << " different. " << std::endl;
+                std::cout << "what I have v: " << atom_->v[k][0]
+                          << " " << atom_->v[k][1] << " "
+                          << atom_->v[k][2] << std::endl;
+                std::cout << "What does LAMMPS have? "
+                          << test_v[timestep][tag * 3 + 0] << " "
+                          << test_v[timestep][tag * 3 + 1] << " "
+                          << test_v[timestep][tag * 3 + 2]
+                          << std::endl;
+                std::cout
+                        << "Diff: "
+                        << fabs(my_vel - test_v[timestep][tag * 3 + dim])
                         << std::endl;
                 std::cout << "pos: " << atom_->x[k][0] << " "
                           << atom_->x[k][1] << " "
@@ -1713,8 +1786,8 @@ void StencilMD::initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Ato
     auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
     auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
     auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
-    const auto * _noalias const f = (dbl3_t_stencil_md *) atom_->f[0];
-    const auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
+    auto * _noalias const f = (dbl3_t_stencil_md *) atom_->f[0];
+    auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
 
     const int * const mask = atom_->mask;
     const int nlocal = atom_->nlocal;
@@ -1734,6 +1807,7 @@ void StencilMD::initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Ato
         if (mask[idx]) {
             const double dtfm = dtf / mass[type[idx]];
 
+            /*
             v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
             v[idx].y += dtfm * (f[idx].y + eval_f[idx].y);
             v[idx].z += dtfm * (f[idx].z + eval_f[idx].z);
@@ -1748,6 +1822,26 @@ void StencilMD::initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Ato
             next_v[next_idx].x = v[idx].x;
             next_v[next_idx].y = v[idx].y;
             next_v[next_idx].z = v[idx].z;
+            */
+
+            int next_idx = atom_idx_mapping[idx];
+
+            next_v[next_idx].x = v[idx].x + dtfm * (f[idx].x + eval_f[idx].x);
+            next_v[next_idx].y = v[idx].y + dtfm * (f[idx].y + eval_f[idx].y);
+            next_v[next_idx].z = v[idx].z + dtfm * (f[idx].z + eval_f[idx].z);
+
+            next_x[next_idx].x = x[idx].x + dtv * next_v[next_idx].x;
+            next_x[next_idx].y = x[idx].y + dtv * next_v[next_idx].y;
+            next_x[next_idx].z = x[idx].z + dtv * next_v[next_idx].z;
+            assert(atom_->tag[idx] == next->tag[next_idx]);
+            assert(next_idx != -1);
+
+            f[idx].x = 0.0;
+            f[idx].y = 0.0;
+            f[idx].z = 0.0;
+            eval_f[idx].x = 0.0;
+            eval_f[idx].y = 0.0;
+            eval_f[idx].z = 0.0;
         }
     }
 }
@@ -1777,7 +1871,8 @@ void StencilMD::final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom*
         int idx = start + i;
         assert(idx == local_idxs[i]);
         if (mask[idx]) {
-            const double dtfm = dtf / mass[type[i]];
+            // const double dtfm = dtf / mass[type[i]];
+            const double dtfm = next->local_dtfm[i];
             next_v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
             next_v[idx].y += dtfm * (f[idx].y + eval_f[idx].y);
             next_v[idx].z += dtfm * (f[idx].z + eval_f[idx].z);
@@ -1788,10 +1883,7 @@ void StencilMD::final_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom*
 void StencilMD::post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_) {
     auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
     auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
-    // auto * _noalias const f = (dbl3_t *) atom_->v[0];
-    // double **v = atom_->v;
-    // double **f = atom_->eval_f_stencil_md;
-    // double *rmass = atom_->rmass;
+
     int *type = atom_->type;
     int *mask = atom_->mask;
 
@@ -1828,6 +1920,7 @@ void StencilMD::post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* mo
             fran.x = gamma2*(rand_x-0.5);
             fran.y = gamma2*(rand_y-0.5);
             fran.z = gamma2*(rand_z-0.5);
+
             /*
             fran[0] = gamma2*(random->uniform()-0.5);
             fran[1] = gamma2*(random->uniform()-0.5);

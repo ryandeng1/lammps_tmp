@@ -46,6 +46,11 @@ class Verlet : public Integrate {
   void construct_recv_pos_bins(bool curr_dt, Atom*, queue_info& zoid, int);
   void construct_recv_vel_bins(bool curr_dt, Atom*, queue_info& zoid, int);
 
+  void construct_no_comm_bins(bool curr_dt, Atom*, queue_info& zoid, int);
+  void construct_bin_to_comm(bool curr_dt, Atom*, queue_info& zoid, int);
+
+  void construct_dtfm_cache(Atom*);
+
   void construct_bin_to_idx(bool curr_dt, Atom*, queue_info& zoid, int);
 
   void construct_bin_to_send_zoids(bool curr_dt, Atom*, queue_info& zoid, int);
@@ -60,7 +65,7 @@ class Verlet : public Integrate {
   void cleanup_stencil_md();
 
   template <bool curr_dt>
-  void run_stencil_md_zoid(int start_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x);
+  void run_stencil_md_zoid(int start_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x, double** test_v);
 
   template <bool curr_dt>
   void run_stencil_md_helper(int start_timestep, int start_t, int end_t,
@@ -71,7 +76,7 @@ class Verlet : public Integrate {
   void run_stencil_md_dep_templated(int dep, int start_timestep, int start_t, int end_t, int* dep_to_idxs,
                                     std::vector<MPI_Request>* send_requests, std::vector<MPI_Request>& receive_requests,
                                     std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                    double** test_f, double** test_x, int pipeline_stage=0);
+                                    double** test_f, double** test_x, double** test_v, int pipeline_stage=0);
 
   template <bool curr_dt>
   void run_stencil_md_dep(int dep, int start_timestep, int start_t, int end_t, int* dep_to_idxs,
@@ -85,10 +90,10 @@ class Verlet : public Integrate {
   template <bool curr_dt>
   void run_stencil_md_pipelined_helper(int starting_timestep,
                                        std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                       double** test_f, double** test_x);
+                                       double** test_f, double** test_x, double** test_v);
 
   void run_stencil_md_pipelined(int num_timesteps, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                double** test_f, double** test_x);
+                                double** test_f, double** test_x, double** test_v);
 
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic

@@ -19,6 +19,7 @@
 #include "math_const.h"
 #include "update.h"
 #include "error.h"
+#include "domain.h"
 
 namespace LAMMPS_NS {
 
@@ -82,8 +83,8 @@ public:
     void COMPUTE_NUM_SEND_RECV_PROCESS();
 
     void COMPARE_POS_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_x);
-
     void COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_f);
+    void COMPARE_VEL_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_f);
 
     void SET_INUM_PER_TIMESTEP();
     void SET_INUM_PER_TIMESTEP_NEXT_DT();
@@ -101,25 +102,194 @@ public:
     void post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_);
 
     template <bool curr_dt>
+    void recv_pos_bins_stencil_md_helper(queue_info& zoid, int timestep, Atom* atom_) {
+        int zoid_num = zoid.num;
+        auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+        auto* _noalias const recv_x = (dbl3_t_stencil_md*) atom_->x[0];
+
+        auto recv_bin_to_idx = zoid.bin_to_idx[timestep];
+        auto recv_bin_to_size = zoid.bin_to_size[timestep];
+
+        for (int i = 0; i < recv_from.size(); i++) {
+            int recv_zoid_num = recv_from[i];
+            auto& recv_zoid = curr_dt ? lmp->zoid_num_to_zoid[recv_zoid_num] : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+            auto& other_atom_arr = lmp->atom_stencil_md[recv_zoid_num];
+            Atom* other_atom = curr_dt ? other_atom_arr[timestep] : other_atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];
+            const dbl3_t_stencil_md* _noalias const send_x = (dbl3_t_stencil_md*) other_atom->x[0];
+
+            int pbc_flag_[3] = {0};
+            for (int dim = 0; dim < 3; dim++) {
+                if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+
+                if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+            }
+
+            auto send_bin_to_idx = recv_zoid.bin_to_idx[timestep];
+            auto send_bin_to_size = recv_zoid.bin_to_size[timestep];
+
+            int num_pos_bins = zoid.recv_pos_num_bins[timestep][i];
+            auto recv_pos_bins = zoid.recv_pos_bins[timestep][i];
+
+            for (int j = 0; j < num_pos_bins; j++) {
+                auto bin = recv_pos_bins[j];
+                auto bin_idx = get_bin_idx(bin);
+
+                int send_bin_idx = send_bin_to_idx[bin_idx];
+                int send_size = send_bin_to_size[bin_idx];
+
+                int recv_bin_idx = recv_bin_to_idx[bin_idx];
+                int recv_size = recv_bin_to_size[bin_idx];
+
+                assert(send_size != -1);
+                assert(send_size == recv_size);
+
+                for (int k = 0; k < send_size; k++) {
+                    int send_idx = send_bin_idx + k;
+                    int recv_idx = recv_bin_idx + k;
+                    tagint src_tag = other_atom->tag[send_idx];
+                    tagint dst_tag = atom_->tag[recv_idx];
+                    assert(src_tag == dst_tag);
+
+                    recv_x[recv_idx].x = send_x[send_idx].x + pbc_flag_[0] * domain->prd[0];
+                    recv_x[recv_idx].y = send_x[send_idx].y + pbc_flag_[1] * domain->prd[1];
+                    recv_x[recv_idx].z = send_x[send_idx].z + pbc_flag_[2] * domain->prd[2];
+                }
+            }
+        }
+    }
+
+    template <bool curr_dt>
+    void fuse_initial_integrate_stencil_md_pos_vel(queue_info& zoid, int timestep, Atom* next) {
+        auto *_noalias const recv_x = (dbl3_t_stencil_md *) next->x[0];
+        auto *_noalias const recv_v = (dbl3_t_stencil_md *) next->v[0];
+
+        auto recv_bin_to_idx = zoid.bin_to_idx[timestep];
+        auto recv_bin_to_size = zoid.bin_to_size[timestep];
+
+        auto& comm_local_bins = zoid.comm_local_bins[timestep];
+
+        for (int i = 0; i < comm_local_bins.size(); i++) {
+            auto &bin = comm_local_bins[i];
+            auto &local_idxs = next->bin_to_local_idxs[bin];
+            auto bin_idx = get_bin_idx(bin);
+            int start = local_idxs[0];
+
+            int recv_zoid_num = zoid.bin_to_pos_vel_comm[timestep][i];
+            auto &recv_zoid = curr_dt ? lmp->zoid_num_to_zoid[recv_zoid_num]
+                                      : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+            auto &other_atom_arr = lmp->atom_stencil_md[recv_zoid_num];
+            Atom *other_atom = curr_dt ? other_atom_arr[timestep] : other_atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];
+            const dbl3_t_stencil_md *_noalias const send_x = (dbl3_t_stencil_md *) other_atom->x[0];
+            const dbl3_t_stencil_md *_noalias const send_v = (dbl3_t_stencil_md *) other_atom->v[0];
+
+            int pbc_flag_[3] = {0};
+            for (int dim = 0; dim < 3; dim++) {
+                if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+
+                if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+            }
+
+            auto send_bin_to_idx = recv_zoid.bin_to_idx[timestep];
+            auto send_bin_to_size = recv_zoid.bin_to_size[timestep];
+
+            int send_bin_idx = send_bin_to_idx[bin_idx];
+            int send_size = send_bin_to_size[bin_idx];
+
+            int recv_bin_idx = recv_bin_to_idx[bin_idx];
+            int recv_size = recv_bin_to_size[bin_idx];
+
+            if (send_size == -1) {
+                std::cout << "zoid: " << zoid.num << " recv from: " << recv_zoid_num << " timestep: " << timestep << " bin: " << bin[0] << " " << bin[1] << " " << bin[2] << std::endl;
+            }
+            assert(recv_bin_idx == start);
+            assert(send_size != -1);
+            assert(send_size == recv_size);
+            assert(send_size == local_idxs.size());
+
+            for (int k = 0; k < send_size; k++) {
+                int send_idx = send_bin_idx + k;
+                int recv_idx = recv_bin_idx + k;
+                tagint src_tag = other_atom->tag[send_idx];
+                tagint dst_tag = next->tag[recv_idx];
+                assert(src_tag == dst_tag);
+
+                recv_x[recv_idx].x = send_x[send_idx].x + pbc_flag_[0] * domain->prd[0];
+                recv_x[recv_idx].y = send_x[send_idx].y + pbc_flag_[1] * domain->prd[1];
+                recv_x[recv_idx].z = send_x[send_idx].z + pbc_flag_[2] * domain->prd[2];
+
+                recv_v[recv_idx].x = send_v[send_idx].x;
+                recv_v[recv_idx].y = send_v[send_idx].y;
+                recv_v[recv_idx].z = send_v[send_idx].z;
+            }
+        }
+    }
+
+    void initial_integrate_stencil_md(Atom* curr, Atom* next, int* atom_idx_mapping) {
+        auto * _noalias const curr_x = (dbl3_t_stencil_md *) curr->x[0];
+        auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
+        auto * _noalias const curr_v = (dbl3_t_stencil_md *) curr->v[0];
+        auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
+        auto * _noalias const curr_f = (dbl3_t_stencil_md *) curr->f[0];
+        auto * _noalias const curr_eval_f = (dbl3_t_stencil_md *) curr->eval_f_stencil_md[0];
+
+        const int * const mask = curr->mask;
+        const int nlocal = curr->nlocal;
+
+        // const double * const mass = atom->mass;
+        // const int * const type = curr->type;
+
+        double dtv = update->dt;
+        // double dtf = 0.5 * update->dt * force->ftm2v;
+
+        cilk_for (int i = 0; i < nlocal; i++) {
+            if (mask[i]) {
+                // const double dtfm = dtf / mass[type[i]];
+                const double dtfm = curr->local_dtfm[i];
+
+                int next_idx = atom_idx_mapping[i];
+
+                next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
+                next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
+                next_v[next_idx].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
+
+                next_x[next_idx].x = curr_x[i].x + dtv * next_v[next_idx].x;
+                next_x[next_idx].y = curr_x[i].y + dtv * next_v[next_idx].y;
+                next_x[next_idx].z = curr_x[i].z + dtv * next_v[next_idx].z;
+
+                assert(curr->tag[i] == next->tag[next_idx]);
+                assert(next_idx != -1);
+
+                curr_f[i].x = 0.0;
+                curr_f[i].y = 0.0;
+                curr_f[i].z = 0.0;
+                curr_eval_f[i].x = 0.0;
+                curr_eval_f[i].y = 0.0;
+                curr_eval_f[i].z = 0.0;
+            }
+        }
+    }
+
+    template <bool curr_dt>
+    void fuse_initial_integrate_stencil_md(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
+        cilk_scope {
+            cilk_spawn recv_pos_bins_stencil_md_helper<curr_dt>(zoid, timestep + 1, next);
+            cilk_spawn fuse_initial_integrate_stencil_md_pos_vel<curr_dt>(zoid, timestep + 1, next);
+            cilk_spawn initial_integrate_stencil_md(curr, next, atom_idx_mapping);
+            memset(&curr->f[curr->nlocal][0], 0, (curr->nghost) * 3 * sizeof(double));
+        }
+    }
+
+    template <bool curr_dt>
     void fuse_force_computation(Atom* next, Neighbor* neigh_next, Force* next_force) {
         memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
-//        int zoid_num = zoid.num;
-//        auto& atom_arr = lmp->atom_stencil_md[zoid_num];
-//        Atom* curr = curr_dt ? atom_arr[timestep] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];
-//        Atom* next = curr_dt ? atom_arr[timestep + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
-//        Neighbor* neigh_next = curr_dt ? lmp->neighbor_stencil_md[zoid_num][timestep + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][timestep + 1];
-//        int* atom_idx_mapping = zoid.atom_idx_mapping[timestep];
-//
-//#ifdef LMP_OPENMP
-//        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][timestep + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
-//#else
-//        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
-//#endif
+        for (int k = 0; k < next->nlocal + next->nghost; k++) {
+            assert(fabs(next->eval_f_stencil_md[k][0]) < 1e-6);
+            assert(fabs(next->eval_f_stencil_md[k][1]) < 1e-6);
+            assert(fabs(next->eval_f_stencil_md[k][2]) < 1e-6);
+        }
 
         // begin force computation, inline lj_cut and bond_fene
         assert(PURELY_LOCAL_POTENTIAL);
-
-        // Force* next_force = curr_dt ? lmp->force_stencil_md[zoid_num][timestep + 1] : lmp->force_stencil_md_next_dt[zoid_num][timestep + 1];
 
         // const auto * _noalias const x = (dbl3_t_stencil_md *) atom_->x[0];
         // auto * _noalias const f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
@@ -154,10 +324,12 @@ public:
         for (int dep = 0; dep < next->num_deps; dep++) {
             auto& partitions_at_dep = next->dep_to_partitions[dep];
 
+            /*
             std::set<int> idxs_touched_at_dep;
             std::map<int, std::array<int, 3>> idx_to_partition;
             std::map<int, int> idx_to_touched_neighbor;
             std::map<int, std::tuple<int, int, int>> idx_to_bin;
+            */
 
             cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
                 auto& partition = partitions_at_dep[d];
@@ -361,83 +533,52 @@ public:
     }
 
     template <bool curr_dt>
-    void fuse_post_force_stencil_md(Atom* curr, Atom* next, Modify* modify_) {
-        // int zoid_num = zoid.num;
-        // auto& atom_arr = lmp->atom_stencil_md[zoid_num];
-        // Atom* curr = curr_dt ? atom_arr[timestep] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep];
-        // Atom* next = curr_dt ? atom_arr[timestep + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
-        // int* atom_idx_mapping = zoid.atom_idx_mapping[timestep];
+    void fuse_post_force_stencil_md(queue_info& zoid, int timestep, Atom* atom_, Modify* modify_) {
+        auto recv_bin_to_idx = zoid.bin_to_idx[timestep];
+        auto recv_bin_to_size = zoid.bin_to_size[timestep];
 
+        auto *_noalias const recv_f = (dbl3_t_stencil_md *) atom_->f[0];
 
-//#ifdef LMP_OPENMP
-//        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][timestep + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep - 1];
-//#else
-//        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
-//#endif
+        cilk_for (int i = 0; i < atom_->local_bins.size(); i++) {
+            auto& bin = atom_->local_bins[i];
+            auto bin_idx = get_bin_idx(bin);
+            auto& recv_force_zoids = zoid.bin_to_force_comm[timestep][i];
 
-        for (int dep = 0; dep < next->num_deps; dep++) {
-            auto& partitions_at_dep = next->dep_to_partitions[dep];
+            for (int j = 0; j < recv_force_zoids.size(); j++) {
+                int recv_zoid_num = recv_force_zoids[j];
+                auto& recv_zoid = curr_dt ? lmp->zoid_num_to_zoid[recv_zoid_num]
+                                          : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+                Atom* other_atom = curr_dt ? lmp->atom_stencil_md[recv_zoid_num][timestep]
+                                           : lmp->atom_stencil_md[recv_zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep];
 
-            cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
-                auto& partition = partitions_at_dep[d];
-                auto& bins = next->partition_to_bins[partition[0]][partition[1]][partition[2]];
-                for (int b = 0; b < bins.size(); b++) {
-                    auto& bin = bins[b];
-                    post_force_stencil_md(bin, next, modify_);
-                    final_integrate_stencil_md(bin, curr, next);
-                    // send_vel_bin_stencil_md<curr_dt>(zoid, timestep + 1, bin);
+                const auto *_noalias const send_f = (dbl3_t_stencil_md *) other_atom->eval_f_stencil_md[0];
+
+                auto send_bin_to_idx = recv_zoid.bin_to_idx[timestep];
+                auto send_bin_to_size = recv_zoid.bin_to_size[timestep];
+
+                int send_bin_idx = send_bin_to_idx[bin_idx];
+                int send_size = send_bin_to_size[bin_idx];
+
+                int recv_bin_idx = recv_bin_to_idx[bin_idx];
+                int recv_size = recv_bin_to_size[bin_idx];
+
+                assert(send_size != -1);
+                assert(send_size == recv_size);
+
+                for (int k = 0; k < send_size; k++) {
+                    int send_idx = send_bin_idx + k;
+                    int recv_idx = recv_bin_idx + k;
+                    tagint src_tag = other_atom->tag[send_idx];
+                    tagint dst_tag = atom_->tag[recv_idx];
+                    assert(src_tag == dst_tag);
+                    recv_f[recv_idx].x += send_f[send_idx].x;
+                    recv_f[recv_idx].y += send_f[send_idx].y;
+                    recv_f[recv_idx].z += send_f[send_idx].z;
                 }
             }
-        }
-    }
 
-    template <bool curr_dt>
-    void send_vel_bin_stencil_md(queue_info& zoid, int timestep, const IDX_3D& bin) {
-        int zoid_num = zoid.num;
-        // auto &send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
-        Atom* send_atom = curr_dt ? lmp->atom_stencil_md[zoid_num][timestep] : lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep];
-
-        auto bin_idx = get_bin_idx(bin);
-        int num_send_zoids = zoid.bin_to_num_send_zoids[timestep][bin_idx];
-        auto send_zoids = zoid.bin_to_send_zoids[timestep][bin_idx];
-
-        // std::cout << "zoid: " << zoid.num << " timestep: " << timestep << " num send: " << num_send_zoids << std::endl;
-
-        // for (int i = 0; i < send_to.size(); i++) {
-        for (int i = 0; i < num_send_zoids; i++) {
-            // int recv_zoid_num = send_to[i];
-            int recv_zoid_num = send_zoids[i];
-
-
-            if (recv_zoid_num == 16 && timestep == 1) {
-                std::cout << "zoid: " << zoid.num << " sending bin: " << bin[0] << " " << bin[1] << " " << bin[2] << std::endl;
-            }
-
-            auto& recv_zoid = curr_dt ? lmp->zoid_num_to_zoid[recv_zoid_num] : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
-
-            Atom* recv_atom = curr_dt ? lmp->atom_stencil_md[recv_zoid_num][timestep] : lmp->atom_stencil_md[recv_zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep];
-
-            auto send_size = zoid.bin_to_size[timestep][bin_idx];
-            auto send_arr_idx = zoid.bin_to_idx[timestep][bin_idx];
-
-            auto recv_size = recv_zoid.bin_to_size[timestep][bin_idx];
-            auto recv_arr_idx = recv_zoid.bin_to_idx[timestep][bin_idx];
-
-            assert(send_size == recv_size);
-
-            auto * _noalias const send_v = (dbl3_t_stencil_md *) send_atom->v[0];
-            auto * _noalias const recv_v = (dbl3_t_stencil_md *) recv_atom->v[0];
-
-            for (int j = 0; j < send_size; j++) {
-                int send_vel_idx = send_arr_idx + j;
-                int recv_vel_idx = recv_arr_idx + j;
-                tagint src_tag = send_atom->tag[send_vel_idx];
-                tagint dst_tag = recv_atom->tag[recv_vel_idx];
-                assert(src_tag == dst_tag);
-                recv_v[recv_vel_idx].x = send_v[send_vel_idx].x;
-                recv_v[recv_vel_idx].y = send_v[send_vel_idx].y;
-                recv_v[recv_vel_idx].z = send_v[send_vel_idx].z;
-            }
+            post_force_stencil_md(bin, atom_, modify_);
+            final_integrate_stencil_md(bin, nullptr, atom_);
         }
     }
 };

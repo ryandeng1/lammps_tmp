@@ -417,6 +417,12 @@ typedef struct cuts cuts_t;
 
 // struct that holds information for queue
 struct queue_info {
+  std::vector<bool>* local_bins_comm;
+  std::vector<IDX_3D>* no_comm_local_bins;
+  std::vector<IDX_3D>* comm_local_bins;
+  std::vector<int>** bin_to_force_comm;
+  int** bin_to_pos_vel_comm;
+
   int** bin_to_idx;
   int** bin_to_size;
 
