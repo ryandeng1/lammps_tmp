@@ -567,7 +567,7 @@ public:
             std::map<int, std::tuple<int, int, int>> idx_to_bin;
             */
 
-            for (int d = 0; d < partitions_at_dep.size(); d++) {
+            cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
                 auto& partition = partitions_at_dep[d];
                 auto& bins = next->partition_to_bins[partition[0]][partition[1]][partition[2]];
 
