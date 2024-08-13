@@ -100,7 +100,7 @@ public:
 
     void initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping);
 
-    inline void final_integrate_stencil_md(const IDX_3D& bin, Atom* next) {
+    inline void final_integrate_stencil_md(const std::vector<int>& local_idxs, Atom* next) {
         // update v of atoms in group
 
         // auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
@@ -115,16 +115,14 @@ public:
         const double * const mass = atom->mass;
         const int * const type = next->type;
 
-        auto& local_idxs = next->bin_to_local_idxs[bin];
         int start = local_idxs[0];
-
         double dtf = 0.5 * update->dt * force->ftm2v;
 
         for (int i = 0; i < local_idxs.size(); i++) {
             // int idx = local_idxs[i];
             int idx = start + i;
             assert(idx == local_idxs[i]);
-            if (mask[idx]) {
+            if (mask[idx] || true) {
                 // const double dtfm = dtf / mass[type[i]];
                 const double dtfm = next->local_dtfm[i];
                 next_v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
@@ -134,7 +132,7 @@ public:
         }
     }
 
-    inline void post_force_stencil_md(const IDX_3D& bin, Atom* atom_, Modify* modify_) {
+    inline void post_force_stencil_md(const std::vector<int>& local_idxs, Atom* atom_, Modify* modify_) {
         auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
         auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
 
@@ -153,7 +151,6 @@ public:
         // fix_post_force->compute_target();
         auto tsqrt = fix_post_force->tsqrt;
 
-        auto& local_idxs = atom_->bin_to_local_idxs[bin];
         int start = local_idxs[0];
         for (int i = 0; i < local_idxs.size(); i++) {
             int idx = start + i;
@@ -164,7 +161,7 @@ public:
             dbl3_t_stencil_md fdrag, fran;
             double gamma1, gamma2;
 
-            if (mask[idx]) {
+            if (mask[idx] || true) {
                 gamma1 = gfactor1[type[idx]];
                 gamma2 = gfactor2[type[idx]] * tsqrt;
 
@@ -298,18 +295,22 @@ public:
             for (int k = 0; k < send_size; k++) {
                 int send_idx = send_bin_idx + k;
                 int recv_idx = recv_bin_idx + k;
-                tagint src_tag = other_atom->tag[send_idx];
-                tagint dst_tag = next->tag[recv_idx];
-                assert(src_tag == dst_tag);
+                if (DEBUG_SEND_RECV_DATA) {
+                    tagint src_tag = other_atom->tag[send_idx];
+                    tagint dst_tag = next->tag[recv_idx];
+                    assert(src_tag == dst_tag);
+                }
 
                 recv_x[recv_idx].x = send_x[send_idx].x + pbc_flag_[0] * domain->prd[0];
                 recv_x[recv_idx].y = send_x[send_idx].y + pbc_flag_[1] * domain->prd[1];
                 recv_x[recv_idx].z = send_x[send_idx].z + pbc_flag_[2] * domain->prd[2];
 
-                recv_v[recv_idx].x = send_v[send_idx].x;
-                recv_v[recv_idx].y = send_v[send_idx].y;
-                recv_v[recv_idx].z = send_v[send_idx].z;
+                // recv_v[recv_idx].x = send_v[send_idx].x;
+                // recv_v[recv_idx].y = send_v[send_idx].y;
+                // recv_v[recv_idx].z = send_v[send_idx].z;
             }
+
+            memcpy(&next->v[recv_bin_idx][0], &other_atom->v[send_bin_idx][0], 3 * send_size * sizeof(double));
         }
     }
 
@@ -331,7 +332,7 @@ public:
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
         cilk_for (int i = 0; i < nlocal; i++) {
-            if (mask[i]) {
+            if (mask[i] || true) {
                 // const double dtfm = dtf / mass[type[i]];
                 const double dtfm = curr->local_dtfm[i];
 
@@ -387,10 +388,6 @@ public:
         auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
         const int * _noalias const type = next->type;
         const double * _noalias const special_lj = force->special_lj;
-
-        auto recv_bin_to_idx = zoid.bin_to_idx[timestep];
-        auto recv_bin_to_size = zoid.bin_to_size[timestep];
-        auto *_noalias const recv_f = (dbl3_t_stencil_md *) next->f[0];
 
         auto pair = (PairLJCut*) next_force->pair;
         auto bond = (BondFENE*) next_force->bond;
@@ -567,7 +564,8 @@ public:
             std::map<int, std::tuple<int, int, int>> idx_to_bin;
             */
 
-            cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
+            int num_atoms = 0;
+            for (int d = 0; d < partitions_at_dep.size(); d++) {
                 auto& partition = partitions_at_dep[d];
                 auto& bins = next->partition_to_bins[partition[0]][partition[1]][partition[2]];
 
@@ -576,6 +574,7 @@ public:
                     auto bin_idx = get_bin_idx(bin);
                     auto& idxs = next->bin_to_local_idxs[bin];
                     int start = idxs[0];
+                    num_atoms += idxs.size();
                     for (int idx = 0; idx < idxs.size(); idx++) {
                         // int ii = idxs[idx];
                         int ii = start + idx;
@@ -817,8 +816,10 @@ public:
 
         auto *_noalias const recv_f = (dbl3_t_stencil_md *) atom_->f[0];
 
+        #pragma cilk grainsize 32
         cilk_for (int i = 0; i < atom_->local_bins.size(); i++) {
             auto& bin = atom_->local_bins[i];
+            auto& local_idxs = atom_->local_bins_idxs[i];
             auto bin_idx = get_bin_idx(bin);
             auto& recv_force_zoids = zoid.bin_to_force_comm[timestep][i];
 
@@ -846,17 +847,19 @@ public:
                 for (int k = 0; k < send_size; k++) {
                     int send_idx = send_bin_idx + k;
                     int recv_idx = recv_bin_idx + k;
-                    tagint src_tag = other_atom->tag[send_idx];
-                    tagint dst_tag = atom_->tag[recv_idx];
-                    assert(src_tag == dst_tag);
+                    if (DEBUG_SEND_RECV_DATA) {
+                        tagint src_tag = other_atom->tag[send_idx];
+                        tagint dst_tag = atom_->tag[recv_idx];
+                        assert(src_tag == dst_tag);
+                    }
                     recv_f[recv_idx].x += send_f[send_idx].x;
                     recv_f[recv_idx].y += send_f[send_idx].y;
                     recv_f[recv_idx].z += send_f[send_idx].z;
                 }
             }
 
-            post_force_stencil_md(bin, atom_, modify_);
-            final_integrate_stencil_md(bin, atom_);
+            post_force_stencil_md(local_idxs, atom_, modify_);
+            final_integrate_stencil_md(local_idxs, atom_);
         }
     }
 };
