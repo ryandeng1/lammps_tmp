@@ -2460,7 +2460,7 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
 
     int num_dims_split = 0;
 
-    double threshold = 8 * ALLEGRO_SLOPE;
+    double threshold = 4 * ALLEGRO_SLOPE;
     std::vector<int> dims_not_split;
     for (int dim = 0; dim < 3; dim++) {
         double zoid_lo = zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower;
