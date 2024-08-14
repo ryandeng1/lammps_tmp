@@ -2466,7 +2466,7 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
 
     int num_dims_split = 0;
 
-    double threshold = 4 * ALLEGRO_SLOPE;
+    double threshold = 8 * ALLEGRO_SLOPE;
     std::vector<int> dims_not_split;
     for (int dim = 0; dim < 3; dim++) {
         double zoid_lo = zoid.zoid.cuts[dim].lower + timestep * zoid.zoid.cuts[dim].slope_lower;
@@ -2488,6 +2488,7 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
             int bin_val = bin[dim];
 
             // TODO: hardcoded here, needs to change something here
+            /*
             if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
                 bin_val = special_bins[0];
             } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
@@ -2500,6 +2501,7 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
             } else {
                 assert(bin_val < special_bins[0]);
             }
+            */
             if (zoid.where[dim] == PBC) {
                 if (bin_val > (NUM_BINS - (special_bins.size() - 1 + special_bins2.size()  - 1)) / 2) {
                     bin_val -= (NUM_BINS - (special_bins.size() - 1 + special_bins2.size() - 1));
@@ -2515,6 +2517,7 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
         for (auto& [bin, idxs] : bin_to_local_idxs) {
             std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
             int bin_val = bin_vals[dim];
+            /*
             if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
                 bin_val = special_bins[0];
             } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
@@ -2527,6 +2530,8 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
             } else {
                 assert(bin_val < special_bins[0]);
             }
+            */
+
             if (zoid.where[dim] == PBC) {
                 if (bin_val > (NUM_BINS - (special_bins.size() - 1 + special_bins2.size()  - 1)) / 2) {
                     bin_val -= (NUM_BINS - (special_bins.size() - 1 + special_bins2.size() - 1));
