@@ -7,6 +7,7 @@
 #include "pointers.h"
 #include "bond_fene.h"
 #include "pair_lj_cut.h"
+#include "pair_lj_cut_omp.h"
 #include <cilk/cilk.h>
 #include "force.h"
 #include "modify.h"
@@ -20,6 +21,7 @@
 #include "update.h"
 #include "error.h"
 #include "domain.h"
+#include "thr_omp.h"
 #include "fix_langevin.h"
 
 namespace LAMMPS_NS {
@@ -366,6 +368,294 @@ public:
             cilk_spawn fuse_initial_integrate_stencil_md_pos_vel<curr_dt>(zoid, timestep + 1, next);
             cilk_spawn initial_integrate_stencil_md(curr, next, atom_idx_mapping);
             memset(&curr->f[curr->nlocal][0], 0, (curr->nghost) * 3 * sizeof(double));
+        }
+    }
+
+    template <bool curr_dt>
+    void fuse_force_computation_reduce(queue_info& zoid, int timestep, Atom* next, Neighbor* neigh_next, Force* next_force, Modify* modify_) {
+        memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
+        for (int k = 0; k < next->nlocal + next->nghost; k++) {
+            assert(fabs(next->eval_f_stencil_md[k][0]) < 1e-6);
+            assert(fabs(next->eval_f_stencil_md[k][1]) < 1e-6);
+            assert(fabs(next->eval_f_stencil_md[k][2]) < 1e-6);
+        }
+
+        int nthreads_to_use = zoid.inum_per_timestep[timestep];
+
+        // begin force computation, inline lj_cut and bond_fene
+        assert(PURELY_LOCAL_POTENTIAL);
+
+        const auto * _noalias const x = (dbl3_t_stencil_md *) next->x[0];
+        auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
+        const int * _noalias const type = next->type;
+        const double * _noalias const special_lj = force->special_lj;
+
+        auto pair = (PairLJCutOMP*) next_force->pair;
+        auto bond = (BondFENE*) next_force->bond;
+        auto* fix = pair->fix;
+
+        const int * _noalias const ilist = pair->list->ilist;
+        const int * _noalias const numneigh = pair->list->numneigh;
+        const int * const * const firstneigh = pair->list->firstneigh;
+
+        const auto* cutsq = pair->cutsq;
+        const auto* offset = pair->offset;
+        const auto* lj1 = pair->lj1;
+        const auto* lj2 = pair->lj2;
+        const auto* lj3 = pair->lj3;
+        const auto* lj4 = pair->lj4;
+        auto newton_pair = force->newton_pair;
+
+        const auto* sigma = bond->sigma;
+        const auto* epsilon = bond->epsilon;
+        const auto* r0 = bond->r0;
+        const auto* k = bond->k;
+
+        int nlocal = next->nlocal;
+        int nall = next->nlocal + next->nghost;
+
+        if (nlocal < 512) {
+            for (int ii = 0; ii < nlocal; ii++) {
+                const int i = ilist[ii];
+                assert(i == ii);
+                const int itype = type[i];
+
+                const int *_noalias const jlist = firstneigh[i];
+                const double *_noalias const cutsqi = cutsq[itype];
+                const double *_noalias const offseti = offset[itype];
+                const double *_noalias const lj1i = lj1[itype];
+                const double *_noalias const lj2i = lj2[itype];
+                const double *_noalias const lj3i = lj3[itype];
+                const double *_noalias const lj4i = lj4[itype];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                int jnum = numneigh[i];
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    double evdwl = 0.0;
+                    int j = jlist[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0 / rsq;
+                        double r6inv = r2inv * r2inv * r2inv;
+                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                        double fpair = factor_lj * forcelj * r2inv;
+
+                        fxtmp += delx * fpair;
+                        fytmp += dely * fpair;
+                        fztmp += delz * fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                        }
+                    }
+                }
+
+                auto& lst_bonds = neigh_next->atom_bondlist[i];
+                for (int j = 0; j < lst_bonds.size(); j++) {
+                    auto& bond_info = lst_bonds[j];
+                    int i2 = bond_info.first;
+                    int bond_type = bond_info.second;
+
+                    double delx = xtmp - x[i2].x;
+                    double dely = ytmp - x[i2].y;
+                    double delz = ztmp - x[i2].z;
+
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    double r0sq = r0[bond_type] * r0[bond_type];
+                    double rlogarg = 1.0 - rsq / r0sq;
+
+                    if (rlogarg < 0.1) {
+                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+//                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+//                                return;
+                        assert(false);
+
+                        rlogarg = 0.1;
+                    }
+
+                    double fbond = -k[bond_type] / rlogarg;
+
+                    // force from LJ term
+                    double sr2 = 0.0;
+                    double sr6 = 0.0;
+
+                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[bond_type] * sigma[bond_type]) {
+                        sr2 = sigma[bond_type] * sigma[bond_type] / rsq;
+                        sr6 = sr2 * sr2 * sr2;
+                        fbond += 48.0 * epsilon[bond_type] * sr6 * (sr6 - 0.5) / rsq;
+                    }
+
+                    // energy
+
+                    // apply force to each of 2 atoms
+
+                    if (newton_pair || i < nlocal) {
+                        fxtmp += delx * fbond;
+                        fytmp += dely * fbond;
+                        fztmp += delz * fbond;
+                    }
+
+                    if (newton_pair || i2 < nlocal) {
+                        f[i2].x -= delx * fbond;
+                        f[i2].y -= dely * fbond;
+                        f[i2].z -= delz * fbond;
+                    }
+                }
+
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+
+            }
+
+            return;
+        }
+
+        cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
+            // each thread works on a fixed chunk of atoms.
+            const int idelta = 1 + nlocal / nthreads_to_use;
+            int ifrom = tid * idelta;
+            int ito = ((ifrom + idelta) > nlocal) ? nlocal : ifrom + idelta;
+            auto* thread_local_f = f + tid * nall;
+            memset(thread_local_f, 0, nall * 3 * sizeof(double));
+
+            for (int ii = ifrom; ii < ito; ++ii) {
+                const int i = ilist[ii];
+                const int itype = type[i];
+                const int    * _noalias const jlist = firstneigh[i];
+                const double * _noalias const cutsqi = cutsq[itype];
+                const double * _noalias const offseti = offset[itype];
+                const double * _noalias const lj1i = lj1[itype];
+                const double * _noalias const lj2i = lj2[itype];
+                const double * _noalias const lj3i = lj3[itype];
+                const double * _noalias const lj4i = lj4[itype];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                int jnum = numneigh[i];
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    // num_edges++;
+                    double evdwl = 0.0;
+                    int j = jlist[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx*delx + dely*dely + delz*delz;
+                    int jtype = type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0/rsq;
+                        double r6inv = r2inv*r2inv*r2inv;
+                        double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
+                        double fpair = factor_lj*forcelj*r2inv;
+
+                        fxtmp += delx*fpair;
+                        fytmp += dely*fpair;
+                        fztmp += delz*fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            thread_local_f[j].x -= delx*fpair;
+                            thread_local_f[j].y -= dely*fpair;
+                            thread_local_f[j].z -= delz*fpair;
+                        }
+                    }
+                }
+
+                auto& lst_bonds = neigh_next->atom_bondlist[i];
+                for (int j = 0; j < lst_bonds.size(); j++) {
+                    auto& bond_info = lst_bonds[j];
+                    int i2 = bond_info.first;
+                    int type = bond_info.second;
+
+                    double delx = xtmp - x[i2].x;
+                    double dely = ytmp - x[i2].y;
+                    double delz = ztmp - x[i2].z;
+
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    double r0sq = r0[type] * r0[type];
+                    double rlogarg = 1.0 - rsq / r0sq;
+
+                    if (rlogarg < 0.1) {
+                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+//                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+//                                return;
+                        assert(false);
+
+                        rlogarg = 0.1;
+                    }
+
+                    double fbond = -k[type] / rlogarg;
+
+                    // force from LJ term
+                    double sr2 = 0.0;
+                    double sr6 = 0.0;
+
+                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                        sr2 = sigma[type] * sigma[type] / rsq;
+                        sr6 = sr2 * sr2 * sr2;
+                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                    }
+
+                    if (newton_pair || i < nlocal) {
+                        fxtmp += delx * fbond;
+                        fytmp += dely * fbond;
+                        fztmp += delz * fbond;
+                    }
+
+                    if (newton_pair || i2 < nlocal) {
+                        thread_local_f[i2].x -= delx*fbond;
+                        thread_local_f[i2].y -= dely*fbond;
+                        thread_local_f[i2].z -= delz*fbond;
+                    }
+                }
+
+                thread_local_f[i].x += fxtmp;
+                thread_local_f[i].y += fytmp;
+                thread_local_f[i].z += fztmp;
+            }
+        }
+
+        if (nthreads_to_use == 1) {
+            return;
+        }
+
+        double* f_ = &(next->eval_f_stencil_md[0][0]);
+
+        int nvals = nall * 3;
+
+        // do not explicitly set chunk size, have cilk figure it out.
+        cilk_for (int i = 0; i < nvals; i++) {
+            for (int n = 1; n < nthreads_to_use; n++) {
+                f_[i] += f_[n * nvals + i];
+            }
         }
     }
 

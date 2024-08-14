@@ -6291,7 +6291,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             }
 
             // stencilMD->fuse_force_computation<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
-            stencilMD->fuse_force_computation_atomics<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            // stencilMD->fuse_force_computation_atomics<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            stencilMD->fuse_force_computation_reduce<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
         }
 
         // reverse communication of forces
