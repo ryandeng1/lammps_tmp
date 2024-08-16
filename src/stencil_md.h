@@ -101,8 +101,6 @@ public:
     // typedef struct { double x,y,z; } dbl3_t;
 
     void lammps_fuse_force_compute() {
-        std::cout << "lammps fuse force. " << std::endl;
-
         const auto * _noalias const x = (dbl3_t_stencil_md *) atom->x[0];
         auto * _noalias const f = (dbl3_t_stencil_md *) atom->f[0];
 
@@ -146,8 +144,10 @@ public:
             cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
                 auto& partition = partitions_at_dep[d];
 
-                for (int dep_level2 = 0; dep_level2 < NUM_DEPS_BINS; dep_level2++) {
-                    auto& partitions_at_dep_level2 = atom->dep_to_partitions_level2[dep_level2];
+                // for (int dep_level2 = 0; dep_level2 < dep + 1; dep_level2++) {
+                for (int dep_level2 = 0; dep_level2 < atom->num_deps_level2[partition[0]][partition[1]][partition[2]]; dep_level2++) {
+                    // auto& partitions_at_dep_level2 = atom->dep_to_partitions_level2[dep_level2];
+                    auto& partitions_at_dep_level2 = atom->dep_to_partitions_level2[partition[0]][partition[1]][partition[2]][dep_level2];
 
                     cilk_for (int d2 = 0; d2 < partitions_at_dep_level2.size(); d2++) {
                         auto& partition_level2 = partitions_at_dep_level2[d2];

@@ -2515,8 +2515,6 @@ void Atom::setup_lammps_pair_bins() {
     }
     num_deps = NUM_DEPS_BINS;
 
-
-
     std::map<IDX_3D, IDX_3D> bin_to_partition_level2;
 
     for (int dep = 0; dep < num_deps; dep++) {
@@ -2550,13 +2548,76 @@ void Atom::setup_lammps_pair_bins() {
 
                 auto p2 = IDX_3D({bin_to_partition_level2[bin][0], bin_to_partition_level2[bin][1], bin_to_partition_level2[bin][2]});
                 partition_to_bins_level2[p[0]][p[1]][p[2]][p2[0]][p2[1]][p2[2]].push_back(bin);
+
+                int num_split = 0;
+                int dim_not_split = -1;
+                for (int dim = 0; dim < 3; dim++) {
+                    if (p[dim] == LEFT || p[dim] == RIGHT) {
+                        num_split++;
+                    } else {
+                        dim_not_split = dim;
+                    }
+                }
+
+                auto d = dep_to_partitions_level2[p[0]][p[1]][p[2]];
+
+                if (num_split == 0) {
+                    num_deps_level2[p[0]][p[1]][p[2]] = 1;
+                    if (std::find(d[0].begin(), d[0].end(), p2) == d[0].end()) {
+                        dep_to_partitions_level2[p[0]][p[1]][p[2]][0].push_back(p2);
+                    }
+                } else if (num_split == 1) {
+                    num_deps_level2[p[0]][p[1]][p[2]] = 2;
+                    int num_middle = 0;
+                    num_middle += (p2[0] == MIDDLE) + (p2[1] == MIDDLE) + (p2[2] == MIDDLE);
+                    if (num_middle == 3) {
+                        if (std::find(d[1].begin(), d[1].end(), p2) == d[1].end()) {
+                            dep_to_partitions_level2[p[0]][p[1]][p[2]][1].push_back(p2);
+                        }
+                    } else {
+                        assert(num_middle == 2);
+                        if (std::find(d[0].begin(), d[0].end(), p2) == d[0].end()) {
+                            dep_to_partitions_level2[p[0]][p[1]][p[2]][0].push_back(p2);
+                        }
+                    }
+                } else if (num_split == 2) {
+                    int num_middle = 0;
+                    num_middle += (p2[0] == MIDDLE) + (p2[1] == MIDDLE) + (p2[2] == MIDDLE);
+                    if (num_middle == 0) {
+                        assert(false);
+                    } else if (num_middle == 1 && p2[dim_not_split] == MIDDLE) {
+                        if (std::find(d[0].begin(), d[0].end(), p2) == d[0].end()) {
+                            dep_to_partitions_level2[p[0]][p[1]][p[2]][0].push_back(p2);
+                        }
+                    } else if (num_middle == 2) {
+                        if (p2[(dim_not_split + 1) % 3] == MIDDLE) {
+                            if (std::find(d[1].begin(), d[1].end(), p2) == d[1].end()) {
+                                dep_to_partitions_level2[p[0]][p[1]][p[2]][1].push_back(p2);
+                            }
+                        } else {
+                            if (std::find(d[2].begin(), d[2].end(), p2) == d[2].end()) {
+                                dep_to_partitions_level2[p[0]][p[1]][p[2]][2].push_back(p2);
+                            }
+                        }
+                    } else if (num_middle == 3) {
+                        if (std::find(d[3].begin(), d[3].end(), p2) == d[3].end()) {
+                            dep_to_partitions_level2[p[0]][p[1]][p[2]][3].push_back(p2);
+                        }
+                    } else {
+                        assert(false);
+                    }
+                    num_deps_level2[p[0]][p[1]][p[2]] = 4;
+                } else if (num_split == 3) {
+                    num_deps_level2[p[0]][p[1]][p[2]] = 8;
+                    int target_dep = partition_to_dep.at(p2);
+                    if (std::find(d[target_dep].begin(), d[target_dep].end(), p2) == d[target_dep].end()) {
+                        dep_to_partitions_level2[p[0]][p[1]][p[2]][partition_to_dep.at(p2)].push_back(p2);
+                    }
+                } else {
+                    assert(false);
+                }
             }
-
         }
-    }
-
-    for (auto& [partition, dep_level2] : partition_to_dep) {
-        dep_to_partitions_level2[dep_level2].push_back(partition);
     }
 }
 

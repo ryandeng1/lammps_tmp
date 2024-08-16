@@ -313,7 +313,8 @@ class Atom : protected Pointers {
   int num_deps;
 
   std::vector<IDX_3D> partition_to_bins_level2[4][4][4][4][4][4];
-  std::vector<IDX_3D> dep_to_partitions_level2[NUM_DEPS_BINS];
+  std::vector<IDX_3D> dep_to_partitions_level2[4][4][4][NUM_DEPS_BINS];
+  int num_deps_level2[4][4][4];
 
   // --------------------------------------------------------------------
   // functions
