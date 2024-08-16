@@ -26,8 +26,6 @@
 
 using namespace LAMMPS_NS;
 
-constexpr int target_tag = 21731;
-
 /* ---------------------------------------------------------------------- */
 
 NPairHalfBinNewtonOmp::NPairHalfBinNewtonOmp(LAMMPS *lmp) : NPair(lmp) {}

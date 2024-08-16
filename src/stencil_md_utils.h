@@ -124,6 +124,8 @@ constexpr bool ONLY_RUN_STENCIL_MD = false;
 
 constexpr bool LAMMPS_USE_CILK = false;
 
+constexpr bool LAMMPS_USE_BINS = true;
+
 constexpr bool TIME_STENCIL_MD = true;
 
 constexpr bool USE_BOND = true;
@@ -177,6 +179,80 @@ const std::map<IDX_3D, int> partition_to_dep = {
         {{RIGHT,  MIDDLE, MIDDLE}, 6},
 
         {{MIDDLE, MIDDLE, MIDDLE}, 7},
+};
+
+const std::map<IDX_3D, int> lammps_partition_to_dep = {
+        {{LEFT,   LEFT,   LEFT},   0},
+        {{LEFT,   LEFT,   RIGHT},  0},
+        {{LEFT,   RIGHT,  LEFT},   0},
+        {{RIGHT,  LEFT,   LEFT},   0},
+        {{RIGHT,  RIGHT,  RIGHT},  0},
+        {{RIGHT,  RIGHT,  LEFT},   0},
+        {{RIGHT,  LEFT,   RIGHT},  0},
+        {{LEFT,   RIGHT,  RIGHT},  0},
+
+        {{LEFT,   LEFT,   MIDDLE}, 1},
+        {{LEFT,   RIGHT,  MIDDLE}, 1},
+        {{RIGHT,  LEFT,   MIDDLE}, 1},
+        {{RIGHT,  RIGHT,  MIDDLE}, 1},
+        {{LEFT,   LEFT,   PBC}, 1},
+        {{LEFT,   RIGHT,  PBC}, 1},
+        {{RIGHT,  LEFT,   PBC}, 1},
+        {{RIGHT,  RIGHT,  PBC}, 1},
+
+        {{LEFT,   MIDDLE, LEFT},   2},
+        {{LEFT,   MIDDLE, RIGHT},  2},
+        {{RIGHT,  MIDDLE, LEFT},   2},
+        {{RIGHT,  MIDDLE, RIGHT},  2},
+        {{LEFT,   PBC, LEFT},   2},
+        {{LEFT,   PBC, RIGHT},  2},
+        {{RIGHT,  PBC, LEFT},   2},
+        {{RIGHT,  PBC, RIGHT},  2},
+
+        {{MIDDLE, LEFT,   LEFT},   3},
+        {{MIDDLE, LEFT,   RIGHT},  3},
+        {{MIDDLE, RIGHT,  LEFT},   3},
+        {{MIDDLE, RIGHT,  RIGHT},  3},
+        {{PBC, LEFT,   LEFT},   3},
+        {{PBC, LEFT,   RIGHT},  3},
+        {{PBC, RIGHT,  LEFT},   3},
+        {{PBC, RIGHT,  RIGHT},  3},
+
+        {{MIDDLE, MIDDLE, LEFT},   4},
+        {{MIDDLE, MIDDLE, RIGHT},  4},
+        {{PBC, PBC, LEFT},   4},
+        {{PBC, PBC, RIGHT},  4},
+        {{MIDDLE, PBC, LEFT},   4},
+        {{MIDDLE, PBC, RIGHT},  4},
+        {{PBC, MIDDLE, LEFT},   4},
+        {{PBC, MIDDLE, RIGHT},  4},
+
+        {{MIDDLE, LEFT,   MIDDLE}, 5},
+        {{MIDDLE, RIGHT,  MIDDLE}, 5},
+        {{MIDDLE, LEFT,   PBC}, 5},
+        {{MIDDLE, RIGHT,  PBC}, 5},
+        {{PBC, LEFT,   MIDDLE}, 5},
+        {{PBC, RIGHT,  MIDDLE}, 5},
+        {{PBC, LEFT,   PBC}, 5},
+        {{PBC, RIGHT,  PBC}, 5},
+
+        {{LEFT,   MIDDLE, MIDDLE}, 6},
+        {{RIGHT,  MIDDLE, MIDDLE}, 6},
+        {{LEFT,   PBC, MIDDLE}, 6},
+        {{RIGHT,  PBC, MIDDLE}, 6},
+        {{LEFT,   MIDDLE, PBC}, 6},
+        {{RIGHT,  MIDDLE, PBC}, 6},
+        {{LEFT,   PBC, PBC}, 6},
+        {{RIGHT,  PBC, PBC}, 6},
+
+        {{MIDDLE, MIDDLE, MIDDLE}, 7},
+        {{MIDDLE, MIDDLE, PBC}, 7},
+        {{MIDDLE, PBC, MIDDLE}, 7},
+        {{PBC, MIDDLE, MIDDLE}, 7},
+        {{PBC, PBC, MIDDLE}, 7},
+        {{PBC, MIDDLE, PBC}, 7},
+        {{MIDDLE, PBC, PBC}, 7},
+        {{PBC, PBC, PBC}, 7},
 };
 
 const std::map<IDX_3D, int> zoid_to_num_map = {

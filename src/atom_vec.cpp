@@ -335,6 +335,92 @@ void AtomVec::grow_stencil_md(int n, Atom* atom_)
    copy atom I info to atom J
 ------------------------------------------------------------------------- */
 
+void AtomVec::copy_with_force(int i, int j, int delflag)
+{
+    int m, n, datatype, cols, collength, ncols;
+    void *pdata, *plength;
+
+    tag[j] = tag[i];
+    type[j] = type[i];
+    mask[j] = mask[i];
+    image[j] = image[i];
+    x[j][0] = x[i][0];
+    x[j][1] = x[i][1];
+    x[j][2] = x[i][2];
+    v[j][0] = v[i][0];
+    v[j][1] = v[i][1];
+    v[j][2] = v[i][2];
+    f[j][0] = f[i][0];
+    f[j][1] = f[i][1];
+    f[j][2] = f[i][2];
+
+    if (ncopy) {
+        for (n = 0; n < ncopy; n++) {
+            pdata = mcopy.pdata[n];
+            datatype = mcopy.datatype[n];
+            cols = mcopy.cols[n];
+            if (datatype == Atom::DOUBLE) {
+                if (cols == 0) {
+                    double *vec = *((double **) pdata);
+                    vec[j] = vec[i];
+                } else if (cols > 0) {
+                    double **array = *((double ***) pdata);
+                    for (m = 0; m < cols; m++) array[j][m] = array[i][m];
+                } else {
+                    double **array = *((double ***) pdata);
+                    collength = mcopy.collength[n];
+                    plength = mcopy.plength[n];
+                    if (collength)
+                        ncols = (*((int ***) plength))[i][collength - 1];
+                    else
+                        ncols = (*((int **) plength))[i];
+                    for (m = 0; m < ncols; m++) array[j][m] = array[i][m];
+                }
+            } else if (datatype == Atom::INT) {
+                if (cols == 0) {
+                    int *vec = *((int **) pdata);
+                    vec[j] = vec[i];
+                } else if (cols > 0) {
+                    int **array = *((int ***) pdata);
+                    for (m = 0; m < cols; m++) array[j][m] = array[i][m];
+                } else {
+                    int **array = *((int ***) pdata);
+                    collength = mcopy.collength[n];
+                    plength = mcopy.plength[n];
+                    if (collength)
+                        ncols = (*((int ***) plength))[i][collength - 1];
+                    else
+                        ncols = (*((int **) plength))[i];
+                    for (m = 0; m < ncols; m++) array[j][m] = array[i][m];
+                }
+            } else if (datatype == Atom::BIGINT) {
+                if (cols == 0) {
+                    bigint *vec = *((bigint **) pdata);
+                    vec[j] = vec[i];
+                } else if (cols > 0) {
+                    bigint **array = *((bigint ***) pdata);
+                    for (m = 0; m < cols; m++) array[j][m] = array[i][m];
+                } else {
+                    bigint **array = *((bigint ***) pdata);
+                    collength = mcopy.collength[n];
+                    plength = mcopy.plength[n];
+                    if (collength)
+                        ncols = (*((int ***) plength))[i][collength - 1];
+                    else
+                        ncols = (*((int **) plength))[i];
+                    for (m = 0; m < ncols; m++) array[j][m] = array[i][m];
+                }
+            }
+        }
+    }
+
+    if (bonus_flag) copy_bonus(i, j, delflag);
+
+    if (atom->nextra_grow)
+        for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+            modify->fix[atom->extra_grow[iextra]]->copy_arrays(i, j, delflag);
+}
+
 void AtomVec::copy(int i, int j, int delflag)
 {
   int m, n, datatype, cols, collength, ncols;

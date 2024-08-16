@@ -80,6 +80,7 @@ class AtomVec : protected Pointers {
   virtual void grow(int);
   virtual void grow_pointers() {}
   virtual void copy(int, int, int);
+  virtual void copy_with_force(int, int, int);
 
   virtual void copy_bonus(int, int, int) {}
   virtual void clear_bonus() {}

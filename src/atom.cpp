@@ -2135,7 +2135,11 @@ void Atom::sort()
 
   // re-setup sort bins if needed
 
-  if (domain->box_change) setup_sort_bins();
+  std::cout << "domain change: " << domain->box_change << " setup sort bins: num bins: " << nbins << " nlocal: " << nlocal << " nmax: " << nmax << std::endl;
+
+  if (domain->box_change) {
+      setup_sort_bins();
+  }
   if (nbins == 1) return;
 
   // reallocate per-atom vectors if needed
@@ -2345,8 +2349,14 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         // setup_sort_bins_stencil_md();
     }
 
+    if (nlocal == nmax) {
+        avec->grow_stencil_md(0, this);
+    }
+
     int* current = new int[nlocal];
     for (int i = 0; i < nlocal; i++) current[i] = i;
+
+    int* stencil_md_p = new int[nlocal];
 
     std::vector<int> local_idxs(nlocal);
     for (int i = 0; i < nlocal; i++) {
@@ -2391,7 +2401,7 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
     for (int i = 0; i < nlocal; i++) {
         int new_idx = local_idxs[i];
         assert(new_idx >= 0 && new_idx < nlocal);
-        permute[i] = new_idx;
+        stencil_md_p[i] = new_idx;
     }
 
     // current = current permutation, just reuse next vector
@@ -2405,15 +2415,21 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
     // empty = location in atom list that is currently empty
 
     for (int i = 0; i < nlocal; i++) {
-        if (current[i] == permute[i]) continue;
-        avec->copy(i,nlocal,0);
-        int empty = i;
-        while (permute[empty] != i) {
-            avec->copy(permute[empty],empty,0);
-            empty = current[empty] = permute[empty];
+        if (current[i] == stencil_md_p[i]) {
+            continue;
         }
-        avec->copy(nlocal,empty,0);
-        current[empty] = permute[empty];
+
+        // avec->copy(i,nlocal,0);
+        avec->copy_with_force(i,nlocal,0);
+        int empty = i;
+        while (stencil_md_p[empty] != i) {
+            avec->copy_with_force(stencil_md_p[empty],empty,0);
+            empty = current[empty] = stencil_md_p[empty];
+        }
+
+        // avec->copy(nlocal,empty,0);
+        avec->copy_with_force(nlocal,empty,0);
+        current[empty] = stencil_md_p[empty];
     }
 
     for (int i = 0; i < nlocal; i++) {
@@ -2437,7 +2453,7 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
 
     int flag = 0;
     for (int i = 0; i < nlocal; i++)
-        if (current[i] != permute[i]) flag = 1;
+        if (current[i] != stencil_md_p[i]) flag = 1;
 
     if (flag) {
         std::cout << "Sort did not work" << std::endl;
@@ -2448,6 +2464,54 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
     //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
 
     delete[] current;
+    delete[] stencil_md_p;
+}
+
+void Atom::setup_lammps_pair_bins() {
+    auto &bin_bounds = stencilMD->GET_BOUNDS(true, 0);
+
+    std::map<IDX_3D, IDX_3D> bin_to_partition;
+
+    constexpr int NUM_PBC_BINS = 2;
+    constexpr int NUM_MIDDLE_BINS = 2;
+    constexpr int middle_idx = NUM_BINS / 2;
+
+    for (int dim = 0; dim < 3; dim++) {
+        double lo = domain->sublo[dim];
+        double hi = domain->subhi[dim];
+        double mid_point = (lo + hi) / 2;
+        std::set<int> bin_vals_dim;
+        for (auto &[bin, idxs]: bin_to_local_idxs) {
+            int bin_val = bin[dim];
+            bin_vals_dim.insert(bin_val);
+        }
+
+        for (auto &[bin, idxs]: bin_to_local_idxs) {
+            int bin_val = bin[dim];
+            if (bin_val < NUM_PBC_BINS || bin_val > NUM_BINS - NUM_PBC_BINS) {
+                bin_to_partition[bin][dim] = PBC;
+            } else if (bin_val >= middle_idx - NUM_MIDDLE_BINS && bin_val <= middle_idx + NUM_MIDDLE_BINS) {
+                bin_to_partition[bin][dim] = MIDDLE;
+            } else if (bin_val < middle_idx - NUM_MIDDLE_BINS) {
+                bin_to_partition[bin][dim] = LEFT;
+            } else if (bin_val > middle_idx + NUM_MIDDLE_BINS) {
+                bin_to_partition[bin][dim] = RIGHT;
+            } else {
+                assert(false);
+            }
+        }
+    }
+
+    for (auto &[bin, partition]: bin_to_partition) {
+        partition_to_bins[partition[0]][partition[1]][partition[2]].push_back(bin);
+    }
+
+    assert(lammps_partition_to_dep.size() == 4 * 4 * 4);
+
+    for (auto& [partition, dep] : lammps_partition_to_dep) {
+        dep_to_partitions[dep].push_back(partition);
+    }
+    num_deps = NUM_DEPS_BINS;
 }
 
 void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {

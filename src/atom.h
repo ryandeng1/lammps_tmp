@@ -308,7 +308,7 @@ class Atom : protected Pointers {
 
   // new set of data structures
   // loop structure, iterate over dep level --> partitions at dep --> partitions to bins --> bins to idxs
-  std::vector<IDX_3D> partition_to_bins[3][3][3];
+  std::vector<IDX_3D> partition_to_bins[4][4][4];
   std::vector<IDX_3D> dep_to_partitions[NUM_DEPS_BINS];
   int num_deps;
 
@@ -423,6 +423,7 @@ class Atom : protected Pointers {
   int map_style_set_stencil_md();
   virtual void map_init_stencil_md(int check = 1);
 
+  virtual void setup_lammps_pair_bins();
   virtual void setup_stencil_md_pair_bins(queue_info& zoid, int timestep);
 
   std::map<int, int> tag_to_idx;

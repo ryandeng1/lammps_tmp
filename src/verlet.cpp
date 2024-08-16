@@ -312,6 +312,20 @@ void Verlet::setup(int flag) {
     if (!ONLY_RUN_LAMMPS) {
         setup_stencil_md();
     }
+
+    if (LAMMPS_USE_BINS) {
+        // lammps setup
+        auto& bin_bounds = stencilMD->GET_BOUNDS(true, 0);
+        auto& sorted_bin_indices = stencilMD->sorted_bin_indices[0];
+        domain->pbc();
+        comm->exchange();
+        atom->sort_local_stencil_md_bins(bin_bounds, sorted_bin_indices);
+        comm->borders();
+        neighbor->build(1);
+        atom->setup_lammps_pair_bins();
+        neighbor->setup_stencil_md_bond_bins(atom);
+    }
+
 }
 
 void atom_reorder_stencil_md(Atom* atom_, int* current, int* permute, int start,
@@ -5721,8 +5735,9 @@ void Verlet::run(int n) {
                     }
                     timer->stamp();
                     comm->exchange();
-                    if (sortflag && ntimestep >= atom->nextsort)
+                    if (sortflag && ntimestep >= atom->nextsort) {
                         atom->sort();
+                    }
                     comm->borders();
                     if (triclinic)
                         domain->lamda2x(atom->nlocal + atom->nghost);
@@ -5759,7 +5774,11 @@ void Verlet::run(int n) {
 
                 if (pair_compute_flag) {
                     auto begin = std::chrono::high_resolution_clock::now();
-                    force->pair->compute(eflag, vflag);
+                    if (!LAMMPS_USE_BINS) {
+                        force->pair->compute(eflag, vflag);
+                    } else {
+                        stencilMD->lammps_fuse_force_compute();
+                    }
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                     lammps_pair_duration += duration;
@@ -5770,7 +5789,9 @@ void Verlet::run(int n) {
                 if (atom->molecular != Atom::ATOMIC) {
                     if (force->bond) {
                         auto begin = std::chrono::high_resolution_clock::now();
-                        force->bond->compute(eflag, vflag);
+                        if (!LAMMPS_USE_BINS) {
+                            force->bond->compute(eflag, vflag);
+                        }
                         auto end = std::chrono::high_resolution_clock::now();
                         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                         lammps_bond_duration += duration;
