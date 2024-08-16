@@ -2468,6 +2468,8 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
 }
 
 void Atom::setup_lammps_pair_bins() {
+    // assume 2 levels of splitting
+
     auto &bin_bounds = stencilMD->GET_BOUNDS(true, 0);
 
     std::map<IDX_3D, IDX_3D> bin_to_partition;
@@ -2490,11 +2492,11 @@ void Atom::setup_lammps_pair_bins() {
             int bin_val = bin[dim];
             if (bin_val < NUM_PBC_BINS || bin_val > NUM_BINS - NUM_PBC_BINS) {
                 bin_to_partition[bin][dim] = PBC;
-            } else if (bin_val >= middle_idx - NUM_MIDDLE_BINS && bin_val <= middle_idx + NUM_MIDDLE_BINS) {
+            } else if (bin_val > middle_idx - NUM_MIDDLE_BINS && bin_val < middle_idx + NUM_MIDDLE_BINS) {
                 bin_to_partition[bin][dim] = MIDDLE;
-            } else if (bin_val < middle_idx - NUM_MIDDLE_BINS) {
+            } else if (bin_val <= middle_idx - NUM_MIDDLE_BINS) {
                 bin_to_partition[bin][dim] = LEFT;
-            } else if (bin_val > middle_idx + NUM_MIDDLE_BINS) {
+            } else if (bin_val >= middle_idx + NUM_MIDDLE_BINS) {
                 bin_to_partition[bin][dim] = RIGHT;
             } else {
                 assert(false);
@@ -2512,6 +2514,50 @@ void Atom::setup_lammps_pair_bins() {
         dep_to_partitions[dep].push_back(partition);
     }
     num_deps = NUM_DEPS_BINS;
+
+
+
+    std::map<IDX_3D, IDX_3D> bin_to_partition_level2;
+
+    for (int dep = 0; dep < num_deps; dep++) {
+        for (auto& p : dep_to_partitions[dep]) {
+            auto& bins = partition_to_bins[p[0]][p[1]][p[2]];
+            for (auto& bin : bins) {
+                for (int dim = 0; dim < 3; dim++) {
+                    int bin_val = bin[dim];
+                    if (bin_val < 2) {
+                        bin_to_partition_level2[bin][dim] = MIDDLE;
+                    } else if (bin_val >= 2 && bin_val <= 4) {
+                        bin_to_partition_level2[bin][dim] = LEFT;
+                    } else if (bin_val >= 5 && bin_val <= 6) {
+                        bin_to_partition_level2[bin][dim] = MIDDLE;
+                    } else if (bin_val >= 7 && bin_val <= 8) {
+                        bin_to_partition_level2[bin][dim] = RIGHT;
+                    } else if (bin_val >= 9 && bin_val <= 11) {
+                        bin_to_partition_level2[bin][dim] = MIDDLE;
+                    } else if (bin_val >= 12 && bin_val <= 14) {
+                        bin_to_partition_level2[bin][dim] = LEFT;
+                    } else if (bin_val >= 15 && bin_val <= 16) {
+                        bin_to_partition_level2[bin][dim] = MIDDLE;
+                    } else if (bin_val >= 17 && bin_val <= 18) {
+                        bin_to_partition_level2[bin][dim] = RIGHT;
+                    } else if (bin_val == 19) {
+                        bin_to_partition_level2[bin][dim] = MIDDLE;
+                    } else {
+                        assert(false);
+                    }
+                }
+
+                auto p2 = IDX_3D({bin_to_partition_level2[bin][0], bin_to_partition_level2[bin][1], bin_to_partition_level2[bin][2]});
+                partition_to_bins_level2[p[0]][p[1]][p[2]][p2[0]][p2[1]][p2[2]].push_back(bin);
+            }
+
+        }
+    }
+
+    for (auto& [partition, dep_level2] : partition_to_dep) {
+        dep_to_partitions_level2[dep_level2].push_back(partition);
+    }
 }
 
 void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {

@@ -101,6 +101,8 @@ public:
     // typedef struct { double x,y,z; } dbl3_t;
 
     void lammps_fuse_force_compute() {
+        std::cout << "lammps fuse force. " << std::endl;
+
         const auto * _noalias const x = (dbl3_t_stencil_md *) atom->x[0];
         auto * _noalias const f = (dbl3_t_stencil_md *) atom->f[0];
 
@@ -143,6 +145,141 @@ public:
             // int num_atoms = 0;
             cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
                 auto& partition = partitions_at_dep[d];
+
+                for (int dep_level2 = 0; dep_level2 < NUM_DEPS_BINS; dep_level2++) {
+                    auto& partitions_at_dep_level2 = atom->dep_to_partitions_level2[dep_level2];
+
+                    cilk_for (int d2 = 0; d2 < partitions_at_dep_level2.size(); d2++) {
+                        auto& partition_level2 = partitions_at_dep_level2[d2];
+                        auto& bins = atom->partition_to_bins_level2[partition[0]][partition[1]][partition[2]][partition_level2[0]][partition_level2[1]][partition_level2[2]];
+
+                        for (int b = 0; b < bins.size(); b++) {
+                            auto& bin = bins[b];
+                            const auto& idxs = atom->bin_to_local_idxs[bin];
+                            int start = idxs[0];
+                            for (int idx = 0; idx < idxs.size(); idx++) {
+                                // int ii = idxs[idx];
+                                int ii = start + idx;
+                                assert(ii == start + idx);
+                                const int i = ilist[ii];
+                                assert(i == ii);
+                                assert(ii >= 0 && ii < nlocal);
+                                const int itype = atom_type[i];
+
+                                const int *_noalias const jlist = firstneigh[i];
+                                const double *_noalias const cutsqi = cutsq[itype];
+                                const double *_noalias const offseti = offset[itype];
+                                const double *_noalias const lj1i = lj1[itype];
+                                const double *_noalias const lj2i = lj2[itype];
+                                const double *_noalias const lj3i = lj3[itype];
+                                const double *_noalias const lj4i = lj4[itype];
+
+                                double xtmp = x[i].x;
+                                double ytmp = x[i].y;
+                                double ztmp = x[i].z;
+                                int jnum = numneigh[i];
+
+                                double fxtmp = 0.0;
+                                double fytmp = 0.0;
+                                double fztmp = 0.0;
+
+                                for (int jj = 0; jj < jnum; jj++) {
+                                    double evdwl = 0.0;
+                                    int j = jlist[jj];
+                                    double factor_lj = special_lj[pair->sbmask(j)];
+                                    j &= NEIGHMASK;
+
+                                    double delx = xtmp - x[j].x;
+                                    double dely = ytmp - x[j].y;
+                                    double delz = ztmp - x[j].z;
+                                    double rsq = delx * delx + dely * dely + delz * delz;
+                                    int jtype = atom_type[j];
+
+                                    if (rsq < cutsqi[jtype]) {
+                                        double r2inv = 1.0 / rsq;
+                                        double r6inv = r2inv * r2inv * r2inv;
+                                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                                        double fpair = factor_lj * forcelj * r2inv;
+
+                                        fxtmp += delx * fpair;
+                                        fytmp += dely * fpair;
+                                        fztmp += delz * fpair;
+
+                                        if (newton_pair || j < nlocal) {
+                                            f[j].x -= delx * fpair;
+                                            f[j].y -= dely * fpair;
+                                            f[j].z -= delz * fpair;
+                                        }
+                                    }
+                                }
+
+                                auto& lst_bonds = neighbor->atom_bondlist[i];
+                                for (int j = 0; j < lst_bonds.size(); j++) {
+                                    auto& bond_info = lst_bonds[j];
+                                    int i2 = bond_info.first;
+                                    int type = bond_info.second;
+
+                                    double delx = xtmp - x[i2].x;
+                                    double dely = ytmp - x[i2].y;
+                                    double delz = ztmp - x[i2].z;
+
+                                    double rsq = delx * delx + dely * dely + delz * delz;
+                                    double r0sq = r0[type] * r0[type];
+                                    double rlogarg = 1.0 - rsq / r0sq;
+
+                                    if (rlogarg < 0.1) {
+                                        std::cout << "dep: " << dep << " dep2: " << dep_level2 << " partition level 1: " << m[partition[0]] << " " << m[partition[1]] << " " << m[partition[2]]
+                                                  << " partition level 2: " << m[partition_level2[0]] << " " << m[partition_level2[1]] << " " << m[partition_level2[2]] << std::endl;
+                                        std::cout << "i: " << i << " other idx: " << i2 << std::endl;
+                                        std::cout << "rsq: " << rsq << std::endl;
+                                        std::cout << "bin: " << bin[0] << " " << bin[1] << " " << bin[2] << std::endl;
+                                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+//                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+//                                return;
+                                        assert(false);
+
+                                        rlogarg = 0.1;
+                                    }
+
+                                    double fbond = -k[type] / rlogarg;
+
+                                    // force from LJ term
+                                    double sr2 = 0.0;
+                                    double sr6 = 0.0;
+
+                                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                                        sr2 = sigma[type] * sigma[type] / rsq;
+                                        sr6 = sr2 * sr2 * sr2;
+                                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                                    }
+
+                                    // energy
+
+                                    // apply force to each of 2 atoms
+
+                                    if (newton_pair || i < nlocal) {
+                                        fxtmp += delx * fbond;
+                                        fytmp += dely * fbond;
+                                        fztmp += delz * fbond;
+                                    }
+
+                                    if (newton_pair || i2 < nlocal) {
+                                        f[i2].x -= delx * fbond;
+                                        f[i2].y -= dely * fbond;
+                                        f[i2].z -= delz * fbond;
+                                    }
+                                }
+
+                                f[i].x += fxtmp;
+                                f[i].y += fytmp;
+                                f[i].z += fztmp;
+                            }
+                        }
+                    }
+                }
+
+                /*
                 auto& bins = atom->partition_to_bins[partition[0]][partition[1]][partition[2]];
 
                 for (int b = 0; b < bins.size(); b++) {
@@ -263,6 +400,7 @@ public:
                         f[i].z += fztmp;
                     }
                 }
+                */
             }
         }
     }
