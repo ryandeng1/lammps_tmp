@@ -139,13 +139,11 @@ public:
 
         for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
             auto& partitions_at_dep = atom->dep_to_partitions[dep];
-            int num_bins = 0;
 
             // int num_atoms = 0;
-            for (int d = 0; d < partitions_at_dep.size(); d++) {
+            cilk_for (int d = 0; d < partitions_at_dep.size(); d++) {
                 auto& partition = partitions_at_dep[d];
                 auto& bins = atom->partition_to_bins[partition[0]][partition[1]][partition[2]];
-                num_bins += bins.size();
 
                 for (int b = 0; b < bins.size(); b++) {
                     auto& bin = bins[b];
