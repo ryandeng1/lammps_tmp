@@ -5778,7 +5778,8 @@ void Verlet::run(int n) {
                         force->pair->compute(eflag, vflag);
                     } else {
                         // stencilMD->lammps_fuse_force_compute();
-                        stencilMD->lammps_fuse_force_compute2();
+                        // stencilMD->lammps_fuse_force_compute2();
+                        stencilMD->lammps_fuse_force_compute_atomics();
                     }
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
