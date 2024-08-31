@@ -2436,6 +2436,7 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         double* pos = x[i];
         auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
         bin_to_local_idxs[bin].push_back(i);
+        bin_to_local_idxs2[bin[0]][bin[1]][bin[2]].push_back(i);
         if (std::find(local_bins.begin(), local_bins.end(), bin) == local_bins.end()) {
             local_bins.push_back(bin);
         }

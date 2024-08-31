@@ -174,7 +174,8 @@ public:
                     auto &bin = bins[b];
                     // bool bin_use_atomics = atom->bin_to_use_atomic[bin];
                     bool bin_use_atomics = atom->bin_to_use_atomic[bin[0]][bin[1]][bin[2]];
-                    auto &idxs = atom->bin_to_local_idxs[bin];
+                    // auto &idxs = atom->bin_to_local_idxs[bin];
+                    auto &idxs = atom->bin_to_local_idxs2[bin[0]][bin[1]][bin[2]];
                     int start = idxs[0];
 
                     for (int idx = 0; idx < idxs.size(); idx++) {
