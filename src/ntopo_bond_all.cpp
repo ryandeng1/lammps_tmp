@@ -116,6 +116,9 @@ int closest_image(Atom* atom_, int i, int j) {
 
 // Need to do similar shenanigans to ensure bond list respects dependency levels
 void NTopoBondAll::build_stencil_md(Atom* atom_, Domain* domain_, queue_info& zoid) {
+    if (zoid.num == 0) {
+        std::cout << "zoid: " << zoid.num << " ntopobondall stencilmd build start" << std::endl;
+    }
     int i, m, atom1;
 
     int nlocal = atom_->nlocal;

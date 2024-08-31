@@ -293,7 +293,10 @@ class Atom : protected Pointers {
   std::map<IDX_3D, std::vector<int>> bin_to_local_idxs;
   std::vector<IDX_3D> local_bins;
   std::vector<std::vector<int>> local_bins_idxs;
+  std::map<IDX_3D, bool> bin_to_use_atomic;
   std::map<IDX_3D, int> bin_to_local_bins_idx;
+
+  std::vector<bool> idx_use_atomics;
 
   std::vector<double> local_dtfm;
 
@@ -311,6 +314,8 @@ class Atom : protected Pointers {
   std::vector<IDX_3D> partition_to_bins[4][4][4];
   std::vector<IDX_3D> dep_to_partitions[NUM_DEPS_BINS];
   int num_deps;
+
+  std::vector<IDX_3D> partition_to_neighbors[4][4][4];
 
   std::vector<IDX_3D> partition_to_bins_level2[4][4][4][4][4][4];
   std::vector<IDX_3D> dep_to_partitions_level2[4][4][4][NUM_DEPS_BINS];

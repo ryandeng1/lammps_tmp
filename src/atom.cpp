@@ -2441,6 +2441,10 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         }
     }
 
+    constexpr int NUM_PBC_BINS = 3;
+    constexpr int NUM_MIDDLE_BINS = 3;
+    constexpr int middle_idx = NUM_BINS / 2;
+
     for (int i = 0; i < local_bins.size(); i++) {
         local_bins_idxs.push_back(bin_to_local_idxs[local_bins[i]]);
     }
@@ -2474,8 +2478,8 @@ void Atom::setup_lammps_pair_bins() {
 
     std::map<IDX_3D, IDX_3D> bin_to_partition;
 
-    constexpr int NUM_PBC_BINS = 2;
-    constexpr int NUM_MIDDLE_BINS = 2;
+    constexpr int NUM_PBC_BINS = 3;
+    constexpr int NUM_MIDDLE_BINS = 3;
     constexpr int middle_idx = NUM_BINS / 2;
 
     for (int dim = 0; dim < 3; dim++) {
@@ -2515,6 +2519,7 @@ void Atom::setup_lammps_pair_bins() {
     }
     num_deps = NUM_DEPS_BINS;
 
+    /*
     std::map<IDX_3D, IDX_3D> bin_to_partition_level2;
 
     for (int dep = 0; dep < num_deps; dep++) {
@@ -2618,6 +2623,58 @@ void Atom::setup_lammps_pair_bins() {
                 }
             }
         }
+    }
+    */
+
+    // do indices
+
+    for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+        for (auto& partition : dep_to_partitions[dep]) {
+            for (auto& bin : partition_to_bins[partition[0]][partition[1]][partition[2]]) {
+                bool use_atomic = false;
+                for (int dim = 0; dim < 3; dim++) {
+                    /*
+                    if ((bin[dim] <= NUM_PBC_BINS + 1 || bin[dim] >= middle_idx - NUM_MIDDLE_BINS - 1)) {
+                        use_atomic = true;
+                    } else if ((bin[dim] >= NUM_BINS - NUM_PBC_BINS - 2 || bin[dim] <= middle_idx + NUM_MIDDLE_BINS + 1)) {
+                        use_atomic = true;
+                    }
+                    */
+
+                    // Ex: 20 bins, 18, 19, 0, 1, 2 PBC
+                    // Ex: 20 bins, 8 9 10 11 12
+
+                    if (partition[dim] == LEFT && (bin[dim] <= NUM_PBC_BINS || bin[dim] >= middle_idx - NUM_MIDDLE_BINS)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == RIGHT && (bin[dim] >= NUM_BINS - NUM_PBC_BINS || bin[dim] <= middle_idx + NUM_MIDDLE_BINS)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == MIDDLE && (bin[dim] <= middle_idx - NUM_MIDDLE_BINS + 1 || bin[dim] >= middle_idx + NUM_MIDDLE_BINS - 1)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == PBC && (bin[dim] <= NUM_PBC_BINS - 1 || bin[dim] <= NUM_BINS - NUM_PBC_BINS + 1)) {
+                        use_atomic = true;
+                    }
+                }
+
+                /*
+                if (use_atomic) {
+                    std::map<int, std::string> m;
+                    m[LEFT] = "LEFT";
+                    m[RIGHT] = "RIGHT";
+                    m[MIDDLE] = "MIDDLE";
+                    m[PBC] = "PBC";
+                    std::cout << "partition: " << m[partition[0]] << " " << m[partition[1]] << " " << m[partition[2]] << " bin: " << bin[0] << " " << bin[1] << " " << bin[2] << std::endl;
+                }
+                */
+
+                bin_to_use_atomic[bin] = use_atomic;
+            }
+        }
+    }
+
+    for (int i = 0; i < nlocal + nghost; i++) {
+        auto& bin_bounds = stencilMD->GET_BOUNDS(true, 0);
+        auto bin = get_bin(bin_bounds, atom->x[i], domain->boxlo, domain->boxhi);
+        idx_use_atomics.push_back(bin_to_use_atomic.at(bin));
     }
 }
 

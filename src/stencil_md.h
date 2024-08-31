@@ -9,6 +9,7 @@
 #include "pair_lj_cut.h"
 #include "pair_lj_cut_omp.h"
 #include <cilk/cilk.h>
+#include <cilk/cilksan.h>
 #include "force.h"
 #include "modify.h"
 #include "pair.h"
@@ -23,6 +24,7 @@
 #include "domain.h"
 #include "thr_omp.h"
 #include "fix_langevin.h"
+#include <cilk/opadd_reducer.h>
 
 namespace LAMMPS_NS {
 
@@ -99,6 +101,240 @@ public:
 
     // Begin methods used for fusing
     // typedef struct { double x,y,z; } dbl3_t;
+    void lammps_fuse_force_compute2() {
+        const auto * _noalias const x = (dbl3_t_stencil_md *) atom->x[0];
+        auto * _noalias const f = (dbl3_t_stencil_md *) atom->f[0];
+
+        auto pair = (PairLJCutOMP*) force->pair;
+        auto bond = (BondFENE*) force->bond;
+
+        const int * _noalias const ilist = pair->list->ilist;
+        const int * _noalias const numneigh = pair->list->numneigh;
+        const int * const * const firstneigh = pair->list->firstneigh;
+        const double * _noalias const special_lj = force->special_lj;
+
+        assert(pair->list->inum == atom->nlocal);
+
+        const auto* cutsq = pair->cutsq;
+        const auto* offset = pair->offset;
+        const auto* lj1 = pair->lj1;
+        const auto* lj2 = pair->lj2;
+        const auto* lj3 = pair->lj3;
+        const auto* lj4 = pair->lj4;
+        auto newton_pair = force->newton_pair;
+
+        const auto* sigma = bond->sigma;
+        const auto* epsilon = bond->epsilon;
+        const auto* r0 = bond->r0;
+        const auto* k = bond->k;
+
+        int* atom_type = atom->type;
+
+        int nlocal = atom->nlocal;
+
+        std::map<int, std::string> m;
+        m[LEFT] = "LEFT";
+        m[RIGHT] = "RIGHT";
+        m[MIDDLE] = "MIDDLE";
+        m[PBC] = "PBC";
+
+        /*
+        int total_num_bins = 0;
+        for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+            auto& partitions_at_dep = atom->dep_to_partitions[dep];
+            for (int d = 0; d < partitions_at_dep.size(); d++) {
+                auto &partition = partitions_at_dep[d];
+                int num_bins = atom->partition_to_bins[partition[0]][partition[1]][partition[2]].size();
+                total_num_bins += num_bins;
+            }
+        }
+
+        for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+            auto& partitions_at_dep = atom->dep_to_partitions[dep];
+            for (int d = 0; d < partitions_at_dep.size(); d++) {
+                auto &partition = partitions_at_dep[d];
+                int num_bins = atom->partition_to_bins[partition[0]][partition[1]][partition[2]].size();
+                std::cout << BOLDYELLOW << "dep: " << dep << " partition: " << m[partition[0]] << " " << m[partition[1]] << " " << m[partition[2]]
+                    << " num bins: " << num_bins << " percentage: " << num_bins * 1.0 / total_num_bins << RESET_COLOR << std::endl;
+            }
+        }
+
+        assert(false);
+        */
+
+        // Cilksan_fake_mutex fake_lock;
+        // __cilksan_register_lock_explicit(&fake_lock);
+
+        cilk::opadd_reducer<int> num_use_atomics_bins = 0;
+
+        std::map<IDX_3D, IDX_3D> bin_to_partition;
+        std::map<IDX_3D, IDX_3D> bin_to_bin;
+
+        cilk_for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+            auto &partitions_at_dep = atom->dep_to_partitions[dep];
+            cilk_for (int p = 0; p < partitions_at_dep.size(); p++) {
+                auto &partition = partitions_at_dep[p];
+                auto &bins = atom->partition_to_bins[partition[0]][partition[1]][partition[2]];
+                for (int b = 0; b < bins.size(); b++) {
+                    auto &bin = bins[b];
+                    bool bin_use_atomics = atom->bin_to_use_atomic[bin];
+                    auto &idxs = atom->bin_to_local_idxs[bin];
+                    int start = idxs[0];
+
+                    for (int idx = 0; idx < idxs.size(); idx++) {
+                        int ii = start + idx;
+                        assert(ii == start + idx);
+                        const int i = ilist[ii];
+                        assert(i == ii);
+                        assert(ii >= 0 && ii < nlocal);
+                        const int itype = atom_type[i];
+
+                        assert(bin_use_atomics == atom->idx_use_atomics[i]);
+
+                        const int *_noalias const jlist = firstneigh[i];
+                        const double *_noalias const cutsqi = cutsq[itype];
+                        const double *_noalias const offseti = offset[itype];
+                        const double *_noalias const lj1i = lj1[itype];
+                        const double *_noalias const lj2i = lj2[itype];
+                        const double *_noalias const lj3i = lj3[itype];
+                        const double *_noalias const lj4i = lj4[itype];
+
+                        double xtmp = x[i].x;
+                        double ytmp = x[i].y;
+                        double ztmp = x[i].z;
+                        int jnum = numneigh[i];
+
+                        double fxtmp = 0.0;
+                        double fytmp = 0.0;
+                        double fztmp = 0.0;
+
+                        for (int jj = 0; jj < jnum; jj++) {
+                            double evdwl = 0.0;
+                            int j = jlist[jj];
+                            double factor_lj = special_lj[pair->sbmask(j)];
+                            j &= NEIGHMASK;
+
+                            double delx = xtmp - x[j].x;
+                            double dely = ytmp - x[j].y;
+                            double delz = ztmp - x[j].z;
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            int jtype = atom_type[j];
+
+                            if (rsq < cutsqi[jtype]) {
+                                double r2inv = 1.0 / rsq;
+                                double r6inv = r2inv * r2inv * r2inv;
+                                double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                                double fpair = factor_lj * forcelj * r2inv;
+
+                                fxtmp += delx * fpair;
+                                fytmp += dely * fpair;
+                                fztmp += delz * fpair;
+
+                                if (newton_pair || j < nlocal) {
+                                    if (atom->idx_use_atomics[j]) {
+                                        // __cilksan_acquire_lock(&fake_lock);
+                                        __atomic_fetch_add(&f[j].x, -delx * fpair, __ATOMIC_RELAXED);
+                                        __atomic_fetch_add(&f[j].y, -dely * fpair, __ATOMIC_RELAXED);
+                                        __atomic_fetch_add(&f[j].z, -delz * fpair, __ATOMIC_RELAXED);
+                                        // __cilksan_release_lock(&fake_lock);
+                                    } else {
+                                        f[j].x -= delx * fpair;
+                                        f[j].y -= dely * fpair;
+                                        f[j].z -= delz * fpair;
+                                    }
+                                }
+                            }
+                        }
+
+                        auto &lst_bonds = neighbor->atom_bondlist[i];
+                        for (int j = 0; j < lst_bonds.size(); j++) {
+                            auto &bond_info = lst_bonds[j];
+                            int i2 = bond_info.first;
+                            int type = bond_info.second;
+
+                            double delx = xtmp - x[i2].x;
+                            double dely = ytmp - x[i2].y;
+                            double delz = ztmp - x[i2].z;
+
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            double r0sq = r0[type] * r0[type];
+                            double rlogarg = 1.0 - rsq / r0sq;
+
+                            if (rlogarg < 0.1) {
+                                error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                               update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                                //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                                //                                return;
+                                assert(false);
+
+                                rlogarg = 0.1;
+                            }
+
+                            double fbond = -k[type] / rlogarg;
+
+                            // force from LJ term
+                            double sr2 = 0.0;
+                            double sr6 = 0.0;
+
+                            if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                                sr2 = sigma[type] * sigma[type] / rsq;
+                                sr6 = sr2 * sr2 * sr2;
+                                fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                            }
+
+                            // energy
+
+                            // apply force to each of 2 atoms
+
+                            if (newton_pair || i < nlocal) {
+                                fxtmp += delx * fbond;
+                                fytmp += dely * fbond;
+                                fztmp += delz * fbond;
+                            }
+
+                            if (newton_pair || i2 < nlocal) {
+                                if (atom->idx_use_atomics[i2]) {
+                                    // __cilksan_acquire_lock(&fake_lock);
+                                    __atomic_fetch_add(&f[i2].x, -delx * fbond, __ATOMIC_RELAXED);
+                                    __atomic_fetch_add(&f[i2].y, -dely * fbond, __ATOMIC_RELAXED);
+                                    __atomic_fetch_add(&f[i2].z, -delz * fbond, __ATOMIC_RELAXED);
+                                    // __cilksan_release_lock(&fake_lock);
+                                } else {
+                                    f[i2].x -= delx * fbond;
+                                    f[i2].y -= dely * fbond;
+                                    f[i2].z -= delz * fbond;
+                                }
+                            }
+                        }
+
+                        if (bin_use_atomics) {
+                            // __cilksan_acquire_lock(&fake_lock);
+                            __atomic_fetch_add(&f[i].x, fxtmp, __ATOMIC_RELAXED);
+                            __atomic_fetch_add(&f[i].y, fytmp, __ATOMIC_RELAXED);
+                            __atomic_fetch_add(&f[i].z, fztmp, __ATOMIC_RELAXED);
+                            // __cilksan_release_lock(&fake_lock);
+                        } else {
+                            f[i].x += fxtmp;
+                            f[i].y += fytmp;
+                            f[i].z += fztmp;
+                        }
+                    }
+                }
+            }
+        }
+
+        /*
+        __cilksan_unregister_lock_explicit(&fake_lock);
+
+        int num_idx_use_atomics = 0;
+        for (int i = 0; i < nlocal + atom->nghost; i++) {
+            if (atom->idx_use_atomics[i]) {
+                num_idx_use_atomics++;
+            }
+        }
+        std::cout << "num idx use atomics: " << num_idx_use_atomics << std::endl;
+        */
+    }
 
     void lammps_fuse_force_compute() {
         const auto * _noalias const x = (dbl3_t_stencil_md *) atom->x[0];
@@ -429,7 +665,7 @@ public:
             // int idx = local_idxs[i];
             int idx = start + i;
             assert(idx == local_idxs[i]);
-            if (mask[idx] || true) {
+            if (mask[idx]) {
                 // const double dtfm = dtf / mass[type[i]];
                 const double dtfm = next->local_dtfm[i];
                 next_v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
@@ -468,7 +704,7 @@ public:
             dbl3_t_stencil_md fdrag, fran;
             double gamma1, gamma2;
 
-            if (mask[idx] || true) {
+            if (mask[idx]) {
                 gamma1 = gfactor1[type[idx]];
                 gamma2 = gfactor2[type[idx]] * tsqrt;
 
@@ -639,7 +875,7 @@ public:
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
         cilk_for (int i = 0; i < nlocal; i++) {
-            if (mask[i] || true) {
+            if (mask[i]) {
                 // const double dtfm = dtf / mass[type[i]];
                 const double dtfm = curr->local_dtfm[i];
 
@@ -1003,8 +1239,7 @@ public:
         int nlocal = next->nlocal;
 
         // loop over neighbors of my atoms
-        #pragma cilk grainsize 256
-        cilk_for (int ii = 0; ii < nlocal; ii++) {
+        for (int ii = 0; ii < nlocal; ii++) {
             const int i = ilist[ii];
             const int itype = type[i];
 
@@ -1054,8 +1289,6 @@ public:
                     }
                 }
             }
-
-
 
             auto& lst_bonds = neigh_next->atom_bondlist[i];
             for (int j = 0; j < lst_bonds.size(); j++) {

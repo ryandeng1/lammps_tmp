@@ -5777,7 +5777,8 @@ void Verlet::run(int n) {
                     if (!LAMMPS_USE_BINS) {
                         force->pair->compute(eflag, vflag);
                     } else {
-                        stencilMD->lammps_fuse_force_compute();
+                        // stencilMD->lammps_fuse_force_compute();
+                        stencilMD->lammps_fuse_force_compute2();
                     }
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
