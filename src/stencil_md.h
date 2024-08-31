@@ -172,7 +172,8 @@ public:
                 auto &bins = atom->partition_to_bins[partition[0]][partition[1]][partition[2]];
                 for (int b = 0; b < bins.size(); b++) {
                     auto &bin = bins[b];
-                    bool bin_use_atomics = atom->bin_to_use_atomic[bin];
+                    // bool bin_use_atomics = atom->bin_to_use_atomic[bin];
+                    bool bin_use_atomics = atom->bin_to_use_atomic[bin[0]][bin[1]][bin[2]];
                     auto &idxs = atom->bin_to_local_idxs[bin];
                     int start = idxs[0];
 
@@ -322,12 +323,23 @@ public:
         __cilksan_unregister_lock_explicit(&fake_lock);
 
         int num_idx_use_atomics = 0;
-        for (int i = 0; i < nlocal + atom->nghost; i++) {
+        for (int i = 0; i < nlocal; i++) {
             if (atom->idx_use_atomics[i]) {
                 num_idx_use_atomics++;
             }
         }
-        std::cout << "num idx use atomics: " << num_idx_use_atomics << std::endl;
+
+        int num_bins_use_atomics = 0;
+        for (int i = 0; i < NUM_BINS; i++) {
+            for (int j = 0; j < NUM_BINS; j++) {
+                for (int h = 0; h < NUM_BINS; h++) {
+                    if (atom->bin_to_use_atomic[i][j][h]) {
+                        num_bins_use_atomics++;
+                    }
+                }
+            }
+        }
+        std::cout << "num idx use atomics: " << num_idx_use_atomics << " out of: " << nlocal + atom->nghost << " num bins use atomic: " << num_bins_use_atomics << std::endl;
         */
     }
 

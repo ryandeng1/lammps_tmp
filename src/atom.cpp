@@ -2628,6 +2628,14 @@ void Atom::setup_lammps_pair_bins() {
 
     // do indices
 
+    for (int i = 0; i < NUM_BINS; i++) {
+        for (int j = 0; j < NUM_BINS; j++) {
+            for (int k = 0; k < NUM_BINS; k++) {
+                bin_to_use_atomic[i][j][k] = false;
+            }
+        }
+    }
+
     for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
         for (auto& partition : dep_to_partitions[dep]) {
             for (auto& bin : partition_to_bins[partition[0]][partition[1]][partition[2]]) {
@@ -2644,13 +2652,13 @@ void Atom::setup_lammps_pair_bins() {
                     // Ex: 20 bins, 18, 19, 0, 1, 2 PBC
                     // Ex: 20 bins, 8 9 10 11 12
 
-                    if (partition[dim] == LEFT && (bin[dim] <= NUM_PBC_BINS || bin[dim] >= middle_idx - NUM_MIDDLE_BINS)) {
+                    if (partition[dim] == LEFT && (bin[dim] == NUM_PBC_BINS || bin[dim] == middle_idx - NUM_MIDDLE_BINS)) {
                         use_atomic = true;
-                    } else if (partition[dim] == RIGHT && (bin[dim] >= NUM_BINS - NUM_PBC_BINS || bin[dim] <= middle_idx + NUM_MIDDLE_BINS)) {
+                    } else if (partition[dim] == RIGHT && (bin[dim] == NUM_BINS - NUM_PBC_BINS || bin[dim] == middle_idx + NUM_MIDDLE_BINS)) {
                         use_atomic = true;
-                    } else if (partition[dim] == MIDDLE && (bin[dim] <= middle_idx - NUM_MIDDLE_BINS + 1 || bin[dim] >= middle_idx + NUM_MIDDLE_BINS - 1)) {
+                    } else if (partition[dim] == MIDDLE && (bin[dim] == middle_idx - NUM_MIDDLE_BINS + 1 || bin[dim] == middle_idx + NUM_MIDDLE_BINS - 1)) {
                         use_atomic = true;
-                    } else if (partition[dim] == PBC && (bin[dim] <= NUM_PBC_BINS - 1 || bin[dim] <= NUM_BINS - NUM_PBC_BINS + 1)) {
+                    } else if (partition[dim] == PBC && (bin[dim] == NUM_PBC_BINS - 1 || bin[dim] == NUM_BINS - NUM_PBC_BINS + 1)) {
                         use_atomic = true;
                     }
                 }
@@ -2666,7 +2674,8 @@ void Atom::setup_lammps_pair_bins() {
                 }
                 */
 
-                bin_to_use_atomic[bin] = use_atomic;
+                // bin_to_use_atomic[bin] = use_atomic;
+                bin_to_use_atomic[bin[0]][bin[1]][bin[2]] = use_atomic;
             }
         }
     }
@@ -2674,8 +2683,35 @@ void Atom::setup_lammps_pair_bins() {
     for (int i = 0; i < nlocal + nghost; i++) {
         auto& bin_bounds = stencilMD->GET_BOUNDS(true, 0);
         auto bin = get_bin(bin_bounds, atom->x[i], domain->boxlo, domain->boxhi);
-        idx_use_atomics.push_back(bin_to_use_atomic.at(bin));
+        // idx_use_atomics.push_back(bin_to_use_atomic.at(bin));
+        idx_use_atomics.push_back(bin_to_use_atomic[bin[0]][bin[1]][bin[2]]);
     }
+
+    /*
+    for (int dep = 0; dep < NUM_DEPS_BINS; dep++) {
+        for (auto& partition : atom->dep_to_partitions[dep]) {
+            auto& bins = atom->partition_to_bins[partition[0]][partition[1]][partition[2]];
+            int num_bins_use_atomics = 0;
+            for (auto& bin: bins) {
+                if (bin_to_use_atomic[bin[0]][bin[1]][bin[2]]) {
+                    num_bins_use_atomics++;
+                    if (partition[0] == LEFT && partition[1] == LEFT && partition[2] == LEFT) {
+                        std::cout << "bin: " << bin[0] << " " << bin[1] << " " << bin[2] << std::endl;
+
+                    }
+                }
+            }
+            std::map<int, std::string> m;
+            m[LEFT] = "LEFT";
+            m[RIGHT] = "RIGHT";
+            m[MIDDLE] = "MIDDLE";
+            m[PBC] = "PBC";
+            std::cout << "partition: " << m[partition[0]] << " " << m[partition[1]] << " " << m[partition[2]] << " num bins use atomic: " << num_bins_use_atomics << " num bins: " << bins.size() << std::endl;
+        }
+    }
+
+    assert(false);
+    */
 }
 
 void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
