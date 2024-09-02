@@ -315,17 +315,16 @@ void Verlet::setup(int flag) {
 
     if (LAMMPS_USE_BINS) {
         // lammps setup
-        auto& bin_bounds = stencilMD->GET_BOUNDS(true, 0);
-        auto& sorted_bin_indices = stencilMD->sorted_bin_indices[0];
+        auto& lammps_bin_bounds = stencilMD->LAMMPS_GET_BOUNDS(true, 0);
+        auto& lammps_sorted_bin_indices = stencilMD->lammps_sorted_bin_indices[0];
         domain->pbc();
         comm->exchange();
-        atom->sort_local_stencil_md_bins(bin_bounds, sorted_bin_indices);
+        atom->lammps_sort_local_bins(lammps_bin_bounds, lammps_sorted_bin_indices);
         comm->borders();
         neighbor->build(1);
         atom->setup_lammps_pair_bins();
         neighbor->setup_stencil_md_bond_bins(atom);
     }
-
 }
 
 void atom_reorder_stencil_md(Atom* atom_, int* current, int* permute, int start,
@@ -5777,9 +5776,10 @@ void Verlet::run(int n) {
                     if (!LAMMPS_USE_BINS) {
                         force->pair->compute(eflag, vflag);
                     } else {
+                        stencilMD->lammps_fuse_force_compute_lammps_bins();
                         // stencilMD->lammps_fuse_force_compute();
                         // stencilMD->lammps_fuse_force_compute2();
-                        stencilMD->lammps_fuse_force_compute_atomics();
+                        // stencilMD->lammps_fuse_force_compute_atomics();
                     }
                     auto end = std::chrono::high_resolution_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();

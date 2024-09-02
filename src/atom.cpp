@@ -2343,6 +2343,136 @@ void Atom::sort_stencil_md() {
 }
 
 // sort local atoms based on what bin they belong in, then within the bin, sort based on a space-filling curve on all of the local atoms
+void Atom::lammps_sort_local_bins(std::vector<double>& bin_bounds, std::vector<std::size_t>& sorted_bin_indices) {
+    if (domain->box_change) {
+        assert(false);
+        // setup_sort_bins_stencil_md();
+    }
+
+    if (nlocal == nmax) {
+        avec->grow_stencil_md(0, this);
+    }
+
+    int* current = new int[nlocal];
+    for (int i = 0; i < nlocal; i++) current[i] = i;
+
+    int* lammps_p = new int[nlocal];
+
+    std::vector<int> local_idxs(nlocal);
+    for (int i = 0; i < nlocal; i++) {
+        local_idxs[i] = i;
+    }
+
+    std::map<int, int> bin_to_idx;
+    for (int i = 0; i < sorted_bin_indices.size(); i++) {
+        bin_to_idx[sorted_bin_indices[i]] = i;
+    }
+
+    std::sort(local_idxs.begin(), local_idxs.end(), [&](const auto& idx_a, const auto& idx_b) {
+        // compare z coordinates of bounds, then y then x, and then finally compare tag for a consistent global ordering
+        // return std::tie(std::get<3>(a), std::get<2>(a), std::get<1>(a), std::get<0>(a)) < std::tie(std::get<3>(b), std::get<2>(b), std::get<1>(b), std::get<0>(b));
+
+        assert(idx_a < nlocal && idx_a >= 0);
+        assert(idx_b < nlocal && idx_b >= 0);
+
+        double* pos_a = x[idx_a];
+        double* pos_b = x[idx_b];
+
+        auto bin_a = get_bin(bin_bounds, pos_a, domain->boxlo, domain->boxhi);
+        auto bin_b = get_bin(bin_bounds, pos_b, domain->boxlo, domain->boxhi);
+
+        int bin_idx_a = lammps_get_bin_idx(bin_a);
+        int bin_idx_b = lammps_get_bin_idx(bin_b);
+
+        int find_idx_a = bin_to_idx[bin_idx_a];
+        int find_idx_b = bin_to_idx[bin_idx_b];
+
+        if (find_idx_a < find_idx_b) {
+            return true;
+        } else if (find_idx_a > find_idx_b) {
+            return false;
+        }
+
+        if (bin_a != bin_b) {
+            std::cout << "bin_a: " << bin_a[0] << " " << bin_a[1] << " " << bin_a[2] << " pos: " << pos_a[0] << " " << pos_a[1] << " " << pos_a[2]
+                      << " bin_b: " << bin_b[0] << " " << bin_b[1] << " " << bin_b[2] << " pos: " << pos_b[0] << " " << pos_b[1] << " " << pos_b[2] << std::endl;
+        }
+        assert(bin_a == bin_b);
+
+        return tag[idx_a] < tag[idx_b];
+    });
+
+    for (int i = 0; i < nlocal; i++) {
+        int new_idx = local_idxs[i];
+        assert(new_idx >= 0 && new_idx < nlocal);
+        lammps_p[i] = new_idx;
+    }
+
+    // current = current permutation, just reuse next vector
+    // current[I] = J means Ith current atom is Jth old atom
+
+    // reorder local atom list, when done, current = permute
+    // perform "in place" using copy() to extra atom location at end of list
+    // inner while loop processes one cycle of the permutation
+    // copy before inner-loop moves an atom to end of atom list
+    // copy after inner-loop moves atom at end of list back into list
+    // empty = location in atom list that is currently empty
+
+    for (int i = 0; i < nlocal; i++) {
+        if (current[i] == lammps_p[i]) {
+            continue;
+        }
+
+        // avec->copy(i,nlocal,0);
+        avec->copy_with_force(i,nlocal,0);
+        int empty = i;
+        while (lammps_p[empty] != i) {
+            avec->copy_with_force(lammps_p[empty],empty,0);
+            empty = current[empty] = lammps_p[empty];
+        }
+
+        // avec->copy(nlocal,empty,0);
+        avec->copy_with_force(nlocal,empty,0);
+        current[empty] = lammps_p[empty];
+    }
+
+    for (int i = 0; i < nlocal; i++) {
+        double* pos = x[i];
+        auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
+        bin_to_local_idxs[bin].push_back(i);
+        bin_to_local_idxs2[bin[0]][bin[1]][bin[2]].push_back(i);
+        if (std::find(local_bins.begin(), local_bins.end(), bin) == local_bins.end()) {
+            local_bins.push_back(bin);
+        }
+    }
+
+    for (int i = 0; i < local_bins.size(); i++) {
+        local_bins_idxs.push_back(bin_to_local_idxs[local_bins[i]]);
+    }
+
+    for (int i = 0; i < local_bins.size(); i++) {
+        bin_to_local_bins_idx[local_bins[i]] = i;
+    }
+
+    // sanity check that current = permute
+
+    int flag = 0;
+    for (int i = 0; i < nlocal; i++)
+        if (current[i] != lammps_p[i]) flag = 1;
+
+    if (flag) {
+        std::cout << "Sort did not work" << std::endl;
+        assert(false);
+    }
+    //int flagall;
+    //MPI_Allreduce(&flag,&flagall,1,MPI_INT,MPI_SUM,world);
+    //if (flagall) error->all(FLERR,"Atom sort did not operate correctly");
+
+    delete[] current;
+    delete[] lammps_p;
+}
+
+// sort local atoms based on what bin they belong in, then within the bin, sort based on a space-filling curve on all of the local atoms
 void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vector<std::size_t>& sorted_bin_indices) {
     if (domain->box_change) {
         assert(false);
@@ -2442,10 +2572,6 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         }
     }
 
-    constexpr int NUM_PBC_BINS = 3;
-    constexpr int NUM_MIDDLE_BINS = 3;
-    constexpr int middle_idx = NUM_BINS / 2;
-
     for (int i = 0; i < local_bins.size(); i++) {
         local_bins_idxs.push_back(bin_to_local_idxs[local_bins[i]]);
     }
@@ -2473,16 +2599,39 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
 }
 
 void Atom::setup_lammps_pair_bins() {
-    // assume 2 levels of splitting
+    auto &bin_bounds = stencilMD->LAMMPS_GET_BOUNDS(true, 0);
 
-    auto &bin_bounds = stencilMD->GET_BOUNDS(true, 0);
+    idx_use_atomics.reserve(nlocal + nghost);
+    for (int i = 0; i < nlocal + nghost; i++) {
+        double* pos = x[i];
+        auto bin = get_bin(bin_bounds, atom->x[i], domain->boxlo, domain->boxhi);
+        bool close_to_border = false;
+        for (int dim = 0; dim < 3; dim++) {
+            double lo = bin_bounds[bin[dim]];
+            double hi = bin_bounds[bin[dim] + 1];
+            double adjusted_pos = pos[dim];
+            if (adjusted_pos < domain->boxlo[dim]) {
+                adjusted_pos += domain->prd[dim];
+            }
+            if (adjusted_pos >= domain->boxhi[dim]) {
+                adjusted_pos -= domain->prd[dim];
+            }
+            if (adjusted_pos - lo <= ALLEGRO_SLOPE) {
+                close_to_border = true;
+                break;
+            }
+            if (hi - adjusted_pos <= ALLEGRO_SLOPE) {
+                close_to_border = true;
+                break;
+            }
+        }
+        idx_use_atomics.push_back(close_to_border);
+    }
+
+    return;
+
 
     std::map<IDX_3D, IDX_3D> bin_to_partition;
-
-    // constexpr int NUM_PBC_BINS = 3;
-    // constexpr int NUM_MIDDLE_BINS = 3;
-    // constexpr int middle_idx = NUM_BINS / 2;
-
 
     constexpr int NUM_PBC_BINS = 5;
     constexpr int NUM_LEFT_BINS = 6;
@@ -2490,9 +2639,6 @@ void Atom::setup_lammps_pair_bins() {
     constexpr int NUM_RIGHT_BINS = 6;
 
     for (int dim = 0; dim < 3; dim++) {
-        double lo = domain->sublo[dim];
-        double hi = domain->subhi[dim];
-        double mid_point = (lo + hi) / 2;
         std::set<int> bin_vals_dim;
         for (auto &[bin, idxs]: bin_to_local_idxs) {
             int bin_val = bin[dim];

@@ -430,7 +430,7 @@ int get_mpi_tag(int dst_zoid_num, int src_zoid_num, int start_timestep, int end_
     return mpi_tag;
 }
 
-IDX_3D  get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi) {
+IDX_3D get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi) {
     std::vector<int> res(3);
 
     for (int dim = 0; dim < 3; dim++) {

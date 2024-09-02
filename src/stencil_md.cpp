@@ -1762,6 +1762,57 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
     return bounds_at_timestep;
 }
 
+std::vector<double>& StencilMD::LAMMPS_GET_BOUNDS(bool curr_dt, int timestep) {
+    auto& bounds_at_timestep = curr_dt ? lammps_bounds[timestep] : lammps_bounds[NUM_TIMESTEPS_IN_PARALLEL - timestep];
+
+    if (bounds_at_timestep.size() > 0) {
+        return bounds_at_timestep;
+    }
+
+    int dim = 0;
+
+    for (int i = 0; i < LAMMPS_NUM_REGIONS; i++) {
+        double width = (domain->boxhi[dim] - domain->boxlo[dim]) / LAMMPS_NUM_REGIONS;
+        bounds_at_timestep.push_back(domain->boxlo[dim] + width * i);
+    }
+
+    bounds_at_timestep.push_back(domain->boxhi[dim]);
+
+    std::vector<double> points_coords;
+    for (int i = 0; i < bounds_at_timestep.size() - 1; i++) {
+        double lo = bounds_at_timestep[i];
+        double hi = bounds_at_timestep[i + 1];
+        assert(hi - lo > 1e-5);
+        double avg = (lo + hi) / 2;
+        points_coords.push_back(avg);
+    }
+
+    std::vector<Point> points(LAMMPS_NUM_REGIONS * LAMMPS_NUM_REGIONS * LAMMPS_NUM_REGIONS);
+    for (int bin_x = 0; bin_x < points_coords.size(); bin_x++) {
+        for (int bin_y = 0; bin_y < points_coords.size(); bin_y++) {
+            for (int bin_z = 0; bin_z < points_coords.size(); bin_z++) {
+                IDX_3D bin = {bin_x, bin_y, bin_z};
+                int bin_idx = lammps_get_bin_idx(bin);
+                points[bin_idx] = Point(points_coords[bin_x], points_coords[bin_y], points_coords[bin_z]);
+            }
+        }
+    }
+
+    auto& indices = curr_dt ? lammps_sorted_bin_indices[timestep] : lammps_sorted_bin_indices[NUM_TIMESTEPS_IN_PARALLEL - timestep];
+    assert(indices.size() == 0);
+    indices.reserve(points.size());
+    for (int i = 0; i < points.size(); i++) {
+        indices.push_back(i);
+    }
+
+    CGAL::spatial_sort(indices.begin(),
+                       indices.end(),
+                       Search_traits(CGAL::make_property_map(points)));
+
+    // assert(false);
+    return bounds_at_timestep;
+}
+
 void StencilMD::initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping) {
     auto * _noalias const x = (dbl3_t_stencil_md *) atom_->x[0];
     auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];

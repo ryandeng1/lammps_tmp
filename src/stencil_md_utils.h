@@ -136,6 +136,8 @@ constexpr bool USE_ATOMICS = false;
 
 constexpr int NUM_BINS = 22;
 
+constexpr int LAMMPS_NUM_REGIONS = 4;
+
 constexpr bool PAIR_USE_BINS = true;
 
 constexpr bool SORT_BINS_BASED_ON_LOCAL_IDX = false;
@@ -636,6 +638,25 @@ int get_segments(const std::vector<int>&, std::vector<int>&, std::vector<int>&, 
 int get_mpi_tag(int dst, int src, int start_timestep=0, int end_timestep=0);
 
 IDX_3D get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi);
+
+inline __attribute__((always_inline)) int lammps_get_bin_idx(const IDX_3D& bin) {
+    int x = bin[0];
+    int y = bin[1];
+    int z = bin[2];
+    if (x >= LAMMPS_NUM_REGIONS || x < 0) {
+        std::cout << "bin x: " << x << std::endl;
+    }
+    if (y >= LAMMPS_NUM_REGIONS || y < 0) {
+        std::cout << "bin y: " << y << std::endl;
+    }
+    if (z >= LAMMPS_NUM_REGIONS || z < 0) {
+        std::cout << "bin z: " << z << std::endl;
+    }
+    assert(x < LAMMPS_NUM_REGIONS && x >= 0);
+    assert(y < LAMMPS_NUM_REGIONS && y >= 0);
+    assert(z < LAMMPS_NUM_REGIONS && z >= 0);
+    return z * LAMMPS_NUM_REGIONS * LAMMPS_NUM_REGIONS + y * LAMMPS_NUM_REGIONS + x;
+}
 
 inline __attribute__((always_inline)) int get_bin_idx(const IDX_3D& bin) {
     // int x = std::get<0>(bin);
