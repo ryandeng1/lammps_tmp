@@ -149,11 +149,13 @@ public:
         m[PBC] = "PBC";
         */
 
+        /*
         constexpr bool DEBUG_CILK = true;
         Cilksan_fake_mutex fake_lock;
         if (DEBUG_CILK) {
             __cilksan_register_lock_explicit(&fake_lock);
         }
+        */
 
         auto& local_bins = atom->local_bins;
         auto& local_bins_idxs = atom->local_bins_idxs;
@@ -214,15 +216,19 @@ public:
 
                         if (newton_pair || j < nlocal) {
                             if (atom->idx_use_atomics[j]) {
+                                /*
                                 if (DEBUG_CILK) {
                                     __cilksan_acquire_lock(&fake_lock);
                                 }
+                                */
                                 __atomic_fetch_add(&f[j].x, -delx * fpair, __ATOMIC_RELAXED);
                                 __atomic_fetch_add(&f[j].y, -dely * fpair, __ATOMIC_RELAXED);
                                 __atomic_fetch_add(&f[j].z, -delz * fpair, __ATOMIC_RELAXED);
+                                /*
                                 if (DEBUG_CILK) {
                                     __cilksan_release_lock(&fake_lock);
                                 }
+                                */
                             } else {
                                 f[j].x -= delx * fpair;
                                 f[j].y -= dely * fpair;
@@ -280,15 +286,19 @@ public:
 
                     if (newton_pair || i2 < nlocal) {
                         if (atom->idx_use_atomics[i2]) {
+                            /*
                             if (DEBUG_CILK) {
                                 __cilksan_acquire_lock(&fake_lock);
                             }
+                            */
                             __atomic_fetch_add(&f[i2].x, -delx * fbond, __ATOMIC_RELAXED);
                             __atomic_fetch_add(&f[i2].y, -dely * fbond, __ATOMIC_RELAXED);
                             __atomic_fetch_add(&f[i2].z, -delz * fbond, __ATOMIC_RELAXED);
+                            /*
                             if (DEBUG_CILK) {
                                 __cilksan_release_lock(&fake_lock);
                             }
+                            */
                         } else {
                             f[i2].x -= delx * fbond;
                             f[i2].y -= dely * fbond;
@@ -298,15 +308,19 @@ public:
                 }
 
                 if (atom->idx_use_atomics[i]) {
+                    /*
                     if (DEBUG_CILK) {
                         __cilksan_acquire_lock(&fake_lock);
                     }
+                    */
                     __atomic_fetch_add(&f[i].x, fxtmp, __ATOMIC_RELAXED);
                     __atomic_fetch_add(&f[i].y, fytmp, __ATOMIC_RELAXED);
                     __atomic_fetch_add(&f[i].z, fztmp, __ATOMIC_RELAXED);
+                    /*
                     if (DEBUG_CILK) {
                         __cilksan_release_lock(&fake_lock);
                     }
+                    */
                 } else {
                     f[i].x += fxtmp;
                     f[i].y += fytmp;
@@ -314,6 +328,12 @@ public:
                 }
             }
         }
+
+        /*
+        if (DEBUG_CILK) {
+            __cilksan_unregister_lock_explicit(&fake_lock);
+        }
+        */
     }
 
     // Begin methods used for fusing
