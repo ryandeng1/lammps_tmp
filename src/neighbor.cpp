@@ -2617,10 +2617,46 @@ void Neighbor::setup_stencil_md_bond_bins(Atom* atom_) {
         int bond_type_ = bond_info[2];
 
         assert(bond_src < atom_->nlocal || bond_dst < atom_->nlocal);
-        if (bond_src < bond_dst) {
-            atom_bondlist[bond_src].emplace_back(std::make_pair(bond_dst, bond_type_));
+
+        if (SORT_BINS_BASED_ON_LOCAL_IDX) {
+            if (bond_src < bond_dst) {
+                atom_bondlist[bond_src].emplace_back(std::make_pair(bond_dst, bond_type_));
+            } else {
+                atom_bondlist[bond_dst].emplace_back(std::make_pair(bond_src, bond_type_));
+            }
         } else {
-            atom_bondlist[bond_dst].emplace_back(std::make_pair(bond_src, bond_type_));
+            double xsrc = atom_->x[bond_src][0];
+            double ysrc = atom_->x[bond_src][1];
+            double zsrc = atom_->x[bond_src][2];
+
+            double xdst = atom_->x[bond_dst][0];
+            double ydst = atom_->x[bond_dst][1];
+            double zdst = atom_->x[bond_dst][2];
+
+            if (bond_src < atom_->nlocal && bond_dst < atom_->nlocal) {
+                bool src_first = false;
+                if (zsrc < zdst) {
+                    src_first = true;
+                } else if (zdst == zdst) {
+                    if (ysrc < ydst) {
+                        src_first = true;
+                    } else if (ysrc == ydst) {
+                        if (xsrc < xdst) {
+                            src_first = true;
+                        }
+                    }
+                }
+
+                if (src_first) {
+                    atom_bondlist[bond_src].emplace_back(std::make_pair(bond_dst, bond_type_));
+                } else {
+                    atom_bondlist[bond_dst].emplace_back(std::make_pair(bond_src, bond_type_));
+                }
+            } else if (bond_src < atom_->nlocal) {
+                atom_bondlist[bond_src].emplace_back(std::make_pair(bond_dst, bond_type_));
+            } else {
+                atom_bondlist[bond_dst].emplace_back(std::make_pair(bond_src, bond_type_));
+            }
         }
     }
 }

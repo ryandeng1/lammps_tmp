@@ -1681,7 +1681,8 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
         double hi_curr = zoid.zoid.cuts[0].upper + zoid.zoid.cuts[0].slope_upper * timestep;
 
         // std::vector<double> try_bounds = {lo_curr, lo_curr - ALLEGRO_SLOPE, lo_curr + ALLEGRO_SLOPE, hi_curr, hi_curr - ALLEGRO_SLOPE, hi_curr + ALLEGRO_SLOPE};
-        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        // for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int t = 0; t < 5; t++) {
             std::vector<int> try_different_vals = {-1, 0, 1};
             for (int try_val : try_different_vals) {
                 double lo = zoid.zoid.cuts[0].lower + zoid.zoid.cuts[0].slope_lower * t + try_val * ALLEGRO_SLOPE;
@@ -1704,7 +1705,8 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
     for (auto& try_val : try_bounds) {
         bool close_to_existing = false;
         for (auto& b : bounds_at_timestep) {
-            if (fabs(try_val - b) <= 1e-5) {
+            // if (fabs(try_val - b) <= 1e-5) {
+            if (fabs(try_val - b) < ALLEGRO_SLOPE - 1e-3) {
                 close_to_existing = true;
             }
         }
@@ -1713,41 +1715,6 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
             bounds_at_timestep.push_back(try_val);
         }
     }
-
-    /*
-    for (double lo : try_lo) {
-        for (double hi: try_hi) {
-            bool close_to_existing_lower = false;
-            bool close_to_existing_upper = false;
-
-            for (int check : check_domains) {
-                double check_lo = lo + check * domain->prd[0];
-                for (auto& bound : bounds) {
-                    if (fabs(lo - bound) <= 1e-5) {
-                        close_to_existing_lower = true;
-                    }
-                }
-
-                double check_hi = hi + check * domain->prd[0];
-                for (auto& bound : bounds) {
-                    if (fabs(hi - bound) <= 1e-5) {
-                        close_to_existing_upper = true;
-                    }
-                }
-
-            }
-
-
-            if (!close_to_existing_lower) {
-                bounds.push_back(lo_curr);
-            }
-
-            if (!close_to_existing_upper) {
-                bounds.push_back(hi_curr);
-            }
-        }
-    }
-    */
 
     std::sort(bounds_at_timestep.begin(), bounds_at_timestep.end());
 

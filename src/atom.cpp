@@ -2479,9 +2479,15 @@ void Atom::setup_lammps_pair_bins() {
 
     std::map<IDX_3D, IDX_3D> bin_to_partition;
 
-    constexpr int NUM_PBC_BINS = 3;
-    constexpr int NUM_MIDDLE_BINS = 3;
-    constexpr int middle_idx = NUM_BINS / 2;
+    // constexpr int NUM_PBC_BINS = 3;
+    // constexpr int NUM_MIDDLE_BINS = 3;
+    // constexpr int middle_idx = NUM_BINS / 2;
+
+
+    constexpr int NUM_PBC_BINS = 5;
+    constexpr int NUM_LEFT_BINS = 6;
+    constexpr int NUM_MIDDLE_BINS = 5;
+    constexpr int NUM_RIGHT_BINS = 6;
 
     for (int dim = 0; dim < 3; dim++) {
         double lo = domain->sublo[dim];
@@ -2493,6 +2499,7 @@ void Atom::setup_lammps_pair_bins() {
             bin_vals_dim.insert(bin_val);
         }
 
+        /*
         for (auto &[bin, idxs]: bin_to_local_idxs) {
             int bin_val = bin[dim];
             if (bin_val < NUM_PBC_BINS || bin_val > NUM_BINS - NUM_PBC_BINS) {
@@ -2502,6 +2509,22 @@ void Atom::setup_lammps_pair_bins() {
             } else if (bin_val <= middle_idx - NUM_MIDDLE_BINS) {
                 bin_to_partition[bin][dim] = LEFT;
             } else if (bin_val >= middle_idx + NUM_MIDDLE_BINS) {
+                bin_to_partition[bin][dim] = RIGHT;
+            } else {
+                assert(false);
+            }
+        }
+        */
+
+        for (auto &[bin, idxs]: bin_to_local_idxs) {
+            int bin_val = bin[dim];
+            if (bin_val < NUM_PBC_BINS) {
+                bin_to_partition[bin][dim] = PBC;
+            } else if (bin_val < NUM_PBC_BINS + NUM_LEFT_BINS) {
+                bin_to_partition[bin][dim] = LEFT;
+            } else if (bin_val < NUM_PBC_BINS + NUM_LEFT_BINS + NUM_MIDDLE_BINS) {
+                bin_to_partition[bin][dim] = MIDDLE;
+            } else if (bin_val < NUM_PBC_BINS + NUM_LEFT_BINS + NUM_MIDDLE_BINS + NUM_RIGHT_BINS) {
                 bin_to_partition[bin][dim] = RIGHT;
             } else {
                 assert(false);
@@ -2653,6 +2676,7 @@ void Atom::setup_lammps_pair_bins() {
                     // Ex: 20 bins, 18, 19, 0, 1, 2 PBC
                     // Ex: 20 bins, 8 9 10 11 12
 
+                    /*
                     if (partition[dim] == LEFT && (bin[dim] == NUM_PBC_BINS || bin[dim] == middle_idx - NUM_MIDDLE_BINS)) {
                         use_atomic = true;
                     } else if (partition[dim] == RIGHT && (bin[dim] == NUM_BINS - NUM_PBC_BINS || bin[dim] == middle_idx + NUM_MIDDLE_BINS)) {
@@ -2660,6 +2684,28 @@ void Atom::setup_lammps_pair_bins() {
                     } else if (partition[dim] == MIDDLE && (bin[dim] == middle_idx - NUM_MIDDLE_BINS + 1 || bin[dim] == middle_idx + NUM_MIDDLE_BINS - 1)) {
                         use_atomic = true;
                     } else if (partition[dim] == PBC && (bin[dim] == NUM_PBC_BINS - 1 || bin[dim] == NUM_BINS - NUM_PBC_BINS + 1)) {
+                        use_atomic = true;
+                    }
+                    */
+
+                    /*
+                    if (partition[dim] == LEFT && (bin[dim] == NUM_PBC_BINS)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == RIGHT && (bin[dim] == middle_idx + NUM_MIDDLE_BINS)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == MIDDLE && (bin[dim] == middle_idx - NUM_MIDDLE_BINS + 1)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == PBC && (bin[dim] == NUM_BINS - NUM_PBC_BINS + 1)) {
+                        use_atomic = true;
+                    }
+                    */
+                    if (partition[dim] == PBC && (bin[dim] == 0 || bin[dim] == NUM_PBC_BINS - 1)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == LEFT && (bin[dim] == NUM_PBC_BINS || bin[dim] == NUM_PBC_BINS + NUM_LEFT_BINS - 1)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == MIDDLE && (bin[dim] == NUM_PBC_BINS + NUM_LEFT_BINS || bin[dim] == NUM_PBC_BINS + NUM_LEFT_BINS + NUM_MIDDLE_BINS - 1)) {
+                        use_atomic = true;
+                    } else if (partition[dim] == RIGHT && (bin[dim] == NUM_PBC_BINS + NUM_LEFT_BINS + NUM_MIDDLE_BINS || bin[dim] == NUM_PBC_BINS + NUM_LEFT_BINS + NUM_MIDDLE_BINS + NUM_RIGHT_BINS - 1)) {
                         use_atomic = true;
                     }
                 }
