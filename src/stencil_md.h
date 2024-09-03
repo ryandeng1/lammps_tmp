@@ -123,6 +123,7 @@ public:
         const double * _noalias const special_lj = force->special_lj;
 
         auto spinlocks = atom->spinlocks;
+        auto mutexes = atom->mutexes;
 
         assert(pair->list->inum == atom->nlocal);
 
@@ -217,11 +218,13 @@ public:
 //                                if (DEBUG_CILK) {
 //                                    __cilksan_acquire_lock(&fake_lock);
 //                                }
-                                spinlocks[j].lock();
+                                // spinlocks[j].lock();
+                                mutexes[j].lock();
                                 f[j].x -= delx * fpair;
                                 f[j].y -= dely * fpair;
                                 f[j].z -= delz * fpair;
-                                spinlocks[j].unlock();
+                                // spinlocks[j].unlock();
+                                mutexes[j].unlock();
 //                                __atomic_fetch_add(&f[j].x, -delx * fpair, __ATOMIC_RELAXED);
 //                                __atomic_fetch_add(&f[j].y, -dely * fpair, __ATOMIC_RELAXED);
 //                                __atomic_fetch_add(&f[j].z, -delz * fpair, __ATOMIC_RELAXED);
@@ -292,11 +295,13 @@ public:
                             // __atomic_fetch_add(&f[i2].x, -delx * fbond, __ATOMIC_RELAXED);
                             // __atomic_fetch_add(&f[i2].y, -dely * fbond, __ATOMIC_RELAXED);
                             // __atomic_fetch_add(&f[i2].z, -delz * fbond, __ATOMIC_RELAXED);
-                            spinlocks[i2].lock();
+                            // spinlocks[i2].lock();
+                            mutexes[i2].lock();
                             f[i2].x -= delx * fbond;
                             f[i2].y -= dely * fbond;
                             f[i2].z -= delz * fbond;
-                            spinlocks[i2].unlock();
+                            mutexes[i2].unlock();
+                            // spinlocks[i2].unlock();
 //                            if (DEBUG_CILK) {
 //                                __cilksan_release_lock(&fake_lock);
 //                            }
@@ -317,11 +322,13 @@ public:
                     __atomic_fetch_add(&f[i].y, fytmp, __ATOMIC_RELAXED);
                     __atomic_fetch_add(&f[i].z, fztmp, __ATOMIC_RELAXED);
                     */
-                    spinlocks[i].lock();
+                    // spinlocks[i].lock();
+                    mutexes[i].lock();
                     f[i].x += fxtmp;
                     f[i].y += fytmp;
                     f[i].z += fztmp;
-                    spinlocks[i].unlock();
+                    // spinlocks[i].unlock();
+                    mutexes[i].unlock();
 //                    if (DEBUG_CILK) {
 //                        __cilksan_release_lock(&fake_lock);
 //                    }

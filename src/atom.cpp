@@ -2602,6 +2602,7 @@ void Atom::setup_lammps_pair_bins() {
     auto &bin_bounds = stencilMD->LAMMPS_GET_BOUNDS(true, 0);
 
     spinlocks = new spinlock[nlocal + nghost];
+    mutexes = new std::mutex[nlocal + nghost];
 
     idx_use_atomics.reserve(nlocal + nghost);
     for (int i = 0; i < nlocal + nghost; i++) {
