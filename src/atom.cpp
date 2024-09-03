@@ -2601,6 +2601,8 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
 void Atom::setup_lammps_pair_bins() {
     auto &bin_bounds = stencilMD->LAMMPS_GET_BOUNDS(true, 0);
 
+    spinlocks = new spinlock[nlocal + nghost];
+
     idx_use_atomics.reserve(nlocal + nghost);
     for (int i = 0; i < nlocal + nghost; i++) {
         double* pos = x[i];
@@ -2627,6 +2629,15 @@ void Atom::setup_lammps_pair_bins() {
         }
         idx_use_atomics.push_back(close_to_border);
     }
+
+    int num_use_atomics = 0;
+    for (int i = 0; i < nlocal + nghost; i++) {
+        if (idx_use_atomics[i]) {
+            num_use_atomics++;
+        }
+    }
+
+    std::cout << "num use atomics: " << num_use_atomics << " total: " << nlocal + nghost << std::endl;
 
     return;
 

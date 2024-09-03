@@ -299,6 +299,7 @@ class Atom : protected Pointers {
   std::map<IDX_3D, int> bin_to_local_bins_idx;
 
   std::vector<bool> idx_use_atomics;
+  spinlock* spinlocks;
 
   std::vector<double> local_dtfm;
 
