@@ -324,6 +324,8 @@ void Verlet::setup(int flag) {
         neighbor->build(1);
         atom->setup_lammps_pair_bins();
         neighbor->setup_stencil_md_bond_bins(atom);
+
+        stencilMD->lammps_setup_atomic_lists();
     }
 }
 
@@ -5628,6 +5630,7 @@ void Verlet::run(int n) {
 
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
+    cilk_scope{
             for (int i = 0; i < n + 1; i++) {
                 if (ONLY_RUN_STENCIL_MD) {
                     break;
@@ -5776,7 +5779,8 @@ void Verlet::run(int n) {
                     if (!LAMMPS_USE_BINS) {
                         force->pair->compute(eflag, vflag);
                     } else {
-                        stencilMD->lammps_fuse_force_compute_lammps_bins();
+                        stencilMD->lammps_fuse_force_compute_lammps_bins_split();
+                        // stencilMD->lammps_fuse_force_compute_lammps_bins();
                         // stencilMD->lammps_fuse_force_compute();
                         // stencilMD->lammps_fuse_force_compute2();
                         // stencilMD->lammps_fuse_force_compute_atomics();
@@ -5864,6 +5868,7 @@ void Verlet::run(int n) {
                 }
                 */
             }
+    }
 
     auto end_lammps = std::chrono::high_resolution_clock::now();
     auto duration_lammps = std::chrono::duration_cast<std::chrono::microseconds>(end_lammps - begin_lammps).count();
