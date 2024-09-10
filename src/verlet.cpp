@@ -326,6 +326,8 @@ void Verlet::setup(int flag) {
         neighbor->setup_stencil_md_bond_bins(atom);
 
         stencilMD->lammps_setup_atomic_lists();
+
+        stencilMD->INIT_PER_PARTITION_FORCE_ARRAY();
     }
 }
 
@@ -5779,7 +5781,8 @@ void Verlet::run(int n) {
                     if (!LAMMPS_USE_BINS) {
                         force->pair->compute(eflag, vflag);
                     } else {
-                        stencilMD->lammps_fuse_force_compute_lammps_bins_split();
+                        stencilMD->lammps_fuse_reduce();
+                        // stencilMD->lammps_fuse_force_compute_lammps_bins_split();
                         // stencilMD->lammps_fuse_force_compute_lammps_bins();
                         // stencilMD->lammps_fuse_force_compute();
                         // stencilMD->lammps_fuse_force_compute2();
