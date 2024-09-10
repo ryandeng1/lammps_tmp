@@ -9,6 +9,7 @@
 #include "pair_lj_cut.h"
 #include "pair_lj_cut_omp.h"
 #include <cilk/cilk.h>
+#include <cilk/cilk_api.h>
 #include <cilk/cilksan.h>
 #include "force.h"
 #include "modify.h"
@@ -105,12 +106,281 @@ public:
     std::vector<std::size_t> sorted_bin_indices[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
     dbl3_t_stencil_md* lammps_f;
-    int NUM_ARRAYS = 64;
+    static constexpr int NUM_ARRAYS = 64;
+
+    std::array<std::vector<std::pair<int, dbl3_t_stencil_md>>, NUM_ARRAYS>* lammps_f_updates;
+    int nworkers;
 
     void INIT_PER_PARTITION_FORCE_ARRAY() {
         int nall = (atom->nlocal + atom->nghost);
         lammps_f = new dbl3_t_stencil_md[nall * NUM_ARRAYS];
         memset(lammps_f, 0, nall * NUM_ARRAYS * 3 * sizeof(double));
+
+        nworkers = __cilkrts_get_nworkers();
+        lammps_f_updates = new std::array<std::vector<std::pair<int, dbl3_t_stencil_md>>, NUM_ARRAYS>[nworkers];
+    }
+
+    void lammps_fuse_reduce2() {
+        const auto * _noalias const x = (dbl3_t_stencil_md *) atom->x[0];
+        auto * _noalias const f = (dbl3_t_stencil_md *) atom->f[0];
+
+        auto pair = (PairLJCutOMP*) force->pair;
+        auto bond = (BondFENE*) force->bond;
+
+        const auto* _noalias bondlist = neighbor->atom_bondlist;
+
+        const int * _noalias const ilist = pair->list->ilist;
+        const int * _noalias const numneigh = pair->list->numneigh;
+        const int * const * const firstneigh = pair->list->firstneigh;
+        const double * _noalias const special_lj = force->special_lj;
+
+        auto* spinlocks = atom->spinlocks;
+        auto idx_use_atomics = atom->idx_use_atomics;
+
+        assert(pair->list->inum == atom->nlocal);
+
+        const auto* cutsq = pair->cutsq;
+        const auto* offset = pair->offset;
+        const auto* lj1 = pair->lj1;
+        const auto* lj2 = pair->lj2;
+        const auto* lj3 = pair->lj3;
+        const auto* lj4 = pair->lj4;
+        auto newton_pair = force->newton_pair;
+
+        const auto* _noalias const sigma = bond->sigma;
+        const auto* _noalias const epsilon = bond->epsilon;
+        const auto* _noalias const r0 = bond->r0;
+        const auto* _noalias const k = bond->k;
+
+        const int* _noalias const atom_type = atom->type;
+
+        const int nlocal = atom->nlocal;
+        const int nall = atom->nlocal + atom->nghost;
+
+        auto& local_bins = atom->local_bins;
+        auto& local_bins_idxs = atom->local_bins_idxs;
+
+        assert(local_bins.size() == NUM_ARRAYS);
+
+        cilk_for (int b = 0; b < local_bins.size(); b++) {
+            auto& bin = local_bins[b];
+            auto& idxs = local_bins_idxs[b];
+            auto& updates = lammps_f_updates[__cilkrts_get_worker_number()];
+
+            int start = idxs[0];
+            for (int idx = 0; idx < idxs.size(); idx++) {
+                int ii = start + idx;
+                assert(ii == start + idx);
+                const int i = ilist[ii];
+                assert(i == ii);
+                assert(ii >= 0 && ii < nlocal);
+                const int itype = atom_type[i];
+
+                // assert(bin_use_atomics == atom->idx_use_atomics[i]);
+
+                // const int *_noalias const jlist = firstneigh[i];
+                const auto& jlist_use_atomics = firstneigh_use_atomics[ii];
+                const auto& jlist_no_atomics = firstneigh_no_atomics[ii];
+
+                const auto& lst_bonds_use_atomics = bondlist_use_atomics[i];
+                const auto& lst_bonds_no_atomics = bondlist_no_atomics[i];
+
+                const double *_noalias const cutsqi = cutsq[itype];
+                const double *_noalias const offseti = offset[itype];
+                const double *_noalias const lj1i = lj1[itype];
+                const double *_noalias const lj2i = lj2[itype];
+                const double *_noalias const lj3i = lj3[itype];
+                const double *_noalias const lj4i = lj4[itype];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                int jnum = numneigh[i];
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jlist_use_atomics.size(); jj++) {
+                    double evdwl = 0.0;
+                    int j = jlist_use_atomics[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0 / rsq;
+                        double r6inv = r2inv * r2inv * r2inv;
+                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                        double fpair = factor_lj * forcelj * r2inv;
+
+                        fxtmp += delx * fpair;
+                        fytmp += dely * fpair;
+                        fztmp += delz * fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            // spinlocks[j].lock();
+                            updates[b].emplace_back(j, dbl3_t_stencil_md{-delx*fpair, -dely*fpair, -delz*fpair});
+                            // f[j].x -= delx * fpair;
+                            // f[j].y -= dely * fpair;
+                            // f[j].z -= delz * fpair;
+                            // spinlocks[j].unlock();
+                        }
+                    }
+                }
+
+                for (int jj = 0; jj < jlist_no_atomics.size(); jj++) {
+                    double evdwl = 0.0;
+                    int j = jlist_no_atomics[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0 / rsq;
+                        double r6inv = r2inv * r2inv * r2inv;
+                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                        double fpair = factor_lj * forcelj * r2inv;
+
+                        fxtmp += delx * fpair;
+                        fytmp += dely * fpair;
+                        fztmp += delz * fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                        }
+                    }
+                }
+
+                // auto& lst_bonds = bondlist[i];
+                for (auto& [i2, type] : bondlist_use_atomics[i]) {
+                    double delx = xtmp - x[i2].x;
+                    double dely = ytmp - x[i2].y;
+                    double delz = ztmp - x[i2].z;
+
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    double r0sq = r0[type] * r0[type];
+                    double rlogarg = 1.0 - rsq / r0sq;
+
+                    if (rlogarg < 0.1) {
+                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                        //                                return;
+                        assert(false);
+
+                        rlogarg = 0.1;
+                    }
+
+                    double fbond = -k[type] / rlogarg;
+
+                    // force from LJ term
+                    double sr2 = 0.0;
+                    double sr6 = 0.0;
+
+                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                        sr2 = sigma[type] * sigma[type] / rsq;
+                        sr6 = sr2 * sr2 * sr2;
+                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                    }
+
+                    // energy
+
+                    // apply force to each of 2 atoms
+
+                    if (newton_pair || i < nlocal) {
+                        fxtmp += delx * fbond;
+                        fytmp += dely * fbond;
+                        fztmp += delz * fbond;
+                    }
+
+                    if (newton_pair || i2 < nlocal) {
+                        // spinlocks[i2].lock();
+                        updates[b].emplace_back(i2, dbl3_t_stencil_md{-delx*fbond, -dely*fbond, -delz*fbond});
+                        // f[i2].x -= delx * fbond;
+                        // f[i2].y -= dely * fbond;
+                        // f[i2].z -= delz * fbond;
+                        // spinlocks[i2].unlock();
+                    }
+                }
+
+                for (auto& [i2, type] : bondlist_no_atomics[i]) {
+                    double delx = xtmp - x[i2].x;
+                    double dely = ytmp - x[i2].y;
+                    double delz = ztmp - x[i2].z;
+
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    double r0sq = r0[type] * r0[type];
+                    double rlogarg = 1.0 - rsq / r0sq;
+
+                    if (rlogarg < 0.1) {
+                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                        //                                return;
+                        assert(false);
+
+                        rlogarg = 0.1;
+                    }
+
+                    double fbond = -k[type] / rlogarg;
+
+                    // force from LJ term
+                    double sr2 = 0.0;
+                    double sr6 = 0.0;
+
+                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                        sr2 = sigma[type] * sigma[type] / rsq;
+                        sr6 = sr2 * sr2 * sr2;
+                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                    }
+
+                    // energy
+
+                    // apply force to each of 2 atoms
+
+                    if (newton_pair || i < nlocal) {
+                        fxtmp += delx * fbond;
+                        fytmp += dely * fbond;
+                        fztmp += delz * fbond;
+                    }
+
+                    if (newton_pair || i2 < nlocal) {
+                        f[i2].x -= delx * fbond;
+                        f[i2].y -= dely * fbond;
+                        f[i2].z -= delz * fbond;
+                    }
+                }
+
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+            }
+        }
+
+        // do reduction
+        for (int b = 0; b < local_bins.size(); b++) {
+            for (int i = 0; i < nworkers; i++) {
+                for (auto& [idx, info] : lammps_f_updates[i][b]) {
+                    f[idx].x += info.x;
+                    f[idx].y += info.y;
+                    f[idx].z += info.z;
+                }
+                lammps_f_updates[i][b].clear();
+            }
+        }
     }
 
     void lammps_fuse_reduce() {
@@ -392,7 +662,15 @@ public:
         auto& local_bins = atom->local_bins;
         auto& local_bins_idxs = atom->local_bins_idxs;
 
-        cilk_for (int b = 0; b < local_bins.size(); b++) {
+        int num_atomics_same_bin = 0;
+        int num_atomics_diff_bin = 0;
+        int num_neighbors_atomics = 0;
+        int num_neighbors_no_atomics = 0;
+
+        int num_atomics_within_cutoff = 0;
+        int num_no_atomics_within_cutoff = 0;
+
+        for (int b = 0; b < local_bins.size(); b++) {
             auto& bin = local_bins[b];
             auto& idxs = local_bins_idxs[b];
 
@@ -413,6 +691,9 @@ public:
 
                 const auto& lst_bonds_use_atomics = bondlist_use_atomics[i];
                 const auto& lst_bonds_no_atomics = bondlist_no_atomics[i];
+
+                num_neighbors_atomics += jlist_use_atomics.size();
+                num_neighbors_no_atomics += jlist_no_atomics.size();
 
                 const double *_noalias const cutsqi = cutsq[itype];
                 const double *_noalias const offseti = offset[itype];
@@ -443,6 +724,8 @@ public:
                     int jtype = atom_type[j];
 
                     if (rsq < cutsqi[jtype]) {
+                        num_atomics_within_cutoff++;
+
                         double r2inv = 1.0 / rsq;
                         double r6inv = r2inv * r2inv * r2inv;
                         double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
@@ -453,6 +736,14 @@ public:
                         fztmp += delz * fpair;
 
                         if (newton_pair || j < nlocal) {
+                            auto bin_bounds = stencilMD->LAMMPS_GET_BOUNDS(true, 0);
+                            auto my_bin = get_bin(bin_bounds, atom->x[i], domain->boxlo, domain->boxhi);
+                            auto other_bin = get_bin(bin_bounds, atom->x[j], domain->boxlo, domain->boxhi);
+                            if (my_bin != other_bin) {
+                                num_atomics_same_bin++;
+                            } else {
+                                num_atomics_diff_bin++;
+                            }
                             assert(idx_use_atomics[j]);
                             spinlocks[j].lock();
                             f[j].x -= delx * fpair;
@@ -476,6 +767,8 @@ public:
                     int jtype = atom_type[j];
 
                     if (rsq < cutsqi[jtype]) {
+                        num_no_atomics_within_cutoff++;
+
                         double r2inv = 1.0 / rsq;
                         double r6inv = r2inv * r2inv * r2inv;
                         double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
@@ -608,6 +901,8 @@ public:
                 }
             }
         }
+
+        std::cout << "num neighbors atomics within cutoff: " << num_atomics_within_cutoff << " num no atomics within cutoff: " << num_no_atomics_within_cutoff << " num same: " << num_atomics_same_bin << " num diff: " << num_atomics_diff_bin << " num neighbors atomics: " << num_neighbors_atomics << " num neigh no atomics: " << num_neighbors_no_atomics << std::endl;
     }
 
     void lammps_fuse_force_compute_lammps_bins() {
@@ -1529,8 +1824,6 @@ public:
             }
         }
     }
-
-    void initial_integrate_stencil_md(const IDX_3D& bin, Atom* atom_, Atom* next, int* atom_idx_mapping);
 
     inline void final_integrate_stencil_md(const std::vector<int>& local_idxs, Atom* next) {
         // update v of atoms in group

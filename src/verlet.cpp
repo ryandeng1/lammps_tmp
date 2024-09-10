@@ -5632,7 +5632,7 @@ void Verlet::run(int n) {
 
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
-    cilk_scope{
+    cilk_scope {
             for (int i = 0; i < n + 1; i++) {
                 if (ONLY_RUN_STENCIL_MD) {
                     break;
@@ -5781,7 +5781,8 @@ void Verlet::run(int n) {
                     if (!LAMMPS_USE_BINS) {
                         force->pair->compute(eflag, vflag);
                     } else {
-                        stencilMD->lammps_fuse_reduce();
+                        // stencilMD->lammps_fuse_reduce();
+                        stencilMD->lammps_fuse_reduce2();
                         // stencilMD->lammps_fuse_force_compute_lammps_bins_split();
                         // stencilMD->lammps_fuse_force_compute_lammps_bins();
                         // stencilMD->lammps_fuse_force_compute();
