@@ -6069,7 +6069,8 @@ void Verlet::run(int n) {
     }
 
     auto begin = std::chrono::high_resolution_clock::now();
-    run_stencil_md_pipelined(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
+    // run_stencil_md_pipelined(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
+    run_stencil_md_no_cilk_for(n, test_f, test_x, test_v);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
 
@@ -6382,6 +6383,88 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             timer->stamp(Timer::OUTPUT);
         }
         */
+    }
+}
+
+template <bool curr_dt>
+void Verlet::run_stencil_md_zoid_no_cilk_for(int starting_timestep, int zoid_num,
+                                             double** test_f, double** test_x, double** test_v,
+                                             std::array<std::atomic<int>, NUM_ZOIDS>& counters, const std::array<int, NUM_ZOIDS>& cache) {
+    assert(counters[zoid_num].load() == 0);
+    counters[zoid_num].store(cache[zoid_num], std::memory_order_relaxed);
+
+    int n_pre_force = modify->n_pre_force;
+    int n_post_force_any = modify->n_post_force_any;
+    int n_end_of_step = modify->n_end_of_step;
+
+    queue_info& zoid = curr_dt ? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
+    auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+    int** atom_idx_mapping = zoid.atom_idx_mapping;
+
+    constexpr int t = 0;
+    Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+    Atom* atom_next_timestep = curr_dt ? atom_arr[t + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+    Neighbor* neigh_next_timestep = curr_dt ? lmp->neighbor_stencil_md[zoid_num][t + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][t + 1];
+
+#ifdef LMP_OPENMP
+    Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][t + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+#else
+    Modify* modify_ = lmp->modify_stencil_md[zoid_num];
+#endif
+
+    if (TEST_AGAINST_LAMMPS_LOCAL) {
+        int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
+
+        stencilMD->COMPARE_POS_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_x);
+        stencilMD->COMPARE_FORCE_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_f);
+        stencilMD->COMPARE_VEL_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_v);
+    }
+
+    stencilMD->fuse_initial_integrate_stencil_md<curr_dt>(zoid, t, atom_, atom_next_timestep, atom_idx_mapping[t]);
+
+    if (pair_compute_flag) {
+        Force* next_force;
+        if (!PURELY_LOCAL_POTENTIAL) {
+            next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+        } else {
+            next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md_next_dt[zoid_num][t + 1];
+        }
+
+        stencilMD->fuse_force_computation_reduce<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+    }
+
+    if (n_post_force_any) {
+        stencilMD->fuse_post_force_stencil_md<curr_dt>(zoid, t + 1, atom_next_timestep, modify_);
+    }
+
+    if (n_end_of_step) {
+        // this doesn't actually do anything
+        // modify->end_of_step();
+    }
+
+    // timer->stamp(Timer::MODIFY);
+
+    // all output
+
+    /*
+    if (ntimestep == output->next) {
+        assert(false);
+        timer->stamp();
+        output->write(ntimestep);
+        timer->stamp(Timer::OUTPUT);
+    }
+    */
+
+    int dep = curr_dt ? get_zoid_dep(zoid_num) : get_zoid_dep_next_dt(zoid_num);
+    auto& neighbors = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+    for (auto& neighbor : neighbors) {
+        int dep_neighbor = curr_dt ? get_zoid_dep(neighbor) : get_zoid_dep_next_dt(neighbor);
+        if (dep_neighbor == dep + 1) {
+            // counters[neighbor]--;
+            if (--counters[neighbor] == 0) {
+                cilk_spawn run_stencil_md_zoid_no_cilk_for<curr_dt>(starting_timestep, neighbor, test_f, test_x, test_v, counters, cache);
+            }
+        }
     }
 }
 
@@ -7287,6 +7370,59 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         }
     }
     */
+}
+
+template <bool curr_dt>
+void Verlet::run_stencil_md_no_cilk_for_helper(int starting_timestep, double** test_f, double** test_x, double** test_v,
+                                               std::array<std::atomic<int>, NUM_ZOIDS>& counters, const std::array<int, NUM_ZOIDS>& cache) {
+    // right now focus on 1 proc implementation, and dt = 1
+    assert(comm->nprocs == 1);
+    assert(NUM_TIMESTEPS_IN_PARALLEL == 1);
+
+    auto& queues = curr_dt ? lmp->queues[0] : lmp->queues_next_dt[0];
+    cilk_scope {
+            for (int i = 0; i < queues.size(); i++) {
+                cilk_spawn run_stencil_md_zoid_no_cilk_for<curr_dt>(starting_timestep, queues[i].num, test_f, test_x, test_v,
+                                                         counters, cache);
+            }
+    }
+}
+
+void Verlet::run_stencil_md_no_cilk_for(int num_timesteps, double **test_f, double **test_x, double** test_v) {
+    std::array<std::atomic<int>, NUM_ZOIDS> counters;
+    std::array<std::atomic<int>, NUM_ZOIDS> counters_next_dt;
+
+    std::array<int, NUM_ZOIDS> cache;
+    std::array<int, NUM_ZOIDS> cache_next_dt;
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        int num_neighbors_recv_from = 0;
+        for (auto& recv_from : lmp->recv_from_neighbors[i]) {
+            if (get_zoid_dep(recv_from) == get_zoid_dep(i) - 1) {
+                num_neighbors_recv_from++;
+            }
+        }
+        counters[i] = num_neighbors_recv_from;
+        cache[i] = num_neighbors_recv_from;
+
+    }
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        int num_neighbors_recv_from = 0;
+        for (auto& recv_from : lmp->recv_from_neighbors_next_dt[i]) {
+            if (get_zoid_dep_next_dt(recv_from) == get_zoid_dep_next_dt(i) - 1) {
+                num_neighbors_recv_from++;
+            }
+        }
+        counters_next_dt[i] = num_neighbors_recv_from;
+        cache_next_dt[i] = num_neighbors_recv_from;
+    }
+
+    for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
+        // curr dt
+        run_stencil_md_no_cilk_for_helper<true>(t, test_f, test_x, test_v, counters, cache);
+        run_stencil_md_no_cilk_for_helper<false>(t, test_f, test_x, test_v, counters_next_dt, cache_next_dt);
+    }
 }
 
 void Verlet::run_stencil_md_pipelined(int num_timesteps, std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,

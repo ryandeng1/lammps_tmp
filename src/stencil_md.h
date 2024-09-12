@@ -2136,6 +2136,8 @@ public:
         int nlocal = next->nlocal;
         int nall = next->nlocal + next->nghost;
 
+        auto bondlist = neigh_next->atom_bondlist;
+
         if (nlocal < 512) {
             for (int ii = 0; ii < nlocal; ii++) {
                 const int i = ilist[ii];
@@ -2310,11 +2312,10 @@ public:
                     }
                 }
 
-                auto& lst_bonds = neigh_next->atom_bondlist[i];
-                for (int j = 0; j < lst_bonds.size(); j++) {
-                    auto& bond_info = lst_bonds[j];
-                    int i2 = bond_info.first;
-                    int type = bond_info.second;
+                for (auto& [i2, type] : bondlist[i]) {
+                    // auto& bond_info = lst_bonds[j];
+                    // int i2 = bond_info.first;
+                    // int type = bond_info.second;
 
                     double delx = xtmp - x[i2].x;
                     double dely = ytmp - x[i2].y;

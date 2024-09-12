@@ -93,7 +93,7 @@ constexpr int NUM_DEPS_BINS = 8;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 3;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 1;
 constexpr double ADDITIONAL_CUTOFF = 0.401;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;

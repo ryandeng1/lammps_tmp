@@ -1674,6 +1674,7 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
 
     // insert current bounds
     std::vector<double> try_bounds;
+
     for (int i = 0; i < NUM_ZOIDS; i++) {
         queue_info& zoid = curr_dt ? lmp->zoid_num_to_zoid[i] : lmp->zoid_num_to_zoid_next_dt[i];
 
@@ -1681,8 +1682,8 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
         double hi_curr = zoid.zoid.cuts[0].upper + zoid.zoid.cuts[0].slope_upper * timestep;
 
         // std::vector<double> try_bounds = {lo_curr, lo_curr - ALLEGRO_SLOPE, lo_curr + ALLEGRO_SLOPE, hi_curr, hi_curr - ALLEGRO_SLOPE, hi_curr + ALLEGRO_SLOPE};
-        // for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-        for (int t = 0; t < 5; t++) {
+        for (int t = 0; t < 2; t++) {
+        // for (int t = 0; t < 5; t++) {
             std::vector<int> try_different_vals = {-1, 0, 1};
             for (int try_val : try_different_vals) {
                 double lo = zoid.zoid.cuts[0].lower + zoid.zoid.cuts[0].slope_lower * t + try_val * ALLEGRO_SLOPE;
