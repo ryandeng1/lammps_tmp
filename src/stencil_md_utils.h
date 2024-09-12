@@ -114,7 +114,7 @@ constexpr bool TRY_PRECOMPUTE_RELEVANT_ATOM_IDX = false;
 
 constexpr bool DEBUG = true;
 
-constexpr int NUM_WORKERS_PER_THREAD = 64;
+constexpr int NUM_WORKERS_PER_THREAD = 512;
 
 constexpr int NUM_ATOMS_PER_WORKER = 128;
 

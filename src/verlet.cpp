@@ -2426,6 +2426,8 @@ void Verlet::setup_stencil_md() {
 
     stencilMD->GET_GHOST_ATOMS_ZOID();
 
+    stencilMD->INIT_PER_WORKER_UPDATES();
+
     // check atom map is correct
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -6325,7 +6327,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
             // stencilMD->fuse_force_computation<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
             // stencilMD->fuse_force_computation_atomics<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
-            stencilMD->fuse_force_computation_reduce<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            // stencilMD->fuse_force_computation_reduce<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
         }
 
         // reverse communication of forces
@@ -6430,7 +6432,8 @@ void Verlet::run_stencil_md_zoid_no_cilk_for(int starting_timestep, int zoid_num
             next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md_next_dt[zoid_num][t + 1];
         }
 
-        stencilMD->fuse_force_computation_reduce<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+        // stencilMD->fuse_force_computation_reduce<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+        stencilMD->fuse_force_computation_reduce_updates<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
     }
 
     if (n_post_force_any) {

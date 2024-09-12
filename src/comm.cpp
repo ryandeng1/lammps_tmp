@@ -40,6 +40,8 @@
 #include <omp.h>
 #endif
 
+#include <cilk/cilk_api.h>
+
 using namespace LAMMPS_NS;
 
 #define BUFEXTRA 1024
@@ -112,6 +114,7 @@ Comm::Comm(LAMMPS *lmp) : Pointers(lmp)
     utils::logmesg(lmp,"  using {} OpenMP thread(s) per MPI task\n",nthreads);
 #endif
 
+  nthreads = __cilkrts_get_nworkers();
 }
 
 /* ---------------------------------------------------------------------- */

@@ -325,6 +325,9 @@ class Atom : protected Pointers {
   std::vector<IDX_3D> dep_to_partitions_level2[4][4][4][NUM_DEPS_BINS];
   int num_deps_level2[4][4][4];
 
+  // per atom, per worker update bins
+  std::vector<std::pair<int, dbl3_t_stencil_md>>* stencilmd_f_updates;
+
   // --------------------------------------------------------------------
   // functions
 
