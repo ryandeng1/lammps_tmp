@@ -715,5 +715,24 @@ struct spinlock {
     }
 };
 
+inline __attribute__((always_inline)) double min_dist_to_boundary(const std::array<std::vector<double>, 3>& bounds, dbl3_t_stencil_md pos) {
+    double dist = 10000000;
+
+    for (auto& x_bound : bounds[0]) {
+        for (auto& y_bound : bounds[1]) {
+            for (auto& z_bound : bounds[2]) {
+                double delx = pos.x - x_bound;
+                double dely = pos.y - y_bound;
+                double delz = pos.z - z_bound;
+                dist = std::min(delx * delx + dely * dely + delz * delz, dist);
+            }
+        }
+    }
+
+    assert(dist != 10000000);
+
+    return dist;
+}
+
 
 

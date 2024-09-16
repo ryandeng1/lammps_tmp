@@ -877,6 +877,51 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
                     return false;
                 }
 
+                std::array<std::vector<double>, 3> bounds;
+                for (int dim = 0; dim < 3; dim++) {
+                    /*
+                    if (bin_a[dim] == bin_bounds.size() - 1) {
+                        bounds[dim].push_back(bin_bounds[bin_a[dim]]);
+                        bounds[dim].push_back(bin_bounds[0] + domain->prd[dim]);
+                    } else {
+                        bounds[dim].push_back(bin_bounds[bin_a[dim]]);
+                        bounds[dim].push_back(bin_bounds[bin_a[dim] + 1]);
+                    }
+                    */
+                    bounds[dim].push_back(bin_bounds[bin_a[dim]]);
+                }
+
+                double new_pos_a[3];
+                double new_pos_b[3];
+
+                for (int dim = 0; dim < 3; dim++) {
+                    double new_pos_a_ = pos_a[dim];
+                    if (new_pos_a_ > domain->boxhi[dim]) {
+                        new_pos_a_ -= domain->prd[dim];
+                    }
+                    if (new_pos_a_ < domain->boxlo[dim]) {
+                        new_pos_a_ += domain->prd[dim];
+                    }
+                    new_pos_a[dim] = new_pos_a_;
+                }
+
+                for (int dim = 0; dim < 3; dim++) {
+                    double new_pos_b_ = pos_b[dim];
+                    if (new_pos_b_ > domain->boxhi[dim]) {
+                        new_pos_b_ -= domain->prd[dim];
+                    }
+                    if (new_pos_b_ < domain->boxlo[dim]) {
+                        new_pos_b_ += domain->prd[dim];
+                    }
+                    new_pos_b[dim] = new_pos_b_;
+                }
+
+                // double dist_a = min_dist_to_boundary(bounds, {pos_a[0], pos_a[1], pos_a[2]});
+                // double dist_b = min_dist_to_boundary(bounds, {pos_b[0], pos_b[1], pos_b[2]});
+                double dist_a = min_dist_to_boundary(bounds, {new_pos_a[0], new_pos_a[1], new_pos_a[2]});
+                double dist_b = min_dist_to_boundary(bounds, {new_pos_b[0], new_pos_b[1], new_pos_b[2]});
+
+                // return dist_a < dist_b;
                 return atom_->tag[idx_a] < atom_->tag[idx_b];
 
                 /*
@@ -929,6 +974,12 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
     atom_reorder_ghost_stencil_md(atom_, current, permute, 0, atom_->nghost,
                                   atom_->nlocal);
 
+    for (int i = atom_->nlocal; i < atom_->nlocal + atom_->nghost; i++) {
+        double* pos = atom_->x[i];
+        auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
+        atom_->bin_to_local_idxs2[bin[0]][bin[1]][bin[2]].push_back(i);
+    }
+
     delete[] current;
     delete[] permute;
 }
@@ -960,7 +1011,6 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         bool next_dt_relevant = (next_dt_set.find(tag) != next_dt_set.end());
     }
 
-
     for (int i = 0; i < atom_->nghost; i++) {
         int actual_idx = i + atom_->nlocal;
         double* pos = atom_->x[actual_idx];
@@ -980,9 +1030,9 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             // technically check if borders zoid
             bool in_zoid_prev = true;
 
-            for (int dim = 0; dim < domain->dimension; dim++) {
-                bool in_zoid_curr_dim = true;
+            bool in_zoid_curr = true;
 
+            for (int dim = 0; dim < domain->dimension; dim++) {
                 double value = pos[dim];
 
                 int pbc_ = 0;
@@ -1011,13 +1061,18 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                                          (add >= lo_prev && add < hi_prev) ||
                                          (value >= lo_prev && value < hi_prev);
 
-                double lo_curr = zoid.zoid.cuts[dim].lower +
+                double lo_curr = recv_from_zoid.zoid.cuts[dim].lower +
                                  (timestep)*zoid.zoid.cuts[dim].slope_lower;
-                double hi_curr = zoid.zoid.cuts[dim].upper +
+                double hi_curr = recv_from_zoid.zoid.cuts[dim].upper +
                                  (timestep)*zoid.zoid.cuts[dim].slope_upper;
+
+                bool at_least_one_curr = (sub >= lo_curr && sub < hi_curr) ||
+                                         (add >= lo_curr && add < hi_curr) ||
+                                         (value >= lo_curr && value < hi_curr);
 
                 // if expanding zoid AND other zoid shrinking, use current instead of past, only need values for actual shrinking?
                 // must be a ghost atom that wasn't local last timestep somehow
+                // TODO: Ryan please check
                 if (timestep > 0) {
                     // in_zoid_prev = in_zoid_prev && ((atom_pos_shifted >= lo_prev && atom_pos_shifted <= hi_prev));
                     in_zoid_prev = in_zoid_prev && at_least_one_prev;
@@ -1045,13 +1100,9 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         }
     }
 
-    auto& bounds = stencilMD->GET_BOUNDS(true, timestep);
-
-    // std::set<std::tuple<int, int, int>> all_ranges;
-    std::set<IDX_3D> all_ranges;
-
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_from_zoid_num = recv_from[i];
+        std::cout << "zoid: " << zoid.num << " recv from: " << recv_from_zoid_num << " size: " << neighbor_to_idxs[recv_from_zoid_num].size() << std::endl;
         if (neighbor_to_idxs[recv_from_zoid_num].size() == 0) {
             zoid.recv_ghost_idxs[timestep][i] = new int[1];
             zoid.recv_ghost_idxs[timestep][i][0] = 0;
@@ -1075,43 +1126,6 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
                 zoid.recv_ghost_idxs[timestep][i][j] = segment_idxs[j];
                 zoid.recv_ghost_sizes[timestep][i][j] = segment_lengths[j];
             }
-
-            if (bounds.size() > 0) {
-                // std::set<std::tuple<int, int, int>> ranges;
-                std::set<IDX_3D> ranges;
-                for (int idx : neighbor_to_idxs[recv_from_zoid_num]) {
-                    assert(idx >= atom_->nlocal);
-                    double* pos = atom_->x[idx];
-                    auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-                    ranges.insert(range);
-                    all_ranges.insert(range);
-                }
-            }
-        }
-    }
-
-    if (bounds.size() > 0) {
-        // std::set<std::tuple<int, int, int>> all_ghost_ranges;
-        std::set<IDX_3D> all_ghost_ranges;
-        for (int k = atom_->nlocal; k < atom_->nlocal + atom_->nghost; k++) {
-            double* pos = atom_->x[k];
-            auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-            all_ghost_ranges.insert(range);
-            if (zoid.num == 39 && timestep == 1) {
-                // std::cout << "ALL RANGES idx: " << k << " range: " << check_range_x << " " << check_range_y << " " << check_range_z << std::endl;
-            }
-        }
-
-        if (zoid.num == 39 && timestep == 1) {
-            /*
-            for (auto& r: all_ranges) {
-                std::cout << BOLDYELLOW << "ALL RANGES: " << std::get<0>(r) << " " << std::get<1>(r) << " " << std::get<2>(r) << RESET_COLOR << std::endl;
-            }
-            for (auto& r: all_ghost_ranges) {
-                std::cout << BOLDCYAN << "ALL GHOST RANGES: " << std::get<0>(r) << " " << std::get<1>(r) << " " << std::get<2>(r) << RESET_COLOR << std::endl;
-            }
-            */
-            std::cout << "ALL RANGES USED: " << all_ranges.size() << " ALL GHOST RANGES: " << all_ghost_ranges.size() << std::endl;
         }
     }
 }
@@ -1169,9 +1183,9 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
             // technically check if borders zoid
             bool in_zoid_prev = true;
 
-            for (int dim = 0; dim < domain->dimension; dim++) {
-                bool in_zoid_curr_dim = true;
+            bool in_zoid_curr = true;
 
+            for (int dim = 0; dim < domain->dimension; dim++) {
                 double value = pos[dim];
 
                 int pbc_ = 0;
@@ -1200,6 +1214,15 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
                                          (add >= lo_prev && add < hi_prev) ||
                                          (value >= lo_prev && value < hi_prev);
 
+                double lo_curr = recv_from_zoid.zoid.cuts[dim].lower +
+                                 (timestep)*recv_from_zoid.zoid.cuts[dim].slope_lower;
+                double hi_curr = recv_from_zoid.zoid.cuts[dim].upper +
+                                 (timestep)*recv_from_zoid.zoid.cuts[dim].slope_upper;
+
+                bool at_least_one_curr = (sub >= lo_curr && sub < hi_curr) ||
+                                         (add >= lo_curr && add < hi_curr) ||
+                                         (value >= lo_curr && value < hi_curr);
+
                 // if expanding zoid AND other zoid shrinking, use current instead of past, only need values for actual shrinking?
                 // must be a ghost atom that wasn't local last timestep somehow
                 if (timestep > 0) {
@@ -1207,12 +1230,8 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
                     in_zoid_prev = in_zoid_prev && at_least_one_prev;
                 } else {
                     in_zoid_prev = false;
+                    // TODO: timestep 0 case
                 }
-
-                double lo_curr = zoid.zoid.cuts[dim].lower +
-                                 (timestep)*zoid.zoid.cuts[dim].slope_lower;
-                double hi_curr = zoid.zoid.cuts[dim].upper +
-                                 (timestep)*zoid.zoid.cuts[dim].slope_upper;
 
                 // if (!(value >= lo_curr && value <= hi_curr) && zoid.zoid.cuts[dim].slope_lower < 0 && timestep < NUM_TIMESTEPS_IN_PARALLEL) {
                 if (!(value >= lo_curr && value < hi_curr) &&
@@ -1234,11 +1253,6 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
             }
         }
     }
-
-    auto& bounds = stencilMD->GET_BOUNDS(false, timestep);
-
-    // std::set<std::tuple<int, int, int>> all_ranges;
-    std::set<IDX_3D> all_ranges;
 
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_from_zoid_num = recv_from[i];
@@ -1265,30 +1279,6 @@ void Verlet::group_ghost_atoms_stencil_md_next_dt(Atom* atom_, Atom* prev,
                 zoid.recv_ghost_idxs[timestep][i][j] = segment_idxs[j];
                 zoid.recv_ghost_sizes[timestep][i][j] = segment_lengths[j];
             }
-
-            if (bounds.size() > 0) {
-                // std::set<std::tuple<int, int, int>> ranges;
-                std::set<IDX_3D> ranges;
-                for (int idx : neighbor_to_idxs[recv_from_zoid_num]) {
-                    double* pos = atom_->x[idx];
-                    auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-                    ranges.insert(range);
-                    all_ranges.insert(range);
-                }
-            }
-        }
-    }
-
-    if (bounds.size() > 0) {
-        // std::set<std::tuple<int, int, int>> all_ghost_ranges;
-        std::set<IDX_3D> all_ghost_ranges;
-        for (int k = atom_->nlocal; k < atom_->nlocal + atom_->nghost; k++) {
-            double* pos = atom_->x[k];
-            auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-            all_ghost_ranges.insert(range);
-        }
-        if (zoid.num == 39 && timestep == NUM_TIMESTEPS_IN_PARALLEL - 1) {
-            std::cout << "NEXT DT ALL RANGES USED: " << all_ranges.size() << " ALL GHOST RANGES: " << all_ghost_ranges.size() << std::endl;
         }
     }
 }
@@ -6432,8 +6422,8 @@ void Verlet::run_stencil_md_zoid_no_cilk_for(int starting_timestep, int zoid_num
             next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md_next_dt[zoid_num][t + 1];
         }
 
-        // stencilMD->fuse_force_computation_reduce<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
-        stencilMD->fuse_force_computation_reduce_updates<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+        stencilMD->fuse_force_computation_reduce(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+        // stencilMD->fuse_force_computation_reduce_updates<curr_dt>(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
     }
 
     if (n_post_force_any) {
@@ -7380,7 +7370,7 @@ void Verlet::run_stencil_md_no_cilk_for_helper(int starting_timestep, double** t
                                                std::array<std::atomic<int>, NUM_ZOIDS>& counters, const std::array<int, NUM_ZOIDS>& cache) {
     // right now focus on 1 proc implementation, and dt = 1
     assert(comm->nprocs == 1);
-    assert(NUM_TIMESTEPS_IN_PARALLEL == 1);
+    // assert(NUM_TIMESTEPS_IN_PARALLEL == 1);
 
     auto& queues = curr_dt ? lmp->queues[0] : lmp->queues_next_dt[0];
     cilk_scope {

@@ -2099,12 +2099,78 @@ public:
         }
     }
 
+    void initial_integrate_stencil_md_bins(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
+        auto * _noalias const curr_x = (dbl3_t_stencil_md *) curr->x[0];
+        auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
+        auto * _noalias const curr_v = (dbl3_t_stencil_md *) curr->v[0];
+        auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
+        auto * _noalias const curr_f = (dbl3_t_stencil_md *) curr->f[0];
+        auto * _noalias const curr_eval_f = (dbl3_t_stencil_md *) curr->eval_f_stencil_md[0];
+
+        const int * const mask = curr->mask;
+        const int nlocal = curr->nlocal;
+
+        // const double * const mass = atom->mass;
+        // const int * const type = curr->type;
+
+        double dtv = update->dt;
+
+        auto& local_bins = curr->local_bins;
+        auto& local_bins_idxs = curr->local_bins_idxs;
+
+        auto next_bin_idxs = next->bin_to_local_idxs2;
+        auto local_dtfm = curr->local_dtfm;
+        // double dtf = 0.5 * update->dt * force->ftm2v;
+
+        cilk_for (int b = 0; b < local_bins.size(); b++) {
+            auto& bin = local_bins[b];
+            auto& idxs = local_bins_idxs[b];
+            auto& next_idxs = next_bin_idxs[bin[0]][bin[1]][bin[2]];
+
+            int curr_start = idxs[0];
+            int next_start = next_idxs[0];
+
+            cilk_for (int j = 0; j < idxs.size(); j++) {
+                int i = curr_start + j;
+                int next_idx = next_start + j;
+
+                assert(i >= 0 && i < curr->nlocal);
+
+                if (mask[i]) {
+                    // const double dtfm = dtf / mass[type[i]];
+                    const double dtfm = local_dtfm[i];
+
+                    assert(next_idx == atom_idx_mapping[i]);
+
+                    next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
+                    next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
+                    next_v[next_idx].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
+
+                    next_x[next_idx].x = curr_x[i].x + dtv * next_v[next_idx].x;
+                    next_x[next_idx].y = curr_x[i].y + dtv * next_v[next_idx].y;
+                    next_x[next_idx].z = curr_x[i].z + dtv * next_v[next_idx].z;
+
+                    assert(curr->tag[i] == next->tag[next_idx]);
+                    assert(next_idx != -1);
+
+                    curr_f[i].x = 0.0;
+                    curr_f[i].y = 0.0;
+                    curr_f[i].z = 0.0;
+                    curr_eval_f[i].x = 0.0;
+                    curr_eval_f[i].y = 0.0;
+                    curr_eval_f[i].z = 0.0;
+                }
+            }
+        }
+    }
+
     template <bool curr_dt>
     void fuse_initial_integrate_stencil_md(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
         cilk_scope {
             cilk_spawn recv_pos_bins_stencil_md_helper<curr_dt>(zoid, timestep + 1, next);
             cilk_spawn fuse_initial_integrate_stencil_md_pos_vel<curr_dt>(zoid, timestep + 1, next);
-            cilk_spawn initial_integrate_stencil_md(curr, next, atom_idx_mapping);
+            // cilk_spawn initial_integrate_stencil_md(curr, next, atom_idx_mapping);
+            cilk_spawn initial_integrate_stencil_md_bins(zoid, timestep, curr, next, atom_idx_mapping);
             memset(&curr->f[curr->nlocal][0], 0, (curr->nghost) * 3 * sizeof(double));
         }
     }
@@ -2302,7 +2368,6 @@ public:
         }
     }
 
-    template <bool curr_dt>
     void fuse_force_computation_reduce(queue_info& zoid, int timestep, Atom* next, Neighbor* neigh_next, Force* next_force, Modify* modify_) {
         memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
         for (int k = 0; k < next->nlocal + next->nghost; k++) {
@@ -2346,7 +2411,7 @@ public:
 
         auto bondlist = neigh_next->atom_bondlist;
 
-        if (nlocal < 512) {
+        if (nlocal < 512 && false) {
             for (int ii = 0; ii < nlocal; ii++) {
                 const int i = ilist[ii];
                 assert(i == ii);
@@ -2461,7 +2526,7 @@ public:
             return;
         }
 
-        cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
+        for (int tid = 0; tid < nthreads_to_use; tid++) {
             // each thread works on a fixed chunk of atoms.
             const int idelta = 1 + nlocal / nthreads_to_use;
             int ifrom = tid * idelta;
@@ -3196,6 +3261,7 @@ public:
 
     template <bool curr_dt>
     void fuse_post_force_stencil_md(queue_info& zoid, int timestep, Atom* atom_, Modify* modify_) {
+
         auto recv_bin_to_idx = zoid.bin_to_idx[timestep];
         auto recv_bin_to_size = zoid.bin_to_size[timestep];
 

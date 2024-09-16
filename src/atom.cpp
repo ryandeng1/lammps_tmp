@@ -2525,6 +2525,51 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
 
         assert(bin_a == bin_b);
 
+        std::array<std::vector<double>, 3> bounds;
+        for (int dim = 0; dim < 3; dim++) {
+            bounds[dim].push_back(bin_bounds[bin_a[dim]]);
+            /*
+            if (bin_a[dim] == bin_bounds.size() - 1) {
+                bounds[dim].push_back(bin_bounds[0] + domain->prd[dim]);
+            } else {
+                bounds[dim].push_back(bin_bounds[bin_a[dim]]);
+                bounds[dim].push_back(bin_bounds[bin_a[dim] + 1]);
+            }
+            */
+        }
+
+        double new_pos_a[3];
+        double new_pos_b[3];
+
+        for (int dim = 0; dim < 3; dim++) {
+            double new_pos_a_ = pos_a[dim];
+            if (new_pos_a_ > domain->boxhi[dim]) {
+                new_pos_a_ -= domain->prd[dim];
+            }
+            if (new_pos_a_ < domain->boxlo[dim]) {
+                new_pos_a_ += domain->prd[dim];
+            }
+            new_pos_a[dim] = new_pos_a_;
+        }
+
+        for (int dim = 0; dim < 3; dim++) {
+            double new_pos_b_ = pos_b[dim];
+            if (new_pos_b_ > domain->boxhi[dim]) {
+                new_pos_b_ -= domain->prd[dim];
+            }
+            if (new_pos_b_ < domain->boxlo[dim]) {
+                new_pos_b_ += domain->prd[dim];
+            }
+            new_pos_b[dim] = new_pos_b_;
+        }
+
+        // double dist_a = min_dist_to_boundary(bounds, {pos_a[0], pos_a[1], pos_a[2]});
+        // double dist_b = min_dist_to_boundary(bounds, {pos_b[0], pos_b[1], pos_b[2]});
+        double dist_a = min_dist_to_boundary(bounds, {new_pos_a[0], new_pos_a[1], new_pos_a[2]});
+        double dist_b = min_dist_to_boundary(bounds, {new_pos_b[0], new_pos_b[1], new_pos_b[2]});
+
+        // return dist_a < dist_b;
+
         return tag[idx_a] < tag[idx_b];
     });
 
