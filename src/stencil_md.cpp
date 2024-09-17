@@ -1096,13 +1096,7 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                     lmp->comm_stencil_md[zoid_num]
                             ->exchange_stencil_md_initial_receive(
                                     first, lmp->domain_stencil_md[zoid_num][t], zoid);
-                    first->sort_stencil_md();
-
-                    auto& bin_bounds = GET_BOUNDS(true, t);
-                    if (comm->nprocs == 1) {
-                        first->sort_local_stencil_md_bins(bin_bounds, sorted_bin_indices[t]);
-                        first->setup_stencil_md_pair_bins(zoid, t);
-                    }
+                    // first->sort_stencil_md();
                 }
             }
         }
@@ -1126,15 +1120,43 @@ void StencilMD::GET_GHOST_ATOMS_ZOID() {
                     Atom* first = lmp->atom_stencil_md[zoid_num][t];
                     lmp->comm_stencil_md[zoid_num]
                             ->borders_stencil_md_initial_receive_from_lammps(
-                                    first, lmp->domain_stencil_md[zoid_num][t], zoid,
-                                    t);
+                                    first, lmp->domain_stencil_md[zoid_num][t], zoid, t);
                 }
             }
         }
 
         MPI_Barrier(world);
         MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
-        // std::cout << GREEN << "T: " << t << " out of: " << NUM_TIMESTEPS_IN_PARALLEL + 1 << " DONE GETTING GHOST ATOMS" << RESET_COLOR << std::endl;
+    }
+}
+
+void StencilMD::SORT_LOCAL_ATOMS_BINS() {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                // receive only if the zoid belongs to me
+                if (zoid_num % comm->nprocs == comm->me) {
+                    auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+                    Atom* first = atom_arr[t];
+                    auto& bin_bounds = GET_BOUNDS(true, t);
+                    if (comm->nprocs == 1) {
+                        // first->sort_local_stencil_md_bins(bin_bounds, sorted_bin_indices[t]);
+                        Atom* next;
+                        if (t < NUM_TIMESTEPS_IN_PARALLEL) {
+                            next = atom_arr[t + 1];
+                        } else {
+                            next = atom_arr[t - 1];
+                        }
+                        stencilMD->sort_local_bins(zoid, t, first, next);
+                        auto& sorted_local_bin_indices = first->sorted_local_bin_indices;
+                        first->sort_local_stencil_md_bins(bin_bounds, sorted_local_bin_indices);
+                        first->setup_stencil_md_pair_bins(zoid, t);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1760,9 +1782,11 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
         indices.push_back(i);
     }
 
+    /*
     CGAL::spatial_sort(indices.begin(),
                        indices.end(),
                        Search_traits(CGAL::make_property_map(points)));
+    */
 
     // assert(false);
     return bounds_at_timestep;

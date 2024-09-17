@@ -83,6 +83,8 @@ public:
 
     void GET_GHOST_ATOMS_ZOID();
 
+    void SORT_LOCAL_ATOMS_BINS();
+
     void BUILD_NEIGHBOR_LIST();
     void BUILD_NEIGHBOR_LIST_NEXT_DT();
 
@@ -2099,7 +2101,7 @@ public:
         }
     }
 
-    void initial_integrate_stencil_md_bins(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
+    void initial_integrate_stencil_md_bins(const queue_info& zoid, Atom* curr, Atom* next, int* atom_idx_mapping) {
         auto * _noalias const curr_x = (dbl3_t_stencil_md *) curr->x[0];
         auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
         auto * _noalias const curr_v = (dbl3_t_stencil_md *) curr->v[0];
@@ -2118,8 +2120,8 @@ public:
         auto& local_bins = curr->local_bins;
         auto& local_bins_idxs = curr->local_bins_idxs;
 
-        auto next_bin_idxs = next->bin_to_local_idxs2;
-        auto local_dtfm = curr->local_dtfm;
+        auto& next_bin_idxs = next->bin_to_local_idxs2;
+        auto& local_dtfm = curr->local_dtfm;
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
         cilk_for (int b = 0; b < local_bins.size(); b++) {
@@ -2130,7 +2132,7 @@ public:
             int curr_start = idxs[0];
             int next_start = next_idxs[0];
 
-            cilk_for (int j = 0; j < idxs.size(); j++) {
+            for (int j = 0; j < idxs.size(); j++) {
                 int i = curr_start + j;
                 int next_idx = next_start + j;
 
@@ -2170,7 +2172,7 @@ public:
             cilk_spawn recv_pos_bins_stencil_md_helper<curr_dt>(zoid, timestep + 1, next);
             cilk_spawn fuse_initial_integrate_stencil_md_pos_vel<curr_dt>(zoid, timestep + 1, next);
             // cilk_spawn initial_integrate_stencil_md(curr, next, atom_idx_mapping);
-            cilk_spawn initial_integrate_stencil_md_bins(zoid, timestep, curr, next, atom_idx_mapping);
+            cilk_spawn initial_integrate_stencil_md_bins(zoid, curr, next, atom_idx_mapping);
             memset(&curr->f[curr->nlocal][0], 0, (curr->nghost) * 3 * sizeof(double));
         }
     }
@@ -2526,7 +2528,7 @@ public:
             return;
         }
 
-        for (int tid = 0; tid < nthreads_to_use; tid++) {
+        cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
             // each thread works on a fixed chunk of atoms.
             const int idelta = 1 + nlocal / nthreads_to_use;
             int ifrom = tid * idelta;
@@ -3311,6 +3313,80 @@ public:
 
             post_force_stencil_md(local_idxs, atom_, modify_);
             final_integrate_stencil_md(local_idxs, atom_);
+        }
+    }
+
+    void sort_local_bins(queue_info& zoid, int timestep, Atom* curr, Atom* next) {
+        std::vector<size_t> local_bins;
+        std::vector<size_t> ghost_bins;
+
+        std::map<int, int> curr_tag_to_idx;
+        std::map<int, int> next_tag_to_idx;
+
+        for (int i = 0; i < curr->nlocal + curr->nghost; i++) {
+            curr_tag_to_idx[curr->tag[i]] = i;
+        }
+
+        for (int i = 0; i < next->nlocal + next->nghost; i++) {
+            next_tag_to_idx[next->tag[i]] = i;
+        }
+
+        auto& bin_bounds = GET_BOUNDS(true, 0);
+        for (int i = 0; i < curr->nlocal; i++) {
+            int next_idx = next_tag_to_idx.at(curr->tag[i]);
+            bool is_ghost = (next_idx >= next->nlocal);
+            auto bin = get_bin(bin_bounds, curr->x[i], domain->boxlo, domain->boxhi);
+            auto bin_idx = get_bin_idx(bin);
+            if (is_ghost) {
+                ghost_bins.push_back(bin_idx);
+            } else {
+                local_bins.push_back(bin_idx);
+            }
+        }
+
+        for (auto& local_bin : local_bins) {
+            curr->sorted_local_bin_indices.push_back(local_bin);
+        }
+        for (auto& ghost_bin : ghost_bins) {
+            curr->sorted_local_bin_indices.push_back(ghost_bin);
+        }
+    }
+
+    void sort_ghost_bins(queue_info& zoid, int timestep, Atom* curr, Atom* prev) {
+        std::map<int, int> curr_tag_to_idx;
+        std::map<int, int> prev_tag_to_idx;
+
+        for (int i = 0; i < curr->nlocal + curr->nghost; i++) {
+            curr_tag_to_idx[curr->tag[i]] = i;
+        }
+
+        for (int i = 0; i < prev->nlocal + prev->nghost; i++) {
+            prev_tag_to_idx[prev->tag[i]] = i;
+        }
+
+        std::vector<size_t> local_bins;
+        std::vector<size_t> ghost_bins;
+        auto& bin_bounds = GET_BOUNDS(true, 0);
+        for (int i = curr->nlocal; i < curr->nlocal + curr->nghost; i++) {
+            int prev_idx = -1;
+            if (prev_tag_to_idx.count(curr->tag[i])) {
+                prev_idx = prev_tag_to_idx.at(curr->tag[i]);
+            }
+            bool is_local = (prev_idx != -1 && prev_idx < prev->nlocal);
+            auto bin = get_bin(bin_bounds, curr->x[i], domain->boxlo, domain->boxhi);
+            auto bin_idx = get_bin_idx(bin);
+            if (is_local) {
+                local_bins.push_back(bin_idx);
+            } else {
+                ghost_bins.push_back(bin_idx);
+            }
+        }
+
+        for (auto& local_bin : local_bins) {
+            curr->sorted_ghost_bin_indices.push_back(local_bin);
+        }
+        for (auto& ghost_bin : ghost_bins) {
+            curr->sorted_ghost_bin_indices.push_back(ghost_bin);
         }
     }
 };

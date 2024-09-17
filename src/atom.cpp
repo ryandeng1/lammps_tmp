@@ -2589,13 +2589,16 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
     // copy after inner-loop moves atom at end of list back into list
     // empty = location in atom list that is currently empty
 
+    int spare_idx = nlocal + nghost;
+
     for (int i = 0; i < nlocal; i++) {
         if (current[i] == stencil_md_p[i]) {
             continue;
         }
 
         // avec->copy(i,nlocal,0);
-        avec->copy_with_force(i,nlocal,0);
+        // avec->copy_with_force(i,nlocal,0);
+        avec->copy_with_force(i,spare_idx,0);
         int empty = i;
         while (stencil_md_p[empty] != i) {
             avec->copy_with_force(stencil_md_p[empty],empty,0);
@@ -2603,7 +2606,8 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         }
 
         // avec->copy(nlocal,empty,0);
-        avec->copy_with_force(nlocal,empty,0);
+        // avec->copy_with_force(nlocal,empty,0);
+        avec->copy_with_force(spare_idx,empty,0);
         current[empty] = stencil_md_p[empty];
     }
 

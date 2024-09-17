@@ -793,7 +793,15 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
     }
 
     auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
-    auto& sorted_bin_indices = stencilMD->sorted_bin_indices[timestep];
+    // auto& sorted_bin_indices = stencilMD->sorted_bin_indices[timestep];
+    auto& sorted_bin_indices = atom_->sorted_ghost_bin_indices;
+    if (zoid.num == 0) {
+        int idx = 0;
+        for (auto& bin_idx : sorted_bin_indices) {
+            std::cout << "idx: " << idx << " bin idx: " << bin_idx << std::endl;
+            idx++;
+        }
+    }
 
     // std::map<std::array<int, 3>, Data_vector> bin_to_data_points;
     // std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
@@ -816,26 +824,6 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
         // bin_to_data_points[bin].push_back(std::make_pair(Point(pos[0], pos[1], pos[2]), i));
         bin_to_data_points[bin].push_back(std::make_pair(Point(new_pos[0], new_pos[1], new_pos[2]), i));
     }
-
-    /*
-    for (auto& [bin, data_points] : bin_to_data_points) {
-        std::sort(data_points.begin(), data_points.end(), [&](const auto& left, const auto& right) {
-            return atom_->tag[left.second] < atom_->tag[right.second];
-        });
-        Search_traits_pair traits;
-        CGAL::spatial_sort(data_points.begin(),
-                           data_points.end(),
-                           traits);
-        if (get_bin_idx(bin) == 1811 && timestep == 0) {
-            for (auto& d : data_points) {
-                int idx = d.second;
-                double* pos = atom_->x[idx];
-                std::cout << "GHOST IDX: " << idx << " tag: " << atom_->tag[idx] << " pos: " << pos[0] << " " << pos[1] << " " << pos[2]
-                          << " pos in the data: " << d.first.x() << " " << d.first.y() << " " << d.first.z() << std::endl;
-            }
-        }
-    }
-    */
 
     std::map<int, int> bin_to_idx;
     for (int i = 0; i < sorted_bin_indices.size(); i++) {
@@ -982,6 +970,15 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
 
     delete[] current;
     delete[] permute;
+
+    for (int idx = 0; idx < atom_->nlocal + atom_->nghost; idx++) {
+        if (atom_->tag_to_idx.count(atom_->tag[idx])) {
+            std::cout << "idx: " << idx << " repeat tag. tag: " << atom_->tag[idx] << " zoid: " << zoid_num
+                      << std::endl;
+        }
+        assert(!atom_->tag_to_idx.count(atom_->tag[idx]));
+        atom_->tag_to_idx[atom_->tag[idx]] = idx;
+    }
 }
 
 // TODO: Sort ghost atoms by zoid in previous timestep and zoid in next timestep
@@ -1102,7 +1099,6 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
 
     for (int i = 0; i < recv_from.size(); i++) {
         int recv_from_zoid_num = recv_from[i];
-        std::cout << "zoid: " << zoid.num << " recv from: " << recv_from_zoid_num << " size: " << neighbor_to_idxs[recv_from_zoid_num].size() << std::endl;
         if (neighbor_to_idxs[recv_from_zoid_num].size() == 0) {
             zoid.recv_ghost_idxs[timestep][i] = new int[1];
             zoid.recv_ghost_idxs[timestep][i][0] = 0;
@@ -2416,9 +2412,12 @@ void Verlet::setup_stencil_md() {
 
     stencilMD->GET_GHOST_ATOMS_ZOID();
 
+    stencilMD->SORT_LOCAL_ATOMS_BINS();
+
     stencilMD->INIT_PER_WORKER_UPDATES();
 
     // check atom map is correct
+    /*
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -2433,6 +2432,7 @@ void Verlet::setup_stencil_md() {
             }
         }
     }
+    */
 
     for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
         if (zoid_num % comm->nprocs == comm->me) {
@@ -2635,6 +2635,13 @@ void Verlet::setup_stencil_md() {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
                     if (comm->nprocs == 1) {
                         // currently this is only tested for local
+                        Atom* prev;
+                        if (t == 0) {
+                            prev = lmp->atom_stencil_md[zoid_num][t + 1];
+                        } else {
+                            prev = lmp->atom_stencil_md[zoid_num][t - 1];
+                        }
+                        stencilMD->sort_ghost_bins(zoid, t, atom_, prev);
                         sort_ghost_atoms_stencil_md_bins(atom_, zoid, t);
                     } else {
                         sort_ghost_atoms_stencil_md(atom_, NULL, zoid, t);
@@ -2799,15 +2806,6 @@ void Verlet::setup_stencil_md() {
                     zoid.recv_list_local_num_force_pos[t] =
                         new int[num_recv_from];
 
-                    for (int idx = 0; idx < atom_->nlocal + atom_->nghost;
-                         idx++) {
-                        if (atom_->tag_to_idx.count(atom_->tag[idx])) {
-                            std::cout << "repeat tag. zoid: " << zoid_num
-                                      << std::endl;
-                        }
-                        assert(!atom_->tag_to_idx.count(atom_->tag[idx]));
-                        atom_->tag_to_idx[atom_->tag[idx]] = idx;
-                    }
                 }
             }
         }
