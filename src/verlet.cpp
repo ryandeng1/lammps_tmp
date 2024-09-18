@@ -795,13 +795,6 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
     auto& bin_bounds = stencilMD->GET_BOUNDS(true, timestep);
     // auto& sorted_bin_indices = stencilMD->sorted_bin_indices[timestep];
     auto& sorted_bin_indices = atom_->sorted_ghost_bin_indices;
-    if (zoid.num == 0) {
-        int idx = 0;
-        for (auto& bin_idx : sorted_bin_indices) {
-            std::cout << "idx: " << idx << " bin idx: " << bin_idx << std::endl;
-            idx++;
-        }
-    }
 
     // std::map<std::array<int, 3>, Data_vector> bin_to_data_points;
     // std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
@@ -2667,6 +2660,7 @@ void Verlet::setup_stencil_md() {
         }
     }
 
+
     stencilMD->BUILD_NEIGHBOR_LIST();
     stencilMD->BUILD_NEIGHBOR_LIST_NEXT_DT();
 
@@ -2845,6 +2839,8 @@ void Verlet::setup_stencil_md() {
             }
         }
     }
+
+    stencilMD->CREATE_ATOM_IDX_MAPPING();
 
     stencilMD->SET_INUM_PER_TIMESTEP();
     stencilMD->SET_INUM_PER_TIMESTEP_NEXT_DT();

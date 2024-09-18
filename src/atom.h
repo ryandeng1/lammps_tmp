@@ -332,6 +332,10 @@ class Atom : protected Pointers {
   std::vector<std::size_t> sorted_local_bin_indices;
   std::vector<std::size_t> sorted_ghost_bin_indices;
 
+  // segments, replace atom_idx_mapping
+  std::vector<int> atom_idx_mapping_segment_idxs;
+  std::vector<int> atom_idx_mapping_segment_sizes;
+
   // --------------------------------------------------------------------
   // functions
 

@@ -85,6 +85,8 @@ public:
 
     void SORT_LOCAL_ATOMS_BINS();
 
+    void CREATE_ATOM_IDX_MAPPING();
+
     void BUILD_NEIGHBOR_LIST();
     void BUILD_NEIGHBOR_LIST_NEXT_DT();
 
@@ -1998,10 +2000,11 @@ public:
         auto recv_bin_to_size = zoid.bin_to_size[timestep];
 
         auto& comm_local_bins = zoid.comm_local_bins[timestep];
+        auto& bin_to_local_idxs = next->bin_to_local_idxs2;
 
         for (int i = 0; i < comm_local_bins.size(); i++) {
             auto &bin = comm_local_bins[i];
-            auto &local_idxs = next->bin_to_local_idxs[bin];
+            auto &local_idxs = bin_to_local_idxs[bin[0]][bin[1]][bin[2]];
             auto bin_idx = get_bin_idx(bin);
             int start = local_idxs[0];
 
@@ -2015,9 +2018,18 @@ public:
 
             int pbc_flag_[3] = {0};
             for (int dim = 0; dim < 3; dim++) {
-                if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+                if (recv_zoid.where[dim] == RIGHT && zoid.where[dim] == PBC) {
+                    pbc_flag_[dim] = -1;
+                }
 
-                if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+                if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) {
+                    pbc_flag_[dim] = 1;
+                }
+            }
+
+            bool can_memcpy = false;
+            if (pbc_flag_[0] == 0 && pbc_flag_[1] == 0 && pbc_flag_[2] == 0) {
+                can_memcpy = true;
             }
 
             auto send_bin_to_idx = recv_zoid.bin_to_idx[timestep];
@@ -2034,29 +2046,94 @@ public:
             assert(send_size == recv_size);
             assert(send_size == local_idxs.size());
 
-            for (int k = 0; k < send_size; k++) {
-                int send_idx = send_bin_idx + k;
-                int recv_idx = recv_bin_idx + k;
-                if (DEBUG_SEND_RECV_DATA) {
-                    tagint src_tag = other_atom->tag[send_idx];
-                    tagint dst_tag = next->tag[recv_idx];
-                    assert(src_tag == dst_tag);
+            if (false) {
+                memcpy(&recv_x[recv_bin_idx], &send_x[send_bin_idx], 3 * send_size * sizeof(double));
+                memcpy(&recv_v[recv_bin_idx], &send_v[send_bin_idx], 3 * send_size * sizeof(double));
+            } else {
+                for (int k = 0; k < send_size; k++) {
+                    int send_idx = send_bin_idx + k;
+                    int recv_idx = recv_bin_idx + k;
+                    if (DEBUG_SEND_RECV_DATA) {
+                        tagint src_tag = other_atom->tag[send_idx];
+                        tagint dst_tag = next->tag[recv_idx];
+                        assert(src_tag == dst_tag);
+                    }
+
+                    recv_x[recv_idx].x = send_x[send_idx].x + pbc_flag_[0] * domain->prd[0];
+                    recv_x[recv_idx].y = send_x[send_idx].y + pbc_flag_[1] * domain->prd[1];
+                    recv_x[recv_idx].z = send_x[send_idx].z + pbc_flag_[2] * domain->prd[2];
+
+                    recv_v[recv_idx].x = send_v[send_idx].x;
+                    recv_v[recv_idx].y = send_v[send_idx].y;
+                    recv_v[recv_idx].z = send_v[send_idx].z;
                 }
-
-                recv_x[recv_idx].x = send_x[send_idx].x + pbc_flag_[0] * domain->prd[0];
-                recv_x[recv_idx].y = send_x[send_idx].y + pbc_flag_[1] * domain->prd[1];
-                recv_x[recv_idx].z = send_x[send_idx].z + pbc_flag_[2] * domain->prd[2];
-
-                recv_v[recv_idx].x = send_v[send_idx].x;
-                recv_v[recv_idx].y = send_v[send_idx].y;
-                recv_v[recv_idx].z = send_v[send_idx].z;
             }
 
             // memcpy(&next->v[recv_bin_idx][0], &other_atom->v[send_bin_idx][0], 3 * send_size * sizeof(double));
         }
     }
 
-    void initial_integrate_stencil_md(Atom* curr, Atom* next, int* atom_idx_mapping) {
+    void initial_integrate_stencil_md_segments(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
+        auto * _noalias const curr_x = (dbl3_t_stencil_md *) curr->x[0];
+        auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
+        auto * _noalias const curr_v = (dbl3_t_stencil_md *) curr->v[0];
+        auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
+        auto * _noalias const curr_f = (dbl3_t_stencil_md *) curr->f[0];
+        auto * _noalias const curr_eval_f = (dbl3_t_stencil_md *) curr->eval_f_stencil_md[0];
+
+        const int * const mask = curr->mask;
+        const int nlocal = curr->nlocal;
+
+        // const double * const mass = atom->mass;
+        // const int * const type = curr->type;
+
+        double dtv = update->dt;
+        const auto& local_dtfm = curr->local_dtfm;
+        // double dtf = 0.5 * update->dt * force->ftm2v;
+
+        int idx = 0;
+        const auto& segment_idxs = curr->atom_idx_mapping_segment_idxs;
+        const auto& segment_sizes = curr->atom_idx_mapping_segment_sizes;
+
+        for (int i = 0; i < segment_idxs.size(); i++) {
+            int start_idx = segment_idxs[i];
+            int size = segment_sizes[i];
+
+            for (int j = 0; j < size; j++) {
+                int next_idx = start_idx + j;
+                assert(next_idx == atom_idx_mapping[idx]);
+                assert(next_idx != -1);
+
+                if (mask[idx]) {
+                    const double dtfm = local_dtfm[idx];
+
+                    next_v[next_idx].x = curr_v[idx].x + dtfm * (curr_f[idx].x + curr_eval_f[idx].x);
+                    next_v[next_idx].y = curr_v[idx].y + dtfm * (curr_f[idx].y + curr_eval_f[idx].y);
+                    next_v[next_idx].z = curr_v[idx].z + dtfm * (curr_f[idx].z + curr_eval_f[idx].z);
+
+                    next_x[next_idx].x = curr_x[idx].x + dtv * next_v[next_idx].x;
+                    next_x[next_idx].y = curr_x[idx].y + dtv * next_v[next_idx].y;
+                    next_x[next_idx].z = curr_x[idx].z + dtv * next_v[next_idx].z;
+
+                    /*
+                    curr_f[idx].x = 0.0;
+                    curr_f[idx].y = 0.0;
+                    curr_f[idx].z = 0.0;
+                    curr_eval_f[idx].x = 0.0;
+                    curr_eval_f[idx].y = 0.0;
+                    curr_eval_f[idx].z = 0.0;
+                    */
+                }
+
+                idx++;
+            }
+        }
+
+        memset(curr_f, 0, nlocal * sizeof(double) * 3);
+        memset(curr_eval_f, 0, nlocal * sizeof(double) * 3);
+    }
+
+    void initial_integrate_stencil_md(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
         auto * _noalias const curr_x = (dbl3_t_stencil_md *) curr->x[0];
         auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
         auto * _noalias const curr_v = (dbl3_t_stencil_md *) curr->v[0];
@@ -2073,12 +2150,15 @@ public:
         double dtv = update->dt;
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
-        cilk_for (int i = 0; i < nlocal; i++) {
+        std::vector<int> idxs;
+
+        for (int i = 0; i < nlocal; i++) {
             if (mask[i]) {
                 // const double dtfm = dtf / mass[type[i]];
                 const double dtfm = curr->local_dtfm[i];
 
                 int next_idx = atom_idx_mapping[i];
+                idxs.push_back(next_idx);
 
                 next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
                 next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
@@ -2099,6 +2179,11 @@ public:
                 curr_eval_f[i].z = 0.0;
             }
         }
+
+        std::vector<int> segment_idxs;
+        std::vector<int> segment_sizes;
+        int num_segments = get_segments(idxs, segment_idxs, segment_sizes);
+        std::cout << "zoid: " << zoid.num << " timestep: " << timestep << " num segments: " << num_segments << " nlocal: " << curr->nlocal << std::endl;
     }
 
     void initial_integrate_stencil_md_bins(const queue_info& zoid, Atom* curr, Atom* next, int* atom_idx_mapping) {
@@ -2171,8 +2256,9 @@ public:
         cilk_scope {
             cilk_spawn recv_pos_bins_stencil_md_helper<curr_dt>(zoid, timestep + 1, next);
             cilk_spawn fuse_initial_integrate_stencil_md_pos_vel<curr_dt>(zoid, timestep + 1, next);
-            // cilk_spawn initial_integrate_stencil_md(curr, next, atom_idx_mapping);
-            cilk_spawn initial_integrate_stencil_md_bins(zoid, curr, next, atom_idx_mapping);
+            cilk_spawn initial_integrate_stencil_md_segments(zoid, timestep, curr, next, atom_idx_mapping);
+            // cilk_spawn initial_integrate_stencil_md(zoid, timestep, curr, next, atom_idx_mapping);
+            // cilk_spawn initial_integrate_stencil_md_bins(zoid, curr, next, atom_idx_mapping);
             memset(&curr->f[curr->nlocal][0], 0, (curr->nghost) * 3 * sizeof(double));
         }
     }

@@ -1160,6 +1160,54 @@ void StencilMD::SORT_LOCAL_ATOMS_BINS() {
     }
 }
 
+void StencilMD::CREATE_ATOM_IDX_MAPPING() {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                // receive only if the zoid belongs to me
+                if (zoid_num % comm->nprocs == comm->me) {
+                    auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+                    Atom* atom_ = atom_arr[t];
+                    if (comm->nprocs == 1) {
+                        std::vector<int> idxs;
+                        for (int i = 0; i < atom_->nlocal; i++) {
+                            int next_idx = zoid.atom_idx_mapping[t][i];
+                            idxs.push_back(next_idx);
+                        }
+
+                        int num_segments = get_segments(idxs, atom_->atom_idx_mapping_segment_idxs, atom_->atom_idx_mapping_segment_sizes);
+                    }
+                }
+            }
+        }
+    }
+
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+                queue_info& zoid = lmp->queues_next_dt[dep][j];
+                int zoid_num = zoid.num;
+                // receive only if the zoid belongs to me
+                if (zoid_num % comm->nprocs == comm->me) {
+                    auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+                    Atom* atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+                    if (comm->nprocs == 1) {
+                        std::vector<int> idxs;
+                        for (int i = 0; i < atom_->nlocal; i++) {
+                            int next_idx = zoid.atom_idx_mapping[t][i];
+                            idxs.push_back(next_idx);
+                        }
+
+                        int num_segments = get_segments(idxs, atom_->atom_idx_mapping_segment_idxs, atom_->atom_idx_mapping_segment_sizes);
+                    }
+                }
+            }
+        }
+    }
+}
+
 void StencilMD::BUILD_NEIGHBOR_LIST() {
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
