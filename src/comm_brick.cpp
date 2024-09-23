@@ -3362,7 +3362,6 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, int start_t
     int buf_offset = pipeline_stage * maxsend_stencil_md[proc];
 
     if (proc != comm->me) {
-        // int mpi_tag = (proc << 16 | zoid_num);
         int mpi_tag = get_mpi_tag(proc, zoid_num, start_timestep, end_timestep);
         MPI_Isend(&buf_send_stencil_md[proc][buf_offset], num_elems_send, MPI_DOUBLE, proc, mpi_tag, world,
                   request);

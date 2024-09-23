@@ -124,21 +124,6 @@ public:
         lammps_f_updates = new std::array<std::vector<std::pair<int, dbl3_t_stencil_md>>, NUM_ARRAYS>[nworkers];
     }
 
-    void INIT_PER_WORKER_UPDATES() {
-        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
-                if (zoid_num % comm->nprocs == comm->me) {
-                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
-                    int nworkers = __cilkrts_get_nworkers();
-                    atom_->stencilmd_f_updates = new std::vector<std::pair<int, dbl3_t_stencil_md>>[nworkers];
-                    for (int w = 0; w < nworkers; w++) {
-                        atom_->stencilmd_f_updates[w].reserve(2500);
-                    }
-                }
-            }
-        }
-    }
-
     void lammps_fuse_reduce2() {
         const auto * _noalias const x = (dbl3_t_stencil_md *) atom->x[0];
         auto * _noalias const f = (dbl3_t_stencil_md *) atom->f[0];
@@ -2095,16 +2080,22 @@ public:
         const auto& segment_idxs = curr->atom_idx_mapping_segment_idxs;
         const auto& segment_sizes = curr->atom_idx_mapping_segment_sizes;
 
+        assert(segment_sizes.size() <= 2);
+
+        int my_start_idxs[2] = {0, segment_sizes[0]};
+
         for (int i = 0; i < segment_idxs.size(); i++) {
+            int my_start_idx = my_start_idxs[i];
             int start_idx = segment_idxs[i];
             int size = segment_sizes[i];
 
-            for (int j = 0; j < size; j++) {
+            cilk_for (int j = 0; j < size; j++) {
+                int idx = my_start_idx + j;
                 int next_idx = start_idx + j;
                 assert(next_idx == atom_idx_mapping[idx]);
                 assert(next_idx != -1);
 
-                if (mask[idx]) {
+                // if (mask[idx]) {
                     const double dtfm = local_dtfm[idx];
 
                     next_v[next_idx].x = curr_v[idx].x + dtfm * (curr_f[idx].x + curr_eval_f[idx].x);
@@ -2115,22 +2106,15 @@ public:
                     next_x[next_idx].y = curr_x[idx].y + dtv * next_v[next_idx].y;
                     next_x[next_idx].z = curr_x[idx].z + dtv * next_v[next_idx].z;
 
-                    /*
                     curr_f[idx].x = 0.0;
                     curr_f[idx].y = 0.0;
                     curr_f[idx].z = 0.0;
                     curr_eval_f[idx].x = 0.0;
                     curr_eval_f[idx].y = 0.0;
                     curr_eval_f[idx].z = 0.0;
-                    */
-                }
-
-                idx++;
+                // }
             }
         }
-
-        memset(curr_f, 0, nlocal * sizeof(double) * 3);
-        memset(curr_eval_f, 0, nlocal * sizeof(double) * 3);
     }
 
     void initial_integrate_stencil_md(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
@@ -2180,10 +2164,6 @@ public:
             }
         }
 
-        std::vector<int> segment_idxs;
-        std::vector<int> segment_sizes;
-        int num_segments = get_segments(idxs, segment_idxs, segment_sizes);
-        std::cout << "zoid: " << zoid.num << " timestep: " << timestep << " num segments: " << num_segments << " nlocal: " << curr->nlocal << std::endl;
     }
 
     void initial_integrate_stencil_md_bins(const queue_info& zoid, Atom* curr, Atom* next, int* atom_idx_mapping) {
@@ -2260,199 +2240,6 @@ public:
             // cilk_spawn initial_integrate_stencil_md(zoid, timestep, curr, next, atom_idx_mapping);
             // cilk_spawn initial_integrate_stencil_md_bins(zoid, curr, next, atom_idx_mapping);
             memset(&curr->f[curr->nlocal][0], 0, (curr->nghost) * 3 * sizeof(double));
-        }
-    }
-
-    template <bool curr_dt>
-    void fuse_force_computation_reduce_updates(queue_info& zoid, int timestep, Atom* next, Neighbor* neigh_next, Force* next_force, Modify* modify_) {
-        memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
-
-        int nthreads_to_use = zoid.inum_per_timestep[timestep];
-
-        // begin force computation, inline lj_cut and bond_fene
-        assert(PURELY_LOCAL_POTENTIAL);
-
-        const auto * _noalias const x = (dbl3_t_stencil_md *) next->x[0];
-        auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
-        const int * _noalias const type = next->type;
-        const double * _noalias const special_lj = force->special_lj;
-
-        auto pair = (PairLJCutOMP*) next_force->pair;
-        auto bond = (BondFENE*) next_force->bond;
-
-        const int * _noalias const ilist = pair->list->ilist;
-        const int * _noalias const numneigh = pair->list->numneigh;
-        const int * const * const firstneigh = pair->list->firstneigh;
-
-        const auto* cutsq = pair->cutsq;
-        const auto* offset = pair->offset;
-        const auto* lj1 = pair->lj1;
-        const auto* lj2 = pair->lj2;
-        const auto* lj3 = pair->lj3;
-        const auto* lj4 = pair->lj4;
-        auto newton_pair = force->newton_pair;
-
-        const auto* sigma = bond->sigma;
-        const auto* epsilon = bond->epsilon;
-        const auto* r0 = bond->r0;
-        const auto* k = bond->k;
-
-        int nlocal = next->nlocal;
-        int nall = next->nlocal + next->nghost;
-
-        auto bondlist = neigh_next->atom_bondlist;
-        auto updates = next->stencilmd_f_updates;
-
-        cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
-            // each thread works on a fixed chunk of atoms.
-            const int idelta = 1 + nlocal / nthreads_to_use;
-            int ifrom = tid * idelta;
-            int ito = ((ifrom + idelta) > nlocal) ? nlocal : ifrom + idelta;
-            int worker_num = __cilkrts_get_worker_number();
-            auto& worker_local_updates = updates[worker_num];
-            // auto* thread_local_f = f + tid * nall;
-            // memset(thread_local_f, 0, nall * 3 * sizeof(double));
-
-            for (int ii = ifrom; ii < ito; ++ii) {
-                const int i = ilist[ii];
-                const int itype = type[i];
-                const int    * _noalias const jlist = firstneigh[i];
-                const double * _noalias const cutsqi = cutsq[itype];
-                const double * _noalias const offseti = offset[itype];
-                const double * _noalias const lj1i = lj1[itype];
-                const double * _noalias const lj2i = lj2[itype];
-                const double * _noalias const lj3i = lj3[itype];
-                const double * _noalias const lj4i = lj4[itype];
-
-                double xtmp = x[i].x;
-                double ytmp = x[i].y;
-                double ztmp = x[i].z;
-                int jnum = numneigh[i];
-
-                double fxtmp = 0.0;
-                double fytmp = 0.0;
-                double fztmp = 0.0;
-
-                for (int jj = 0; jj < jnum; jj++) {
-                    // num_edges++;
-                    double evdwl = 0.0;
-                    int j = jlist[jj];
-                    double factor_lj = special_lj[pair->sbmask(j)];
-                    j &= NEIGHMASK;
-
-                    double delx = xtmp - x[j].x;
-                    double dely = ytmp - x[j].y;
-                    double delz = ztmp - x[j].z;
-                    double rsq = delx*delx + dely*dely + delz*delz;
-                    int jtype = type[j];
-
-                    if (rsq < cutsqi[jtype]) {
-                        double r2inv = 1.0/rsq;
-                        double r6inv = r2inv*r2inv*r2inv;
-                        double forcelj = r6inv * (lj1i[jtype]*r6inv - lj2i[jtype]);
-                        double fpair = factor_lj*forcelj*r2inv;
-
-                        fxtmp += delx*fpair;
-                        fytmp += dely*fpair;
-                        fztmp += delz*fpair;
-
-                        if (newton_pair || j < nlocal) {
-                            /*
-                            thread_local_f[j].x -= delx*fpair;
-                            thread_local_f[j].y -= dely*fpair;
-                            thread_local_f[j].z -= delz*fpair;
-                            */
-                            worker_local_updates.emplace_back(j, dbl3_t_stencil_md{-delx*fpair, -dely*fpair, -delz*fpair});
-                        }
-                    }
-                }
-
-                for (auto& [i2, type] : bondlist[i]) {
-                    // auto& bond_info = lst_bonds[j];
-                    // int i2 = bond_info.first;
-                    // int type = bond_info.second;
-
-                    double delx = xtmp - x[i2].x;
-                    double dely = ytmp - x[i2].y;
-                    double delz = ztmp - x[i2].z;
-
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    double r0sq = r0[type] * r0[type];
-                    double rlogarg = 1.0 - rsq / r0sq;
-
-                    if (rlogarg < 0.1) {
-                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-//                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-//                                return;
-                        assert(false);
-
-                        rlogarg = 0.1;
-                    }
-
-                    double fbond = -k[type] / rlogarg;
-
-                    // force from LJ term
-                    double sr2 = 0.0;
-                    double sr6 = 0.0;
-
-                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                        sr2 = sigma[type] * sigma[type] / rsq;
-                        sr6 = sr2 * sr2 * sr2;
-                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                    }
-
-                    if (newton_pair || i < nlocal) {
-                        fxtmp += delx * fbond;
-                        fytmp += dely * fbond;
-                        fztmp += delz * fbond;
-                    }
-
-                    if (newton_pair || i2 < nlocal) {
-                        /*
-                        thread_local_f[i2].x -= delx*fbond;
-                        thread_local_f[i2].y -= dely*fbond;
-                        thread_local_f[i2].z -= delz*fbond;
-                        */
-                        worker_local_updates.emplace_back(i2, dbl3_t_stencil_md{-delx*fbond, -dely*fbond, -delz*fbond});
-                    }
-                }
-
-                f[i].x += fxtmp;
-                f[i].y += fytmp;
-                f[i].z += fztmp;
-
-                // thread_local_f[i].x += fxtmp;
-                // thread_local_f[i].y += fytmp;
-                // thread_local_f[i].z += fztmp;
-                // updates.emplace_back(i2, dbl3_t_stencil_md{-delx*fbond, -dely*fbond, -delz*fbond});
-            }
-        }
-
-        /*
-        if (nthreads_to_use == 1) {
-            return;
-        }
-
-        double* f_ = &(next->eval_f_stencil_md[0][0]);
-
-        int nvals = nall * 3;
-
-        // do not explicitly set chunk size, have cilk figure it out.
-        cilk_for (int i = 0; i < nvals; i++) {
-            for (int n = 1; n < nthreads_to_use; n++) {
-                f_[i] += f_[n * nvals + i];
-            }
-        }
-        */
-
-        for (int i = 0; i < __cilkrts_get_nworkers(); i++) {
-            for (auto& [idx, forces] : updates[i]) {
-                f[idx].x += forces.x;
-                f[idx].y += forces.y;
-                f[idx].z += forces.z;
-            }
-            updates[i].clear();
         }
     }
 
@@ -3349,7 +3136,6 @@ public:
 
     template <bool curr_dt>
     void fuse_post_force_stencil_md(queue_info& zoid, int timestep, Atom* atom_, Modify* modify_) {
-
         auto recv_bin_to_idx = zoid.bin_to_idx[timestep];
         auto recv_bin_to_size = zoid.bin_to_size[timestep];
 
@@ -3369,7 +3155,7 @@ public:
                 Atom* other_atom = curr_dt ? lmp->atom_stencil_md[recv_zoid_num][timestep]
                                            : lmp->atom_stencil_md[recv_zoid_num][NUM_TIMESTEPS_IN_PARALLEL - timestep];
 
-                const auto *_noalias const send_f = (dbl3_t_stencil_md *) other_atom->eval_f_stencil_md[0];
+                auto *_noalias const send_f = (dbl3_t_stencil_md *) other_atom->eval_f_stencil_md[0];
 
                 auto send_bin_to_idx = recv_zoid.bin_to_idx[timestep];
                 auto send_bin_to_size = recv_zoid.bin_to_size[timestep];
@@ -3394,6 +3180,10 @@ public:
                     recv_f[recv_idx].x += send_f[send_idx].x;
                     recv_f[recv_idx].y += send_f[send_idx].y;
                     recv_f[recv_idx].z += send_f[send_idx].z;
+
+                    send_f[send_idx].x = 0;
+                    send_f[send_idx].y = 0;
+                    send_f[send_idx].z = 0;
                 }
             }
 
