@@ -1204,6 +1204,7 @@ void FixLangevin::post_force_templated_stencil_md(Atom* atom_) {
 
     if (Tp_BIAS) temperature->compute_scalar();
 
+    #pragma cilk grainsize 512
     cilk_for (int i = 0; i < nlocal; i++) {
         // these are per-atom variables that get updated. Need to put them here to avoid races.
         double fdrag[3],fran[3];
