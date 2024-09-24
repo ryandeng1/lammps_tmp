@@ -84,8 +84,6 @@ static cilk::opadd_reducer<int64_t> send_pack_duration_cilk = 0;
 static std::vector<int64_t> lammps_forward_comm_times;
 static std::vector<int64_t> lammps_reverse_comm_times;
 
-constexpr bool TIME_STENCIL_MD = false;
-
 /* ---------------------------------------------------------------------- */
 
 Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
