@@ -74,29 +74,15 @@ static cilk::opadd_reducer<int64_t> modify_final_duration = 0;
 static cilk::opadd_reducer<int64_t> modify_pre_force_duration = 0;
 static cilk::opadd_reducer<int64_t> modify_post_force_duration = 0;
 static cilk::opadd_reducer<int64_t> mpi_duration = 0;
-static cilk::opadd_reducer<int64_t> curr_dt_comm_duration = 0;
-static cilk::opadd_reducer<int64_t> next_dt_comm_duration = 0;
 static cilk::opadd_reducer<int64_t> send_pack_duration = 0;
 static cilk::opadd_reducer<int64_t> misc_time = 0;
 static cilk::opadd_reducer<int64_t> unpack_self_time = 0;
 static cilk::opadd_reducer<int64_t> pre_recv_time = 0;
 
-static cilk::opadd_reducer<int64_t> pair_duration_cilk = 0;
-static cilk::opadd_reducer<int64_t> bond_duration_cilk = 0;
-static cilk::opadd_reducer<int64_t> modify_initial_duration_cilk = 0;
-static cilk::opadd_reducer<int64_t> modify_final_duration_cilk = 0;
-static cilk::opadd_reducer<int64_t> modify_pre_force_duration_cilk = 0;
-static cilk::opadd_reducer<int64_t> modify_post_force_duration_cilk = 0;
-
 static cilk::opadd_reducer<int64_t> send_pack_duration_cilk = 0;
 
 static std::vector<int64_t> lammps_forward_comm_times;
 static std::vector<int64_t> lammps_reverse_comm_times;
-
-static int64_t SIZES[NUM_DEPS] = {1, 3, 3, 1};
-
-static int START_STAGES[NUM_PIPELINE_STAGES] = {1, NUM_TIMESTEPS_IN_PARALLEL / 2 + 1};
-static int END_STAGES[NUM_PIPELINE_STAGES] = {NUM_TIMESTEPS_IN_PARALLEL / 2 + 1, NUM_TIMESTEPS_IN_PARALLEL + 1};
 
 /* ---------------------------------------------------------------------- */
 
@@ -6074,7 +6060,11 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         }
 
         // updates positions in atom_next_timestep
+        auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
         modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
+        auto end_initial_integrate = std::chrono::high_resolution_clock::now();
+        auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
+        modify_initial_duration += duration_initial_integrate;
         // stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
         // memset(&atom_->f[atom_->nlocal][0], 0, (atom_->nghost) * 3 * sizeof(double));
         // stencilMD->fuse_initial_integrate_stencil_md<curr_dt>(zoid, t, atom_, atom_next_timestep, atom_idx_mapping[t]);
@@ -6097,7 +6087,12 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
             int timestep_flag = t + 1;
 
+            auto begin_compute = std::chrono::high_resolution_clock::now();
             stencilMD->stencil_md_fuse_force_computation_atomics(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            auto end_compute = std::chrono::high_resolution_clock::now();
+            auto duration_compute = std::chrono::duration_cast<std::chrono::microseconds>(end_compute - begin_compute).count();
+            pair_duration += duration_compute;
+
             /*
             next_force->pair->compute_stencil_md(
                     eflag, vflag, atom_next_timestep,
@@ -6150,8 +6145,12 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             // stencilMD->fuse_post_force_stencil_md<curr_dt>(zoid, t + 1, atom_next_timestep, modify_);
         }
 
+        auto begin_final_integrate = std::chrono::high_resolution_clock::now();
         modify_->final_integrate_stencil_md(
                 atom_, atom_next_timestep, neighbor, atom_idx_mapping[t], nullptr);
+        auto end_final_integrate = std::chrono::high_resolution_clock::now();
+        auto duration_final_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_final_integrate - begin_final_integrate).count();
+        modify_final_duration += duration_final_integrate;
 
         if (n_end_of_step) {
             // this doesn't actually do anything
@@ -6314,16 +6313,6 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             }
         }
     }
-
-//    if (TIME_STENCIL_MD) {
-//        modify_initial_duration += modify_initial_duration_cilk / SIZES[dep];
-//        modify_final_duration += modify_final_duration_cilk / SIZES[dep];
-//        pair_duration += pair_duration_cilk / SIZES[dep];
-//        bond_duration += bond_duration_cilk / SIZES[dep];
-//        modify_pre_force_duration += modify_pre_force_duration_cilk / SIZES[dep];
-//        modify_post_force_duration += modify_post_force_duration_cilk / SIZES[dep];
-//        send_pack_duration += send_pack_duration_cilk / SIZES[dep];
-//    }
 
     if (comm->nprocs != 1) {
         if (dep < NUM_DEPS - 1) {
