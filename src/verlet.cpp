@@ -5428,31 +5428,36 @@ void Verlet::run(int n) {
     double* test_f[test_num_timesteps];
     double* test_x[test_num_timesteps];
     double* test_v[test_num_timesteps];
+    double* send_f;
+    double* send_x;
+    double* send_v;
 
-    for (int i = 0; i < test_num_timesteps; i++) {
-        test_f[i] = new double[3 * (atom->natoms + 1)];
-        test_x[i] = new double[3 * (atom->natoms + 1)];
-        test_v[i] = new double[3 * (atom->natoms + 1)];
-        for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
-            test_f[i][j] = 0.0;
-            test_x[i][j] = 0.0;
-            test_v[i][j] = 0.0;
+    if (TEST_AGAINST_LAMMPS_LOCAL) {
+        for (int i = 0; i < test_num_timesteps; i++) {
+            test_f[i] = new double[3 * (atom->natoms + 1)];
+            test_x[i] = new double[3 * (atom->natoms + 1)];
+            test_v[i] = new double[3 * (atom->natoms + 1)];
+            for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+                test_f[i][j] = 0.0;
+                test_x[i][j] = 0.0;
+                test_v[i][j] = 0.0;
+            }
         }
-    }
 
-    double* send_f = new double[3 * (atom->natoms + 1)];
-    for (int i = 0; i < 3 * (atom->natoms + 1); i++) {
-        send_f[i] = 0;
-    }
+        send_f = new double[3 * (atom->natoms + 1)];
+        for (int i = 0; i < 3 * (atom->natoms + 1); i++) {
+            send_f[i] = 0;
+        }
 
-    double* send_x = new double[3 * (atom->natoms + 1)];
-    for (int i = 0; i < 3 * (atom->natoms + 1); i++) {
-        send_x[i] = 0;
-    }
+        send_x = new double[3 * (atom->natoms + 1)];
+        for (int i = 0; i < 3 * (atom->natoms + 1); i++) {
+            send_x[i] = 0;
+        }
 
-    double* send_v = new double[3 * (atom->natoms + 1)];
-    for (int i = 0; i < 3 * (atom->natoms + 1); i++) {
-        send_v[i] = 0;
+        send_v = new double[3 * (atom->natoms + 1)];
+        for (int i = 0; i < 3 * (atom->natoms + 1); i++) {
+            send_v[i] = 0;
+        }
     }
 
     int64_t lammps_pair_duration = 0;
@@ -5808,9 +5813,11 @@ void Verlet::run(int n) {
     }
     */
 
-    delete[] send_f;
-    delete[] send_x;
-    delete[] send_v;
+    if (TEST_AGAINST_LAMMPS_LOCAL) {
+        delete[] send_f;
+        delete[] send_x;
+        delete[] send_v;
+    }
 
     MPI_Barrier(world);
     if (ONLY_RUN_LAMMPS) {
@@ -6065,8 +6072,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         }
 
         // updates positions in atom_next_timestep
-        // modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
-        stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+        modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
+        // stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
         // stencilMD->fuse_initial_integrate_stencil_md<curr_dt>(zoid, t, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
         if (n_pre_force) {
