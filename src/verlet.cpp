@@ -5523,11 +5523,11 @@ void Verlet::run(int n) {
                 }
                 // end stencil md code
 
-                auto begin_m = std::chrono::high_resolution_clock::now();
+                // auto begin_m = std::chrono::high_resolution_clock::now();
                 modify->initial_integrate(vflag);
-                auto end_m = std::chrono::high_resolution_clock::now();
-                auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-                lammps_modify_initial_integrate_duration += duration_m;
+                // auto end_m = std::chrono::high_resolution_clock::now();
+                // auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
+                // lammps_modify_initial_integrate_duration += duration_m;
                 if (n_post_integrate) {
                     assert(false);
                     modify->post_integrate();
@@ -5540,13 +5540,13 @@ void Verlet::run(int n) {
 
                 if (nflag == 0) {
                     timer->stamp();
-                    auto begin = std::chrono::high_resolution_clock::now();
+                    // auto begin = std::chrono::high_resolution_clock::now();
                     comm->forward_comm();
-                    auto end = std::chrono::high_resolution_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    lammps_comm_duration += duration;
-                    lammps_forward_comm_duration += duration;
-                    lammps_forward_comm_times.push_back(duration);
+                    // auto end = std::chrono::high_resolution_clock::now();
+                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    // lammps_comm_duration += duration;
+                    // lammps_forward_comm_duration += duration;
+                    // lammps_forward_comm_times.push_back(duration);
                     timer->stamp(Timer::COMM);
                 } else {
                     assert(false);
@@ -5595,16 +5595,16 @@ void Verlet::run(int n) {
                 timer->stamp();
 
                 if (n_pre_force) {
-                    auto begin = std::chrono::high_resolution_clock::now();
+                    // auto begin = std::chrono::high_resolution_clock::now();
                     modify->pre_force(vflag);
-                    auto end = std::chrono::high_resolution_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    lammps_modify_pre_force_duration += duration;
+                    // auto end = std::chrono::high_resolution_clock::now();
+                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    // lammps_modify_pre_force_duration += duration;
                     timer->stamp(Timer::MODIFY);
                 }
 
                 if (pair_compute_flag) {
-                    auto begin = std::chrono::high_resolution_clock::now();
+                    // auto begin = std::chrono::high_resolution_clock::now();
                     if (!LAMMPS_USE_BINS) {
                         force->pair->compute(eflag, vflag);
                     } else {
@@ -5617,24 +5617,24 @@ void Verlet::run(int n) {
                         // stencilMD->lammps_fuse_force_compute2();
                         // stencilMD->lammps_fuse_force_compute_atomics();
                     }
-                    auto end = std::chrono::high_resolution_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    lammps_pair_duration += duration;
-                    lammps_num_atoms += atom->nlocal;
+                    // auto end = std::chrono::high_resolution_clock::now();
+                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    // lammps_pair_duration += duration;
+                    // lammps_num_atoms += atom->nlocal;
                     timer->stamp(Timer::PAIR);
                 }
 
                 if (atom->molecular != Atom::ATOMIC) {
                     if (force->bond) {
-                        auto begin = std::chrono::high_resolution_clock::now();
+                        // auto begin = std::chrono::high_resolution_clock::now();
                         if (!LAMMPS_USE_BINS) {
                             force->bond->compute(eflag, vflag);
                         } else {
                             assert(false);
                         }
-                        auto end = std::chrono::high_resolution_clock::now();
-                        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                        lammps_bond_duration += duration;
+                        // auto end = std::chrono::high_resolution_clock::now();
+                        // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                        // lammps_bond_duration += duration;
                     }
                     if (force->angle) {
                         assert(false);
@@ -5665,30 +5665,30 @@ void Verlet::run(int n) {
 
                 // reverse communication of forces
                 if (force->newton) {
-                    auto begin = std::chrono::high_resolution_clock::now();
+                    // auto begin = std::chrono::high_resolution_clock::now();
                     comm->reverse_comm();
-                    auto end = std::chrono::high_resolution_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    lammps_comm_duration += duration;
-                    lammps_reverse_comm_duration += duration;
-                    lammps_reverse_comm_times.push_back(duration);
+                    // auto end = std::chrono::high_resolution_clock::now();
+                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    // lammps_comm_duration += duration;
+                    // lammps_reverse_comm_duration += duration;
+                    // lammps_reverse_comm_times.push_back(duration);
                     timer->stamp(Timer::COMM);
                 }
 
                 // force modifications, final time integration, diagnostics
                 if (n_post_force_any) {
-                    auto begin = std::chrono::high_resolution_clock::now();
+                    // auto begin = std::chrono::high_resolution_clock::now();
                     modify->post_force(vflag);
-                    auto end = std::chrono::high_resolution_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    lammps_modify_post_force_duration += duration;
+                    // auto end = std::chrono::high_resolution_clock::now();
+                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                    // lammps_modify_post_force_duration += duration;
                 }
 
-                auto begin_m2 = std::chrono::high_resolution_clock::now();
+                // auto begin_m2 = std::chrono::high_resolution_clock::now();
                 modify->final_integrate();
-                auto end_m2 = std::chrono::high_resolution_clock::now();
-                auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
-                lammps_modify_final_integrate_duration += duration_m2;
+                // auto end_m2 = std::chrono::high_resolution_clock::now();
+                // auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
+                // lammps_modify_final_integrate_duration += duration_m2;
                 if (n_end_of_step) {
                     // modify->end_of_step();
                 }
