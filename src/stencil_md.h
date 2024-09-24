@@ -2132,17 +2132,16 @@ public:
         // const int * const type = curr->type;
 
         double dtv = update->dt;
+        auto& local_dtfm = curr->local_dtfm;
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
-        std::vector<int> idxs;
-
-        for (int i = 0; i < nlocal; i++) {
+        cilk_for (int i = 0; i < nlocal; i++) {
             if (mask[i]) {
                 // const double dtfm = dtf / mass[type[i]];
-                const double dtfm = curr->local_dtfm[i];
+                const double dtfm = local_dtfm[i];
 
                 int next_idx = atom_idx_mapping[i];
-                idxs.push_back(next_idx);
+                // idxs.push_back(next_idx);
 
                 next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
                 next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
@@ -2163,7 +2162,6 @@ public:
                 curr_eval_f[i].z = 0.0;
             }
         }
-
     }
 
     void initial_integrate_stencil_md_bins(const queue_info& zoid, Atom* curr, Atom* next, int* atom_idx_mapping) {
