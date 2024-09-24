@@ -1141,7 +1141,7 @@ void StencilMD::SORT_LOCAL_ATOMS_BINS() {
                     auto& atom_arr = lmp->atom_stencil_md[zoid_num];
                     Atom* first = atom_arr[t];
                     auto& bin_bounds = GET_BOUNDS(true, t);
-                    if (comm->nprocs == 1) {
+                    if (true || comm->nprocs == 1) {
                         Atom* next;
                         if (t < NUM_TIMESTEPS_IN_PARALLEL) {
                             next = atom_arr[t + 1];
@@ -1223,11 +1223,7 @@ void StencilMD::BUILD_NEIGHBOR_LIST() {
                                             comm_, zoid);
                     neigh->ncalls = 0;
 
-                    if (comm->nprocs == 1) {
-                        neigh->setup_stencil_md_bond_bins(atom_);
-                    }
-
-                    MPI_Barrier(world);
+                    neigh->setup_stencil_md_bond_bins(atom_);
 
                     Force* force_ = lmp->force_stencil_md[zoid_num][t];
                     force_->setup();
@@ -1256,9 +1252,7 @@ void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
                                                     comm_, zoid);
                     neigh_next_dt->ncalls = 0;
 
-                    if (comm->nprocs == 1) {
-                        neigh_next_dt->setup_stencil_md_bond_bins(atom_next_dt);
-                    }
+                    neigh_next_dt->setup_stencil_md_bond_bins(atom_next_dt);
 
                     Force* force_ = lmp->force_stencil_md_next_dt[zoid_num][t];
                     force_->setup();
@@ -1756,7 +1750,7 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
         double hi_curr = zoid.zoid.cuts[0].upper + zoid.zoid.cuts[0].slope_upper * timestep;
 
         // std::vector<double> try_bounds = {lo_curr, lo_curr - ALLEGRO_SLOPE, lo_curr + ALLEGRO_SLOPE, hi_curr, hi_curr - ALLEGRO_SLOPE, hi_curr + ALLEGRO_SLOPE};
-        for (int t = 0; t < 2; t++) {
+        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         // for (int t = 0; t < 5; t++) {
             std::vector<int> try_different_vals = {-1, 0, 1};
             for (int try_val : try_different_vals) {

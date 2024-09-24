@@ -371,7 +371,7 @@ Atom::~Atom()
 
   delete unique_tags;
 
-  // start stencilmd
+  // destroy stencilmd
   memory->destroy(eval_f_stencil_md);
 }
 
@@ -2969,6 +2969,8 @@ void Atom::setup_lammps_pair_bins() {
 }
 
 void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
+    spinlocks = new spinlock[nlocal + nghost];
+
     assert(partition_to_dep.size() == 3 * 3 * 3);
     // std::vector<int> special_bins = {10, 11, 12, 13};
     // std::vector<int> special_bins2 = {34, 35, 36, 37};
@@ -3142,78 +3144,44 @@ void Atom::setup_stencil_md_pair_bins(queue_info& zoid, int timestep) {
     }
 
     /*
-    for (auto& [bin, idxs] : bin_to_local_idxs) {
-        std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
-        int sum = 0;
-        bool special_bin = false;
-        std::vector<int> new_bin;
-        new_bin.reserve(3);
+    idx_use_atomics.reserve(nlocal + nghost);
+    for (int i = 0; i < nlocal + nghost; i++) {
+        double* pos = x[i];
+        auto bin = get_bin(bin_bounds, x[i], domain->boxlo, domain->boxhi);
+        bool close_to_border = false;
         for (int dim = 0; dim < 3; dim++) {
-            int bin_val = bin_vals[dim];
-            // TODO: hardcoded here, needs to change something here
-            if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
-                bin_val = 10;
-                special_bin = true;
-            } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
-                bin_val = 34 - 3;
-                special_bin = true;
-            } else if (bin_val > 13 && bin_val < 34) {
-                bin_val -= 3;
-            } else if (bin_val > 37) {
-                bin_val -= 6;
-            } else {
-                assert(bin_val < 10);
+            std::cout << "bin: " << bin[dim] << " num bins: " << bin_bounds.size() << std::endl;
+            double lo = bin_bounds[bin[dim]];
+            double hi = bin_bounds[bin[dim] + 1];
+            double adjusted_pos = pos[dim];
+            if (adjusted_pos < domain->boxlo[dim]) {
+                adjusted_pos += domain->prd[dim];
+            }
+            if (adjusted_pos >= domain->boxhi[dim]) {
+                adjusted_pos -= domain->prd[dim];
+            }
+            if (adjusted_pos - lo <= ALLEGRO_SLOPE) {
+                close_to_border = true;
+                break;
+            }
+            if (hi - adjusted_pos <= ALLEGRO_SLOPE) {
+                close_to_border = true;
+                break;
             }
         }
+        idx_use_atomics.push_back(close_to_border);
+    }
 
-        int new_bin_idx = partition_to_dep[bin_to_partition[bin]];
-        if (special_bin) {
-            special_pair_bins[new_bin_idx].push_back(bin);
-        } else {
-            pair_bins[new_bin_idx].push_back(bin);
+    int num_use_atomics = 0;
+    for (int i = 0; i < nlocal + nghost; i++) {
+        if (idx_use_atomics[i]) {
+            num_use_atomics++;
         }
     }
-    */
 
-    /*
-    for (auto& [bin, idxs] : bin_to_local_idxs) {
-        std::vector<int> bin_vals = {std::get<0>(bin), std::get<1>(bin), std::get<2>(bin)};
-        int sum = 0;
-        bool special_bin = false;
-        std::vector<int> new_bin;
-        new_bin.reserve(3);
-        for (int dim = 0; dim < 3; dim++) {
-            int bin_val = bin_vals[dim];
-            // TODO: hardcoded here, needs to change something here
-            if (std::find(special_bins.begin(), special_bins.end(), bin_val) != special_bins.end()) {
-                bin_val = 10;
-                special_bin = true;
-            } else if (std::find(special_bins2.begin(), special_bins2.end(), bin_val) != special_bins2.end()) {
-                bin_val = 34 - 3;
-                special_bin = true;
-            } else if (bin_val > 13 && bin_val < 34) {
-                bin_val -= 3;
-            } else if (bin_val > 37) {
-                bin_val -= 6;
-            } else {
-                assert(bin_val < 10);
-            }
+    std::cout << "num use atomics: " << num_use_atomics << " total: " << nlocal + nghost << std::endl;
 
-            int idx_set_dim = bin_val % 3;
-            sum += idx_set_dim;
-            new_bin.push_back(idx_set_dim);
-        }
-
-        // int new_bin_idx = new_bin_to_idx[std::make_tuple(new_bin[0], new_bin[1], new_bin[2])];
-        // int new_bin_idx = new_bin[0] * 3 * 3 + new_bin[1] * 3 + new_bin[2];
-        // assert(new_bin_idx >= 0 && new_bin_idx < 27);
-        int new_bin_idx = sum;
-        if (special_bin) {
-            special_pair_bins[new_bin_idx].push_back(bin);
-        } else {
-            pair_bins[new_bin_idx].push_back(bin);
-        }
-    }
+    return;
     */
 }
 

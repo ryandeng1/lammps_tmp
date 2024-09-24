@@ -6076,8 +6076,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         // stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
         // stencilMD->fuse_initial_integrate_stencil_md<curr_dt>(zoid, t, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
+
         if (n_pre_force) {
-            modify_->pre_force_stencil_md(vflag, atom_next_timestep);
+            // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
             // timer->stamp(Timer::MODIFY);
         }
 
@@ -6092,16 +6093,22 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             int* atom_idx_mapping_ = zoid.atom_idx_mapping[t + 1];
 
             int timestep_flag = t + 1;
+
+            stencilMD->stencil_md_fuse_force_computation_atomics(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            /*
             next_force->pair->compute_stencil_md(
                     eflag, vflag, atom_next_timestep,
                     zoid.can_eval_center[t + 1],
                     zoid, &timestep_flag);
+            */
 
             if (atom->molecular != Atom::ATOMIC) {
                 if (force->bond) {
+                    /*
                     next_force->bond->compute_stencil_md(eflag, vflag, atom_next_timestep,
                                                          zoid.can_eval_center[t + 1],
                                                          zoid, &timestep_flag, neigh_next_timestep);
+                    */
                 }
                 if (force->angle) {
                     assert(false);
