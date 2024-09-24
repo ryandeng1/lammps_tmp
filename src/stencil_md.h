@@ -2682,7 +2682,7 @@ public:
 
     template <bool curr_dt>
     void fuse_force_computation_atomics(queue_info& zoid, int timestep, Atom* next, Neighbor* neigh_next, Force* next_force, Modify* modify_) {
-        memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
+        // memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
         for (int k = 0; k < next->nlocal + next->nghost; k++) {
             assert(fabs(next->eval_f_stencil_md[k][0]) < 1e-6);
             assert(fabs(next->eval_f_stencil_md[k][1]) < 1e-6);
