@@ -720,7 +720,6 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
     delete[] current;
     delete[] permute;
 
-    /*
     for (int idx = 0; idx < atom_->nlocal + atom_->nghost; idx++) {
         if (atom_->tag_to_idx.count(atom_->tag[idx])) {
             std::cout << "idx: " << idx << " repeat tag. tag: " << atom_->tag[idx] << " zoid: " << zoid_num
@@ -729,7 +728,6 @@ void Verlet::sort_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
         assert(!atom_->tag_to_idx.count(atom_->tag[idx]));
         atom_->tag_to_idx[atom_->tag[idx]] = idx;
     }
-    */
 }
 
 void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int timestep) {
@@ -1072,6 +1070,7 @@ void Verlet::group_ghost_atoms_stencil_md(Atom* atom_, Atom* prev,
             }
         }
     }
+
 }
 
 // does the same thing as group_ghost but without the reordering as that has been done already
@@ -2661,16 +2660,6 @@ void Verlet::setup_stencil_md() {
                         new int[num_recv_from];
                     zoid.recv_list_local_num_force_pos[t] =
                         new int[num_recv_from];
-
-                    for (int idx = 0; idx < atom_->nlocal + atom_->nghost;
-                         idx++) {
-                        if (atom_->tag_to_idx.count(atom_->tag[idx])) {
-                            std::cout << "repeat tag. zoid: " << zoid_num
-                                      << std::endl;
-                        }
-                        assert(!atom_->tag_to_idx.count(atom_->tag[idx]));
-                        atom_->tag_to_idx[atom_->tag[idx]] = idx;
-                    }
                 }
             }
         }
@@ -2940,6 +2929,11 @@ void Verlet::setup_stencil_md() {
 
                         construct_no_comm_bins(true, atom_, zoid, t);
 
+                        construct_dtfm_cache(atom_);
+                    }
+                } else {
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
                         construct_dtfm_cache(atom_);
                     }
                 }
@@ -6071,7 +6065,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         }
 
         // updates positions in atom_next_timestep
-        modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
+        // modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
+        stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
         // stencilMD->fuse_initial_integrate_stencil_md<curr_dt>(zoid, t, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
         if (n_pre_force) {
@@ -6385,10 +6380,14 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
             auto& wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             for (int idx: wait_idxs) {
                 int recv_zoid_num = recv_neighbor_procs[idx];
+                comm->receive_data_process_stencil_md(curr_dt, start_t, end_t,
+                                                      &receive_requests[recv_idx], recv_zoid_num, 0);
+                /*
                 comm->receive_data_process_stencil_md(curr_dt, start_t, mid_t,
                                                       &receive_requests[recv_idx], recv_zoid_num, 0);
                 comm->receive_data_process_stencil_md(curr_dt, mid_t, end_t,
                                                       &receive_requests2[recv_idx], recv_zoid_num, 1);
+                */
                 recv_idx++;
             }
         }
@@ -6404,14 +6403,13 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         }
     }
 
-    /*
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         run_stencil_md_dep_templated<curr_dt>(dep, starting_timestep, start_t, end_t, dep_to_idx,
                                               send_requests, receive_requests,
                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
     }
-    */
 
+    /*
     run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, start_t, mid_t, dep_to_idx,
                                           send_requests, receive_requests,
                                           dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
@@ -6449,6 +6447,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
     run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, mid_t, end_t, dep_to_idx,
                                           send_requests2, receive_requests2,
                                           dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+    */
 
     if (comm->nprocs != 1) {
         for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
