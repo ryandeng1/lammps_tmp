@@ -2564,7 +2564,7 @@ public:
 
         const int nlocal = next->nlocal;
 
-        for (int i = 0; i < nlocal; i++) {
+        cilk_for (int i = 0; i < nlocal; i++) {
             const int itype = atom_type[i];
 
             const int *_noalias const jlist = firstneigh[i];
