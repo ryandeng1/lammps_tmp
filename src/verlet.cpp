@@ -6034,10 +6034,12 @@ void Verlet::run(int n) {
                   << " NEXT DT COMM DURATION: " << stencil_md_total_next_dt_comm_duration << RESET_COLOR << std::endl;
     }
 
-    for (int i = 0; i < test_num_timesteps; i++) {
-        delete[] test_f[i];
-        delete[] test_x[i];
-        delete[] test_v[i];
+    if (TEST_AGAINST_LAMMPS) {
+        for (int i = 0; i < test_num_timesteps; i++) {
+            delete[] test_f[i];
+            delete[] test_x[i];
+            delete[] test_v[i];
+        }
     }
 }
 
