@@ -6110,16 +6110,20 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             }
 
             // memset(&atom_next_timestep->eval_f_stencil_md[0][0], 0, (atom_next_timestep->nlocal + atom_next_timestep->nghost) * 3 * sizeof(double));
+            /*
             next_force->pair->compute_stencil_md(
                     eflag, vflag, atom_next_timestep,
                     zoid.can_eval_center[t + 1],
                     zoid, &timestep_flag);
+            */
 
             if (atom->molecular != Atom::ATOMIC) {
                 if (force->bond) {
+                    /*
                     next_force->bond->compute_stencil_md(eflag, vflag, atom_next_timestep,
                                                          zoid.can_eval_center[t + 1],
                                                          zoid, &timestep_flag, neigh_next_timestep);
+                    */
                 }
                 if (force->angle) {
                     assert(false);
