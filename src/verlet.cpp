@@ -6102,12 +6102,14 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             int num_chunks = 1 + total / chunk_size;
             double* f_ = &(atom_->f[0][0]);
 
+            /*
             cilk_for (int tid = 0; tid < num_chunks; tid++) {
                 // each thread works on a fixed chunk of atoms.
                 int ifrom = tid * chunk_size;
                 int ito = ((ifrom + chunk_size) > total) ? total : ifrom + chunk_size;
                 memset((char*) f_ + ifrom, 0, ito - ifrom);
             }
+            */
 
             // memset(&atom_next_timestep->eval_f_stencil_md[0][0], 0, (atom_next_timestep->nlocal + atom_next_timestep->nghost) * 3 * sizeof(double));
             /*
