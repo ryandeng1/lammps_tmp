@@ -6403,14 +6403,11 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
             auto& wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             for (int idx: wait_idxs) {
                 int recv_zoid_num = recv_neighbor_procs[idx];
-                comm->receive_data_process_stencil_md(curr_dt, start_t, end_t,
-                                                      &receive_requests[recv_idx], recv_zoid_num, 0);
-                /*
+                // comm->receive_data_process_stencil_md(curr_dt, start_t, end_t, &receive_requests[recv_idx], recv_zoid_num, 0);
                 comm->receive_data_process_stencil_md(curr_dt, start_t, mid_t,
                                                       &receive_requests[recv_idx], recv_zoid_num, 0);
                 comm->receive_data_process_stencil_md(curr_dt, mid_t, end_t,
                                                       &receive_requests2[recv_idx], recv_zoid_num, 1);
-                */
                 recv_idx++;
             }
         }
@@ -6426,13 +6423,14 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         }
     }
 
+    /*
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         run_stencil_md_dep_templated<curr_dt>(dep, starting_timestep, start_t, end_t, dep_to_idx,
                                               send_requests, receive_requests,
                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
     }
+    */
 
-    /*
     run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, start_t, mid_t, dep_to_idx,
                                           send_requests, receive_requests,
                                           dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
@@ -6470,7 +6468,6 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
     run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, mid_t, end_t, dep_to_idx,
                                           send_requests2, receive_requests2,
                                           dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
-    */
 
     if (comm->nprocs != 1) {
         for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
