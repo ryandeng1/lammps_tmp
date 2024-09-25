@@ -5896,7 +5896,9 @@ void Verlet::run(int n) {
     }
 
     auto begin = std::chrono::high_resolution_clock::now();
-    run_stencil_md_pipelined(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
+    cilk_scope {
+        run_stencil_md_pipelined(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
+    }
     // run_stencil_md_no_cilk_for(n, test_f, test_x, test_v);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
