@@ -306,7 +306,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         return;
     }
 
-    if (nlocal < 4096) {
+    if (false && nlocal < 4096) {
         const auto * _noalias const x = (dbl3_t *) atom_->x[0];
         auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
         const int * _noalias const type = atom_->type;
@@ -768,7 +768,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                 f[i] += f[n * nvals + i];
             }
         }
-
     }
 
     // try new reduce
