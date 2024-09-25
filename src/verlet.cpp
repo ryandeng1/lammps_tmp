@@ -6061,12 +6061,12 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         // updates positions in atom_next_timestep
         // auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
-        modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
+        // modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
         // auto end_initial_integrate = std::chrono::high_resolution_clock::now();
         // auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
         // modify_initial_duration += duration_initial_integrate;
-        // stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
-        // memset(&atom_->f[atom_->nlocal][0], 0, (atom_->nghost) * 3 * sizeof(double));
+        stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+        memset(&atom_->f[atom_->nlocal][0], 0, (atom_->nghost) * 3 * sizeof(double));
         // stencilMD->fuse_initial_integrate_stencil_md<curr_dt>(zoid, t, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
 
@@ -6464,6 +6464,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         }
     }
 
+    /*
     int memset_start = 0;
     int memset_end = NUM_TIMESTEPS_IN_PARALLEL;
 
@@ -6475,6 +6476,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
             memset(&atom_->eval_f_stencil_md[0][0], 0, (nall) * 3 * sizeof(double));
         }
     }
+    */
 }
 
 template <bool curr_dt>
