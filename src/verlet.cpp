@@ -6065,8 +6065,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         // auto end_initial_integrate = std::chrono::high_resolution_clock::now();
         // auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
         // modify_initial_duration += duration_initial_integrate;
-        stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
-        memset(&atom_->f[atom_->nlocal][0], 0, (atom_->nghost) * 3 * sizeof(double));
+        cilk_scope {
+            cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+            memset(&atom_->f[atom_->nlocal][0], 0, (atom_->nghost) * 3 * sizeof(double));
+        }
         // stencilMD->fuse_initial_integrate_stencil_md<curr_dt>(zoid, t, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
 
