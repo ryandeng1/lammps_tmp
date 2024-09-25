@@ -6065,12 +6065,31 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         // auto end_initial_integrate = std::chrono::high_resolution_clock::now();
         // auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
         // modify_initial_duration += duration_initial_integrate;
+
+        constexpr int chunk_size = 4096;
+
+        int f_total = (atom_->nghost) * sizeof(double) * 3;
+        int num_chunks_f = 1 + f_total / chunk_size;
+        double* f_ = &(atom_->f[atom_->nlocal][0]);
+
+        int eval_f_total = (atom_next_timestep->nghost) * sizeof(double) * 3;
+        int num_chunks_eval_f = 1 + eval_f_total / chunk_size;
+        double* eval_f_ = &(atom_next_timestep->eval_f_stencil_md[atom_next_timestep->nlocal][0]);
+
         cilk_scope {
             cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
-            memset(&atom_->f[atom_->nlocal][0], 0, (atom_->nghost) * 3 * sizeof(double));
-        }
-        // stencilMD->fuse_initial_integrate_stencil_md<curr_dt>(zoid, t, atom_, atom_next_timestep, atom_idx_mapping[t]);
+            for (int tid = 0; tid < num_chunks_f; tid++) {
+                int ifrom = tid * chunk_size;
+                int ito = ((ifrom + chunk_size) > f_total) ? f_total : ifrom + chunk_size;
+                cilk_spawn memset((char*) f_ + ifrom, 0, ito - ifrom);
+            }
 
+            for (int tid = 0; tid < num_chunks_eval_f; tid++) {
+                int ifrom = tid * chunk_size;
+                int ito = ((ifrom + chunk_size) > eval_f_total) ? eval_f_total : ifrom + chunk_size;
+                cilk_spawn memset((char*) eval_f_ + ifrom, 0, ito - ifrom);
+            }
+        }
 
         if (n_pre_force) {
             // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
@@ -6095,23 +6114,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             // auto duration_compute = std::chrono::duration_cast<std::chrono::microseconds>(end_compute - begin_compute).count();
             // pair_duration += duration_compute;
 
-            /*
-            int total = (atom_->nlocal + atom_->nghost) * sizeof(double) * 3;
-            constexpr int chunk_size = 4096;
-            int num_chunks = 1 + total / chunk_size;
-            double* f_ = &(atom_->f[0][0]);
-            */
-
-            /*
-            cilk_for (int tid = 0; tid < num_chunks; tid++) {
-                // each thread works on a fixed chunk of atoms.
-                int ifrom = tid * chunk_size;
-                int ito = ((ifrom + chunk_size) > total) ? total : ifrom + chunk_size;
-                memset((char*) f_ + ifrom, 0, ito - ifrom);
-            }
-            */
-
-            // memset(&atom_next_timestep->eval_f_stencil_md[0][0], 0, (atom_next_timestep->nlocal + atom_next_timestep->nghost) * 3 * sizeof(double));
             /*
             next_force->pair->compute_stencil_md(
                     eflag, vflag, atom_next_timestep,
