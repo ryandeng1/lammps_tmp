@@ -6068,7 +6068,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         // auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
         // modify_initial_duration += duration_initial_integrate;
 
-        constexpr int chunk_size = 4096;
+        constexpr int chunk_size = 8192;
 
         int f_total = (atom_->nghost) * sizeof(double) * 3;
         int num_chunks_f = 1 + f_total / chunk_size;
@@ -6401,19 +6401,22 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         dep_to_idx[dep] = wait_idxs.size() + dep_to_idx[dep - 1];
     }
 
+    constexpr bool PIPELINE = true;
+
     if (comm->nprocs != 1) {
         int recv_idx = 0;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             auto& wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             for (int idx: wait_idxs) {
                 int recv_zoid_num = recv_neighbor_procs[idx];
-                comm->receive_data_process_stencil_md(curr_dt, start_t, end_t, &receive_requests[recv_idx], recv_zoid_num, 0);
-                /*
-                comm->receive_data_process_stencil_md(curr_dt, start_t, mid_t,
-                                                      &receive_requests[recv_idx], recv_zoid_num, 0);
-                comm->receive_data_process_stencil_md(curr_dt, mid_t, end_t,
-                                                      &receive_requests2[recv_idx], recv_zoid_num, 1);
-                */
+                if (!PIPELINE) {
+                    comm->receive_data_process_stencil_md(curr_dt, start_t, end_t, &receive_requests[recv_idx], recv_zoid_num, 0);
+                } else {
+                    comm->receive_data_process_stencil_md(curr_dt, start_t, mid_t,
+                                                          &receive_requests[recv_idx], recv_zoid_num, 0);
+                    comm->receive_data_process_stencil_md(curr_dt, mid_t, end_t,
+                                                          &receive_requests2[recv_idx], recv_zoid_num, 1);
+                }
                 recv_idx++;
             }
         }
@@ -6429,51 +6432,51 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         }
     }
 
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        run_stencil_md_dep_templated<curr_dt>(dep, starting_timestep, start_t, end_t, dep_to_idx,
+    if (!PIPELINE) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            run_stencil_md_dep_templated<curr_dt>(dep, starting_timestep, start_t, end_t, dep_to_idx,
+                                                  send_requests, receive_requests,
+                                                  dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+        }
+    } else {
+        run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, start_t, mid_t, dep_to_idx,
                                               send_requests, receive_requests,
                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+
+        cilk_scope {
+                cilk_spawn run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, mid_t, end_t, dep_to_idx,
+                send_requests2, receive_requests2,
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+                run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, start_t, mid_t, dep_to_idx,
+                send_requests, receive_requests,
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+        }
+
+        cilk_scope {
+                cilk_spawn run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, mid_t, end_t, dep_to_idx,
+                send_requests2, receive_requests2,
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+                run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, start_t, mid_t, dep_to_idx,
+                send_requests, receive_requests,
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+        }
+
+        cilk_scope {
+                cilk_spawn run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, mid_t, end_t, dep_to_idx,
+                send_requests2, receive_requests2,
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+                run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, start_t, mid_t, dep_to_idx,
+                send_requests, receive_requests,
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+        }
+
+        run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, mid_t, end_t, dep_to_idx,
+                                              send_requests2, receive_requests2,
+                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
     }
-
-    /*
-    run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, start_t, mid_t, dep_to_idx,
-                                          send_requests, receive_requests,
-                                          dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
-
-    cilk_scope {
-            cilk_spawn run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, mid_t, end_t, dep_to_idx,
-                                                   send_requests2, receive_requests2,
-                                                   dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
-
-            run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, start_t, mid_t, dep_to_idx,
-                                                             send_requests, receive_requests,
-                                                             dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
-    }
-
-    cilk_scope {
-            cilk_spawn run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, mid_t, end_t, dep_to_idx,
-                                                             send_requests2, receive_requests2,
-                                                             dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
-
-            run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, start_t, mid_t, dep_to_idx,
-                                                             send_requests, receive_requests,
-                                                             dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
-    }
-
-    cilk_scope {
-            cilk_spawn run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, mid_t, end_t, dep_to_idx,
-                                                             send_requests2, receive_requests2,
-                                                             dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
-
-            run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, start_t, mid_t, dep_to_idx,
-                                                             send_requests, receive_requests,
-                                                             dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
-    }
-
-    run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, mid_t, end_t, dep_to_idx,
-                                          send_requests2, receive_requests2,
-                                          dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
-    */
 
     if (comm->nprocs != 1) {
         for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
