@@ -2681,7 +2681,7 @@ public:
             return;
         }
 
-        #pragma cilk grainsize 2048
+        #pragma cilk grainsize 128
         cilk_for (int i = 0; i < nlocal; i++) {
             const int itype = atom_type[i];
 
