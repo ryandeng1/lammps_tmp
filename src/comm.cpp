@@ -114,7 +114,7 @@ Comm::Comm(LAMMPS *lmp) : Pointers(lmp)
     utils::logmesg(lmp,"  using {} OpenMP thread(s) per MPI task\n",nthreads);
 #endif
 
-  nthreads = __cilkrts_get_nworkers();
+  // nthreads = __cilkrts_get_nworkers();
 }
 
 /* ---------------------------------------------------------------------- */

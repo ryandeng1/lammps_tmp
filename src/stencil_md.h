@@ -116,6 +116,7 @@ public:
     int nworkers;
 
     void INIT_PER_PARTITION_FORCE_ARRAY() {
+        return;
         int nall = (atom->nlocal + atom->nghost);
         lammps_f = new dbl3_t_stencil_md[nall * NUM_ARRAYS];
         memset(lammps_f, 0, nall * NUM_ARRAYS * 3 * sizeof(double));
