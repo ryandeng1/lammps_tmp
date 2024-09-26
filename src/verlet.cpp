@@ -5385,6 +5385,19 @@ void Verlet::setup_minimal(int flag) {
     update->setupflag = 0;
 }
 
+void parallel_memset(void* buf, int num_bytes) {
+    constexpr int chunk_size = 8192;
+
+    int num_chunks_f = 1 + num_bytes / chunk_size;
+
+    #pragma cilk grainsize 1
+    cilk_for (int tid = 0; tid < num_chunks_f; tid++) {
+        int ifrom = tid * chunk_size;
+        int ito = ((ifrom + chunk_size) > num_bytes) ? num_bytes : ifrom + chunk_size;
+        memset((char*) buf + ifrom, 0, ito - ifrom);
+    }
+}
+
 /* ----------------------------------------------------------------------
    run for N steps
 ------------------------------------------------------------------------- */
@@ -6068,18 +6081,22 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         // auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
         // modify_initial_duration += duration_initial_integrate;
 
-        constexpr int chunk_size = 8192;
 
         int f_total = (atom_->nghost) * sizeof(double) * 3;
-        int num_chunks_f = 1 + f_total / chunk_size;
+        // int num_chunks_f = 1 + f_total / chunk_size;
         double* f_ = &(atom_->f[atom_->nlocal][0]);
 
         int eval_f_total = (atom_next_timestep->nghost) * sizeof(double) * 3;
-        int num_chunks_eval_f = 1 + eval_f_total / chunk_size;
+        // int num_chunks_eval_f = 1 + eval_f_total / chunk_size;
         double* eval_f_ = &(atom_next_timestep->eval_f_stencil_md[atom_next_timestep->nlocal][0]);
 
         cilk_scope {
             cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+
+            cilk_spawn parallel_memset(f_, f_total);
+            cilk_spawn parallel_memset(eval_f_, eval_f_total);
+
+            /*
             for (int tid = 0; tid < num_chunks_f; tid++) {
                 int ifrom = tid * chunk_size;
                 int ito = ((ifrom + chunk_size) > f_total) ? f_total : ifrom + chunk_size;
@@ -6091,6 +6108,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
                 int ito = ((ifrom + chunk_size) > eval_f_total) ? eval_f_total : ifrom + chunk_size;
                 cilk_spawn memset((char*) eval_f_ + ifrom, 0, ito - ifrom);
             }
+            */
         }
 
         if (n_pre_force) {
