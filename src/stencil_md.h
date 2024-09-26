@@ -2529,7 +2529,6 @@ public:
     }
 
     void stencil_md_fuse_force_computation_atomics(queue_info& zoid, int timestep, Atom* next, Neighbor* neigh_next, Force* next_force, Modify* modify_) {
-        // memset(&next->eval_f_stencil_md[next->nlocal][0], 0, (next->nghost) * 3 * sizeof(double));
         const auto * _noalias const x = (dbl3_t_stencil_md *) next->x[0];
         auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
 
@@ -2681,6 +2680,7 @@ public:
             return;
         }
 
+        #pragma cilk grainsize 2048
         cilk_for (int i = 0; i < nlocal; i++) {
             const int itype = atom_type[i];
 
