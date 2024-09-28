@@ -2136,6 +2136,7 @@ public:
         auto& local_dtfm = curr->local_dtfm;
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
+        #pragma cilk grainsize 2048
         cilk_for (int i = 0; i < nlocal; i++) {
             if (mask[i]) {
                 // const double dtfm = dtf / mass[type[i]];
