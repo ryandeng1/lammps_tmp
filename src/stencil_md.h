@@ -2568,7 +2568,7 @@ public:
 
         constexpr bool USE_ATOMIC_FETCH_ADD = true;
 
-        constexpr int BASE_CASE_SIZE = 2048;
+        constexpr int BASE_CASE_SIZE = 1024;
 
         if (nlocal < BASE_CASE_SIZE) {
             for (int i = 0; i < nlocal; i++) {
@@ -2682,7 +2682,7 @@ public:
             return;
         }
 
-        #pragma cilk grainsize 128
+        #pragma cilk grainsize 512
         cilk_for (int i = 0; i < nlocal; i++) {
             const int itype = atom_type[i];
 
