@@ -1843,7 +1843,7 @@ public:
         const int * const type = next->type;
         auto& local_dtfm = next->local_dtfm;
 
-        if (next_nlocal < 1024) {
+        if (true || next_nlocal < 1024) {
             cilk_for (int i = 0; i < next_nlocal; i++) {
                 // if (mask[i] & groupbit) {
                 // const double dtfm = dtf / mass[type[i]];
@@ -2179,7 +2179,7 @@ public:
         auto& local_dtfm = curr->local_dtfm;
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
-        if (nlocal > 1024) {
+        if (false && nlocal > 1024) {
             int num_chunks = __cilkrts_get_nworkers();
             const int idelta = 1 + nlocal / num_chunks;
 

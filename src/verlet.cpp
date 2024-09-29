@@ -6313,15 +6313,19 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             int recv_idx = dep_to_recv_idx[dep];
 
+            auto begin_mpi = std::chrono::high_resolution_clock::now();
+            MPI_Waitall(wait_idxs.size(), &receive_requests[recv_idx], MPI_STATUSES_IGNORE);
+            auto end_mpi = std::chrono::high_resolution_clock::now();
+            auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
+            mpi_duration += duration_mpi;
+
+            /*
             for (int idx: wait_idxs) {
-                int recv_zoid_num = recv_neighbor_procs[idx];
-                // auto begin_mpi = std::chrono::high_resolution_clock::now();
+                // int recv_zoid_num = recv_neighbor_procs[idx];
                 MPI_Wait(&receive_requests[recv_idx++], MPI_STATUS_IGNORE);
-                // auto end_mpi = std::chrono::high_resolution_clock::now();
-                // auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
-                // mpi_duration += duration_mpi;
                 // comm->unpack_data_process_stencil_md(curr_dt, start_t, end_t, recv_zoid_num, pipeline_stage);
             }
+            */
         }
     }
 
