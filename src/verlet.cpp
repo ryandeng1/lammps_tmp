@@ -6094,7 +6094,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
             cilk_spawn parallel_memset(f_, f_total);
-            cilk_spawn parallel_memset(eval_f_, eval_f_total);
+            parallel_memset(eval_f_, eval_f_total);
 
             /*
             for (int tid = 0; tid < num_chunks_f; tid++) {
