@@ -77,9 +77,12 @@ class LAMMPS {
 
   std::vector<class Modify*> modify_stencil_md;
   std::vector<class Update*> update_stencil_md;
-  std::deque<queue_info> queues[NUM_DEPS];
 
+  std::deque<queue_info> queues[NUM_DEPS];
   std::deque<queue_info> queues_next_dt[NUM_DEPS];
+
+  std::deque<queue_info> my_queues[NUM_DEPS];
+  std::deque<queue_info> my_queues_next_dt[NUM_DEPS];
 
   // TODO: use this, replace send_to_next_dt and recv_from_next_dt with this as well
   std::vector<int>* send_to_neighbors;

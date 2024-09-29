@@ -780,6 +780,24 @@ void StencilMD::INIT_ZOID_DATA() {
                     lmp->queues_next_dt[dep][j];
         }
     }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            int zoid_num = lmp->queues[dep][j].num;
+            if (zoid_num % comm->nprocs == comm->me) {
+                lmp->my_queues[dep].push_back(lmp->queues[dep][j]);
+            }
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            int zoid_num = lmp->queues_next_dt[dep][j].num;
+            if (zoid_num % comm->nprocs == comm->me) {
+                lmp->my_queues_next_dt[dep].push_back(lmp->queues_next_dt[dep][j]);
+            }
+        }
+    }
 }
 
 void StencilMD::INIT_ZOID_NEIGHBORS() {
