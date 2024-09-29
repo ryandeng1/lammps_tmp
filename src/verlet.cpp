@@ -6014,6 +6014,7 @@ void Verlet::run(int n) {
     MPI_Allreduce(&send_pack_duration, &stencil_md_total_send_pack_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     if (comm->me == 0) {
+        /*
         std::cout << GREEN << "process: " << comm->me << " STENCIL MD LOCAL COMM DURATION: " << send_comm_duration + recv_comm_duration
                   << " LOCAL PAIR: " << pair_duration << " LOCAL BOND: " << bond_duration
                   << " TOTAL PAIR: " << stencil_md_total_pair_duration << " TOTAL BOND: " << stencil_md_total_bond_duration
@@ -6031,6 +6032,7 @@ void Verlet::run(int n) {
 
         std::cout << YELLOW << "CURR DT TOTAL COMM DURATION: " << stencil_md_total_curr_dt_comm_duration
                   << " NEXT DT COMM DURATION: " << stencil_md_total_next_dt_comm_duration << RESET_COLOR << std::endl;
+        */
     }
 
     if (TEST_AGAINST_LAMMPS) {
@@ -6314,18 +6316,13 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             int recv_idx = dep_to_recv_idx[dep];
 
             auto begin_mpi = std::chrono::high_resolution_clock::now();
-            MPI_Waitall(wait_idxs.size(), &receive_requests[recv_idx], MPI_STATUSES_IGNORE);
+            // MPI_Waitall(wait_idxs.size(), &receive_requests[recv_idx], MPI_STATUSES_IGNORE);
+            for (int idx: wait_idxs) {
+                MPI_Wait(&receive_requests[recv_idx++], MPI_STATUS_IGNORE);
+            }
             auto end_mpi = std::chrono::high_resolution_clock::now();
             auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
             mpi_duration += duration_mpi;
-
-            /*
-            for (int idx: wait_idxs) {
-                // int recv_zoid_num = recv_neighbor_procs[idx];
-                MPI_Wait(&receive_requests[recv_idx++], MPI_STATUS_IGNORE);
-                // comm->unpack_data_process_stencil_md(curr_dt, start_t, end_t, recv_zoid_num, pipeline_stage);
-            }
-            */
         }
     }
 
