@@ -2136,7 +2136,42 @@ public:
         auto& local_dtfm = curr->local_dtfm;
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
-        #pragma cilk grainsize 128
+        if (nlocal > 1024) {
+            int num_chunks = __cilkrts_get_nworkers();
+            const int idelta = 1 + nlocal / num_chunks;
+
+            #pragma cilk grainsize 1
+            cilk_for (int tid = 0; tid < num_chunks; tid++) {
+                int ifrom = tid * idelta;
+                int ito = ((ifrom + idelta) > nlocal) ? nlocal : ifrom + idelta;
+                for (int i = ifrom; i < ito; i++) {
+                    const double dtfm = local_dtfm[i];
+
+                    int next_idx = atom_idx_mapping[i];
+
+                    next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
+                    next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
+                    next_v[next_idx].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
+
+                    next_x[next_idx].x = curr_x[i].x + dtv * next_v[next_idx].x;
+                    next_x[next_idx].y = curr_x[i].y + dtv * next_v[next_idx].y;
+                    next_x[next_idx].z = curr_x[i].z + dtv * next_v[next_idx].z;
+
+                    assert(curr->tag[i] == next->tag[next_idx]);
+                    assert(next_idx != -1);
+
+                    curr_f[i].x = 0.0;
+                    curr_f[i].y = 0.0;
+                    curr_f[i].z = 0.0;
+                    curr_eval_f[i].x = 0.0;
+                    curr_eval_f[i].y = 0.0;
+                    curr_eval_f[i].z = 0.0;
+                }
+            }
+
+            return;
+        }
+
         cilk_for (int i = 0; i < nlocal; i++) {
             if (mask[i]) {
                 // const double dtfm = dtf / mass[type[i]];
