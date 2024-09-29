@@ -1830,6 +1830,49 @@ public:
         }
     }
 
+    inline void final_integrate_stencil_md_(Atom* next) {
+        auto * _noalias const next_v = (dbl3_t *) next->v[0];
+
+        const auto * _noalias const f = (dbl3_t *) next->f[0];
+        const auto * _noalias const eval_f = (dbl3_t *) next->eval_f_stencil_md[0];
+
+        const int * const mask = next->mask;
+        const int next_nlocal = next->nlocal;
+
+        const double * const mass = atom->mass;
+        const int * const type = next->type;
+        auto& local_dtfm = next->local_dtfm;
+
+        if (next_nlocal < 1024) {
+            cilk_for (int i = 0; i < next_nlocal; i++) {
+                // if (mask[i] & groupbit) {
+                // const double dtfm = dtf / mass[type[i]];
+                const double dtfm = local_dtfm[i];
+                next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                // }
+            }
+        } else {
+            int num_chunks = __cilkrts_get_nworkers();
+            const int idelta = 1 + next_nlocal / num_chunks;
+
+            #pragma cilk grainsize 1
+            cilk_for (int tid = 0; tid < num_chunks; tid++) {
+                int ifrom = tid * idelta;
+                int ito = ((ifrom + idelta) > next_nlocal) ? next_nlocal : ifrom + idelta;
+                for (int i = ifrom; i < ito; i++) {
+                    const double dtfm = local_dtfm[i];
+                    next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                    next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                    next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                }
+            }
+
+            return;
+        }
+    }
+
     inline void final_integrate_stencil_md(const std::vector<int>& local_idxs, Atom* next) {
         // update v of atoms in group
 

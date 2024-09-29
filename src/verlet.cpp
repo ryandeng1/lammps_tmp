@@ -6187,8 +6187,11 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         }
 
         // auto begin_final_integrate = std::chrono::high_resolution_clock::now();
+        /*
         modify_->final_integrate_stencil_md(
                 atom_, atom_next_timestep, neighbor, atom_idx_mapping[t], nullptr);
+        */
+        stencilMD->final_integrate_stencil_md_(atom_next_timestep);
         // auto end_final_integrate = std::chrono::high_resolution_clock::now();
         // auto duration_final_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_final_integrate - begin_final_integrate).count();
         // modify_final_duration += duration_final_integrate;
