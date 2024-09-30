@@ -6313,7 +6313,6 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                                           std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
                                           double **test_f, double **test_x, double** test_v, int pipeline_stage) {
     if (comm->nprocs != 1) {
-        auto& recv_neighbor_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
         if (dep > 0) {
             auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             int recv_idx = dep_to_recv_idx[dep];
@@ -6427,7 +6426,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         dep_to_idx[dep] = wait_idxs.size() + dep_to_idx[dep - 1];
     }
 
-    constexpr bool PIPELINE = true;
+    constexpr bool PIPELINE = false;
 
     if (comm->nprocs != 1) {
         int recv_idx = 0;
