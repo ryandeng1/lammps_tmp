@@ -1644,18 +1644,6 @@ void CommBrick::construct_send_list_stencil_md_send(
             std::vector<int> segment_lengths_force;
             int num_force_segments = get_segments(idx_vec_force[t], segment_idxs_force, segment_lengths_force);
 
-            auto& bounds = stencilMD->GET_BOUNDS(true, t);
-
-            if (bounds.size() > 0) {
-                std::set<IDX_3D> ranges;
-                for (int idx : idx_vec_force[t]) {
-                    double* pos = atom_->x[idx];
-                    auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-                    ranges.insert(range);
-                    all_ranges.insert(range);
-                }
-            }
-
             if (num_force_segments > 10) {
                 std::cout << YELLOW << "curr dt zoid: " << zoid.num << " to: " << send_zoid_num << " time: " << t << " num force segments: " << num_force_segments << RESET_COLOR << std::endl;
             }
@@ -2005,9 +1993,6 @@ void CommBrick::construct_send_list_stencil_md(
             zoid.recv_list_local_force_only[t][i] = new int[nrecv_force_only];
             zoid.recv_list_local_num_force_only[t][i] = nrecv_force_only;
 
-            auto& bounds = stencilMD->GET_BOUNDS(true, t);
-            std::set<IDX_3D> ranges;
-
             for (int j = 0; j < nrecv_force_only; j++) {
                 tagint tag_ = (tagint) ubuf(buf_recv_stencil_md[i][idx_in_buf++]).i;
                 assert(tag_ >= 0 && tag_ <= atom->natoms);
@@ -2018,28 +2003,7 @@ void CommBrick::construct_send_list_stencil_md(
                 int idx = atom_->tag_to_idx[tag_];
                 assert(idx < atom_->nlocal);
                 zoid.recv_list_local_force_only[t][i][j] = idx;
-
-                if (t != 0 && t < NUM_TIMESTEPS_IN_PARALLEL + 1) {
-                    double* pos = atom_->x[idx];
-                    auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-                    ranges.insert(range);
-                }
             }
-
-            int num_local_in_range = 0;
-            for (auto& range : ranges) {
-                assert(bounds.size() > 0);
-                for (int local_idx = 0; local_idx < atom_->nlocal; local_idx++) {
-                    double *pos = atom_->x[local_idx];
-                    auto compare = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-                    if (range == compare) {
-                        num_local_in_range++;
-                    } else {
-                        // std::cout << "range: " << std::get<0>(range) << " " << std::get<1>(range) << " " << std::get<2>(range) << " compare: " << std::get<0>(compare) << " " << std::get<1>(compare) << " " << std::get<2>(compare) << std::endl;
-                    }
-                }
-            }
-            // assert(num_local_in_range == nrecv_force_only);
         }
 
 
@@ -2049,9 +2013,6 @@ void CommBrick::construct_send_list_stencil_md(
             int nrecv_force_pos = nrecv_arr[t + NUM_TIMESTEPS_IN_PARALLEL + 1];
             zoid.recv_list_local_force_pos[t][i] = new int[nrecv_force_pos];
             zoid.recv_list_local_num_force_pos[t][i] = nrecv_force_pos;
-
-            auto& bounds = stencilMD->GET_BOUNDS(true, t);
-            std::set<IDX_3D> ranges;
 
             for (int j = 0; j < nrecv_force_pos; j++) {
                 tagint tag_ = (tagint) ubuf(buf_recv_stencil_md[i][idx_in_buf++]).i;
@@ -2066,12 +2027,6 @@ void CommBrick::construct_send_list_stencil_md(
                 }
                 assert(idx < atom_->nlocal);
                 zoid.recv_list_local_force_pos[t][i][j] = idx;
-
-                if (t != 0 && t < NUM_TIMESTEPS_IN_PARALLEL + 1) {
-                    double *pos = atom_->x[idx];
-                    auto range = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-                    ranges.insert(range);
-                }
             }
 
             /*
@@ -3029,29 +2984,6 @@ void CommBrick::send_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
                 if (zoid.where[dim] == PBC && send_zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
             }
 
-            auto& bounds = stencilMD->GET_BOUNDS(curr_dt, t);
-            std::cout << BOLDCYAN << "zoid: " << zoid.num << " send to: " << send_zoid_num << " time: " << t << RESET_COLOR << std::endl;
-            std::stringstream s;
-            for (auto& b: bounds) {
-                s << b << " ";
-            }
-            std::cout << BOLDMAGENTA << "MAN BOUNDS: " << s.str() << RESET_COLOR << std::endl;
-            /*
-            for (int h = 0; h < atom_->nlocal + atom_->nghost; h++) {
-                double* pos = atom_->x[h];
-                auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-                std::cout << BOLDGREEN << "TIMESTEP: " << t << " MY ZOID: " << zoid_num << " MY IDX: " << h << " nlocal: " << atom_->nlocal << " tag: " << atom_->tag[h] << " pos: " << pos[0] << " " << pos[1] << " " << pos[2]
-                    << " BIN: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << " bin idx: " << get_bin_idx(bin) << RESET_COLOR << std::endl;
-            }
-
-            for (int h = 0; h < other_atom->nlocal + other_atom->nghost; h++) {
-                double* pos = other_atom->x[h];
-                auto bin = get_bin(bounds, pos, domain->boxlo, domain->boxhi);
-                std::cout << BOLDYELLOW << "TIMESTEP: " << t << " OTHER ZOID: " << send_zoid_num << " OTHER IDX: " << h << " nlocal: " << other_atom->nlocal << " tag: " << other_atom->tag[h] << " pos: " << pos[0] << " " << pos[1] << " " << pos[2]
-                    << " BIN: " << std::get<0>(bin) << " " << std::get<1>(bin) << " " << std::get<2>(bin) << " bin idx: " << get_bin_idx(bin) << RESET_COLOR << std::endl;
-            }
-            */
-
             atom_->avec->send_data_bins_stencil_md(zoid.bin_to_idx[t], zoid.bin_to_size[t], send_zoid.bin_to_idx[t], send_zoid.bin_to_size[t],
                                                    zoid.send_force_num_bins[t][i], zoid.send_force_bins[t][i],
                                                    zoid.send_pos_num_bins[t][i], zoid.send_pos_bins[t][i],
@@ -3247,13 +3179,6 @@ void CommBrick::recv_data_bins_stencil_md(bool curr_dt, std::array<Atom*, NUM_TI
 
                 if (recv_zoid.where[dim] == PBC && zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
             }
-
-            auto& bounds = stencilMD->GET_BOUNDS(curr_dt, t);
-            /*
-            std::cout << "zoid: " << zoid.num << " recv from: " << recv_zoid_num << " t: " << t << " curr dt? " << curr_dt
-                << " num force bins recv: " << zoid.recv_force_num_bins[t][i] << " num pos bins recv: " << zoid.recv_pos_num_bins[t][i]
-                << " num vel bins recv: " << zoid.recv_vel_num_bins[t][i] << std::endl;
-            */
 
             const dbl3_t_stencil_md* _noalias const send_f = (dbl3_t_stencil_md*) other_atom->eval_f_stencil_md[0];
             const dbl3_t_stencil_md* _noalias const send_x = (dbl3_t_stencil_md*) other_atom->x[0];

@@ -2505,7 +2505,6 @@ void Verlet::setup_stencil_md() {
         }
     }
 
-
     stencilMD->BUILD_NEIGHBOR_LIST();
     stencilMD->BUILD_NEIGHBOR_LIST_NEXT_DT();
 
@@ -2741,6 +2740,7 @@ void Verlet::setup_stencil_md() {
     MPI_Barrier(world);
 
     std::cout << "send list stencilmd" << std::endl;
+
     std::vector<MPI_Request> r2_arr[NUM_ZOIDS];
     // construct local list now, ghost to local?
     for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -5090,18 +5090,23 @@ void Verlet::setup_stencil_md() {
                 // todo: eflag and vflag might cause some issues
                 // TODO: compute force for each pair in parallel
 
+                stencilMD->fuse_force_computation_atomics<true>(zoid, 0, lmp->atom_stencil_md[zoid_num][0], neighbor_, force_, modify_);
+                /*
                 int curr_dt_flag = 0;
                 force_->pair->compute_stencil_md(
                     eflag, vflag, lmp->atom_stencil_md[zoid_num][0],
                     zoid.can_eval_center[0], lmp->zoid_num_to_zoid[zoid_num],
                     &curr_dt_flag);
+                */
 
                 if (atom->molecular != Atom::ATOMIC) {
                     if (force->bond) {
+                        /*
                         force_->bond->compute_stencil_md(eflag, vflag, atom_,
                                                          zoid.can_eval_center[0],
                                                          lmp->zoid_num_to_zoid[zoid_num],
                                                          &curr_dt_flag, neighbor_);
+                        */
                     }
                     if (force->angle) {
                         assert(false);

@@ -2629,6 +2629,47 @@ void Atom::sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vect
         bin_to_local_bins_idx[local_bins[i]] = i;
     }
 
+    idx_use_atomics.reserve(nlocal + nghost);
+    for (int i = 0; i < nlocal + nghost; i++) {
+        double* pos = x[i];
+        auto bin = get_bin(bin_bounds, x[i], domain->boxlo, domain->boxhi);
+        bool close_to_border = false;
+        for (int dim = 0; dim < 3; dim++) {
+            double lo = bin_bounds[bin[dim]];
+            double hi;
+            if (bin[dim] == bin_bounds.size() - 1) {
+                hi = bin_bounds[0] + domain->prd[dim];
+            } else {
+                hi = bin_bounds[bin[dim] + 1];
+            }
+            double adjusted_pos = pos[dim];
+            if (adjusted_pos < domain->boxlo[dim]) {
+                adjusted_pos += domain->prd[dim];
+            }
+            if (adjusted_pos >= domain->boxhi[dim]) {
+                adjusted_pos -= domain->prd[dim];
+            }
+            if (adjusted_pos - lo <= ALLEGRO_SLOPE) {
+                close_to_border = true;
+                break;
+            }
+            if (hi - adjusted_pos <= ALLEGRO_SLOPE) {
+                close_to_border = true;
+                break;
+            }
+        }
+        idx_use_atomics.push_back(close_to_border);
+    }
+
+    int num_use_atomics = 0;
+    for (int i = 0; i < nlocal + nghost; i++) {
+        if (idx_use_atomics[i]) {
+            num_use_atomics++;
+        }
+    }
+
+    std::cout << "num use atomics: " << num_use_atomics << " total: " << nlocal + nghost << std::endl;
+
     // sanity check that current = permute
 
     int flag = 0;
@@ -2688,9 +2729,6 @@ void Atom::setup_lammps_pair_bins() {
     }
 
     std::cout << "num use atomics: " << num_use_atomics << " total: " << nlocal + nghost << std::endl;
-
-    return;
-
 
     std::map<IDX_3D, IDX_3D> bin_to_partition;
 

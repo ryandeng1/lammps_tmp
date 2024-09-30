@@ -1114,7 +1114,7 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
                     lmp->comm_stencil_md[zoid_num]
                             ->exchange_stencil_md_initial_receive(
                                     first, lmp->domain_stencil_md[zoid_num][t], zoid);
-                    // first->sort_stencil_md();
+                    first->sort_stencil_md();
                 }
             }
         }
@@ -1156,10 +1156,10 @@ void StencilMD::SORT_LOCAL_ATOMS_BINS() {
                 int zoid_num = zoid.num;
                 // receive only if the zoid belongs to me
                 if (zoid_num % comm->nprocs == comm->me) {
-                    auto& atom_arr = lmp->atom_stencil_md[zoid_num];
-                    Atom* first = atom_arr[t];
-                    auto& bin_bounds = GET_BOUNDS(true, t);
-                    if (true || comm->nprocs == 1) {
+                    if (comm->nprocs == 1) {
+                        auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+                        Atom* first = atom_arr[t];
+                        auto& bin_bounds = GET_BOUNDS(true, t);
                         Atom* next;
                         if (t < NUM_TIMESTEPS_IN_PARALLEL) {
                             next = atom_arr[t + 1];
