@@ -1843,33 +1843,15 @@ public:
         const int * const type = next->type;
         auto& local_dtfm = next->local_dtfm;
 
-        if (true || next_nlocal < 1024) {
-            cilk_for (int i = 0; i < next_nlocal; i++) {
-                // if (mask[i] & groupbit) {
-                // const double dtfm = dtf / mass[type[i]];
-                const double dtfm = local_dtfm[i];
-                next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
-                next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
-                next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
-                // }
-            }
-        } else {
-            int num_chunks = __cilkrts_get_nworkers();
-            const int idelta = 1 + next_nlocal / num_chunks;
-
-            #pragma cilk grainsize 1
-            cilk_for (int tid = 0; tid < num_chunks; tid++) {
-                int ifrom = tid * idelta;
-                int ito = ((ifrom + idelta) > next_nlocal) ? next_nlocal : ifrom + idelta;
-                for (int i = ifrom; i < ito; i++) {
-                    const double dtfm = local_dtfm[i];
-                    next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
-                    next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
-                    next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
-                }
-            }
-
-            return;
+        #pragma cilk grainsize 2048
+        cilk_for (int i = 0; i < next_nlocal; i++) {
+            // if (mask[i] & groupbit) {
+            // const double dtfm = dtf / mass[type[i]];
+            const double dtfm = local_dtfm[i];
+            next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
+            next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
+            next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+            // }
         }
     }
 
@@ -1902,6 +1884,67 @@ public:
                 next_v[idx].y += dtfm * (f[idx].y + eval_f[idx].y);
                 next_v[idx].z += dtfm * (f[idx].z + eval_f[idx].z);
             }
+        }
+    }
+
+    inline void post_force_stencil_md_(Atom* atom_, Modify* modify_) {
+        auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
+        auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
+
+        int *type = atom_->type;
+        int *mask = atom_->mask;
+
+        int n_post_force = modify_->n_post_force;
+
+        assert(n_post_force == 1);
+
+        // auto fix_post_force = (FixLangevin*) modify_->fix[modify_->list_post_force[0]];
+        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
+
+        auto gfactor1 = fix_post_force->gfactor1;
+        auto gfactor2 = fix_post_force->gfactor2;
+        // fix_post_force->compute_target();
+        auto tsqrt = fix_post_force->tsqrt;
+
+        const int nlocal = atom_->nlocal;
+
+        #pragma cilk grainsize 2048
+        cilk_for (int i = 0; i < nlocal; i++) {
+            // these are per-atom variables that get updated. Need to put them here to avoid races.
+            // double fdrag[3],fran[3];
+            // dbl3_t_stencil_md fdrag, fran;
+
+            // if (mask[i]) {
+                double gamma1 = gfactor1[type[i]];
+                double gamma2 = gfactor2[type[i]] * tsqrt;
+
+                double rand_x = 0.6;
+                double rand_y = 0.6;
+                double rand_z = 0.6;
+
+                dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2*(rand_y - 0.5), gamma2 * (rand_z - 0.5)};
+                dbl3_t_stencil_md fdrag = {gamma1 * v[i].x, gamma1 * v[i].y, gamma1 * v[i].z};
+
+                /*
+                fran.x = gamma2*(rand_x-0.5);
+                fran.y = gamma2*(rand_y-0.5);
+                fran.z = gamma2*(rand_z-0.5);
+                */
+
+                /*
+                fran[0] = gamma2*(random->uniform()-0.5);
+                fran[1] = gamma2*(random->uniform()-0.5);
+                fran[2] = gamma2*(random->uniform()-0.5);
+
+                fdrag.x = gamma1*v[i].x;
+                fdrag.y = gamma1*v[i].y;
+                fdrag.z = gamma1*v[i].z;
+                */
+
+                eval_f[i].x += fdrag.x + fran.x;
+                eval_f[i].y += fdrag.y + fran.y;
+                eval_f[i].z += fdrag.z + fran.z;
+            // }
         }
     }
 
@@ -2178,42 +2221,6 @@ public:
         double dtv = update->dt;
         auto& local_dtfm = curr->local_dtfm;
         // double dtf = 0.5 * update->dt * force->ftm2v;
-
-        if (false && nlocal > 1024) {
-            int num_chunks = __cilkrts_get_nworkers();
-            const int idelta = 1 + nlocal / num_chunks;
-
-            #pragma cilk grainsize 1
-            cilk_for (int tid = 0; tid < num_chunks; tid++) {
-                int ifrom = tid * idelta;
-                int ito = ((ifrom + idelta) > nlocal) ? nlocal : ifrom + idelta;
-                for (int i = ifrom; i < ito; i++) {
-                    const double dtfm = local_dtfm[i];
-
-                    int next_idx = atom_idx_mapping[i];
-
-                    next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
-                    next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
-                    next_v[next_idx].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
-
-                    next_x[next_idx].x = curr_x[i].x + dtv * next_v[next_idx].x;
-                    next_x[next_idx].y = curr_x[i].y + dtv * next_v[next_idx].y;
-                    next_x[next_idx].z = curr_x[i].z + dtv * next_v[next_idx].z;
-
-                    assert(curr->tag[i] == next->tag[next_idx]);
-                    assert(next_idx != -1);
-
-                    curr_f[i].x = 0.0;
-                    curr_f[i].y = 0.0;
-                    curr_f[i].z = 0.0;
-                    curr_eval_f[i].x = 0.0;
-                    curr_eval_f[i].y = 0.0;
-                    curr_eval_f[i].z = 0.0;
-                }
-            }
-
-            return;
-        }
 
         cilk_for (int i = 0; i < nlocal; i++) {
             if (mask[i]) {

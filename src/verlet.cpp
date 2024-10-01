@@ -6185,9 +6185,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         auto begin_post_force = std::chrono::high_resolution_clock::now();
         if (n_post_force_any) {
-            modify_->post_force_stencil_md(vflag, atom_next_timestep);
+            // modify_->post_force_stencil_md(vflag, atom_next_timestep);
             // modify->post_force(vflag);
             // stencilMD->fuse_post_force_stencil_md<curr_dt>(zoid, t + 1, atom_next_timestep, modify_);
+            stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
         }
 
         auto end_post_force = std::chrono::high_resolution_clock::now();
