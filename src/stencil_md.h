@@ -1908,7 +1908,7 @@ public:
 
         const int nlocal = atom_->nlocal;
 
-        #pragma cilk grainsize 1024
+        #pragma cilk grainsize 512
         cilk_for (int i = 0; i < nlocal; i++) {
             // these are per-atom variables that get updated. Need to put them here to avoid races.
             // double fdrag[3],fran[3];
