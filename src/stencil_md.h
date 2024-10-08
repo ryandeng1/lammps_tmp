@@ -1843,8 +1843,7 @@ public:
         const int * const type = next->type;
         auto& local_dtfm = next->local_dtfm;
 
-        #pragma cilk grainsize 2048
-        cilk_for (int i = 0; i < next_nlocal; i++) {
+        for (int i = 0; i < next_nlocal; i++) {
             // if (mask[i] & groupbit) {
             // const double dtfm = dtf / mass[type[i]];
             const double dtfm = local_dtfm[i];
