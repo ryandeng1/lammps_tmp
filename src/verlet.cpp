@@ -6316,8 +6316,8 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
 
     // auto &zoid_queue = curr_dt ? lmp->queues[dep] : lmp->queues_next_dt[dep];
     auto &zoid_queue = curr_dt ? lmp->my_queues[dep] : lmp->my_queues_next_dt[dep];
-    cilk_scope {
-            for (int j = 0; j < zoid_queue.size(); j++) {
+    // cilk_scope {
+            cilk_for (int j = 0; j < zoid_queue.size(); j++) {
                 queue_info &zoid = zoid_queue[j];
                 int zoid_num = zoid.num;
                 if (zoid_num % comm->nprocs != comm->me) {
@@ -6352,7 +6352,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                     }
                 }
             }
-    }
+    // }
 
     if (comm->nprocs != 1) {
         if (dep < NUM_DEPS - 1) {
