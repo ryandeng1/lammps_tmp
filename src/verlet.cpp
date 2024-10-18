@@ -6327,7 +6327,9 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
         }
 
-        run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v);
+        cilk_scope {
+            run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v);
+        }
 
         if (comm->nprocs != 1) {
             if (dep < NUM_DEPS - 1) {
@@ -6396,7 +6398,6 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             }
         }
     }
-
 }
 
 template <bool curr_dt>
@@ -6422,13 +6423,13 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
 
     constexpr bool PIPELINE = false;
 
-    if (comm->nprocs != 1) {
+    if (comm->nprocs != 1 && false) {
         int recv_idx = 0;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             auto& wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             for (int idx: wait_idxs) {
                 int recv_zoid_num = recv_neighbor_procs[idx];
-                if (!PIPELINE && false) {
+                if (!PIPELINE) {
                     comm->receive_data_process_stencil_md(curr_dt, start_t, end_t, &receive_requests[recv_idx], recv_zoid_num, 0);
                 } else {
                     comm->receive_data_process_stencil_md(curr_dt, start_t, mid_t,
