@@ -6428,7 +6428,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
             auto& wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             for (int idx: wait_idxs) {
                 int recv_zoid_num = recv_neighbor_procs[idx];
-                if (!PIPELINE) {
+                if (!PIPELINE && false) {
                     comm->receive_data_process_stencil_md(curr_dt, start_t, end_t, &receive_requests[recv_idx], recv_zoid_num, 0);
                 } else {
                     comm->receive_data_process_stencil_md(curr_dt, start_t, mid_t,
@@ -6497,7 +6497,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
     }
 
-    if (comm->nprocs != 1) {
+    if (comm->nprocs != 1 && false) {
         for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
             if (send_requests[i].size() > 0) {
                 MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
