@@ -6451,9 +6451,12 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
 
     if (!PIPELINE) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
-            run_stencil_md_dep_templated<curr_dt>(dep, starting_timestep, start_t, end_t, dep_to_idx,
-                                                  send_requests, receive_requests,
-                                                  dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+            cilk_scope {
+                    run_stencil_md_dep_templated<curr_dt>(dep, starting_timestep, start_t, end_t, dep_to_idx,
+                                                          send_requests, receive_requests,
+                                                          dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x,
+                                                          test_v, 0);
+            }
         }
     } else {
         run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, start_t, mid_t, dep_to_idx,
