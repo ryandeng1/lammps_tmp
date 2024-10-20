@@ -1843,7 +1843,7 @@ public:
         const int * const type = next->type;
         auto& local_dtfm = next->local_dtfm;
 
-        #pragma cilk grainsize 1024
+        #pragma cilk grainsize 2048
         cilk_for (int i = 0; i < next_nlocal; i++) {
             // if (mask[i] & groupbit) {
             // const double dtfm = dtf / mass[type[i]];
@@ -1908,7 +1908,7 @@ public:
 
         const int nlocal = atom_->nlocal;
 
-        #pragma cilk grainsize 1024
+        #pragma cilk grainsize 2048
         cilk_for (int i = 0; i < nlocal; i++) {
             // these are per-atom variables that get updated. Need to put them here to avoid races.
             // double fdrag[3],fran[3];
@@ -2222,6 +2222,7 @@ public:
         auto& local_dtfm = curr->local_dtfm;
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
+        #pragma cilk grainsize 2048
         cilk_for (int i = 0; i < nlocal; i++) {
             if (mask[i]) {
                 // const double dtfm = dtf / mass[type[i]];
