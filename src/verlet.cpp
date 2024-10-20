@@ -6132,9 +6132,11 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
             if (atom->molecular != Atom::ATOMIC) {
                 if (force->bond) {
+                    /*
                     next_force->bond->compute_stencil_md(eflag, vflag, atom_next_timestep,
                                                          zoid.can_eval_center[t + 1],
                                                          zoid, &timestep_flag, neigh_next_timestep);
+                    */
                 }
                 if (force->angle) {
                     assert(false);
@@ -6165,10 +6167,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         auto begin_post_force = std::chrono::high_resolution_clock::now();
         if (n_post_force_any) {
-            modify_->post_force_stencil_md(vflag, atom_next_timestep);
+            // modify_->post_force_stencil_md(vflag, atom_next_timestep);
             // modify->post_force(vflag);
             // stencilMD->fuse_post_force_stencil_md<curr_dt>(zoid, t + 1, atom_next_timestep, modify_);
-            // stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
+            stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
         }
 
         auto end_post_force = std::chrono::high_resolution_clock::now();
@@ -6416,7 +6418,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         dep_to_idx[dep] = wait_idxs.size() + dep_to_idx[dep - 1];
     }
 
-    constexpr bool PIPELINE = true;
+    constexpr bool PIPELINE = false;
 
     if (comm->nprocs != 1) {
         int recv_idx = 0;
