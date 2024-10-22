@@ -1104,8 +1104,8 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         std::vector<MPI_Request> r(2 * NUM_ZOIDS, MPI_REQUEST_NULL);
         comm->exchange_stencil_md_initial_send(r);
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 queue_info& zoid = lmp->queues[dep][j];
                 int zoid_num = zoid.num;
                 // receive only if the zoid belongs to me
@@ -1129,8 +1129,8 @@ void StencilMD::GET_GHOST_ATOMS_ZOID() {
         std::vector<MPI_Request> r(2 * NUM_ZOIDS, MPI_REQUEST_NULL);
         // comm->exchange_stencil_md_initial_send(r);
         comm->borders_stencil_md_initial_send(r);
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 queue_info& zoid = lmp->queues[dep][j];
                 int zoid_num = zoid.num;
                 // receive only if the zoid belongs to me
