@@ -1901,11 +1901,11 @@ public:
             int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
-                if (claimed[s].load()) {
+                if (claimed[s].load(std::memory_order_relaxed)) {
                     continue;
                 }
                 bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true)) {
+                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
