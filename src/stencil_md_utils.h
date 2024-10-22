@@ -93,7 +93,7 @@ constexpr int NUM_DEPS_BINS = 8;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 1;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 3;
 constexpr double ADDITIONAL_CUTOFF = 0.401;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
@@ -124,7 +124,7 @@ constexpr bool ONLY_RUN_STENCIL_MD = false;
 
 constexpr bool LAMMPS_USE_CILK = false;
 
-constexpr bool LAMMPS_USE_BINS = true;
+constexpr bool LAMMPS_USE_BINS = false;
 
 constexpr bool TIME_STENCIL_MD = true;
 
@@ -134,7 +134,7 @@ constexpr int NUM_PIPELINE_STAGES = 2;
 
 constexpr bool USE_ATOMICS = false;
 
-constexpr int NUM_BINS = 22;
+constexpr int NUM_BINS = 1;
 
 constexpr int LAMMPS_NUM_REGIONS = 4;
 
@@ -145,6 +145,8 @@ constexpr bool SORT_BINS_BASED_ON_LOCAL_IDX = false;
 using dbl3_t_stencil_md = struct { double x,y,z; };
 
 using IDX_3D = std::array<int, 3>;
+
+constexpr int MODIFY_GRAINSIZE = 2048;
 
 const std::map<IDX_3D, int> partition_to_dep = {
         {{LEFT,   LEFT,   LEFT},   0},
@@ -665,6 +667,7 @@ inline __attribute__((always_inline)) int get_bin_idx(const IDX_3D& bin) {
     int x = bin[0];
     int y = bin[1];
     int z = bin[2];
+    /*
     if (x >= NUM_BINS || x < 0) {
         std::cout << "bin x: " << x << std::endl;
     }
@@ -674,6 +677,7 @@ inline __attribute__((always_inline)) int get_bin_idx(const IDX_3D& bin) {
     if (z >= NUM_BINS || z < 0) {
         std::cout << "bin z: " << z << std::endl;
     }
+    */
     assert(x < NUM_BINS && x >= 0);
     assert(y < NUM_BINS && y >= 0);
     assert(z < NUM_BINS && z >= 0);

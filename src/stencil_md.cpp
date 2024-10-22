@@ -1104,8 +1104,8 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID() {
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         std::vector<MPI_Request> r(2 * NUM_ZOIDS, MPI_REQUEST_NULL);
         comm->exchange_stencil_md_initial_send(r);
-        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
-            cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 queue_info& zoid = lmp->queues[dep][j];
                 int zoid_num = zoid.num;
                 // receive only if the zoid belongs to me
@@ -1129,8 +1129,8 @@ void StencilMD::GET_GHOST_ATOMS_ZOID() {
         std::vector<MPI_Request> r(2 * NUM_ZOIDS, MPI_REQUEST_NULL);
         // comm->exchange_stencil_md_initial_send(r);
         comm->borders_stencil_md_initial_send(r);
-        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
-            cilk_for (int j = 0; j < lmp->queues[dep].size(); j++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 queue_info& zoid = lmp->queues[dep][j];
                 int zoid_num = zoid.num;
                 // receive only if the zoid belongs to me
@@ -1274,6 +1274,27 @@ void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
 
                     Force* force_ = lmp->force_stencil_md_next_dt[zoid_num][t];
                     force_->setup();
+                }
+            }
+        }
+    }
+}
+
+// TODO: what to do with inum per timestep
+void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < lmp->queues[dep].size(); j++) {
+                queue_info& zoid = lmp->queues[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs == comm->me) {
+                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
+                    int nlocal = atom_->nlocal;
+                    int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+                    atom_->claimed = new std::atomic<bool>[num_chunks];
+                    for (int i = 0; i < num_chunks; i++) {
+                        atom_->claimed[i] = false;
+                    }
                 }
             }
         }

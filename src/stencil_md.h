@@ -99,6 +99,8 @@ public:
     void SET_INUM_PER_TIMESTEP();
     void SET_INUM_PER_TIMESTEP_NEXT_DT();
 
+    void SET_CLAIMED_ATOMIC_BOOLS();
+
     std::vector<double>& GET_BOUNDS(bool curr_dt, int timestep);
 
     std::vector<double>& LAMMPS_GET_BOUNDS(bool curr_dt, int timestep);
@@ -1855,6 +1857,70 @@ public:
         }
     }
 
+    /*
+     *
+     * cilk_for (int ii = 0; ii < num_chunks; ++ii) {
+        int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
+        for (int c = 0; c < num_chunks; ++c) {
+            int s = (c + start_chunk) % num_chunks;
+	    if (claimed[s].load()) {
+		continue;
+	    }
+	    bool expected = false;
+	    if (claimed[s].compare_exchange_weak(expected, true)) {
+		for (int i = s * GRAINSIZE; i < (s + 1) * GRAINSIZE && i < N; i++) {
+	            const double dtfm = local_dtfm[i];
+        	    v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                    v[i].y += dtfm * (f[i].y + eval_f[i].y);
+        	    v[i].z += dtfm * (f[i].z + eval_f[i].z);
+		}
+	    }
+	}
+    }
+     */
+
+    inline void final_integrate_stencil_md_affinity(Atom* next) {
+        auto * _noalias const next_v = (dbl3_t *) next->v[0];
+
+        const auto * _noalias const f = (dbl3_t *) next->f[0];
+        const auto * _noalias const eval_f = (dbl3_t *) next->eval_f_stencil_md[0];
+
+        const int * const mask = next->mask;
+        const int next_nlocal = next->nlocal;
+
+        const double * const mass = atom->mass;
+        const int * const type = next->type;
+        auto& local_dtfm = next->local_dtfm;
+        auto claimed = next->claimed;
+
+        int num_chunks = next_nlocal / MODIFY_GRAINSIZE + 1;
+        int num_workers = __cilkrts_get_nworkers();
+
+        #pragma cilk grainsize 1
+        cilk_for (int ii = 0; ii < num_chunks; ii++) {
+            int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
+            for (int c = 0; c < num_chunks; ++c) {
+                int s = (c + start_chunk) % num_chunks;
+                if (claimed[s].load()) {
+                    continue;
+                }
+                bool expected = false;
+                if (claimed[s].compare_exchange_weak(expected, true)) {
+                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
+                        const double dtfm = local_dtfm[i];
+                        next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                        next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                        next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < num_chunks; i++) {
+            claimed[i] = false;
+        }
+    }
+
     inline void final_integrate_stencil_md(const std::vector<int>& local_idxs, Atom* next) {
         // update v of atoms in group
 
@@ -1945,6 +2011,65 @@ public:
                 eval_f[i].y += fdrag.y + fran.y;
                 eval_f[i].z += fdrag.z + fran.z;
             // }
+        }
+    }
+
+    inline void post_force_stencil_md_affinity(Atom* atom_, Modify* modify_) {
+        auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
+        auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
+
+        int *type = atom_->type;
+        int *mask = atom_->mask;
+
+        int n_post_force = modify_->n_post_force;
+
+        assert(n_post_force == 1);
+
+        // auto fix_post_force = (FixLangevin*) modify_->fix[modify_->list_post_force[0]];
+        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
+
+        auto gfactor1 = fix_post_force->gfactor1;
+        auto gfactor2 = fix_post_force->gfactor2;
+        // fix_post_force->compute_target();
+        auto tsqrt = fix_post_force->tsqrt;
+
+        const int nlocal = atom_->nlocal;
+        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        auto claimed = atom_->claimed;
+        int num_workers = __cilkrts_get_nworkers();
+
+        #pragma cilk grainsize 1
+        cilk_for (int ii = 0; ii < num_chunks; ii++) {
+            int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
+            for (int c = 0; c < num_chunks; ++c) {
+                int s = (c + start_chunk) % num_chunks;
+                if (claimed[s].load()) {
+                    continue;
+                }
+                bool expected = false;
+                if (claimed[s].compare_exchange_weak(expected, true)) {
+                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
+                        double gamma1 = gfactor1[type[i]];
+                        double gamma2 = gfactor2[type[i]] * tsqrt;
+
+                        double rand_x = 0.6;
+                        double rand_y = 0.6;
+                        double rand_z = 0.6;
+
+                        dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2 * (rand_y - 0.5),
+                                                  gamma2 * (rand_z - 0.5)};
+                        dbl3_t_stencil_md fdrag = {gamma1 * v[i].x, gamma1 * v[i].y, gamma1 * v[i].z};
+
+                        eval_f[i].x += fdrag.x + fran.x;
+                        eval_f[i].y += fdrag.y + fran.y;
+                        eval_f[i].z += fdrag.z + fran.z;
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < num_chunks; i++) {
+            claimed[i] = false;
         }
     }
 
@@ -2249,6 +2374,67 @@ public:
                 curr_eval_f[i].y = 0.0;
                 curr_eval_f[i].z = 0.0;
             }
+        }
+    }
+
+    void initial_integrate_stencil_md_affinity(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
+        auto * _noalias const curr_x = (dbl3_t_stencil_md *) curr->x[0];
+        auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
+        auto * _noalias const curr_v = (dbl3_t_stencil_md *) curr->v[0];
+        auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
+        auto * _noalias const curr_f = (dbl3_t_stencil_md *) curr->f[0];
+        auto * _noalias const curr_eval_f = (dbl3_t_stencil_md *) curr->eval_f_stencil_md[0];
+
+        const int * const mask = curr->mask;
+        const int nlocal = curr->nlocal;
+        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        auto claimed = curr->claimed;
+        int num_workers = __cilkrts_get_nworkers();
+
+        // const double * const mass = atom->mass;
+        // const int * const type = curr->type;
+
+        double dtv = update->dt;
+        auto& local_dtfm = curr->local_dtfm;
+        // double dtf = 0.5 * update->dt * force->ftm2v;
+
+        #pragma cilk grainsize 1
+        cilk_for (int ii = 0; ii < num_chunks; ii++) {
+            int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
+            for (int c = 0; c < num_chunks; ++c) {
+                int s = (c + start_chunk) % num_chunks;
+                if (claimed[s].load()) {
+                    continue;
+                }
+                bool expected = false;
+                if (claimed[s].compare_exchange_weak(expected, true)) {
+                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
+                        const double dtfm = local_dtfm[i];
+                        int next_idx = atom_idx_mapping[i];
+                        next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
+                        next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
+                        next_v[next_idx].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
+
+                        next_x[next_idx].x = curr_x[i].x + dtv * next_v[next_idx].x;
+                        next_x[next_idx].y = curr_x[i].y + dtv * next_v[next_idx].y;
+                        next_x[next_idx].z = curr_x[i].z + dtv * next_v[next_idx].z;
+
+                        assert(curr->tag[i] == next->tag[next_idx]);
+                        assert(next_idx != -1);
+
+                        curr_f[i].x = 0.0;
+                        curr_f[i].y = 0.0;
+                        curr_f[i].z = 0.0;
+                        curr_eval_f[i].x = 0.0;
+                        curr_eval_f[i].y = 0.0;
+                        curr_eval_f[i].z = 0.0;
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < num_chunks; i++) {
+            claimed[i] = false;
         }
     }
 

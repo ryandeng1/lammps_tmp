@@ -301,6 +301,7 @@ class Atom : protected Pointers {
   std::vector<bool> idx_use_atomics;
   spinlock* spinlocks;
   std::mutex* mutexes;
+  std::atomic<bool>* claimed;
 
   std::vector<double> local_dtfm;
 
