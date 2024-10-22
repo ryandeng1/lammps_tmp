@@ -6091,17 +6091,22 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         double* eval_f_ = &(atom_next_timestep->eval_f_stencil_md[atom_next_timestep->nlocal][0]);
 
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
+
+        stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+        /*
         cilk_scope {
             // cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
             cilk_spawn stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
-            cilk_spawn parallel_memset(f_, f_total);
-            parallel_memset(eval_f_, eval_f_total);
         }
+        */
 
         auto end_initial_integrate = std::chrono::high_resolution_clock::now();
         auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
         modify_initial_duration += duration_initial_integrate;
+
+        parallel_memset(f_, f_total);
+        parallel_memset(eval_f_, eval_f_total);
 
         if (n_pre_force) {
             // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
@@ -6301,9 +6306,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                                           std::vector<MPI_Request> *send_requests, std::vector<MPI_Request>& receive_requests,
                                           std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
                                           double **test_f, double **test_x, double** test_v, int pipeline_stage) {
-    constexpr bool SKIP_COMM = false;
-
-    if (comm->nprocs != 1 && !SKIP_COMM) {
+    if (comm->nprocs != 1) {
         if (dep > 0) {
             auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             int recv_idx = dep_to_recv_idx[dep];
@@ -6326,9 +6329,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
         }
 
         auto comm_ = lmp->comm_stencil_md[zoid_num];
-        if (SKIP_COMM || comm->nprocs == 1) {
-
-        } else {
+        if (comm->nprocs != 1) {
             comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
         }
 
@@ -6340,10 +6341,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 auto &atom_arr = lmp->atom_stencil_md[zoid_num];
 
                 int vec_idx = 0;
-                cilk_for(int
-                proc = 0;
-                proc < comm->nprocs;
-                proc++) {
+                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
                                                            atom_arr, zoid, proc, pipeline_stage);
                 }
@@ -6352,10 +6350,6 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 send_pack_duration += duration;
             }
         }
-    }
-
-    if (SKIP_COMM) {
-        return;
     }
 
     if (comm->nprocs != 1) {
@@ -6442,7 +6436,7 @@ void Verlet::run_stencil_md_dep_affinity(int dep, int start_timestep, int start_
                 auto &atom_arr = lmp->atom_stencil_md[zoid_num];
 
                 int vec_idx = 0;
-                cilk_for(int proc = 0; proc < comm->nprocs; proc++) {
+                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
                                                            atom_arr, zoid, proc, pipeline_stage);
                 }
