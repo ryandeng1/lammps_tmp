@@ -74,6 +74,12 @@ class Verlet : public Integrate {
                                     double** test_f, double** test_x, double** test_v, int pipeline_stage=0);
 
   template <bool curr_dt>
+  void run_stencil_md_dep_affinity(int dep, int start_timestep, int start_t, int end_t, int* dep_to_idxs,
+                                   std::vector<MPI_Request>* send_requests, std::vector<MPI_Request>& receive_requests,
+                                   std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
+                                   double** test_f, double** test_x, double** test_v, int pipeline_stage=0);
+
+  template <bool curr_dt>
   void run_stencil_md_pipelined_helper(int starting_timestep,
                                        std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
                                        double** test_f, double** test_x, double** test_v);
