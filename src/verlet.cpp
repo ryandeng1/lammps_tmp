@@ -6092,8 +6092,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
         cilk_scope {
-            // cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
-            cilk_spawn stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+            cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+            // cilk_spawn stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
             cilk_spawn parallel_memset(f_, f_total);
             parallel_memset(eval_f_, eval_f_total);
@@ -6173,8 +6173,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             // modify_->post_force_stencil_md(vflag, atom_next_timestep);
             // modify->post_force(vflag);
             // stencilMD->fuse_post_force_stencil_md<curr_dt>(zoid, t + 1, atom_next_timestep, modify_);
-            // stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
-            stencilMD->post_force_stencil_md_affinity(atom_next_timestep, modify_);
+            stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
+            // stencilMD->post_force_stencil_md_affinity(atom_next_timestep, modify_);
         }
 
         auto end_post_force = std::chrono::high_resolution_clock::now();
@@ -6187,8 +6187,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         */
 
         auto begin_final_integrate = std::chrono::high_resolution_clock::now();
-        // stencilMD->final_integrate_stencil_md_(atom_next_timestep);
-        stencilMD->final_integrate_stencil_md_affinity(atom_next_timestep);
+        stencilMD->final_integrate_stencil_md_(atom_next_timestep);
+        // stencilMD->final_integrate_stencil_md_affinity(atom_next_timestep);
         auto end_final_integrate = std::chrono::high_resolution_clock::now();
         auto duration_final_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_final_integrate - begin_final_integrate).count();
         modify_final_duration += duration_final_integrate;
