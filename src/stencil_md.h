@@ -1908,9 +1908,12 @@ public:
                 if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
                         const double dtfm = local_dtfm[i];
-                        next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
-                        next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
-                        next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                        // next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                        // next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                        // next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                        next_v[i].x += dtfm * (f[i].x);
+                        next_v[i].y += dtfm * (f[i].y);
+                        next_v[i].z += dtfm * (f[i].z);
                     }
                 }
             }
