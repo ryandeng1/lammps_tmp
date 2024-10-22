@@ -1879,6 +1879,69 @@ public:
     }
      */
 
+    inline void fuse_post_force_final_integrate_stencil_md_affinity(Atom* next, Modify* modify_) {
+        auto * _noalias const next_v = (dbl3_t *) next->v[0];
+
+        const auto * _noalias const f = (dbl3_t *) next->f[0];
+        auto * _noalias const eval_f = (dbl3_t *) next->eval_f_stencil_md[0];
+
+        const int * const mask = next->mask;
+        const int next_nlocal = next->nlocal;
+
+        const double * const mass = atom->mass;
+        const int * const type = next->type;
+        auto& local_dtfm = next->local_dtfm;
+        auto claimed = next->claimed;
+
+        int num_chunks = next_nlocal / MODIFY_GRAINSIZE + 1;
+        int num_workers = __cilkrts_get_nworkers();
+
+        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
+
+        auto gfactor1 = fix_post_force->gfactor1;
+        auto gfactor2 = fix_post_force->gfactor2;
+        // fix_post_force->compute_target();
+        auto tsqrt = fix_post_force->tsqrt;
+
+        #pragma cilk grainsize 1
+        cilk_for (int ii = 0; ii < num_chunks; ii++) {
+            int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
+            for (int c = 0; c < num_chunks; ++c) {
+                int s = (c + start_chunk) % num_chunks;
+                if (claimed[s].load(std::memory_order_relaxed)) {
+                    continue;
+                }
+                bool expected = false;
+                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
+                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
+                        const double dtfm = local_dtfm[i];
+                        double gamma1 = gfactor1[type[i]];
+                        double gamma2 = gfactor2[type[i]] * tsqrt;
+
+                        double rand_x = 0.6;
+                        double rand_y = 0.6;
+                        double rand_z = 0.6;
+
+                        dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2*(rand_y - 0.5), gamma2 * (rand_z - 0.5)};
+                        dbl3_t_stencil_md fdrag = {gamma1 * next_v[i].x, gamma1 * next_v[i].y, gamma1 * next_v[i].z};
+
+                        eval_f[i].x += fdrag.x + fran.x;
+                        eval_f[i].y += fdrag.y + fran.y;
+                        eval_f[i].z += fdrag.z + fran.z;
+
+                        next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                        next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                        next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < num_chunks; i++) {
+            claimed[i] = false;
+        }
+    }
+
     inline void final_integrate_stencil_md_affinity(Atom* next) {
         auto * _noalias const next_v = (dbl3_t *) next->v[0];
 
