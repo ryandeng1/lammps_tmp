@@ -5390,7 +5390,7 @@ void Verlet::setup_minimal(int flag) {
 }
 
 void parallel_memset(void* buf, int num_bytes) {
-    constexpr int chunk_size = 8192;
+    constexpr int chunk_size = 32768;
 
     int num_chunks_f = 1 + num_bytes / chunk_size;
 
