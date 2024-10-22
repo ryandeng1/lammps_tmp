@@ -6403,6 +6403,101 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
 }
 
 template <bool curr_dt>
+void Verlet::run_stencil_md_dep_affinity(int dep, int start_timestep, int start_t, int end_t, int* dep_to_recv_idx,
+                                         std::vector<MPI_Request> *send_requests, std::vector<MPI_Request>& receive_requests,
+                                         std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
+                                         double **test_f, double **test_x, double** test_v, int pipeline_stage) {
+    if (comm->nprocs != 1) {
+        if (dep > 0) {
+            auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
+            int recv_idx = dep_to_recv_idx[dep];
+
+            auto begin_mpi = std::chrono::high_resolution_clock::now();
+            MPI_Waitall(wait_idxs.size(), &receive_requests[recv_idx], MPI_STATUSES_IGNORE);
+            auto end_mpi = std::chrono::high_resolution_clock::now();
+            auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
+            mpi_duration += duration_mpi;
+        }
+    }
+
+    // auto &zoid_queue = curr_dt ? lmp->queues[dep] : lmp->queues_next_dt[dep];
+    auto &zoid_queue = curr_dt ? lmp->my_queues[dep] : lmp->my_queues_next_dt[dep];
+    int num_chunks = zoid_queue.size();
+
+    for (int j = 0; j < zoid_queue.size(); j++) {
+        queue_info &zoid = zoid_queue[j];
+        int zoid_num = zoid.num;
+
+        auto comm_ = lmp->comm_stencil_md[zoid_num];
+        if (comm->nprocs != 1) {
+            comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
+        }
+
+        run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v);
+
+        if (comm->nprocs != 1) {
+            if (dep < NUM_DEPS - 1) {
+                auto begin = std::chrono::high_resolution_clock::now();
+                auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+
+                int vec_idx = 0;
+                cilk_for(int proc = 0; proc < comm->nprocs; proc++) {
+                    comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
+                                                           atom_arr, zoid, proc, pipeline_stage);
+                }
+                auto end = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                send_pack_duration += duration;
+            }
+        }
+    }
+
+    if (comm->nprocs != 1) {
+        if (dep < NUM_DEPS - 1) {
+            for (int j = 0; j < zoid_queue.size(); j++) {
+                queue_info &zoid = zoid_queue[j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                Comm *comm_ = lmp->comm_stencil_md[zoid_num];
+                auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
+                                                        : lmp->send_to_neighbors_procs_next_dt[zoid_num];
+
+                // auto begin = std::chrono::high_resolution_clock::now();
+                int vec_idx = 0;
+                // TODO: parallelize
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    if (proc != comm->me
+                        && send_to_neighbors_procs.find(proc) !=
+                           send_to_neighbors_procs.end()) {
+                        bool sent = comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t,
+                                                                                  end_t,
+                                                                                  zoid,
+                                                                                  &send_requests[zoid_num][proc],
+                                                                                  proc, pipeline_stage);
+                    }
+                }
+
+                // auto end = std::chrono::high_resolution_clock::now();
+                // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                // send_comm_duration += duration;
+
+                // auto begin2 = std::chrono::high_resolution_clock::now();
+                if (send_to_neighbors_procs.find(comm->me) != send_to_neighbors_procs.end()) {
+                    comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t, end_t, zoid,
+                                                                  nullptr, comm->me, pipeline_stage);
+                }
+                // auto end2 = std::chrono::high_resolution_clock::now();
+                // auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
+                // unpack_self_time += duration2;
+            }
+        }
+    }
+}
+
+template <bool curr_dt>
 void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                              std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
                                              double** test_f, double** test_x, double** test_v) {
@@ -6423,7 +6518,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         dep_to_idx[dep] = wait_idxs.size() + dep_to_idx[dep - 1];
     }
 
-    constexpr bool PIPELINE = true;
+    constexpr bool PIPELINE = false;
 
     if (comm->nprocs != 1) {
         int recv_idx = 0;
