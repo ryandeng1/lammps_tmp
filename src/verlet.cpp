@@ -6147,8 +6147,12 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
         modify_initial_duration += duration_initial_integrate;
 
+        auto begin_post_force = std::chrono::high_resolution_clock::now();
         parallel_memset(f_, f_total);
         parallel_memset(eval_f_, eval_f_total);
+        auto end_post_force = std::chrono::high_resolution_clock::now();
+        auto duration_post_force = std::chrono::duration_cast<std::chrono::microseconds>(end_post_force - begin_post_force).count();
+        modify_post_force_duration += duration_post_force;
 
         if (n_pre_force) {
             // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
@@ -6215,7 +6219,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         // force modifications, final time integration, diagnostics
 
-        auto begin_post_force = std::chrono::high_resolution_clock::now();
         if (n_post_force_any) {
             // modify_->post_force_stencil_md(vflag, atom_next_timestep);
             // modify->post_force(vflag);
@@ -6223,10 +6226,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             // stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
             // stencilMD->post_force_stencil_md_affinity(atom_next_timestep, modify_);
         }
-
-        auto end_post_force = std::chrono::high_resolution_clock::now();
-        auto duration_post_force = std::chrono::duration_cast<std::chrono::microseconds>(end_post_force - begin_post_force).count();
-        modify_post_force_duration += duration_post_force;
 
         /*
         modify_->final_integrate_stencil_md(
