@@ -6555,7 +6555,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         dep_to_idx[dep] = wait_idxs.size() + dep_to_idx[dep - 1];
     }
 
-    constexpr bool PIPELINE = false;
+    constexpr bool PIPELINE = true;
 
     if (comm->nprocs != 1) {
         int recv_idx = 0;
