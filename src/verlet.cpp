@@ -6148,7 +6148,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         modify_initial_duration += duration_initial_integrate;
 
         auto begin_post_force = std::chrono::high_resolution_clock::now();
-        parallel_memset(f_, f_total);
+        // parallel_memset(f_, f_total);
         parallel_memset(eval_f_, eval_f_total);
         auto end_post_force = std::chrono::high_resolution_clock::now();
         auto duration_post_force = std::chrono::duration_cast<std::chrono::microseconds>(end_post_force - begin_post_force).count();
