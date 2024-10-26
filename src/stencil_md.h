@@ -2519,8 +2519,6 @@ public:
         auto claimed = next->claimed;
         int num_workers = __cilkrts_get_nworkers();
 
-        std::cout << "next total size: " << next_total << std::endl;
-
         // const double * const mass = atom->mass;
         // const int * const type = curr->type;
 
