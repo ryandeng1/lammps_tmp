@@ -6122,20 +6122,16 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         // modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
 
         int f_total = (atom_->nghost) * sizeof(double) * 3;
-        // int num_chunks_f = 1 + f_total / chunk_size;
         double* f_ = &(atom_->f[atom_->nlocal][0]);
 
         int eval_f_total = (atom_next_timestep->nghost) * sizeof(double) * 3;
-        // int num_chunks_eval_f = 1 + eval_f_total / chunk_size;
         double* eval_f_ = &(atom_next_timestep->eval_f_stencil_md[atom_next_timestep->nlocal][0]);
 
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
 
-        stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t], reverse_atom_idx_mapping[t + 1]);
-        /*
+        // stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t], reverse_atom_idx_mapping[t + 1]);
         stencilMD->initial_integrate_stencil_md_affinity_reverse(zoid, t + 1, atom_, atom_next_timestep,
                                                                  atom_idx_mapping[t], reverse_atom_idx_mapping[t + 1], reverse_atom_idx_mapping_idxs[t + 1]);
-        */
         /*
         cilk_scope {
             // cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
@@ -6150,6 +6146,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         parallel_memset(f_, f_total);
         parallel_memset(eval_f_, eval_f_total);
+        // parallel_memset(&(atom_->f[0][0]), (atom_->nlocal + atom_->nghost) * 3 * sizeof(double));
+        // parallel_memset(&(atom_next_timestep->eval_f_stencil_md[0][0]), (atom_->nlocal + atom_->nghost) * 3 * sizeof(double));
 
         if (n_pre_force) {
             // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
