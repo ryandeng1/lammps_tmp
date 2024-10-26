@@ -2440,7 +2440,7 @@ public:
         }
     }
 
-    void initial_integrate_stencil_md_affinity(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping, int* next_atom_idx_mapping) {
+    void initial_integrate_stencil_md_affinity(queue_info& zoid, int timestep, Atom* curr, Atom* next, int* atom_idx_mapping) {
         auto * _noalias const curr_x = (dbl3_t_stencil_md *) curr->x[0];
         auto * _noalias const next_x = (dbl3_t_stencil_md *) next->x[0];
         auto * _noalias const curr_v = (dbl3_t_stencil_md *) curr->v[0];
@@ -2474,7 +2474,6 @@ public:
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         int next_idx = atom_idx_mapping[i];
-                        assert(next_atom_idx_mapping[next_idx] == i);
                         next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
                         next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
                         next_v[next_idx].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
