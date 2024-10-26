@@ -3260,7 +3260,7 @@ public:
 
         const int nlocal = next->nlocal;
 
-        constexpr bool USE_ATOMIC_FETCH_ADD = true;
+        constexpr bool USE_ATOMIC_FETCH_ADD = false;
 
         constexpr int BASE_CASE_SIZE = 1024;
 
