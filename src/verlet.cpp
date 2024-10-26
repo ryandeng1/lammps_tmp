@@ -6172,7 +6172,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             int timestep_flag = t + 1;
 
             auto begin_compute = std::chrono::high_resolution_clock::now();
-            stencilMD->stencil_md_fuse_force_computation_atomics(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            // stencilMD->stencil_md_fuse_force_computation_atomics(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            stencilMD->stencil_md_fuse_force_computation_atomics_affinity(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
             auto end_compute = std::chrono::high_resolution_clock::now();
             auto duration_compute = std::chrono::duration_cast<std::chrono::microseconds>(end_compute - begin_compute).count();
             pair_duration += duration_compute;
