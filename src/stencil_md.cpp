@@ -531,6 +531,8 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.num_elems_recv = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.atom_idx_mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.reverse_atom_idx_mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.reverse_atom_idx_mapping_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_process_segment_types =
                         new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -708,6 +710,8 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.num_elems_recv = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.atom_idx_mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.reverse_atom_idx_mapping = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.reverse_atom_idx_mapping_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.recv_process_segment_types =
                         new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -1289,8 +1293,8 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                 int zoid_num = zoid.num;
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
-                    int nlocal = atom_->nlocal;
-                    int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+                    int total = atom_->nlocal + atom_->nghost;
+                    int num_chunks = total / MODIFY_GRAINSIZE + 1;
                     atom_->claimed = new std::atomic<bool>[num_chunks];
                     for (int i = 0; i < num_chunks; i++) {
                         atom_->claimed[i] = false;

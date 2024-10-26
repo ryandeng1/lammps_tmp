@@ -2083,6 +2083,16 @@ void setup_atom_pos_mapping_stencil_md(
         }
     }
 
+    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
+        zoid.reverse_atom_idx_mapping[i] = new int[max_atoms];
+    }
+
+    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
+        for (int j = 0; j < max_atoms; j++) {
+            zoid.reverse_atom_idx_mapping[i][j] = -1;
+        }
+    }
+
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         Atom* atom_ = atom_arr[t];
         Atom* next = atom_arr[t + 1];
@@ -2098,7 +2108,8 @@ void setup_atom_pos_mapping_stencil_md(
             next_tag_to_idx[tag] = i;
         }
 
-        for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+        // for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+        for (int i = 0; i < atom_->nlocal; i++) {
             int next_idx = -1;
             int curr_tag = atom_->tag[i];
             if (next_tag_to_idx.count(curr_tag)) {
@@ -2106,7 +2117,13 @@ void setup_atom_pos_mapping_stencil_md(
             }
 
             zoid.atom_idx_mapping[t][i] = next_idx;
+            if (next_idx != -1) {
+                zoid.reverse_atom_idx_mapping[t + 1][next_idx] = i;
+                zoid.reverse_atom_idx_mapping_idxs[t + 1].push_back(next_idx);
+            }
         }
+
+        std::sort(zoid.reverse_atom_idx_mapping_idxs[t + 1].begin(), zoid.reverse_atom_idx_mapping_idxs[t + 1].end());
     }
 }
 
@@ -2133,6 +2150,16 @@ void setup_atom_pos_mapping_stencil_md_next_dt(
         }
     }
 
+    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
+        zoid.reverse_atom_idx_mapping[i] = new int[max_atoms];
+    }
+
+    for (int i = 0; i < NUM_TIMESTEPS_IN_PARALLEL + 1; i++) {
+        for (int j = 0; j < max_atoms; j++) {
+            zoid.reverse_atom_idx_mapping[i][j] = -1;
+        }
+    }
+
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         int idx = NUM_TIMESTEPS_IN_PARALLEL - t;
         int idx_next = NUM_TIMESTEPS_IN_PARALLEL - t - 1;
@@ -2152,7 +2179,8 @@ void setup_atom_pos_mapping_stencil_md_next_dt(
             next_tag_to_idx[tag] = i;
         }
 
-        for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+        // for (int i = 0; i < atom_->nlocal + atom_->nghost; i++) {
+        for (int i = 0; i < atom_->nlocal; i++) {
             int next_idx = -1;
             int curr_tag = atom_->tag[i];
             if (next_tag_to_idx.count(curr_tag)) {
@@ -2160,7 +2188,13 @@ void setup_atom_pos_mapping_stencil_md_next_dt(
             }
 
             zoid.atom_idx_mapping[t][i] = next_idx;
+            if (next_idx != -1) {
+                zoid.reverse_atom_idx_mapping[t + 1][next_idx] = i;
+                zoid.reverse_atom_idx_mapping_idxs[t + 1].push_back(next_idx);
+            }
         }
+
+        std::sort(zoid.reverse_atom_idx_mapping_idxs[t + 1].begin(), zoid.reverse_atom_idx_mapping_idxs[t + 1].end());
     }
 }
 
@@ -5390,8 +5424,8 @@ void Verlet::setup_minimal(int flag) {
 }
 
 void parallel_memset(void* buf, int num_bytes) {
-    memset(buf, 0, num_bytes);
-    return;
+    // memset(buf, 0, num_bytes);
+    // return;
 
     constexpr int chunk_size = 32768;
 
@@ -6061,6 +6095,8 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
     queue_info& zoid = curr_dt ? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
     auto& atom_arr = lmp->atom_stencil_md[zoid_num];
     int** atom_idx_mapping = zoid.atom_idx_mapping;
+    int** reverse_atom_idx_mapping = zoid.reverse_atom_idx_mapping;
+    std::vector<int>* reverse_atom_idx_mapping_idxs = zoid.reverse_atom_idx_mapping_idxs;
 
     for (int t = start_eval; t < end_eval; t++) {
         Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
@@ -6095,7 +6131,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
 
-        stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+        // stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t], reverse_atom_idx_mapping[t + 1]);
+        stencilMD->initial_integrate_stencil_md_affinity_reverse(zoid, t + 1, atom_, atom_next_timestep,
+                                                                 atom_idx_mapping[t], reverse_atom_idx_mapping[t + 1], reverse_atom_idx_mapping_idxs[t + 1]);
         /*
         cilk_scope {
             // cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);

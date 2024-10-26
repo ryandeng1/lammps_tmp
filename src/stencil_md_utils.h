@@ -544,6 +544,8 @@ struct queue_info {
   int num;
   int where[3];
   int **atom_idx_mapping;
+  int **reverse_atom_idx_mapping;
+  std::vector<int>* reverse_atom_idx_mapping_idxs;
 
   // debugging
   double** debug_atom_pos;
