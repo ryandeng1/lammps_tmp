@@ -6276,9 +6276,11 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         auto end_timestep = std::chrono::high_resolution_clock::now();
         auto duration_timestep = std::chrono::duration_cast<std::chrono::microseconds>(end_timestep - begin_timestep).count();
         if (comm->me == 0) {
+            /*
             std::stringstream s;
             s << "curr dt: " << curr_dt << " zoid: " << zoid.num << " time: " << t << " nlocal: " << atom_->nlocal << " " << atom_next_timestep->nlocal << " duration : " << duration_timestep << std::endl;
             std::cout << s.str();
+            */
         }
     }
 }
@@ -6578,7 +6580,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         dep_to_idx[dep] = wait_idxs.size() + dep_to_idx[dep - 1];
     }
 
-    constexpr bool PIPELINE = true;
+    constexpr bool PIPELINE = false;
 
     if (comm->nprocs != 1) {
         int recv_idx = 0;
