@@ -6098,7 +6098,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
     int** reverse_atom_idx_mapping = zoid.reverse_atom_idx_mapping;
     std::vector<int>* reverse_atom_idx_mapping_idxs = zoid.reverse_atom_idx_mapping_idxs;
 
+    constexpr bool USE_AFFINITY = false;
+
     for (int t = start_eval; t < end_eval; t++) {
+        auto begin_timestep = std::chrono::high_resolution_clock::now();
         Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
         Atom* atom_next_timestep = curr_dt ? atom_arr[t + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t - 1];
         Neighbor* neigh_next_timestep = curr_dt ? lmp->neighbor_stencil_md[zoid_num][t + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][t + 1];
@@ -6129,8 +6132,12 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
 
-        stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep,
-                                                         atom_idx_mapping[t]);
+        if (USE_AFFINITY) {
+            stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep,
+                                                             atom_idx_mapping[t]);
+        } else {
+            stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+        }
         /*
         stencilMD->initial_integrate_stencil_md_affinity_reverse(zoid, t + 1, atom_, atom_next_timestep,
                                                                  atom_idx_mapping[t], reverse_atom_idx_mapping[t + 1], reverse_atom_idx_mapping_idxs[t + 1]);
@@ -6172,8 +6179,12 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             int timestep_flag = t + 1;
 
             auto begin_compute = std::chrono::high_resolution_clock::now();
-            // stencilMD->stencil_md_fuse_force_computation_atomics(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
-            stencilMD->stencil_md_fuse_force_computation_atomics_affinity(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            if (USE_AFFINITY) {
+                stencilMD->stencil_md_fuse_force_computation_atomics_affinity(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            } else {
+                stencilMD->stencil_md_fuse_force_computation_atomics(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            }
+
             auto end_compute = std::chrono::high_resolution_clock::now();
             auto duration_compute = std::chrono::duration_cast<std::chrono::microseconds>(end_compute - begin_compute).count();
             pair_duration += duration_compute;
@@ -6234,9 +6245,14 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         */
 
         auto begin_final_integrate = std::chrono::high_resolution_clock::now();
-        // stencilMD->final_integrate_stencil_md_(atom_next_timestep);
+        if (USE_AFFINITY) {
+            stencilMD->fuse_post_force_final_integrate_stencil_md_affinity(atom_next_timestep, modify_);
+        } else {
+            stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
+            stencilMD->final_integrate_stencil_md_(atom_next_timestep);
+        }
+
         // stencilMD->final_integrate_stencil_md_affinity(atom_next_timestep);
-        stencilMD->fuse_post_force_final_integrate_stencil_md_affinity(atom_next_timestep, modify_);
         auto end_final_integrate = std::chrono::high_resolution_clock::now();
         auto duration_final_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_final_integrate - begin_final_integrate).count();
         modify_final_duration += duration_final_integrate;
@@ -6257,6 +6273,13 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             timer->stamp(Timer::OUTPUT);
         }
         */
+        auto end_timestep = std::chrono::high_resolution_clock::now();
+        auto duration_timestep = std::chrono::duration_cast<std::chrono::microseconds>(end_timestep - begin_timestep).count();
+        if (comm->me == 0) {
+            std::stringstream s;
+            s << "curr dt: " << curr_dt << " zoid: " << zoid.num << " time: " << t << " nlocal: " << atom_->nlocal << " " << atom_next_timestep->nlocal << " duration : " << duration_timestep << std::endl;
+            std::cout << s.str();
+        }
     }
 }
 
