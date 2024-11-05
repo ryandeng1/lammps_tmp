@@ -2478,19 +2478,19 @@ public:
                         next_v[next_idx].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
                         next_v[next_idx].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
 
-                        next_x[next_idx].x = curr_x[i].x + dtv * next_v[next_idx].x;
-                        next_x[next_idx].y = curr_x[i].y + dtv * next_v[next_idx].y;
-                        next_x[next_idx].z = curr_x[i].z + dtv * next_v[next_idx].z;
-
-                        assert(curr->tag[i] == next->tag[next_idx]);
-                        assert(next_idx != -1);
-
                         curr_f[i].x = 0.0;
                         curr_f[i].y = 0.0;
                         curr_f[i].z = 0.0;
                         curr_eval_f[i].x = 0.0;
                         curr_eval_f[i].y = 0.0;
                         curr_eval_f[i].z = 0.0;
+
+                        next_x[next_idx].x = curr_x[i].x + dtv * next_v[next_idx].x;
+                        next_x[next_idx].y = curr_x[i].y + dtv * next_v[next_idx].y;
+                        next_x[next_idx].z = curr_x[i].z + dtv * next_v[next_idx].z;
+
+                        assert(curr->tag[i] == next->tag[next_idx]);
+                        assert(next_idx != -1);
                     }
                 }
             }
@@ -3277,7 +3277,7 @@ public:
                     continue;
                 }
                 bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
+                if (claimed[s].compare_exchange_weak(expected, true)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const int itype = atom_type[i];
 
