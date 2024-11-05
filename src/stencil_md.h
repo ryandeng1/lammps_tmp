@@ -2110,7 +2110,7 @@ public:
                     continue;
                 }
                 bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true)) {
+                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         double gamma1 = gfactor1[type[i]];
                         double gamma2 = gfactor2[type[i]] * tsqrt;
@@ -2470,7 +2470,7 @@ public:
                     continue;
                 }
                 bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true)) {
+                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         int next_idx = atom_idx_mapping[i];
@@ -2534,7 +2534,7 @@ public:
                     continue;
                 }
                 bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true)) {
+                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_total; i++) {
                         // int prev_idx = next_atom_idx_mapping[i];
                         int curr_idx = next_atom_idx_mapping_idxs[i];
@@ -3277,7 +3277,7 @@ public:
                     continue;
                 }
                 bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true)) {
+                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const int itype = atom_type[i];
 

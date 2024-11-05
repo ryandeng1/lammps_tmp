@@ -1256,10 +1256,6 @@ void CommBrick::borders_stencil_md_initial_receive_from_lammps(Atom *atom_, Doma
                 borders_zoid = borders_zoid && value_borders >= lo_borders && value_borders < hi_borders;
 
                 ghost_pos[dim] = value_borders;
-
-                if (atom_->nlocal == 0) {
-                    std::cout << "Lo: " << lo << " hi: " << hi << std::endl;
-                }
             }
 
             tagint tag_ = (tagint) ubuf(buf_recv[m + 6 + 1]).i;
