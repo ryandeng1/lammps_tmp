@@ -1892,6 +1892,7 @@ public:
         const int * const type = next->type;
         auto& local_dtfm = next->local_dtfm;
         auto claimed = next->claimed;
+        auto claimed_int = next->claimed_int;
 
         int num_chunks = next_nlocal / MODIFY_GRAINSIZE + 1;
         int num_workers = __cilkrts_get_nworkers();
@@ -1908,11 +1909,17 @@ public:
             int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
+                /*
                 if (claimed[s].load(std::memory_order_relaxed)) {
                     continue;
                 }
                 bool expected = false;
                 if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
+                */
+                if (claimed_int[s].load(std::memory_order_relaxed)) {
+                    continue;
+                }
+                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         double gamma1 = gfactor1[type[i]];
@@ -1937,50 +1944,13 @@ public:
             }
         }
 
+        /*
         for (int i = 0; i < num_chunks; i++) {
             claimed[i] = false;
         }
-    }
-
-    inline void final_integrate_stencil_md_affinity(Atom* next) {
-        auto * _noalias const next_v = (dbl3_t *) next->v[0];
-
-        const auto * _noalias const f = (dbl3_t *) next->f[0];
-        const auto * _noalias const eval_f = (dbl3_t *) next->eval_f_stencil_md[0];
-
-        const int * const mask = next->mask;
-        const int next_nlocal = next->nlocal;
-
-        const double * const mass = atom->mass;
-        const int * const type = next->type;
-        auto& local_dtfm = next->local_dtfm;
-        auto claimed = next->claimed;
-
-        int num_chunks = next_nlocal / MODIFY_GRAINSIZE + 1;
-        int num_workers = __cilkrts_get_nworkers();
-
-        #pragma cilk grainsize 1
-        cilk_for (int ii = 0; ii < num_chunks; ii++) {
-            int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
-            for (int c = 0; c < num_chunks; ++c) {
-                int s = (c + start_chunk) % num_chunks;
-                if (claimed[s].load(std::memory_order_relaxed)) {
-                    continue;
-                }
-                bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
-                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
-                        const double dtfm = local_dtfm[i];
-                        next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
-                        next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
-                        next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
-                    }
-                }
-            }
-        }
-
+        */
         for (int i = 0; i < num_chunks; i++) {
-            claimed[i] = false;
+            claimed_int[i] = false;
         }
     }
 
@@ -2474,7 +2444,7 @@ public:
                 bool expected = false;
                 if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
                 */
-                if (claimed_int[s].load()) {
+                if (claimed_int[s].load(std::memory_order_relaxed)) {
                     continue;
                 }
                 if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
@@ -3279,17 +3249,24 @@ public:
         int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
         int num_workers = __cilkrts_get_nworkers();
         auto claimed = next->claimed;
+        auto claimed_int = next->claimed_int;
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
             int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
+                /*
                 if (claimed[s].load(std::memory_order_relaxed)) {
                     continue;
                 }
                 bool expected = false;
                 if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
+                */
+                if (claimed_int[s].load(std::memory_order_relaxed)) {
+                    continue;
+                }
+                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const int itype = atom_type[i];
 
@@ -3425,8 +3402,13 @@ public:
             }
         }
 
+        /*
         for (int i = 0; i < num_chunks; i++) {
             claimed[i] = false;
+        }
+        */
+        for (int i = 0; i < num_chunks; i++) {
+            claimed_int[i] = false;
         }
     }
 
