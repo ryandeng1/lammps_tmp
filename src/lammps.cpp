@@ -619,11 +619,13 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator) :
 
     if ((universe->me == 0) && (!helpflag)) {
       const char fmt[] = "LAMMPS ({})\nRunning on {} partitions of processors\n";
+      /*
       if (universe->uscreen)
         fmt::print(universe->uscreen,fmt,version,universe->nworlds);
 
       if (universe->ulogfile)
         fmt::print(universe->ulogfile,fmt,version,universe->nworlds);
+      */
     }
 
     if ((me == 0) && (!helpflag))

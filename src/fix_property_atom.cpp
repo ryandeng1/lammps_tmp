@@ -466,7 +466,7 @@ void FixPropertyAtom::write_data_section(int /*mth*/, FILE *fp, int n, double **
         icol += ncol;
       }
     }
-    fmt::print(fp, line + "\n");
+    // fmt::print(fp, line + "\n");
   }
 }
 

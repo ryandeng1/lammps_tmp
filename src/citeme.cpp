@@ -111,6 +111,7 @@ void CiteMe::add(const std::string &reference)
 
 void CiteMe::flush()
 {
+  /*
   if (comm->me == 0) {
     if (!scrbuffer.empty()) {
       if (!citefile.empty())
@@ -131,5 +132,6 @@ void CiteMe::flush()
       logbuffer.clear();
     }
   }
+  */
 }
 
