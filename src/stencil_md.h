@@ -2452,6 +2452,7 @@ public:
         const int nlocal = curr->nlocal;
         int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
         auto claimed = curr->claimed;
+        auto claimed_int = curr->claimed_int;
         int num_workers = __cilkrts_get_nworkers();
 
         // const double * const mass = atom->mass;
@@ -2466,11 +2467,17 @@ public:
             int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
+                /*
                 if (claimed[s].load()) {
                     continue;
                 }
                 bool expected = false;
                 if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
+                */
+                if (claimed_int[s].load()) {
+                    continue;
+                }
+                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         int next_idx = atom_idx_mapping[i];
@@ -2496,8 +2503,13 @@ public:
             }
         }
 
+        /*
         for (int i = 0; i < num_chunks; i++) {
             claimed[i] = false;
+        }
+        */
+        for (int i = 0; i < num_chunks; i++) {
+            claimed_int[i] = 0;
         }
     }
 
