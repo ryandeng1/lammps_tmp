@@ -6133,18 +6133,12 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
 
         if (USE_AFFINITY) {
-            cilk_scope {
-                cilk_spawn stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep,
-                                                                                atom_idx_mapping[t]);
-                // parallel_memset(eval_f_, eval_f_total);
-            }
-
+            stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep,
+                                                             atom_idx_mapping[t]);
+            // parallel_memset(eval_f_, eval_f_total);
         } else {
-            cilk_scope {
-                cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep,
-                                                            atom_idx_mapping[t]);
-                // parallel_memset(eval_f_, eval_f_total);
-            }
+            stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep,
+                                                    atom_idx_mapping[t]);
         }
         /*
         stencilMD->initial_integrate_stencil_md_affinity_reverse(zoid, t + 1, atom_, atom_next_timestep,
