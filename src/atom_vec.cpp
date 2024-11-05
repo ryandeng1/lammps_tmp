@@ -2053,6 +2053,10 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                     buf[m++] = eval_f_stencil_md[idx][0];
                     buf[m++] = eval_f_stencil_md[idx][1];
                     buf[m++] = eval_f_stencil_md[idx][2];
+
+                    eval_f_stencil_md[idx][0] = 0;
+                    eval_f_stencil_md[idx][1] = 0;
+                    eval_f_stencil_md[idx][2] = 0;
                 }
             }
 
@@ -2171,6 +2175,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
                 // memcpy(&buf[m], &eval_f_stencil_md[force_idx][0], force_size * sizeof(double) * 3);
                 // m += force_size * 3;
                 memcpy(&buf[m + arr_sizes_f[i] + idx], &eval_f_stencil_md[force_idx][0], force_size * sizeof(double) * 3);
+                memset(&eval_f_stencil_md[force_idx][0], 0, force_size * sizeof(double) * 3);
                 idx += force_size * 3;
             }
         }
