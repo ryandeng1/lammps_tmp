@@ -303,6 +303,7 @@ class Atom : protected Pointers {
   std::mutex* mutexes;
   std::atomic<int>* claimed_int;
   std::atomic<bool>* claimed;
+  std::atomic_flag* claimed_flag;
 
   std::vector<double> local_dtfm;
 
