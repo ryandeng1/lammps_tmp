@@ -6124,12 +6124,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         // updates positions in atom_next_timestep
         // modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
 
-        int f_total = (atom_->nghost) * sizeof(double) * 3;
-        double* f_ = &(atom_->f[atom_->nlocal][0]);
-
-        int eval_f_total = (atom_next_timestep->nghost) * sizeof(double) * 3;
-        double* eval_f_ = &(atom_next_timestep->eval_f_stencil_md[atom_next_timestep->nlocal][0]);
-
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
 
         if (USE_AFFINITY) {
@@ -6157,8 +6151,6 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         modify_initial_duration += duration_initial_integrate;
 
         auto begin_post_force = std::chrono::high_resolution_clock::now();
-        // parallel_memset(f_, f_total);
-        // parallel_memset(eval_f_, eval_f_total);
         auto end_post_force = std::chrono::high_resolution_clock::now();
         auto duration_post_force = std::chrono::duration_cast<std::chrono::microseconds>(end_post_force - begin_post_force).count();
         modify_post_force_duration += duration_post_force;
