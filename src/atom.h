@@ -336,6 +336,10 @@ class Atom : protected Pointers {
   std::vector<int> atom_idx_mapping_segment_idxs;
   std::vector<int> atom_idx_mapping_segment_sizes;
 
+  // worker-local updates?
+  dbl3_t_stencil_md*** worker_force_updates;
+  int** worker_force_updates_sizes;
+
   // --------------------------------------------------------------------
   // functions
 
