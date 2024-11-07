@@ -3280,12 +3280,16 @@ public:
                     continue;
                 }
                 if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
-                */
 
                 if (claimed_flag[s].test(std::memory_order_relaxed)) {
                     continue;
                 }
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
+                */
+                if (claimed_int[s].load(std::memory_order_relaxed)) {
+                    continue;
+                }
+                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const int itype = atom_type[i];
 
@@ -3410,9 +3414,12 @@ public:
         for (int i = 0; i < num_chunks; i++) {
             claimed_int[i] = false;
         }
-        */
         for (int i = 0; i < num_chunks; i++) {
             claimed_flag[i].clear();
+        }
+        */
+        for (int i = 0; i < num_chunks; i++) {
+            claimed_int[i] = false;
         }
     }
 
