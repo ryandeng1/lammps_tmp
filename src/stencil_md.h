@@ -3557,7 +3557,7 @@ public:
                                     worker_local_updates[j][size].y = -dely * fpair;
                                     worker_local_updates[j][size].z = -delz * fpair;
 
-                                    worker_local_sizes[j]++;
+                                    // worker_local_sizes[j]++;
 
                                     // f[j].x -= delx * fpair;
                                     // f[j].y -= dely * fpair;
@@ -3622,7 +3622,7 @@ public:
                                 worker_local_updates[i2][size].y = -dely * fbond;
                                 worker_local_updates[i2][size].z = -delz * fbond;
 
-                                worker_local_sizes[i2]++;
+                                // worker_local_sizes[i2]++;
                             }
                         }
 
@@ -3644,6 +3644,7 @@ public:
 
         // chunking again?
 
+        /*
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
             int worker_number = __cilkrts_get_worker_number();
@@ -3672,6 +3673,7 @@ public:
                 }
             }
         }
+        */
 
         /*
         for (int i = 0; i < num_chunks; i++) {
