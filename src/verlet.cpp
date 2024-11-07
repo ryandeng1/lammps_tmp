@@ -6455,14 +6455,14 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                 // send_comm_duration += duration;
 
-                // auto begin2 = std::chrono::high_resolution_clock::now();
+                auto begin2 = std::chrono::high_resolution_clock::now();
                 if (send_to_neighbors_procs.find(comm->me) != send_to_neighbors_procs.end()) {
                     comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t, end_t, zoid,
                                                                   nullptr, comm->me, pipeline_stage);
                 }
-                // auto end2 = std::chrono::high_resolution_clock::now();
-                // auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
-                // unpack_self_time += duration2;
+                auto end2 = std::chrono::high_resolution_clock::now();
+                auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
+                unpack_self_time += duration2;
             }
         }
     }
