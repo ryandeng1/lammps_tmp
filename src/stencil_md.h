@@ -3553,9 +3553,9 @@ public:
 
                                 if (newton_pair || j < nlocal) {
                                     int size = worker_local_sizes[j];
-                                    worker_local_updates[j][size].x = -delx * fpair;
-                                    worker_local_updates[j][size].y = -dely * fpair;
-                                    worker_local_updates[j][size].z = -delz * fpair;
+                                    // worker_local_updates[j][size].x = -delx * fpair;
+                                    // worker_local_updates[j][size].y = -dely * fpair;
+                                    // worker_local_updates[j][size].z = -delz * fpair;
 
                                     // worker_local_sizes[j]++;
 
@@ -3618,9 +3618,9 @@ public:
                                 // f[i2].z -= delz * fbond;
 
                                 int size = worker_local_sizes[i2];
-                                worker_local_updates[i2][size].x = -delx * fbond;
-                                worker_local_updates[i2][size].y = -dely * fbond;
-                                worker_local_updates[i2][size].z = -delz * fbond;
+                                // worker_local_updates[i2][size].x = -delx * fbond;
+                                // worker_local_updates[i2][size].y = -dely * fbond;
+                                // worker_local_updates[i2][size].z = -delz * fbond;
 
                                 // worker_local_sizes[i2]++;
                             }
