@@ -3336,11 +3336,13 @@ public:
                                         __atomic_fetch_add(&f[j].y, -dely * fpair, __ATOMIC_RELAXED);
                                         __atomic_fetch_add(&f[j].z, -delz * fpair, __ATOMIC_RELAXED);
                                     } else {
+                                        /*
                                         spinlocks[j].lock();
                                         f[j].x -= delx * fpair;
                                         f[j].y -= dely * fpair;
                                         f[j].z -= delz * fpair;
                                         spinlocks[j].unlock();
+                                        */
                                     }
                                 }
                             }
@@ -3398,11 +3400,13 @@ public:
                                     __atomic_fetch_add(&f[i2].y, -dely * fbond, __ATOMIC_RELAXED);
                                     __atomic_fetch_add(&f[i2].z, -delz * fbond, __ATOMIC_RELAXED);
                                 } else {
+                                    /*
                                     spinlocks[i2].lock();
                                     f[i2].x -= delx * fbond;
                                     f[i2].y -= dely * fbond;
                                     f[i2].z -= delz * fbond;
                                     spinlocks[i2].unlock();
+                                    */
                                 }
                             }
                         }
@@ -3412,11 +3416,13 @@ public:
                             __atomic_fetch_add(&f[i].y, fytmp, __ATOMIC_RELAXED);
                             __atomic_fetch_add(&f[i].z, fztmp, __ATOMIC_RELAXED);
                         } else {
+                            /*
                             spinlocks[i].lock();
                             f[i].x += fxtmp;
                             f[i].y += fytmp;
                             f[i].z += fztmp;
                             spinlocks[i].unlock();
+                            */
                         }
                     }
                 }
