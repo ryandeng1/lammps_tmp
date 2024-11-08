@@ -2141,6 +2141,8 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
 
         return m;
     } else {
+        auto * _noalias const x_ = (dbl3_t_stencil_md *) x[0];
+
         int m = 0;
 
         int arr_sizes_f[num_zoid_recv];
@@ -2195,11 +2197,15 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
             bool segment_type = segment_types[i];
             int segment_size = segment_lengths[i];
             if (segment_type == SEND_DATA_PROCESS_LOCAL) {
-                cilk_for (int j = 0; j < segment_size; j++) {
+                // cilk_for (int j = 0; j < segment_size; j++) {
+                for (int j = 0; j < segment_size; j++) {
                     int idx = local_list[local_list_idx + j];
-                    buf[m + j * 3 + 0] = x[idx][0];
-                    buf[m + j * 3 + 1] = x[idx][1];
-                    buf[m + j * 3 + 2] = x[idx][2];
+                    // buf[m + j * 3 + 0] = x[idx][0];
+                    // buf[m + j * 3 + 1] = x[idx][1];
+                    // buf[m + j * 3 + 2] = x[idx][2];
+                    buf[m + j * 3 + 0] = x_[idx].x;
+                    buf[m + j * 3 + 1] = x_[idx].y;
+                    buf[m + j * 3 + 2] = x_[idx].z;
                 }
                 local_list_idx += segment_size;
                 m += 3 * segment_size;
