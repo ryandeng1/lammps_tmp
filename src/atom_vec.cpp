@@ -2847,6 +2847,10 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             v[idx][2] = v_z;
         }
     } else {
+        auto * _noalias f_ = (dbl3_t_stencil_md *) f[0];
+        auto * _noalias v_ = (dbl3_t_stencil_md *) x[0];
+        auto * _noalias x_ = (dbl3_t_stencil_md *) v[0];
+
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
 
@@ -2857,9 +2861,12 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
 
             int idx = recv_force_list[i];
 
-            f[idx][0] += f_x;
-            f[idx][1] += f_y;
-            f[idx][2] += f_z;
+            // f[idx][0] += f_x;
+            // f[idx][1] += f_y;
+            // f[idx][2] += f_z;
+            f_[idx].x += f_x;
+            f_[idx].y += f_y;
+            f_[idx].z += f_z;
         }
 
         m += 3 * num_recv_force;
@@ -2885,9 +2892,12 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
 
                     int idx = recv_pos_local_list[local_list_idx + j];
 
-                    x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
-                    x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
-                    x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+                    // x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
+                    // x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
+                    // x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+                    x_[idx].x = x_x + domain->prd[0] * pbc_flags[0];
+                    x_[idx].y = x_y + domain->prd[1] * pbc_flags[1];
+                    x_[idx].z = x_z + domain->prd[2] * pbc_flags[2];
                 }
                 local_list_idx += segment_size;
             } else {
@@ -2906,9 +2916,13 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
 
                     int idx = recv_ghost_idx_list[curr_pos_segment] + ghost_idx;
 
-                    x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
-                    x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
-                    x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+                    // x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
+                    // x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
+                    // x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+
+                    x_[idx].x = x_x + domain->prd[0] * pbc_flags[0];
+                    x_[idx].y = x_y + domain->prd[1] * pbc_flags[1];
+                    x_[idx].z = x_z + domain->prd[2] * pbc_flags[2];
 
                     ghost_idx++;
                 }
@@ -2926,9 +2940,13 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
 
             int idx = recv_pos_local_list[i];
 
-            v[idx][0] = v_x;
-            v[idx][1] = v_y;
-            v[idx][2] = v_z;
+            // v[idx][0] = v_x;
+            // v[idx][1] = v_y;
+            // v[idx][2] = v_z;
+
+            v_[idx].x = v_x;
+            v_[idx].y = v_y;
+            v_[idx].z = v_z;
         }
     }
 }
