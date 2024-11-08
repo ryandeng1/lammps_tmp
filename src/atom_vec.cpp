@@ -2848,8 +2848,8 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         }
     } else {
         auto * _noalias f_ = (dbl3_t_stencil_md *) f[0];
-        auto * _noalias v_ = (dbl3_t_stencil_md *) x[0];
-        auto * _noalias x_ = (dbl3_t_stencil_md *) v[0];
+        auto * _noalias x_ = (dbl3_t_stencil_md *) x[0];
+        auto * _noalias v_ = (dbl3_t_stencil_md *) v[0];
 
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
