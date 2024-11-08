@@ -67,6 +67,10 @@ class CommBrick : public Comm {
   void unpack_data_process_zoid_stencil_md(bool curr_dt, queue_info& zoid, int start_timestep, int end_timestep,
                                            int pipeline_stage) override;
 
+  void unpack_data_process_zoid_stencil_md_single_timestep(bool curr_dt, queue_info& zoid,
+                                                           int start_timestep, int end_timestep, int target_timestep,
+                                                           int pipeline_stage) override;
+
   void unpack_data_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
                                       int recv_zoid_num, int pipeline_stage=0) override;
 
