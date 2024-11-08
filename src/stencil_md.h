@@ -3226,7 +3226,8 @@ public:
         const auto * _noalias const x = (dbl3_t_stencil_md *) next->x[0];
         auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
 
-        auto pair = (PairLJCutOMP*) next_force->pair;
+        // auto pair = (PairLJCutOMP*) next_force->pair;
+        auto pair = (PairLJCut*) next_force->pair;
         auto bond = (BondFENE*) next_force->bond;
 
         const auto* _noalias bondlist = neigh_next->atom_bondlist;

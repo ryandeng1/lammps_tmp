@@ -84,6 +84,10 @@ class Verlet : public Integrate {
   void run_stencil_md_pipelined(int num_timesteps, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
                                 double** test_f, double** test_x, double** test_v);
 
+  void run_stencil_md_pipelined_helper_merge_dt(int starting_timestep,
+                                                std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
+                                                double** test_f, double** test_x, double** test_v);
+
   template <bool curr_dt>
   void run_stencil_md_zoid_no_cilk_for(int start_timestep, int zoid_num,
                                        double** test_f, double** test_x, double** test_v,

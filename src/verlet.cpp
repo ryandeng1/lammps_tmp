@@ -6579,8 +6579,10 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                                           std::vector<MPI_Request> *send_requests, std::vector<MPI_Request>& receive_requests,
                                           std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
                                           double **test_f, double **test_x, double** test_v, int pipeline_stage) {
+    std::cout << "me: " << comm->me << " curr_dt: " << curr_dt << " dep: " << dep << " RUN STENCIL MD DEP TEMPLATED. stage: " << pipeline_stage << std::endl;
     if (comm->nprocs != 1) {
         if (dep > 0) {
+            std::cout << "before wait on dep: " << dep << " curr dt: " << curr_dt << std::endl;
             auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
             int recv_idx = dep_to_recv_idx[dep];
 
@@ -6589,6 +6591,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             auto end_mpi = std::chrono::high_resolution_clock::now();
             auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
             mpi_duration += duration_mpi;
+            std::cout << "after wait on dep: " << dep << " curr dt: " << curr_dt << std::endl;
         }
     }
 
@@ -6673,6 +6676,8 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             }
         }
     }
+
+    std::cout << "me: " << comm->me << " curr_dt: " << curr_dt << " dep: " << dep << " RUN STENCIL MD DEP TEMPLATED DONE. stage: " << pipeline_stage << std::endl;
 }
 
 template <bool curr_dt>
@@ -6916,6 +6921,195 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
     */
 }
 
+void Verlet::run_stencil_md_pipelined_helper_merge_dt(int starting_timestep,
+                                                      std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
+                                                      double** test_f, double** test_x, double** test_v) {
+    constexpr int start_t = 1;
+    constexpr int mid_t = NUM_TIMESTEPS_IN_PARALLEL / 2 + 1;
+    constexpr int end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
+
+    auto& recv_neighbor_procs = lmp->recv_from_neighbors_procs;
+    int num_zoids_recv_from = recv_neighbor_procs.size();
+
+    // hardcode to 2 stages
+    std::vector<MPI_Request> receive_requests(num_zoids_recv_from, MPI_REQUEST_NULL);
+    std::vector<MPI_Request> receive_requests2(num_zoids_recv_from, MPI_REQUEST_NULL);
+
+    int dep_to_idx[NUM_DEPS] = {0};
+    for (int dep = 2; dep < NUM_DEPS; dep++) {
+        auto& wait_idxs = dep_to_wait_idxs[dep - 1];
+        dep_to_idx[dep] = wait_idxs.size() + dep_to_idx[dep - 1];
+    }
+
+    auto& recv_neighbor_procs_next_dt = lmp->recv_from_neighbors_procs_next_dt;
+    int num_zoids_recv_from_next_dt = recv_neighbor_procs_next_dt.size();
+
+    std::vector<MPI_Request> receive_requests_next_dt(num_zoids_recv_from_next_dt, MPI_REQUEST_NULL);
+    std::vector<MPI_Request> receive_requests2_next_dt(num_zoids_recv_from_next_dt, MPI_REQUEST_NULL);
+
+    int dep_to_idx_next_dt[NUM_DEPS] = {0};
+    for (int dep = 2; dep < NUM_DEPS; dep++) {
+        auto& wait_idxs_next_dt = dep_to_wait_idxs_next_dt[dep - 1];
+        dep_to_idx_next_dt[dep] = wait_idxs_next_dt.size() + dep_to_idx_next_dt[dep - 1];
+    }
+
+    constexpr bool PIPELINE = true;
+
+    if (comm->nprocs != 1) {
+        int recv_idx = 0;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            auto& wait_idxs = dep_to_wait_idxs[dep];
+            for (int idx: wait_idxs) {
+                int recv_zoid_num = recv_neighbor_procs[idx];
+                comm->receive_data_process_stencil_md(true, start_t, mid_t,
+                                                      &receive_requests[recv_idx], recv_zoid_num, 0);
+                comm->receive_data_process_stencil_md(true, mid_t, end_t,
+                                                      &receive_requests2[recv_idx], recv_zoid_num, 1);
+                recv_idx++;
+            }
+        }
+    }
+
+    std::vector<MPI_Request> send_requests[NUM_ZOIDS];
+    std::vector<MPI_Request> send_requests2[NUM_ZOIDS];
+
+    std::vector<MPI_Request> send_requests_next_dt[NUM_ZOIDS];
+    std::vector<MPI_Request> send_requests2_next_dt[NUM_ZOIDS];
+
+    if (comm->nprocs != 1) {
+        for (int zoid_num = comm->me; zoid_num < NUM_ZOIDS; zoid_num += comm->nprocs) {
+            send_requests[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
+            send_requests2[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
+
+            send_requests_next_dt[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
+            send_requests2_next_dt[zoid_num] = std::move(std::vector<MPI_Request>(comm->nprocs, MPI_REQUEST_NULL));
+        }
+    }
+
+    run_stencil_md_dep_templated<true>(0, starting_timestep, start_t, mid_t, dep_to_idx,
+                                       send_requests, receive_requests,
+                                       dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+
+    std::cout << "me: " << comm->me << " 1" << std::endl;
+
+    cilk_scope {
+            std::cout << "me: " << comm->me << " what" << std::endl;
+            run_stencil_md_dep_templated<true>(0, starting_timestep, mid_t, end_t, dep_to_idx,
+                                                          send_requests2, receive_requests2,
+                                                          dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+            std::cout << "me: " << comm->me << " after 1.5 before 2?" << std::endl;
+            run_stencil_md_dep_templated<true>(1, starting_timestep, start_t, mid_t, dep_to_idx,
+                                               send_requests, receive_requests,
+                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+    }
+
+    std::cout << "2" << std::endl;
+
+    cilk_scope {
+            cilk_spawn run_stencil_md_dep_templated<true>(1, starting_timestep, mid_t, end_t, dep_to_idx,
+                                                             send_requests2, receive_requests2,
+                                                             dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+            run_stencil_md_dep_templated<true>(2, starting_timestep, start_t, mid_t, dep_to_idx,
+                                               send_requests, receive_requests,
+                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+    }
+
+    std::cout << "3" << std::endl;
+
+    cilk_scope {
+            cilk_spawn run_stencil_md_dep_templated<true>(2, starting_timestep, mid_t, end_t, dep_to_idx,
+                                                          send_requests2, receive_requests2,
+                                                          dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+            run_stencil_md_dep_templated<true>(3, starting_timestep, start_t, mid_t, dep_to_idx,
+                                               send_requests, receive_requests,
+                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+    }
+
+    cilk_scope {
+            cilk_spawn run_stencil_md_dep_templated<true>(3, starting_timestep, mid_t, end_t, dep_to_idx,
+                                                          send_requests2, receive_requests2,
+                                                          dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+            run_stencil_md_dep_templated<false>(0, starting_timestep, start_t, mid_t, dep_to_idx_next_dt,
+                                                send_requests_next_dt, receive_requests_next_dt,
+                                                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+    }
+
+
+    assert(false);
+
+    std::cout << "HERE" << std::endl;
+
+    if (comm->nprocs != 1) {
+        int recv_idx = 0;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            auto& wait_idxs_next_dt = dep_to_wait_idxs_next_dt[dep];
+            for (int idx: wait_idxs_next_dt) {
+                int recv_zoid_num = recv_neighbor_procs_next_dt[idx];
+                comm->receive_data_process_stencil_md(false, start_t, mid_t,
+                                                      &receive_requests_next_dt[recv_idx], recv_zoid_num, 0);
+                comm->receive_data_process_stencil_md(false, mid_t, end_t,
+                                                      &receive_requests2_next_dt[recv_idx], recv_zoid_num, 1);
+                recv_idx++;
+            }
+        }
+    }
+
+    cilk_scope {
+            cilk_spawn run_stencil_md_dep_templated<false>(0, starting_timestep, mid_t, end_t, dep_to_idx_next_dt,
+                                                          send_requests2_next_dt, receive_requests2_next_dt,
+                                                          dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+            run_stencil_md_dep_templated<false>(1, starting_timestep, start_t, mid_t, dep_to_idx_next_dt,
+                                                send_requests_next_dt, receive_requests_next_dt,
+                                                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+    }
+
+    cilk_scope {
+            cilk_spawn run_stencil_md_dep_templated<false>(1, starting_timestep, mid_t, end_t, dep_to_idx_next_dt,
+                                                           send_requests2_next_dt, receive_requests2_next_dt,
+                                                           dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+            run_stencil_md_dep_templated<false>(2, starting_timestep, start_t, mid_t, dep_to_idx_next_dt,
+                                                send_requests_next_dt, receive_requests_next_dt,
+                                                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+    }
+
+    cilk_scope {
+            cilk_spawn run_stencil_md_dep_templated<false>(2, starting_timestep, mid_t, end_t, dep_to_idx_next_dt,
+                                                           send_requests2_next_dt, receive_requests2_next_dt,
+                                                           dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+            run_stencil_md_dep_templated<false>(3, starting_timestep, start_t, mid_t, dep_to_idx_next_dt,
+                                                send_requests_next_dt, receive_requests_next_dt,
+                                                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+    }
+
+    cilk_spawn run_stencil_md_dep_templated<false>(3, starting_timestep, mid_t, end_t, dep_to_idx_next_dt,
+                                                   send_requests2_next_dt, receive_requests2_next_dt,
+                                                   dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+
+    if (comm->nprocs != 1) {
+        for (int i = comm->me; i < NUM_ZOIDS; i += comm->nprocs) {
+            if (send_requests[i].size() > 0) {
+                MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
+            }
+            if (send_requests2[i].size() > 0) {
+                MPI_Waitall(send_requests2[i].size(), send_requests2[i].data(), MPI_STATUSES_IGNORE);
+            }
+
+            if (send_requests_next_dt[i].size() > 0) {
+                MPI_Waitall(send_requests[i].size(), send_requests[i].data(), MPI_STATUSES_IGNORE);
+            }
+            if (send_requests2_next_dt[i].size() > 0) {
+                MPI_Waitall(send_requests2[i].size(), send_requests2[i].data(), MPI_STATUSES_IGNORE);
+            }
+        }
+    }
+}
+
 template <bool curr_dt>
 void Verlet::run_stencil_md_no_cilk_for_helper(int starting_timestep, double** test_f, double** test_x, double** test_v,
                                                std::array<std::atomic<int>, NUM_ZOIDS>& counters, const std::array<int, NUM_ZOIDS>& cache) {
@@ -6971,10 +7165,17 @@ void Verlet::run_stencil_md_no_cilk_for(int num_timesteps, double **test_f, doub
 void Verlet::run_stencil_md_pipelined(int num_timesteps, std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
                                       double **test_f, double **test_x, double** test_v) {
 
+    /*
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
         // curr dt
         run_stencil_md_pipelined_helper<true>(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
         run_stencil_md_pipelined_helper<false>(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
+    }
+    */
+
+    for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
+        // curr dt
+        run_stencil_md_pipelined_helper_merge_dt(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
     }
 }
 
