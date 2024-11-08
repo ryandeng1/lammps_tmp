@@ -6303,11 +6303,13 @@ void Verlet::run_stencil_md_zoid_pipelined(int starting_timestep, int start_eval
     auto comm_ = lmp->comm_stencil_md[zoid_num];
 
     for (int t = start_eval; t < end_eval; t++) {
+        /*
         auto begin1 = std::chrono::high_resolution_clock::now();
         comm_->unpack_data_process_zoid_stencil_md_single_timestep(curr_dt, zoid, start_eval + 1, end_eval + 1, t + 1, pipeline_stage);
         auto end1 = std::chrono::high_resolution_clock::now();
         auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(end1 - begin1).count();
         unpack_duration += duration1;
+        */
 
         auto begin_timestep = std::chrono::high_resolution_clock::now();
         Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
@@ -6602,7 +6604,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
         auto comm_ = lmp->comm_stencil_md[zoid_num];
         if (comm->nprocs != 1) {
             auto begin = std::chrono::high_resolution_clock::now();
-            // comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
+            comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             unpack_duration += duration;
@@ -6733,9 +6735,28 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                                   test_v, 0);
         }
     } else {
+        auto b1 = std::chrono::high_resolution_clock::now();
         run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, start_t, mid_t, dep_to_idx,
                                               send_requests, receive_requests,
                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+        auto e1 = std::chrono::high_resolution_clock::now();
+        auto d1 = std::chrono::duration_cast<std::chrono::microseconds>(e1 - b1).count();
+
+        if (comm->me == 0) {
+            int num_atoms = 0;
+            for (int t = start_t; t < mid_t; t++) {
+                auto& queues = curr_dt ? lmp->queues[0] : lmp->queues_next_dt[0];
+                for (int j = 0; j < queues.size(); j++) {
+                    int zoid_num = queues[j].num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        num_atoms += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
+                }
+            }
+            std::cout << "1. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+        }
+
+        auto b2 = std::chrono::high_resolution_clock::now();
 
         cilk_scope {
                 cilk_spawn run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, mid_t, end_t, dep_to_idx,
@@ -6747,6 +6768,34 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                 dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
         }
 
+        auto e2 = std::chrono::high_resolution_clock::now();
+        auto d2 = std::chrono::duration_cast<std::chrono::microseconds>(e2 - b2).count();
+
+        if (comm->me == 0) {
+            int num_atoms = 0;
+            for (int t = mid_t; t < end_t; t++) {
+                auto& queues = curr_dt ? lmp->queues[0] : lmp->queues_next_dt[0];
+                for (int j = 0; j < queues.size(); j++) {
+                    int zoid_num = queues[j].num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        num_atoms += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
+                }
+            }
+            for (int t = start_t; t < mid_t; t++) {
+                auto& queues = curr_dt ? lmp->queues[1] : lmp->queues_next_dt[1];
+                for (int j = 0; j < queues.size(); j++) {
+                    int zoid_num = queues[j].num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        num_atoms += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
+                }
+            }
+            std::cout << "2. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+        }
+
+        auto b3 = std::chrono::high_resolution_clock::now();
+
         cilk_scope {
                 cilk_spawn run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, mid_t, end_t, dep_to_idx,
                 send_requests2, receive_requests2,
@@ -6757,6 +6806,33 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                 dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
         }
 
+        auto e3 = std::chrono::high_resolution_clock::now();
+        auto d3 = std::chrono::duration_cast<std::chrono::microseconds>(e3 - b3).count();
+
+        if (comm->me == 0) {
+            int num_atoms = 0;
+            for (int t = mid_t; t < end_t; t++) {
+                auto& queues = curr_dt ? lmp->queues[1] : lmp->queues_next_dt[1];
+                for (int j = 0; j < queues.size(); j++) {
+                    int zoid_num = queues[j].num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        num_atoms += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
+                }
+            }
+            for (int t = start_t; t < mid_t; t++) {
+                auto& queues = curr_dt ? lmp->queues[2] : lmp->queues_next_dt[2];
+                for (int j = 0; j < queues.size(); j++) {
+                    int zoid_num = queues[j].num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        num_atoms += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
+                }
+            }
+            std::cout << "3. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+        }
+
+        auto b4 = std::chrono::high_resolution_clock::now();
         cilk_scope {
                 cilk_spawn run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, mid_t, end_t, dep_to_idx,
                 send_requests2, receive_requests2,
@@ -6767,9 +6843,51 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                 dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
         }
 
+        auto e4 = std::chrono::high_resolution_clock::now();
+        auto d4 = std::chrono::duration_cast<std::chrono::microseconds>(e4 - b4).count();
+
+        if (comm->me == 0) {
+            int num_atoms = 0;
+            for (int t = mid_t; t < end_t; t++) {
+                auto& queues = curr_dt ? lmp->queues[2] : lmp->queues_next_dt[2];
+                for (int j = 0; j < queues.size(); j++) {
+                    int zoid_num = queues[j].num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        num_atoms += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
+                }
+            }
+            for (int t = start_t; t < mid_t; t++) {
+                auto& queues = curr_dt ? lmp->queues[3] : lmp->queues_next_dt[3];
+                for (int j = 0; j < queues.size(); j++) {
+                    int zoid_num = queues[j].num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        num_atoms += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
+                }
+            }
+            std::cout << "4. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+        }
+
+        auto b5 = std::chrono::high_resolution_clock::now();
         run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, mid_t, end_t, dep_to_idx,
                                               send_requests2, receive_requests2,
                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+        auto e5 = std::chrono::high_resolution_clock::now();
+        auto d5 = std::chrono::duration_cast<std::chrono::microseconds>(e5 - b5).count();
+        if (comm->me == 0) {
+            int num_atoms = 0;
+            for (int t = mid_t; t < end_t; t++) {
+                auto& queues = curr_dt ? lmp->queues[3] : lmp->queues_next_dt[3];
+                for (int j = 0; j < queues.size(); j++) {
+                    int zoid_num = queues[j].num;
+                    if (zoid_num % comm->nprocs == comm->me) {
+                        num_atoms += lmp->atom_stencil_md[zoid_num][t]->nlocal;
+                    }
+                }
+            }
+            std::cout << "5. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+        }
     }
 
     if (comm->nprocs != 1) {
