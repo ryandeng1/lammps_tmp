@@ -6791,7 +6791,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                     }
                 }
             }
-            std::cout << "2. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+            std::cout << "2. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d2 << " rate: " << num_atoms * 1.0 / d2 << std::endl;
         }
 
         auto b3 = std::chrono::high_resolution_clock::now();
@@ -6829,7 +6829,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                     }
                 }
             }
-            std::cout << "3. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+            std::cout << "3. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d3 << " rate: " << num_atoms * 1.0 / d3 << std::endl;
         }
 
         auto b4 = std::chrono::high_resolution_clock::now();
@@ -6866,7 +6866,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                     }
                 }
             }
-            std::cout << "4. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+            std::cout << "4. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d4 << " rate: " << num_atoms * 1.0 / d4 << std::endl;
         }
 
         auto b5 = std::chrono::high_resolution_clock::now();
@@ -6886,7 +6886,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                     }
                 }
             }
-            std::cout << "5. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d1 << " rate: " << num_atoms * 1.0 / d1 << std::endl;
+            std::cout << "5. curr_dt? " << curr_dt << " num atoms: " << num_atoms << " duration: " << d5 << " rate: " << num_atoms * 1.0 / d5 << std::endl;
         }
     }
 
