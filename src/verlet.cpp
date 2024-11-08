@@ -6285,6 +6285,210 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
     }
 }
 
+// assume already have all the data necessary to run the zoid
+template <bool curr_dt>
+void Verlet::run_stencil_md_zoid_pipelined(int starting_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x, double** test_v, int pipeline_stage) {
+    int n_pre_force = modify->n_pre_force;
+    int n_post_force_any = modify->n_post_force_any;
+    int n_end_of_step = modify->n_end_of_step;
+
+    queue_info& zoid = curr_dt ? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
+    auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+    int** atom_idx_mapping = zoid.atom_idx_mapping;
+    int** reverse_atom_idx_mapping = zoid.reverse_atom_idx_mapping;
+    std::vector<int>* reverse_atom_idx_mapping_idxs = zoid.reverse_atom_idx_mapping_idxs;
+
+    constexpr bool USE_AFFINITY = true;
+
+    auto comm_ = lmp->comm_stencil_md[zoid_num];
+
+    for (int t = start_eval; t < end_eval; t++) {
+        auto begin1 = std::chrono::high_resolution_clock::now();
+        comm_->unpack_data_process_zoid_stencil_md_single_timestep(curr_dt, zoid, start_eval + 1, end_eval + 1, t + 1, pipeline_stage);
+        auto end1 = std::chrono::high_resolution_clock::now();
+        auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(end1 - begin1).count();
+        unpack_duration += duration1;
+
+        auto begin_timestep = std::chrono::high_resolution_clock::now();
+        Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+        Atom* atom_next_timestep = curr_dt ? atom_arr[t + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+        Neighbor* neigh_next_timestep = curr_dt ? lmp->neighbor_stencil_md[zoid_num][t + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][t + 1];
+
+#ifdef LMP_OPENMP
+        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][t + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+#else
+        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
+#endif
+
+        if (TEST_AGAINST_LAMMPS_LOCAL) {
+            int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
+
+            stencilMD->COMPARE_FORCE_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_f);
+            stencilMD->COMPARE_POS_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_x);
+            stencilMD->COMPARE_VEL_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_v);
+        }
+
+
+        // updates positions in atom_next_timestep
+        // modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
+
+        auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
+
+        if (USE_AFFINITY) {
+            stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep,
+                                                             atom_idx_mapping[t]);
+            // Moved to atom_vec packing, which is within a cilk loop
+            // parallel_memset(eval_f_, eval_f_total);
+        } else {
+            stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep,
+                                                    atom_idx_mapping[t]);
+        }
+        /*
+        stencilMD->initial_integrate_stencil_md_affinity_reverse(zoid, t + 1, atom_, atom_next_timestep,
+                                                                 atom_idx_mapping[t], reverse_atom_idx_mapping[t + 1], reverse_atom_idx_mapping_idxs[t + 1]);
+        */
+        /*
+        cilk_scope {
+            // cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+            cilk_spawn stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
+
+        }
+        */
+
+        auto end_initial_integrate = std::chrono::high_resolution_clock::now();
+        auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
+        modify_initial_duration += duration_initial_integrate;
+
+        auto begin_post_force = std::chrono::high_resolution_clock::now();
+        auto end_post_force = std::chrono::high_resolution_clock::now();
+        auto duration_post_force = std::chrono::duration_cast<std::chrono::microseconds>(end_post_force - begin_post_force).count();
+        modify_post_force_duration += duration_post_force;
+
+        if (n_pre_force) {
+            // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
+            // timer->stamp(Timer::MODIFY);
+        }
+
+        if (pair_compute_flag) {
+            Force* next_force;
+            if (!PURELY_LOCAL_POTENTIAL) {
+                next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+            } else {
+                next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md_next_dt[zoid_num][t + 1];
+            }
+
+            int* atom_idx_mapping_ = zoid.atom_idx_mapping[t + 1];
+
+            int timestep_flag = t + 1;
+
+            auto begin_compute = std::chrono::high_resolution_clock::now();
+            if (USE_AFFINITY) {
+                stencilMD->stencil_md_fuse_force_computation_atomics_affinity(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+                // stencilMD->stencil_md_fuse_force_computation_per_worker_affinity(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            } else {
+                stencilMD->stencil_md_fuse_force_computation_atomics(zoid, t + 1, atom_next_timestep, neigh_next_timestep, next_force, modify_);
+            }
+
+            auto end_compute = std::chrono::high_resolution_clock::now();
+            auto duration_compute = std::chrono::duration_cast<std::chrono::microseconds>(end_compute - begin_compute).count();
+            pair_duration += duration_compute;
+
+            /*
+            next_force->pair->compute_stencil_md(
+                    eflag, vflag, atom_next_timestep,
+                    zoid.can_eval_center[t + 1],
+                    zoid, &timestep_flag);
+            */
+
+            if (atom->molecular != Atom::ATOMIC) {
+                if (force->bond) {
+                    /*
+                    next_force->bond->compute_stencil_md(eflag, vflag, atom_next_timestep,
+                                                         zoid.can_eval_center[t + 1],
+                                                         zoid, &timestep_flag, neigh_next_timestep);
+                    */
+                }
+                if (force->angle) {
+                    assert(false);
+                    force->angle->compute(eflag, vflag);
+                }
+                if (force->dihedral) {
+                    assert(false);
+                    force->dihedral->compute(eflag, vflag);
+                }
+                if (force->improper) {
+                    assert(false);
+                    force->improper->compute(eflag, vflag);
+                }
+            }
+        }
+
+        // reverse communication of forces
+        if (force->newton) {
+            /*
+              std::cout << "Force newton on" << std::endl;
+              Kokkos::fence();
+              comm->reverse_comm();
+              timer->stamp(Timer::COMM);
+            */
+        }
+
+        // force modifications, final time integration, diagnostics
+
+        if (n_post_force_any) {
+            // modify_->post_force_stencil_md(vflag, atom_next_timestep);
+            // modify->post_force(vflag);
+            // stencilMD->fuse_post_force_stencil_md<curr_dt>(zoid, t + 1, atom_next_timestep, modify_);
+            // stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
+            // stencilMD->post_force_stencil_md_affinity(atom_next_timestep, modify_);
+        }
+
+        /*
+        modify_->final_integrate_stencil_md(
+                atom_, atom_next_timestep, neighbor, atom_idx_mapping[t], nullptr);
+        */
+
+        auto begin_final_integrate = std::chrono::high_resolution_clock::now();
+        if (USE_AFFINITY) {
+            stencilMD->fuse_post_force_final_integrate_stencil_md_affinity(atom_next_timestep, modify_);
+        } else {
+            stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
+            stencilMD->final_integrate_stencil_md_(atom_next_timestep);
+        }
+
+        // stencilMD->final_integrate_stencil_md_affinity(atom_next_timestep);
+        auto end_final_integrate = std::chrono::high_resolution_clock::now();
+        auto duration_final_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_final_integrate - begin_final_integrate).count();
+        modify_final_duration += duration_final_integrate;
+
+        if (n_end_of_step) {
+            // this doesn't actually do anything
+            // modify->end_of_step();
+        }
+        // timer->stamp(Timer::MODIFY);
+
+        // all output
+
+        /*
+        if (ntimestep == output->next) {
+            assert(false);
+            timer->stamp();
+            output->write(ntimestep);
+            timer->stamp(Timer::OUTPUT);
+        }
+        */
+        auto end_timestep = std::chrono::high_resolution_clock::now();
+        auto duration_timestep = std::chrono::duration_cast<std::chrono::microseconds>(end_timestep - begin_timestep).count();
+        if (comm->me == 0) {
+            /*
+            std::stringstream s;
+            s << "curr dt: " << curr_dt << " zoid: " << zoid.num << " time: " << t << " nlocal: " << atom_->nlocal << " " << atom_next_timestep->nlocal << " duration : " << duration_timestep << std::endl;
+            std::cout << s.str();
+            */
+        }
+    }
+}
+
 template <bool curr_dt>
 void Verlet::run_stencil_md_zoid_no_cilk_for(int starting_timestep, int zoid_num,
                                              double** test_f, double** test_x, double** test_v,
@@ -6398,13 +6602,14 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
         auto comm_ = lmp->comm_stencil_md[zoid_num];
         if (comm->nprocs != 1) {
             auto begin = std::chrono::high_resolution_clock::now();
-            comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
+            // comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             unpack_duration += duration;
         }
 
-        run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v);
+        // run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v);
+        run_stencil_md_zoid_pipelined<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, pipeline_stage);
 
         if (comm->nprocs != 1) {
             if (dep < NUM_DEPS - 1) {

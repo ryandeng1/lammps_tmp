@@ -123,6 +123,10 @@ class Comm : protected Pointers {
   virtual void unpack_data_process_zoid_stencil_md(bool curr_dt, queue_info& zoid, int start_timestep, int end_timestep,
                                                    int pipeline_stage) { assert(false); }
 
+  virtual void unpack_data_process_zoid_stencil_md_single_timestep(bool curr_dt, queue_info& zoid,
+                                                                   int start_timestep, int end_timestep, int target_timestep,
+                                                                   int pipeline_stage) { assert(false); }
+
   virtual void pack_data_to_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
                                                std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
                                                queue_info&, int proc, int pipeline_stage=0) { assert(false); }
