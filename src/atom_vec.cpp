@@ -2197,8 +2197,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
             bool segment_type = segment_types[i];
             int segment_size = segment_lengths[i];
             if (segment_type == SEND_DATA_PROCESS_LOCAL) {
-                // cilk_for (int j = 0; j < segment_size; j++) {
-                for (int j = 0; j < segment_size; j++) {
+                cilk_for (int j = 0; j < segment_size; j++) {
                     int idx = local_list[local_list_idx + j];
                     // buf[m + j * 3 + 0] = x[idx][0];
                     // buf[m + j * 3 + 1] = x[idx][1];
@@ -2857,6 +2856,8 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         auto * _noalias x_ = (dbl3_t_stencil_md *) x[0];
         auto * _noalias v_ = (dbl3_t_stencil_md *) v[0];
 
+        bool is_all_zero = (pbc_flags[0] == 0 && pbc_flags[1] == 0 && pbc_flags[2] == 0);
+
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
 
@@ -2890,20 +2891,37 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
             int segment_idx = segment_idxs_buf[i];
             int counter = segment_idx * (3) + pos_start_idx;
             if (segment_type == RECV_DATA_PROCESS_LOCAL) {
-                for (int j = 0; j < segment_size; j++) {
+                if (is_all_zero) {
+                    for (int j = 0; j < segment_size; j++) {
+                        double x_x = buf[counter + j * 3];
+                        double x_y = buf[counter + j * 3 + 1];
+                        double x_z = buf[counter + j * 3 + 2];
 
-                    double x_x = buf[counter + j * 3];
-                    double x_y = buf[counter + j * 3 + 1];
-                    double x_z = buf[counter + j * 3 + 2];
+                        int idx = recv_pos_local_list[local_list_idx + j];
 
-                    int idx = recv_pos_local_list[local_list_idx + j];
+                        // x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
+                        // x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
+                        // x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+                        x_[idx].x = x_x;
+                        x_[idx].y = x_y;
+                        x_[idx].z = x_z;
+                    }
+                } else {
+                    for (int j = 0; j < segment_size; j++) {
 
-                    // x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
-                    // x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
-                    // x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
-                    x_[idx].x = x_x + domain->prd[0] * pbc_flags[0];
-                    x_[idx].y = x_y + domain->prd[1] * pbc_flags[1];
-                    x_[idx].z = x_z + domain->prd[2] * pbc_flags[2];
+                        double x_x = buf[counter + j * 3];
+                        double x_y = buf[counter + j * 3 + 1];
+                        double x_z = buf[counter + j * 3 + 2];
+
+                        int idx = recv_pos_local_list[local_list_idx + j];
+
+                        // x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
+                        // x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
+                        // x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+                        x_[idx].x = x_x + domain->prd[0] * pbc_flags[0];
+                        x_[idx].y = x_y + domain->prd[1] * pbc_flags[1];
+                        x_[idx].z = x_z + domain->prd[2] * pbc_flags[2];
+                    }
                 }
                 local_list_idx += segment_size;
             } else {
