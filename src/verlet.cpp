@@ -2718,9 +2718,9 @@ void Verlet::setup_stencil_md() {
     }
 
     // stencilMD->CREATE_ATOM_IDX_MAPPING();
+    // stencilMD->SET_INUM_PER_TIMESTEP();
+    // stencilMD->SET_INUM_PER_TIMESTEP_NEXT_DT();
 
-    stencilMD->SET_INUM_PER_TIMESTEP();
-    stencilMD->SET_INUM_PER_TIMESTEP_NEXT_DT();
     stencilMD->SET_CLAIMED_ATOMIC_BOOLS();
 
     // Now need to communicate with ther zoids to construct send_list and second_send_list
@@ -6536,7 +6536,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         auto e1 = std::chrono::high_resolution_clock::now();
         auto d1 = std::chrono::duration_cast<std::chrono::microseconds>(e1 - b1).count();
 
-        if (comm->me == 0) {
+        if (false && comm->me == 0) {
             int num_atoms = 0;
             for (int t = start_t; t < mid_t; t++) {
                 auto& queues = curr_dt ? lmp->queues[0] : lmp->queues_next_dt[0];
@@ -6565,7 +6565,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         auto e2 = std::chrono::high_resolution_clock::now();
         auto d2 = std::chrono::duration_cast<std::chrono::microseconds>(e2 - b2).count();
 
-        if (comm->me == 0) {
+        if (false && comm->me == 0) {
             int num_atoms = 0;
             for (int t = mid_t; t < end_t; t++) {
                 auto& queues = curr_dt ? lmp->queues[0] : lmp->queues_next_dt[0];
@@ -6603,7 +6603,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         auto e3 = std::chrono::high_resolution_clock::now();
         auto d3 = std::chrono::duration_cast<std::chrono::microseconds>(e3 - b3).count();
 
-        if (comm->me == 0) {
+        if (false && comm->me == 0) {
             int num_atoms = 0;
             for (int t = mid_t; t < end_t; t++) {
                 auto& queues = curr_dt ? lmp->queues[1] : lmp->queues_next_dt[1];
@@ -6640,7 +6640,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         auto e4 = std::chrono::high_resolution_clock::now();
         auto d4 = std::chrono::duration_cast<std::chrono::microseconds>(e4 - b4).count();
 
-        if (comm->me == 0) {
+        if (false && comm->me == 0) {
             int num_atoms = 0;
             for (int t = mid_t; t < end_t; t++) {
                 auto& queues = curr_dt ? lmp->queues[2] : lmp->queues_next_dt[2];
@@ -6669,7 +6669,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                               dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
         auto e5 = std::chrono::high_resolution_clock::now();
         auto d5 = std::chrono::duration_cast<std::chrono::microseconds>(e5 - b5).count();
-        if (comm->me == 0) {
+        if (false && comm->me == 0) {
             int num_atoms = 0;
             for (int t = mid_t; t < end_t; t++) {
                 auto& queues = curr_dt ? lmp->queues[3] : lmp->queues_next_dt[3];
