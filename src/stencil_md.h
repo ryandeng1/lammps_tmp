@@ -1905,7 +1905,7 @@ public:
         // fix_post_force->compute_target();
         auto tsqrt = fix_post_force->tsqrt;
 
-        if (num_chunks == 1 && false) {
+        if (num_chunks == 1) {
             for (int i = 0; i < next_nlocal; i++) {
                 const double dtfm = local_dtfm[i];
                 double gamma1 = gfactor1[type[i]];
@@ -2467,7 +2467,7 @@ public:
         // double dtf = 0.5 * update->dt * force->ftm2v;
 
         // base case
-        if (num_chunks == 1 && false) {
+        if (num_chunks == 1) {
             for (int i = 0; i < nlocal; i++) {
                 const double dtfm = local_dtfm[i];
                 int next_idx = atom_idx_mapping[i];
@@ -3317,7 +3317,7 @@ public:
         auto claimed_int = next->claimed_int;
         auto claimed_flag = next->claimed_flag;
 
-        if (num_chunks == 1 && false) {
+        if (num_chunks == 1) {
             for (int i = 0; i < nlocal; i++) {
                 const int itype = atom_type[i];
 
