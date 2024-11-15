@@ -2717,7 +2717,7 @@ void Verlet::setup_stencil_md() {
         }
     }
 
-    stencilMD->CREATE_ATOM_IDX_MAPPING();
+    // stencilMD->CREATE_ATOM_IDX_MAPPING();
 
     stencilMD->SET_INUM_PER_TIMESTEP();
     stencilMD->SET_INUM_PER_TIMESTEP_NEXT_DT();
