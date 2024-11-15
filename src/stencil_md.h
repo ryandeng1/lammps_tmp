@@ -1915,16 +1915,29 @@ public:
                 double rand_y = 0.6;
                 double rand_z = 0.6;
 
-                dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2*(rand_y - 0.5), gamma2 * (rand_z - 0.5)};
-                dbl3_t_stencil_md fdrag = {gamma1 * next_v[i].x, gamma1 * next_v[i].y, gamma1 * next_v[i].z};
+                // dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2*(rand_y - 0.5), gamma2 * (rand_z - 0.5)};
 
-                eval_f[i].x += fdrag.x + fran.x;
-                eval_f[i].y += fdrag.y + fran.y;
-                eval_f[i].z += fdrag.z + fran.z;
+                double v_x = next_v[i].x;
+                double v_y = next_v[i].y;
+                double v_z = next_v[i].z;
 
-                next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
-                next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
-                next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                // dbl3_t_stencil_md fdrag = {gamma1 * v_x, gamma1 * v_y, gamma1 * v_z};
+
+                // double f_x = eval_f[i].x + gamma1 * v_x + fran.x;
+                // double f_y = eval_f[i].y + gamma1 * v_y + fran.y;
+                // double f_z = eval_f[i].z + gamma1 * v_z + fran.z;
+
+                eval_f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
+                eval_f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
+                eval_f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+
+                next_v[i].x = v_x + dtfm * (f[i].x + eval_f[i].x);
+                next_v[i].y = v_y + dtfm * (f[i].y + eval_f[i].y);
+                next_v[i].z = v_z + dtfm * (f[i].z + eval_f[i].z);
+
+                // next_v[i].x = v_x + dtfm * (f[i].x + f_x);
+                // next_v[i].y = v_y + dtfm * (f[i].y + f_y);
+                // next_v[i].z = v_z + dtfm * (f[i].z + f_z);
             }
 
             return;
@@ -1959,16 +1972,28 @@ public:
                         double rand_y = 0.6;
                         double rand_z = 0.6;
 
-                        dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2*(rand_y - 0.5), gamma2 * (rand_z - 0.5)};
-                        dbl3_t_stencil_md fdrag = {gamma1 * next_v[i].x, gamma1 * next_v[i].y, gamma1 * next_v[i].z};
+                        double v_x = next_v[i].x;
+                        double v_y = next_v[i].y;
+                        double v_z = next_v[i].z;
 
-                        eval_f[i].x += fdrag.x + fran.x;
-                        eval_f[i].y += fdrag.y + fran.y;
-                        eval_f[i].z += fdrag.z + fran.z;
+                        // dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2*(rand_y - 0.5), gamma2 * (rand_z - 0.5)};
+                        // dbl3_t_stencil_md fdrag = {gamma1 * next_v[i].x, gamma1 * next_v[i].y, gamma1 * next_v[i].z};
 
-                        next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
-                        next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
-                        next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                        // eval_f[i].x += fdrag.x + fran.x;
+                        // eval_f[i].y += fdrag.y + fran.y;
+                        // eval_f[i].z += fdrag.z + fran.z;
+
+                        eval_f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
+                        eval_f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
+                        eval_f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+
+                        // next_v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                        // next_v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                        // next_v[i].z += dtfm * (f[i].z + eval_f[i].z);
+
+                        next_v[i].x = v_x + dtfm * (f[i].x + eval_f[i].x);
+                        next_v[i].y = v_y + dtfm * (f[i].y + eval_f[i].y);
+                        next_v[i].z = v_z + dtfm * (f[i].z + eval_f[i].z);
                     }
                 }
             }
@@ -3283,7 +3308,6 @@ public:
         auto bond = (BondFENE*) next_force->bond;
 
         const auto* _noalias bondlist = neigh_next->atom_bondlist;
-        auto& idx_use_atomics = next->idx_use_atomics;
 
         const int * _noalias const ilist = pair->list->ilist;
         const int * _noalias const numneigh = pair->list->numneigh;
@@ -3584,259 +3608,7 @@ public:
         }
         */
         for (int i = 0; i < num_chunks; i++) {
-            claimed_int[i] = false;
-        }
-    }
-
-    void stencil_md_fuse_force_computation_per_worker_affinity(queue_info& zoid, int timestep, Atom* next, Neighbor* neigh_next, Force* next_force, Modify* modify_) {
-        const auto * _noalias const x = (dbl3_t_stencil_md *) next->x[0];
-        auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
-
-        auto pair = (PairLJCutOMP*) next_force->pair;
-        auto bond = (BondFENE*) next_force->bond;
-
-        const auto* _noalias bondlist = neigh_next->atom_bondlist;
-        auto& idx_use_atomics = next->idx_use_atomics;
-
-        const int * _noalias const ilist = pair->list->ilist;
-        const int * _noalias const numneigh = pair->list->numneigh;
-        const int * const * const firstneigh = pair->list->firstneigh;
-        const double * _noalias const special_lj = force->special_lj;
-
-        auto* spinlocks = next->spinlocks;
-
-        assert(pair->list->inum == next->nlocal);
-
-        const auto* cutsq = pair->cutsq;
-        const auto* offset = pair->offset;
-        const auto* lj1 = pair->lj1;
-        const auto* lj2 = pair->lj2;
-        const auto* lj3 = pair->lj3;
-        const auto* lj4 = pair->lj4;
-        auto newton_pair = force->newton_pair;
-
-        const auto* _noalias const sigma = bond->sigma;
-        const auto* _noalias const epsilon = bond->epsilon;
-        const auto* _noalias const r0 = bond->r0;
-        const auto* _noalias const k = bond->k;
-
-        const int* _noalias const atom_type = next->type;
-
-        const int nlocal = next->nlocal;
-        const int nghost = next->nghost;
-
-        constexpr int BASE_CASE_SIZE = 1024;
-
-        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
-        int num_workers = __cilkrts_get_nworkers();
-        auto claimed = next->claimed;
-        auto claimed_int = next->claimed_int;
-        auto claimed_flag = next->claimed_flag;
-
-        auto force_updates = next->worker_force_updates;
-        auto force_updates_sizes = next->worker_force_updates_sizes;
-
-        #pragma cilk grainsize 1
-        cilk_for (int ii = 0; ii < num_chunks; ii++) {
-            int worker_number = __cilkrts_get_worker_number();
-            auto* worker_local_updates = force_updates[worker_number];
-            auto* worker_local_sizes = force_updates_sizes[worker_number];
-
-            int start_chunk = worker_number * num_chunks / num_workers;
-
-            for (int c = 0; c < num_chunks; ++c) {
-                int s = (c + start_chunk) % num_chunks;
-                /*
-                if (claimed[s].load(std::memory_order_relaxed)) {
-                    continue;
-                }
-                bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
-                if (claimed_int[s].load(std::memory_order_relaxed)) {
-                    continue;
-                }
-                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
-                */
-                if (claimed_flag[s].test(std::memory_order_relaxed)) {
-                    continue;
-                }
-                if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
-                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
-                        const int itype = atom_type[i];
-
-                        const int *_noalias const jlist = firstneigh[i];
-                        const double *_noalias const cutsqi = cutsq[itype];
-                        const double *_noalias const offseti = offset[itype];
-                        const double *_noalias const lj1i = lj1[itype];
-                        const double *_noalias const lj2i = lj2[itype];
-                        const double *_noalias const lj3i = lj3[itype];
-                        const double *_noalias const lj4i = lj4[itype];
-
-                        double xtmp = x[i].x;
-                        double ytmp = x[i].y;
-                        double ztmp = x[i].z;
-                        int jnum = numneigh[i];
-
-                        double fxtmp = 0.0;
-                        double fytmp = 0.0;
-                        double fztmp = 0.0;
-
-                        for (int jj = 0; jj < jnum; jj++) {
-                            double evdwl = 0.0;
-                            int j = jlist[jj];
-                            double factor_lj = special_lj[pair->sbmask(j)];
-                            j &= NEIGHMASK;
-
-                            double delx = xtmp - x[j].x;
-                            double dely = ytmp - x[j].y;
-                            double delz = ztmp - x[j].z;
-                            double rsq = delx * delx + dely * dely + delz * delz;
-                            int jtype = atom_type[j];
-
-                            if (rsq < cutsqi[jtype]) {
-                                double r2inv = 1.0 / rsq;
-                                double r6inv = r2inv * r2inv * r2inv;
-                                double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
-                                double fpair = factor_lj * forcelj * r2inv;
-
-                                fxtmp += delx * fpair;
-                                fytmp += dely * fpair;
-                                fztmp += delz * fpair;
-
-                                if (newton_pair || j < nlocal) {
-                                    int size = worker_local_sizes[j];
-                                    // worker_local_updates[j][size].x = -delx * fpair;
-                                    // worker_local_updates[j][size].y = -dely * fpair;
-                                    // worker_local_updates[j][size].z = -delz * fpair;
-
-                                    // worker_local_sizes[j]++;
-
-                                    // f[j].x -= delx * fpair;
-                                    // f[j].y -= dely * fpair;
-                                    // f[j].z -= delz * fpair;
-                                }
-                            }
-                        }
-
-                        auto &lst_bonds = bondlist[i];
-                        for (int j = 0; j < lst_bonds.size(); j++) {
-                            auto &bond_info = lst_bonds[j];
-                            int i2 = bond_info.first;
-                            int type = bond_info.second;
-
-                            double delx = xtmp - x[i2].x;
-                            double dely = ytmp - x[i2].y;
-                            double delz = ztmp - x[i2].z;
-
-                            double rsq = delx * delx + dely * dely + delz * delz;
-                            double r0sq = r0[type] * r0[type];
-                            double rlogarg = 1.0 - rsq / r0sq;
-
-                            if (rlogarg < 0.1) {
-                                error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                               update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                                //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                                //                                return;
-                                assert(false);
-
-                                rlogarg = 0.1;
-                            }
-
-                            double fbond = -k[type] / rlogarg;
-
-                            // force from LJ term
-                            double sr2 = 0.0;
-                            double sr6 = 0.0;
-
-                            if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                                sr2 = sigma[type] * sigma[type] / rsq;
-                                sr6 = sr2 * sr2 * sr2;
-                                fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                            }
-
-                            // energy
-
-                            // apply force to each of 2 atoms
-
-                            if (newton_pair || i < nlocal) {
-                                fxtmp += delx * fbond;
-                                fytmp += dely * fbond;
-                                fztmp += delz * fbond;
-                            }
-
-                            if (newton_pair || i2 < nlocal) {
-                                // f[i2].x -= delx * fbond;
-                                // f[i2].y -= dely * fbond;
-                                // f[i2].z -= delz * fbond;
-
-                                int size = worker_local_sizes[i2];
-                                // worker_local_updates[i2][size].x = -delx * fbond;
-                                // worker_local_updates[i2][size].y = -dely * fbond;
-                                // worker_local_updates[i2][size].z = -delz * fbond;
-
-                                // worker_local_sizes[i2]++;
-                            }
-                        }
-
-                        // spinlocks[i].lock();
-                        f[i].x += fxtmp;
-                        f[i].y += fytmp;
-                        f[i].z += fztmp;
-                        // spinlocks[i].unlock();
-                    }
-                }
-            }
-        }
-
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_flag[i].clear();
-        }
-
-        num_chunks = (next->nlocal + next->nghost) / MODIFY_GRAINSIZE + 1;
-
-        // chunking again?
-
-        /*
-        #pragma cilk grainsize 1
-        cilk_for (int ii = 0; ii < num_chunks; ii++) {
-            int worker_number = __cilkrts_get_worker_number();
-            int start_chunk = worker_number * num_chunks / num_workers;
-
-            for (int c = 0; c < num_chunks; ++c) {
-                int s = (c + start_chunk) % num_chunks;
-                if (claimed_flag[s].test(std::memory_order_relaxed)) {
-                    continue;
-                }
-                if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
-                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal + nghost; i++) {
-                        for (int j = 0; j < num_workers; j++) {
-                            auto *updates = force_updates[j][i];
-                            int num_updates = force_updates_sizes[j][i];
-
-                            assert(num_updates < 50);
-                            for (int l = 0; l < num_updates; l++) {
-                                f[i].x += updates[l].x;
-                                f[i].y += updates[l].y;
-                                f[i].z += updates[l].z;
-                            }
-                            force_updates_sizes[j][i] = 0;
-                        }
-                    }
-                }
-            }
-        }
-        */
-
-        /*
-        for (int i = 0; i < num_chunks; i++) {
-            claimed[i] = false;
-        }
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_int[i] = false;
-        }
-        */
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_flag[i].clear();
+            claimed_int[i] = 0;
         }
     }
 

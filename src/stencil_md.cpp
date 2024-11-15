@@ -1300,22 +1300,6 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                     atom_->claimed_flag = new std::atomic_flag[num_chunks];
                     atom_->spinlocks = new spinlock[atom_->nlocal + atom_->nghost];
 
-                    /*
-                    atom_->worker_force_updates = new dbl3_t_stencil_md**[__cilkrts_get_nworkers()];
-                    atom_->worker_force_updates_sizes = new int*[__cilkrts_get_nworkers()];
-
-                    constexpr int MAX_SIZE = 50;
-                    for (int w = 0; w < __cilkrts_get_nworkers(); w++) {
-                        atom_->worker_force_updates[w] = new dbl3_t_stencil_md*[atom_->nlocal + atom_->nghost];
-                        atom_->worker_force_updates_sizes[w] = new int[atom_->nlocal + atom_->nghost];
-
-                        for (int idx = 0; idx < atom_->nlocal + atom_->nghost; idx++) {
-                            atom_->worker_force_updates[w][idx] = new dbl3_t_stencil_md[MAX_SIZE];
-                            atom_->worker_force_updates_sizes[w][idx] = 0;
-                        }
-                    }
-                    */
-
                     for (int i = 0; i < num_chunks; i++) {
                         atom_->claimed[i] = false;
                         atom_->claimed_int[i] = 0;
