@@ -1948,17 +1948,7 @@ public:
             int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
-                /*
-                if (claimed[s].load(std::memory_order_relaxed)) {
-                    continue;
-                }
-                bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
-                if (claimed_int[s].load(std::memory_order_relaxed)) {
-                    continue;
-                }
-                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
-                */
+
                 if (claimed_flag[s].test(std::memory_order_relaxed)) {
                     continue;
                 }
@@ -1999,16 +1989,8 @@ public:
             }
         }
 
-        /*
         for (int i = 0; i < num_chunks; i++) {
-            claimed[i] = false;
-        }
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_int[i] = false;
-        }
-        */
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_flag[i].clear();
+            claimed_flag[i].clear(std::memory_order_relaxed);
         }
     }
 
@@ -2523,17 +2505,7 @@ public:
             int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
-                /*
-                if (claimed[s].load()) {
-                    continue;
-                }
-                bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
-                if (claimed_int[s].load(std::memory_order_relaxed)) {
-                    continue;
-                }
-                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
-                */
+
                 if (claimed_flag[s].test(std::memory_order_relaxed)) {
                     continue;
                 }
@@ -2563,19 +2535,12 @@ public:
             }
         }
 
-        /*
-        for (int i = 0; i < num_chunks; i++) {
-            claimed[i] = false;
-        }
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_int[i] = 0;
-        }
-        */
         for (int i = 0; i < num_chunks; i++) {
             claimed_flag[i].clear(std::memory_order_relaxed);
         }
     }
 
+    /*
     void initial_integrate_stencil_md_affinity_reverse(queue_info& zoid, int timestep, Atom* curr, Atom* next,
                                                        int* atom_idx_mapping, int* next_atom_idx_mapping,
                                                        std::vector<int>& next_atom_idx_mapping_idxs) {
@@ -2629,15 +2594,6 @@ public:
 
                             assert(curr->tag[prev_idx] == next->tag[curr_idx]);
                             assert(prev_idx != -1);
-
-                            /*
-                            curr_f[prev_idx].x = 0.0;
-                            curr_f[prev_idx].y = 0.0;
-                            curr_f[prev_idx].z = 0.0;
-                            curr_eval_f[prev_idx].x = 0.0;
-                            curr_eval_f[prev_idx].y = 0.0;
-                            curr_eval_f[prev_idx].z = 0.0;
-                            */
                         // }
                     }
                 }
@@ -2648,6 +2604,7 @@ public:
             claimed[i] = false;
         }
     }
+    */
 
     void initial_integrate_stencil_md_bins(const queue_info& zoid, Atom* curr, Atom* next, int* atom_idx_mapping) {
         auto * _noalias const curr_x = (dbl3_t_stencil_md *) curr->x[0];
@@ -3459,26 +3416,11 @@ public:
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
-                /*
-                if (claimed[s].load(std::memory_order_relaxed)) {
+                if (claimed_flag[s].test()) {
                     continue;
                 }
-                bool expected = false;
-                if (claimed[s].compare_exchange_weak(expected, true, std::memory_order_relaxed)) {
-                if (claimed_int[s].load(std::memory_order_relaxed)) {
-                    continue;
-                }
-                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
 
-                if (claimed_flag[s].test(std::memory_order_relaxed)) {
-                    continue;
-                }
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
-                */
-                if (claimed_int[s].load(std::memory_order_relaxed)) {
-                    continue;
-                }
-                if (claimed_int[s].fetch_add(1, std::memory_order_relaxed) == 0) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const int itype = atom_type[i];
 
@@ -3596,19 +3538,8 @@ public:
             }
         }
 
-        /*
         for (int i = 0; i < num_chunks; i++) {
-            claimed[i] = false;
-        }
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_int[i] = false;
-        }
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_flag[i].clear();
-        }
-        */
-        for (int i = 0; i < num_chunks; i++) {
-            claimed_int[i] = 0;
+            claimed_flag[i].clear(std::memory_order_relaxed);
         }
     }
 
