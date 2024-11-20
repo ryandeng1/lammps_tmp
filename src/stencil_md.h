@@ -1958,8 +1958,8 @@ public:
 
         int num_chunks = next_nlocal / MODIFY_GRAINSIZE + 1;
         int num_workers = __cilkrts_get_nworkers();
-        num_chunks = num_workers;
-        int chunk_size = next_nlocal / num_chunks + 1;
+        // num_chunks = num_workers;
+        // int chunk_size = next_nlocal / num_chunks + 1;
         // int chunk_size = MODIFY_GRAINSIZE;
 
         auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
@@ -2017,8 +2017,8 @@ public:
                     continue;
                 }
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
-                    // for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
-                    for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < next_nlocal; i++) {
+                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
+                    // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < next_nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         double gamma1 = gfactor1[type[i]];
                         double gamma2 = gfactor2[type[i]] * tsqrt;
@@ -2532,8 +2532,8 @@ public:
         auto claimed_int = curr->claimed_int;
         auto claimed_flag = curr->claimed_flag;
         int num_workers = __cilkrts_get_nworkers();
-        num_chunks = num_workers;
-        int chunk_size = nlocal / num_chunks + 1;
+        // num_chunks = num_workers;
+        // int chunk_size = nlocal / num_chunks + 1;
 
         // const double * const mass = atom->mass;
         // const int * const type = curr->type;
@@ -2579,8 +2579,8 @@ public:
                     continue;
                 }
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
-                    // for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
-                    for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
+                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
+                    // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         int next_idx = atom_idx_mapping[i];
                         next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
@@ -3369,8 +3369,8 @@ public:
         auto claimed_int = next->claimed_int;
         auto claimed_flag = next->claimed_flag;
 
-        num_chunks = num_workers;
-        int chunk_size = nlocal / num_chunks + 1;
+        // num_chunks = num_workers;
+        // int chunk_size = nlocal / num_chunks + 1;
 
         if (num_chunks == 1) {
             for (int i = 0; i < nlocal; i++) {
@@ -3495,8 +3495,8 @@ public:
                 }
 
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
-                    // for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
-                    for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
+                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
+                    // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
                         const int itype = atom_type[i];
 
                         const int *_noalias const jlist = firstneigh[i];
