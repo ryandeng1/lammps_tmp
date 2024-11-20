@@ -6102,7 +6102,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
     int** reverse_atom_idx_mapping = zoid.reverse_atom_idx_mapping;
     std::vector<int>* reverse_atom_idx_mapping_idxs = zoid.reverse_atom_idx_mapping_idxs;
 
-    constexpr bool USE_AFFINITY = true;
+    constexpr bool USE_AFFINITY = false;
 
     for (int t = start_eval; t < end_eval; t++) {
         auto begin_timestep = std::chrono::high_resolution_clock::now();
@@ -6247,8 +6247,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         if (USE_AFFINITY) {
             stencilMD->fuse_post_force_final_integrate_stencil_md_affinity(atom_next_timestep, modify_);
         } else {
-            stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
-            stencilMD->final_integrate_stencil_md_(atom_next_timestep);
+            stencilMD->fuse_post_force_final_integrate_stencil_md(atom_next_timestep, modify_);
+            // stencilMD->post_force_stencil_md_(atom_next_timestep, modify_);
+            // stencilMD->final_integrate_stencil_md_(atom_next_timestep);
         }
 
         // stencilMD->final_integrate_stencil_md_affinity(atom_next_timestep);

@@ -1879,6 +1879,67 @@ public:
     }
      */
 
+    inline void fuse_post_force_final_integrate_stencil_md(Atom* next, Modify* modify_) {
+        auto * _noalias const next_v = (dbl3_t *) next->v[0];
+
+        const auto * _noalias const f = (dbl3_t *) next->f[0];
+        auto * _noalias const eval_f = (dbl3_t *) next->eval_f_stencil_md[0];
+
+        const int * const mask = next->mask;
+        const int next_nlocal = next->nlocal;
+
+        const double * const mass = atom->mass;
+        const int * const type = next->type;
+        auto& local_dtfm = next->local_dtfm;
+        auto claimed = next->claimed;
+        auto claimed_int = next->claimed_int;
+        auto claimed_flag = next->claimed_flag;
+
+        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
+
+        auto gfactor1 = fix_post_force->gfactor1;
+        auto gfactor2 = fix_post_force->gfactor2;
+        // fix_post_force->compute_target();
+        auto tsqrt = fix_post_force->tsqrt;
+
+        #pragma cilk grainsize 2048
+        cilk_for (int i = 0; i < next_nlocal; i++) {
+            const double dtfm = local_dtfm[i];
+            double gamma1 = gfactor1[type[i]];
+            double gamma2 = gfactor2[type[i]] * tsqrt;
+
+            double rand_x = 0.6;
+            double rand_y = 0.6;
+            double rand_z = 0.6;
+
+            // dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2*(rand_y - 0.5), gamma2 * (rand_z - 0.5)};
+
+            double v_x = next_v[i].x;
+            double v_y = next_v[i].y;
+            double v_z = next_v[i].z;
+
+            // dbl3_t_stencil_md fdrag = {gamma1 * v_x, gamma1 * v_y, gamma1 * v_z};
+
+            // double f_x = eval_f[i].x + gamma1 * v_x + fran.x;
+            // double f_y = eval_f[i].y + gamma1 * v_y + fran.y;
+            // double f_z = eval_f[i].z + gamma1 * v_z + fran.z;
+
+            eval_f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
+            eval_f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
+            eval_f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+
+            next_v[i].x = v_x + dtfm * (f[i].x + eval_f[i].x);
+            next_v[i].y = v_y + dtfm * (f[i].y + eval_f[i].y);
+            next_v[i].z = v_z + dtfm * (f[i].z + eval_f[i].z);
+
+            // next_v[i].x = v_x + dtfm * (f[i].x + f_x);
+            // next_v[i].y = v_y + dtfm * (f[i].y + f_y);
+            // next_v[i].z = v_z + dtfm * (f[i].z + f_z);
+        }
+
+        return;
+    }
+
     inline void fuse_post_force_final_integrate_stencil_md_affinity(Atom* next, Modify* modify_) {
         auto * _noalias const next_v = (dbl3_t *) next->v[0];
 
@@ -2983,7 +3044,8 @@ public:
         const auto * _noalias const x = (dbl3_t_stencil_md *) next->x[0];
         auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
 
-        auto pair = (PairLJCutOMP*) next_force->pair;
+        // auto pair = (PairLJCutOMP*) next_force->pair;
+        auto pair = (PairLJCut*) next_force->pair;
         auto bond = (BondFENE*) next_force->bond;
 
         const auto* _noalias bondlist = neigh_next->atom_bondlist;
