@@ -6443,7 +6443,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 auto begin = std::chrono::high_resolution_clock::now();
                 int vec_idx = 0;
                 // TODO: parallelize
-                for (int proc = 0; proc < comm->nprocs; proc++) {
+                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     if (proc != comm->me
                         && send_to_neighbors_procs.find(proc) !=
                            send_to_neighbors_procs.end()) {
