@@ -2927,29 +2927,54 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
                 local_list_idx += segment_size;
             } else {
                 assert(segment_type == RECV_DATA_PROCESS_GHOST);
+                if (is_all_zero) {
+                    for (int j = 0; j < segment_size; j++) {
+                        int buf_idx = counter / 3;
+                        double x_x = buf[counter++];
+                        double x_y = buf[counter++];
+                        double x_z = buf[counter++];
 
-                for (int j = 0; j < segment_size; j++) {
-                    int buf_idx = counter / 3;
-                    double x_x = buf[counter++];
-                    double x_y = buf[counter++];
-                    double x_z = buf[counter++];
+                        if (ghost_idx >= recv_ghost_size_list[curr_pos_segment]) {
+                            ghost_idx = 0;
+                            curr_pos_segment++;
+                        }
 
-                    if (ghost_idx >= recv_ghost_size_list[curr_pos_segment]) {
-                        ghost_idx = 0;
-                        curr_pos_segment++;
+                        int idx = recv_ghost_idx_list[curr_pos_segment] + ghost_idx;
+
+                        // x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
+                        // x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
+                        // x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+
+                        x_[idx].x = x_x;
+                        x_[idx].y = x_y;
+                        x_[idx].z = x_z;
+
+                        ghost_idx++;
                     }
+                } else {
+                    for (int j = 0; j < segment_size; j++) {
+                        int buf_idx = counter / 3;
+                        double x_x = buf[counter++];
+                        double x_y = buf[counter++];
+                        double x_z = buf[counter++];
 
-                    int idx = recv_ghost_idx_list[curr_pos_segment] + ghost_idx;
+                        if (ghost_idx >= recv_ghost_size_list[curr_pos_segment]) {
+                            ghost_idx = 0;
+                            curr_pos_segment++;
+                        }
 
-                    // x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
-                    // x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
-                    // x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
+                        int idx = recv_ghost_idx_list[curr_pos_segment] + ghost_idx;
 
-                    x_[idx].x = x_x + domain->prd[0] * pbc_flags[0];
-                    x_[idx].y = x_y + domain->prd[1] * pbc_flags[1];
-                    x_[idx].z = x_z + domain->prd[2] * pbc_flags[2];
+                        // x[idx][0] = x_x + domain->prd[0] * pbc_flags[0];
+                        // x[idx][1] = x_y + domain->prd[1] * pbc_flags[1];
+                        // x[idx][2] = x_z + domain->prd[2] * pbc_flags[2];
 
-                    ghost_idx++;
+                        x_[idx].x = x_x + domain->prd[0] * pbc_flags[0];
+                        x_[idx].y = x_y + domain->prd[1] * pbc_flags[1];
+                        x_[idx].z = x_z + domain->prd[2] * pbc_flags[2];
+
+                        ghost_idx++;
+                    }
                 }
             }
         }
