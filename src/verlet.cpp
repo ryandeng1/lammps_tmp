@@ -6391,9 +6391,12 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
     cilk_for (int j = 0; j < zoid_queue.size(); j++) {
         queue_info &zoid = zoid_queue[j];
         int zoid_num = zoid.num;
+        assert(zoid_num % comm->nprocs == comm->me);
+        /*
         if (zoid_num % comm->nprocs != comm->me) {
             continue;
         }
+        */
 
         auto comm_ = lmp->comm_stencil_md[zoid_num];
         if (comm->nprocs != 1) {
@@ -6437,7 +6440,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
                                                         : lmp->send_to_neighbors_procs_next_dt[zoid_num];
 
-                // auto begin = std::chrono::high_resolution_clock::now();
+                auto begin = std::chrono::high_resolution_clock::now();
                 int vec_idx = 0;
                 // TODO: parallelize
                 for (int proc = 0; proc < comm->nprocs; proc++) {
@@ -6452,9 +6455,9 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                     }
                 }
 
-                // auto end = std::chrono::high_resolution_clock::now();
-                // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                // send_comm_duration += duration;
+                auto end = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                send_comm_duration += duration;
 
                 auto begin2 = std::chrono::high_resolution_clock::now();
                 if (send_to_neighbors_procs.find(comm->me) != send_to_neighbors_procs.end()) {
