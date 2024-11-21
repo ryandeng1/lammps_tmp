@@ -3671,7 +3671,8 @@ void CommBrick::unpack_data_process_zoid_stencil_md(bool curr_dt, queue_info& zo
         assert(recv_idx2 != -1);
         assert(recv_idx == recv_idx2);
 
-        cilk_for(int t = start_timestep; t < end_timestep; t++) {
+        // cilk_for(int t = start_timestep; t < end_timestep; t++) {
+        for (int t = start_timestep; t < end_timestep; t++) {
             Atom *atom_;
             int nrecv_force;
             int nrecv_pos;
