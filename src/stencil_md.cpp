@@ -1293,7 +1293,7 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                 int zoid_num = zoid.num;
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
-                    int total = atom_->nlocal + atom_->nghost;
+                    int total = atom_->nlocal;
                     int num_chunks = total / MODIFY_GRAINSIZE + 1;
                     // int num_chunks = __cilkrts_get_nworkers();
                     atom_->claimed = new std::atomic<bool>[num_chunks];
