@@ -6415,10 +6415,18 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 auto begin = std::chrono::high_resolution_clock::now();
                 auto &atom_arr = lmp->atom_stencil_md[zoid_num];
 
-                int vec_idx = 0;
+                auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
+                                                        : lmp->send_to_neighbors_procs_next_dt[zoid_num];
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
                                                            atom_arr, zoid, proc, pipeline_stage);
+                    if (send_to_neighbors_procs.find(proc) != send_to_neighbors_procs.end()) {
+                        bool sent = comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t,
+                                                                                  end_t,
+                                                                                  zoid,
+                                                                                  &send_requests[zoid_num][proc],
+                                                                                  proc, pipeline_stage);
+                    }
                 }
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
@@ -6427,6 +6435,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
         }
     }
 
+    /*
     if (comm->nprocs != 1) {
         if (dep < NUM_DEPS - 1) {
             for (int j = 0; j < zoid_queue.size(); j++) {
@@ -6470,6 +6479,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             }
         }
     }
+    */
 }
 
 template <bool curr_dt>
