@@ -2013,12 +2013,15 @@ public:
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
+                /*
                 if (claimed_flag[s].test(std::memory_order_relaxed)) {
                     continue;
                 }
-                if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
+                */
+
+                if (!claimed_flag[s].test(std::memory_order_relaxed) && !claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
-                    // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < next_nlocal; i++) {
+                        // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < next_nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         double gamma1 = gfactor1[type[i]];
                         double gamma2 = gfactor2[type[i]] * tsqrt;
@@ -2575,10 +2578,13 @@ public:
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
+                /*
                 if (claimed_flag[s].test(std::memory_order_relaxed)) {
                     continue;
                 }
-                if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
+                */
+
+                if (!claimed_flag[s].test(std::memory_order_relaxed) && !claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                     // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
                         const double dtfm = local_dtfm[i];
@@ -3490,11 +3496,13 @@ public:
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
+                /*
                 if (claimed_flag[s].test()) {
                     continue;
                 }
+                */
 
-                if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
+                if (!claimed_flag[s].test(std::memory_order_relaxed) && !claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                     // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
                         const int itype = atom_type[i];

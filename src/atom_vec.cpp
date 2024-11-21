@@ -2197,6 +2197,7 @@ int AtomVec::pack_data_to_process_stencil_md(int num_zoid_recv, int* zoid_idxs,
             bool segment_type = segment_types[i];
             int segment_size = segment_lengths[i];
             if (segment_type == SEND_DATA_PROCESS_LOCAL) {
+                #pragma cilk grainsize 2048
                 cilk_for (int j = 0; j < segment_size; j++) {
                     int idx = local_list[local_list_idx + j];
                     // buf[m + j * 3 + 0] = x[idx][0];
