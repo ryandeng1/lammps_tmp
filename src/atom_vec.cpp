@@ -2861,7 +2861,8 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
 
-        for (int i = 0; i < num_recv_force; i++) {
+        #pragma cilk grainsize 2048
+        cilk_for (int i = 0; i < num_recv_force; i++) {
             double f_x = buf[m + i * 3];
             double f_y = buf[m + i * 3 + 1];
             double f_z = buf[m + i * 3 + 2];
@@ -2957,7 +2958,8 @@ void AtomVec::unpack_data_from_process_stencil_md(int nrecv_force, int nrecv_pos
         int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
         m = vel_start_idx;
 
-        for (int i = 0; i < num_recv_vel; i++) {
+        #pragma cilk grainsize 2048
+        cilk_for (int i = 0; i < num_recv_vel; i++) {
             double v_x = buf[m + i * 3];
             double v_y = buf[m + i * 3 + 1];
             double v_z = buf[m + i * 3 + 2];
