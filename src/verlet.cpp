@@ -6478,7 +6478,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            send_pack_duration += duration;
+            // send_pack_duration += duration;
         }
     }
 
