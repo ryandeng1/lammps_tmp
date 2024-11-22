@@ -3357,6 +3357,18 @@ bool CommBrick::send_packed_data_to_process_stencil_md(bool curr_dt, int start_t
     }
 }
 
+void CommBrick::pack_and_send_data_to_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                                         std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
+                                                         queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage) {
+
+    pack_data_to_process_stencil_md(curr_dt, start_timestep, end_timestep,
+                                    atom_arr, zoid, proc, pipeline_stage);
+
+    send_packed_data_to_process_stencil_md(curr_dt, start_timestep, end_timestep,
+                                           zoid, request, proc, pipeline_stage);
+}
+
+
 
 bool CommBrick::send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
                                                 queue_info& zoid, MPI_Request* request, int proc, bool is_initial, int pipeline_stage) {

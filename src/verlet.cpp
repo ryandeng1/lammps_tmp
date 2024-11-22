@@ -6417,6 +6417,26 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
 
                 auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
                                                         : lmp->send_to_neighbors_procs_next_dt[zoid_num];
+
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    if (proc != comm->me && send_to_neighbors_procs.find(proc) != send_to_neighbors_procs.end()) {
+                        cilk_spawn comm_->pack_and_send_data_to_process_stencil_md(curr_dt, start_t, end_t,
+                                                                                   atom_arr, zoid, &send_requests[zoid_num][proc],
+                                                                                   proc, pipeline_stage);
+                        /*
+                        comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
+                                                               atom_arr, zoid, proc, pipeline_stage);
+                        cilk_spawn comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t,
+                                                                                 end_t,
+                                                                                 zoid,
+                                                                                 &send_requests[zoid_num][proc],
+                                                                                 proc, pipeline_stage);
+                        */
+                    }
+                }
+
+
+                /*
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     if (send_to_neighbors_procs.find(proc) != send_to_neighbors_procs.end()) {
                         comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
@@ -6428,9 +6448,27 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                                                                                   proc, pipeline_stage);
                     }
                 }
+                */
+
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
                 send_pack_duration += duration;
+            }
+        }
+    }
+
+    if (comm->nprocs != 1) {
+        if (dep < NUM_DEPS - 1) {
+            for (int j = 0; j < zoid_queue.size(); j++) {
+                queue_info& zoid = zoid_queue[j];
+                int zoid_num = zoid.num;
+                assert(zoid_num % comm->nprocs == comm->me);
+                auto comm_ = lmp->comm_stencil_md[zoid_num];
+                auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+
+                comm_->pack_and_send_data_to_process_stencil_md(curr_dt, start_t, end_t,
+                                                                atom_arr, zoid, nullptr,
+                                                                comm->me, pipeline_stage);
             }
         }
     }

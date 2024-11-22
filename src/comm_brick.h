@@ -90,6 +90,10 @@ class CommBrick : public Comm {
   bool send_packed_data_to_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
                                               queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage=0) override;
 
+  void pack_and_send_data_to_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
+                                                std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
+                                                queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage=0) override;
+
   void construct_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_send_list_stencil_md_send(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid,
                                            std::vector<MPI_Request>& r) override;
