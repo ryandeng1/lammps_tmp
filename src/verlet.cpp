@@ -6459,6 +6459,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
 
     if (comm->nprocs != 1) {
         if (dep < NUM_DEPS - 1) {
+            auto begin = std::chrono::high_resolution_clock::now();
             for (int j = 0; j < zoid_queue.size(); j++) {
                 queue_info& zoid = zoid_queue[j];
                 int zoid_num = zoid.num;
@@ -6470,8 +6471,12 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                                                                 atom_arr, zoid, nullptr,
                                                                 comm->me, pipeline_stage);
             }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            send_pack_duration += duration;
         }
     }
+
 
     /*
     if (comm->nprocs != 1) {
