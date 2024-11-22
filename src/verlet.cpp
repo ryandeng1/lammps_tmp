@@ -6435,6 +6435,9 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                     }
                 }
 
+                comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
+                                                       atom_arr, zoid, comm->me, pipeline_stage);
+
 
                 /*
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
@@ -6467,16 +6470,17 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 auto comm_ = lmp->comm_stencil_md[zoid_num];
                 auto &atom_arr = lmp->atom_stencil_md[zoid_num];
 
-                comm_->pack_and_send_data_to_process_stencil_md(curr_dt, start_t, end_t,
-                                                                atom_arr, zoid, nullptr,
-                                                                comm->me, pipeline_stage);
+                bool sent = comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t,
+                                                                          end_t,
+                                                                          zoid,
+                                                                          nullptr,
+                                                                          comm->me, pipeline_stage);
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             send_pack_duration += duration;
         }
     }
-
 
     /*
     if (comm->nprocs != 1) {
