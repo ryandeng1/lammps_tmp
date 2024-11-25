@@ -6418,25 +6418,24 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
                                                         : lmp->send_to_neighbors_procs_next_dt[zoid_num];
 
-                for (int proc = 0; proc < comm->nprocs; proc++) {
-                    if (proc != comm->me && send_to_neighbors_procs.find(proc) != send_to_neighbors_procs.end()) {
-                        cilk_spawn comm_->pack_and_send_data_to_process_stencil_md(curr_dt, start_t, end_t,
-                                                                                   atom_arr, zoid, &send_requests[zoid_num][proc],
-                                                                                   proc, pipeline_stage);
-                        /*
-                        comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
-                                                               atom_arr, zoid, proc, pipeline_stage);
-                        cilk_spawn comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t,
-                                                                                 end_t,
-                                                                                 zoid,
-                                                                                 &send_requests[zoid_num][proc],
-                                                                                 proc, pipeline_stage);
-                        */
+                constexpr bool flag = true;
+
+                if (flag) {
+                    cilk_for(int proc = 0; proc < comm->nprocs; proc++) {
+                        bool found = (send_to_neighbors_procs.find(proc) != send_to_neighbors_procs.end());
+                        if (proc != comm->me && found) {
+                            comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
+                                                                   atom_arr, zoid, proc, pipeline_stage);
+                            comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t, end_t,
+                                                                          zoid,
+                                                                          &send_requests[zoid_num][proc],
+                                                                          proc, pipeline_stage);
+                        } else if (proc == comm->me && found) {
+                            comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
+                                                                   atom_arr, zoid, proc, pipeline_stage);
+                        }
                     }
                 }
-
-                comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
-                                                       atom_arr, zoid, comm->me, pipeline_stage);
 
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
@@ -6466,52 +6465,6 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             unpack_self_time += duration;
         }
     }
-
-    /*
-    if (comm->nprocs != 1) {
-        if (dep < NUM_DEPS - 1) {
-            for (int j = 0; j < zoid_queue.size(); j++) {
-                queue_info &zoid = zoid_queue[j];
-                int zoid_num = zoid.num;
-                if (zoid_num % comm->nprocs != comm->me) {
-                    continue;
-                }
-
-                Comm *comm_ = lmp->comm_stencil_md[zoid_num];
-                auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
-                                                        : lmp->send_to_neighbors_procs_next_dt[zoid_num];
-
-                auto begin = std::chrono::high_resolution_clock::now();
-                int vec_idx = 0;
-                // TODO: parallelize
-                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
-                    if (proc != comm->me
-                        && send_to_neighbors_procs.find(proc) !=
-                           send_to_neighbors_procs.end()) {
-                        bool sent = comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t,
-                                                                                  end_t,
-                                                                                  zoid,
-                                                                                  &send_requests[zoid_num][proc],
-                                                                                  proc, pipeline_stage);
-                    }
-                }
-
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                send_comm_duration += duration;
-
-                auto begin2 = std::chrono::high_resolution_clock::now();
-                if (send_to_neighbors_procs.find(comm->me) != send_to_neighbors_procs.end()) {
-                    comm_->send_packed_data_to_process_stencil_md(curr_dt, start_t, end_t, zoid,
-                                                                  nullptr, comm->me, pipeline_stage);
-                }
-                auto end2 = std::chrono::high_resolution_clock::now();
-                auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - begin2).count();
-                unpack_self_time += duration2;
-            }
-        }
-    }
-    */
 }
 
 template <bool curr_dt>
