@@ -2019,7 +2019,6 @@ public:
 
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
-                        // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < next_nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         double gamma1 = gfactor1[type[i]];
                         double gamma2 = gfactor2[type[i]] * tsqrt;
@@ -2051,6 +2050,7 @@ public:
                         next_v[i].y = v_y + dtfm * (f[i].y + eval_f[i].y);
                         next_v[i].z = v_z + dtfm * (f[i].z + eval_f[i].z);
                     }
+                    break;
                 }
             }
         }
@@ -2582,7 +2582,6 @@ public:
 
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
-                    // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         int next_idx = atom_idx_mapping[i];
                         next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
@@ -2603,6 +2602,7 @@ public:
                         assert(curr->tag[i] == next->tag[next_idx]);
                         assert(next_idx != -1);
                     }
+                    break;
                 }
             }
         }
@@ -3498,7 +3498,6 @@ public:
 
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
-                    // for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
                         const int itype = atom_type[i];
 
                         const int *_noalias const jlist = firstneigh[i];
@@ -3611,6 +3610,7 @@ public:
                         f[i].z += fztmp;
                         spinlocks[i].unlock();
                     }
+                    break;
                 }
             }
         }
