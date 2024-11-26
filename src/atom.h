@@ -311,6 +311,7 @@ class Atom : protected Pointers {
   std::atomic_flag* claimed_flag;
   ClaimedFlag* claimed_flag_struct;
   int num_chunks;
+  int chunk_size;
 
   std::vector<double> local_dtfm;
 
