@@ -1296,7 +1296,7 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                     int total = atom_->nlocal;
                     int num_chunks;
 
-                    if (dep == 1 || dep == 2) {
+                    if (true || dep == 1 || dep == 2) {
                         num_chunks = total / MODIFY_GRAINSIZE + 1;
                     } else {
                         num_chunks = __cilkrts_get_nworkers();
