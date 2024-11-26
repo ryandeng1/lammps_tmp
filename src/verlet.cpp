@@ -6212,7 +6212,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         // updates positions in atom_next_timestep
         // modify_->initial_integrate_stencil_md(vflag, atom_, atom_next_timestep, atom_idx_mapping[t], nullptr);
 
-        // auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
+        auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
 
         if (USE_AFFINITY) {
             stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep,
@@ -6228,26 +6228,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         stencilMD->initial_integrate_stencil_md_affinity_reverse(zoid, t + 1, atom_, atom_next_timestep,
                                                                  atom_idx_mapping[t], reverse_atom_idx_mapping[t + 1], reverse_atom_idx_mapping_idxs[t + 1]);
         */
-        /*
-        cilk_scope {
-            // cilk_spawn stencilMD->initial_integrate_stencil_md(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
-            cilk_spawn stencilMD->initial_integrate_stencil_md_affinity(zoid, t + 1, atom_, atom_next_timestep, atom_idx_mapping[t]);
 
-        }
-        */
-
-        /*
         auto end_initial_integrate = std::chrono::high_resolution_clock::now();
         auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
         modify_initial_duration += duration_initial_integrate;
-        */
-
-        /*
-        auto begin_post_force = std::chrono::high_resolution_clock::now();
-        auto end_post_force = std::chrono::high_resolution_clock::now();
-        auto duration_post_force = std::chrono::duration_cast<std::chrono::microseconds>(end_post_force - begin_post_force).count();
-        modify_post_force_duration += duration_post_force;
-        */
 
         if (n_pre_force) {
             // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
@@ -6332,7 +6316,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
                 atom_, atom_next_timestep, neighbor, atom_idx_mapping[t], nullptr);
         */
 
-        // auto begin_final_integrate = std::chrono::high_resolution_clock::now();
+        auto begin_final_integrate = std::chrono::high_resolution_clock::now();
         if (USE_AFFINITY) {
             stencilMD->fuse_post_force_final_integrate_stencil_md_affinity(atom_next_timestep, modify_);
         } else {
@@ -6341,10 +6325,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
             // stencilMD->final_integrate_stencil_md_(atom_next_timestep);
         }
 
-        // stencilMD->final_integrate_stencil_md_affinity(atom_next_timestep);
-        // auto end_final_integrate = std::chrono::high_resolution_clock::now();
-        // auto duration_final_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_final_integrate - begin_final_integrate).count();
-        // modify_final_duration += duration_final_integrate;
+        auto end_final_integrate = std::chrono::high_resolution_clock::now();
+        auto duration_final_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_final_integrate - begin_final_integrate).count();
+        modify_final_duration += duration_final_integrate;
 
         if (n_end_of_step) {
             // this doesn't actually do anything
