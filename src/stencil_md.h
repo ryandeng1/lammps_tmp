@@ -1857,28 +1857,6 @@ public:
         }
     }
 
-    /*
-     *
-     * cilk_for (int ii = 0; ii < num_chunks; ++ii) {
-        int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
-        for (int c = 0; c < num_chunks; ++c) {
-            int s = (c + start_chunk) % num_chunks;
-	    if (claimed[s].load()) {
-		continue;
-	    }
-	    bool expected = false;
-	    if (claimed[s].compare_exchange_weak(expected, true)) {
-		for (int i = s * GRAINSIZE; i < (s + 1) * GRAINSIZE && i < N; i++) {
-	            const double dtfm = local_dtfm[i];
-        	    v[i].x += dtfm * (f[i].x + eval_f[i].x);
-                    v[i].y += dtfm * (f[i].y + eval_f[i].y);
-        	    v[i].z += dtfm * (f[i].z + eval_f[i].z);
-		}
-	    }
-	}
-    }
-     */
-
     inline void fuse_post_force_final_integrate_stencil_md(Atom* next, Modify* modify_) {
         auto * _noalias const next_v = (dbl3_t *) next->v[0];
 
@@ -1957,7 +1935,8 @@ public:
         auto claimed_flag = next->claimed_flag;
         auto claimed_flag_struct = next->claimed_flag_struct;
 
-        int num_chunks = next_nlocal / MODIFY_GRAINSIZE + 1;
+        // int num_chunks = next_nlocal / MODIFY_GRAINSIZE + 1;
+        int num_chunks = next->num_chunks;
         int num_workers = __cilkrts_get_nworkers();
         // num_chunks = num_workers;
         // int chunk_size = next_nlocal / num_chunks + 1;
@@ -2008,9 +1987,11 @@ public:
             return;
         }
 
+        int chunks_per_worker = num_chunks / num_workers;
+
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
-            int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
+            int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
@@ -2537,7 +2518,8 @@ public:
 
         const int * const mask = curr->mask;
         const int nlocal = curr->nlocal;
-        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        // int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        int num_chunks = curr->num_chunks;
         auto claimed = curr->claimed;
         auto claimed_int = curr->claimed_int;
         auto claimed_flag = curr->claimed_flag;
@@ -2580,9 +2562,11 @@ public:
             return;
         }
 
+        int chunks_per_worker = num_chunks / num_workers;
+
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
-            int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
+            int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
@@ -3383,7 +3367,8 @@ public:
 
         const int nlocal = next->nlocal;
 
-        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        // int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        int num_chunks = next->num_chunks;
         int num_workers = __cilkrts_get_nworkers();
         auto claimed = next->claimed;
         auto claimed_int = next->claimed_int;
@@ -3505,9 +3490,11 @@ public:
             return;
         }
 
+        int chunks_per_worker = num_chunks / num_workers;
+
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
-            int start_chunk = __cilkrts_get_worker_number() * num_chunks / num_workers;
+            int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
