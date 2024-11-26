@@ -1296,11 +1296,15 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                     int total = atom_->nlocal;
                     int num_chunks;
 
+                    /*
                     if (true || dep == 1 || dep == 2) {
                         num_chunks = total / MODIFY_GRAINSIZE + 1;
                     } else {
                         num_chunks = __cilkrts_get_nworkers();
                     }
+                    */
+
+                    num_chunks = std::max<int>(__cilkrts_get_nworkers(), total / MODIFY_GRAINSIZE + 1);
 
                     atom_->claimed = new std::atomic<bool>[num_chunks];
                     atom_->claimed_int = new std::atomic<int>[num_chunks];
