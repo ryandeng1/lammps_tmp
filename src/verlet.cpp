@@ -6231,7 +6231,10 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         auto end_initial_integrate = std::chrono::high_resolution_clock::now();
         auto duration_initial_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_initial_integrate - begin_initial_integrate).count();
-        modify_initial_duration += duration_initial_integrate;
+
+        if (!warmup) {
+            modify_initial_duration += duration_initial_integrate;
+        }
 
         if (n_pre_force) {
             // modify_->pre_force_stencil_md(vflag, atom_next_timestep);
@@ -6259,22 +6262,15 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
             auto end_compute = std::chrono::high_resolution_clock::now();
             auto duration_compute = std::chrono::duration_cast<std::chrono::microseconds>(end_compute - begin_compute).count();
-            pair_duration += duration_compute;
+            if (!warmup) {
+                pair_duration += duration_compute;
+            }
 
-            /*
-            next_force->pair->compute_stencil_md(
-                    eflag, vflag, atom_next_timestep,
-                    zoid.can_eval_center[t + 1],
-                    zoid, &timestep_flag);
-            */
+            // next_force->pair->compute_stencil_md(eflag, vflag, atom_next_timestep, zoid.can_eval_center[t + 1], zoid, &timestep_flag);
 
             if (atom->molecular != Atom::ATOMIC) {
                 if (force->bond) {
-                    /*
-                    next_force->bond->compute_stencil_md(eflag, vflag, atom_next_timestep,
-                                                         zoid.can_eval_center[t + 1],
-                                                         zoid, &timestep_flag, neigh_next_timestep);
-                    */
+                    // next_force->bond->compute_stencil_md(eflag, vflag, atom_next_timestep, zoid.can_eval_center[t + 1], zoid, &timestep_flag, neigh_next_timestep);
                 }
                 if (force->angle) {
                     assert(false);
@@ -6327,7 +6323,9 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
 
         auto end_final_integrate = std::chrono::high_resolution_clock::now();
         auto duration_final_integrate = std::chrono::duration_cast<std::chrono::microseconds>(end_final_integrate - begin_final_integrate).count();
-        modify_final_duration += duration_final_integrate;
+        if (!warmup) {
+            modify_final_duration += duration_final_integrate;
+        }
 
         if (n_end_of_step) {
             // this doesn't actually do anything
@@ -6454,7 +6452,9 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             MPI_Waitall(wait_idxs.size(), &receive_requests[recv_idx], MPI_STATUSES_IGNORE);
             auto end_mpi = std::chrono::high_resolution_clock::now();
             auto duration_mpi = std::chrono::duration_cast<std::chrono::microseconds>(end_mpi - begin_mpi).count();
-            mpi_duration += duration_mpi;
+            if (!warmup) {
+                mpi_duration += duration_mpi;
+            }
         }
     }
 
@@ -6464,6 +6464,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
         queue_info &zoid = zoid_queue[j];
         int zoid_num = zoid.num;
         assert(zoid_num % comm->nprocs == comm->me);
+
         /*
         if (zoid_num % comm->nprocs != comm->me) {
             continue;
@@ -6476,7 +6477,9 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             comm_->unpack_data_process_zoid_stencil_md(curr_dt, zoid, start_t, end_t, pipeline_stage);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            unpack_duration += duration;
+            if (!warmup) {
+                unpack_duration += duration;
+            }
         }
 
         run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
@@ -6511,7 +6514,9 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
 
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                send_pack_duration += duration;
+                if (!warmup) {
+                    send_pack_duration += duration;
+                }
             }
         }
     }
@@ -6534,7 +6539,9 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            unpack_self_time += duration;
+            if (!warmup) {
+                unpack_self_time += duration;
+            }
         }
     }
 }
