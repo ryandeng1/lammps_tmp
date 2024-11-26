@@ -1294,7 +1294,8 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
                     int total = atom_->nlocal;
-                    int num_chunks;
+                    int num_chunks = total / MODIFY_GRAINSIZE + 1;
+                    int chunk_size = MODIFY_GRAINSIZE;
 
                     /*
                     if (true || dep == 1 || dep == 2) {
@@ -1304,7 +1305,7 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                     }
                     */
 
-                    num_chunks = std::max<int>(__cilkrts_get_nworkers(), total / MODIFY_GRAINSIZE + 1);
+                    // num_chunks = std::max<int>(__cilkrts_get_nworkers(), total / MODIFY_GRAINSIZE + 1);
 
                     atom_->claimed = new std::atomic<bool>[num_chunks];
                     atom_->claimed_int = new std::atomic<int>[num_chunks];
@@ -1312,6 +1313,7 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                     atom_->claimed_flag_struct = new Atom::ClaimedFlag[num_chunks];
                     atom_->spinlocks = new spinlock[atom_->nlocal + atom_->nghost];
                     atom_->num_chunks = num_chunks;
+                    atom_->chunk_size = chunk_size;
 
                     for (int i = 0; i < num_chunks; i++) {
                         atom_->claimed[i] = false;

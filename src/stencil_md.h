@@ -1988,7 +1988,7 @@ public:
         }
 
         int chunks_per_worker = num_chunks / num_workers;
-        int chunk_size = next_nlocal / num_chunks + 1;
+        int chunk_size = next->chunk_size;
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -2565,7 +2565,7 @@ public:
         }
 
         int chunks_per_worker = num_chunks / num_workers;
-        int chunk_size = nlocal / num_chunks + 1;
+        int chunk_size = curr->chunk_size;
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -3490,7 +3490,7 @@ public:
         }
 
         int chunks_per_worker = num_chunks / num_workers;
-        int chunk_size = nlocal / num_chunks + 1;
+        int chunk_size = next->chunk_size;
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
