@@ -1684,11 +1684,13 @@ void StencilMD::COMPARE_FORCE_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* a
                           << test_f[timestep][tag * 3 + 1] << " "
                           << test_f[timestep][tag * 3 + 2]
                           << std::endl;
+                /*
                 std::cout << "What does LAMMPS have prev? "
                           << test_f[timestep - 1][tag * 3 + 0] << " "
                           << test_f[timestep - 1][tag * 3 + 1] << " "
                           << test_f[timestep - 1][tag * 3 + 2]
                           << std::endl;
+                */
                 std::cout
                         << "Diff: "
                         << fabs(my_force - test_f[timestep][tag * 3 + dim])

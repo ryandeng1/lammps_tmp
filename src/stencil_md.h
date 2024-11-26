@@ -1988,6 +1988,7 @@ public:
         }
 
         int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = next_nlocal / num_chunks + 1;
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -2007,7 +2008,8 @@ public:
                 }
 
                 if (!claimed_flag_struct[s].m.test_and_set(std::memory_order_relaxed)) {
-                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
+                    // for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
+                    for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < next_nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         double gamma1 = gfactor1[type[i]];
                         double gamma2 = gfactor2[type[i]] * tsqrt;
@@ -2563,6 +2565,7 @@ public:
         }
 
         int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = nlocal / num_chunks + 1;
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -2582,7 +2585,8 @@ public:
                 }
 
                 if (!claimed_flag_struct[s].m.test_and_set(std::memory_order_relaxed)) {
-                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
+                    // for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
+                    for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         int next_idx = atom_idx_mapping[i];
                         next_v[next_idx].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
@@ -3335,7 +3339,6 @@ public:
         const auto * _noalias const x = (dbl3_t_stencil_md *) next->x[0];
         auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
 
-        // auto pair = (PairLJCutOMP*) next_force->pair;
         auto pair = (PairLJCut*) next_force->pair;
         auto bond = (BondFENE*) next_force->bond;
 
@@ -3367,16 +3370,12 @@ public:
 
         const int nlocal = next->nlocal;
 
-        // int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
         int num_chunks = next->num_chunks;
         int num_workers = __cilkrts_get_nworkers();
         auto claimed = next->claimed;
         auto claimed_int = next->claimed_int;
         auto claimed_flag = next->claimed_flag;
         auto claimed_flag_struct = next->claimed_flag_struct;
-
-        // num_chunks = num_workers;
-        // int chunk_size = nlocal / num_chunks + 1;
 
         if (num_chunks == 1) {
             for (int i = 0; i < nlocal; i++) {
@@ -3491,6 +3490,7 @@ public:
         }
 
         int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = nlocal / num_chunks + 1;
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -3505,12 +3505,14 @@ public:
 
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
                 */
+
                 if (claimed_flag_struct[s].m.test(std::memory_order_relaxed)) {
                     continue;
                 }
 
                 if (!claimed_flag_struct[s].m.test_and_set(std::memory_order_relaxed)) {
-                    for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
+                    // for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
+                    for (int i = s * chunk_size; i < (s + 1) * chunk_size && i < nlocal; i++) {
                         const int itype = atom_type[i];
 
                         const int *_noalias const jlist = firstneigh[i];
