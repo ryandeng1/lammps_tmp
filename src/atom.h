@@ -225,6 +225,11 @@ class Atom : protected Pointers {
     int threadflag;
   };
 
+  struct ClaimedFlag {
+      std::atomic_flag m;
+      int8_t padding[63];
+  };
+
   std::vector<PerAtom> peratom;
 
   // custom vectors and arrays used by fix property/atom
@@ -304,6 +309,7 @@ class Atom : protected Pointers {
   std::atomic<int>* claimed_int;
   std::atomic<bool>* claimed;
   std::atomic_flag* claimed_flag;
+  ClaimedFlag* claimed_flag_struct;
 
   std::vector<double> local_dtfm;
 

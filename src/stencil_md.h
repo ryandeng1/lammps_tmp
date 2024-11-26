@@ -1955,6 +1955,7 @@ public:
         auto claimed = next->claimed;
         auto claimed_int = next->claimed_int;
         auto claimed_flag = next->claimed_flag;
+        auto claimed_flag_struct = next->claimed_flag_struct;
 
         int num_chunks = next_nlocal / MODIFY_GRAINSIZE + 1;
         int num_workers = __cilkrts_get_nworkers();
@@ -2013,11 +2014,18 @@ public:
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
+                /*
                 if (claimed_flag[s].test(std::memory_order_relaxed)) {
                     continue;
                 }
 
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
+                */
+                if (claimed_flag_struct[s].m.test(std::memory_order_relaxed)) {
+                    continue;
+                }
+
+                if (!claimed_flag_struct[s].m.test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < next_nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         double gamma1 = gfactor1[type[i]];
@@ -2056,7 +2064,8 @@ public:
         }
 
         for (int i = 0; i < num_chunks; i++) {
-            claimed_flag[i].clear(std::memory_order_relaxed);
+            // claimed_flag[i].clear(std::memory_order_relaxed);
+            claimed_flag_struct[i].m.clear(std::memory_order_relaxed);
         }
     }
 
@@ -2532,6 +2541,7 @@ public:
         auto claimed = curr->claimed;
         auto claimed_int = curr->claimed_int;
         auto claimed_flag = curr->claimed_flag;
+        auto claimed_flag_struct = curr->claimed_flag_struct;
         int num_workers = __cilkrts_get_nworkers();
         // num_chunks = num_workers;
         // int chunk_size = nlocal / num_chunks + 1;
@@ -2576,11 +2586,18 @@ public:
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
+                /*
                 if (claimed_flag[s].test(std::memory_order_relaxed)) {
                     continue;
                 }
 
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
+                */
+                if (claimed_flag_struct[s].m.test(std::memory_order_relaxed)) {
+                    continue;
+                }
+
+                if (!claimed_flag_struct[s].m.test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const double dtfm = local_dtfm[i];
                         int next_idx = atom_idx_mapping[i];
@@ -2608,7 +2625,8 @@ public:
         }
 
         for (int i = 0; i < num_chunks; i++) {
-            claimed_flag[i].clear(std::memory_order_relaxed);
+            // claimed_flag[i].clear(std::memory_order_relaxed);
+            claimed_flag_struct[i].m.clear(std::memory_order_relaxed);
         }
     }
 
@@ -3370,6 +3388,7 @@ public:
         auto claimed = next->claimed;
         auto claimed_int = next->claimed_int;
         auto claimed_flag = next->claimed_flag;
+        auto claimed_flag_struct = next->claimed_flag_struct;
 
         // num_chunks = num_workers;
         // int chunk_size = nlocal / num_chunks + 1;
@@ -3492,11 +3511,18 @@ public:
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
+                /*
                 if (claimed_flag[s].test(std::memory_order_relaxed)) {
                     continue;
                 }
 
                 if (!claimed_flag[s].test_and_set(std::memory_order_relaxed)) {
+                */
+                if (claimed_flag_struct[s].m.test(std::memory_order_relaxed)) {
+                    continue;
+                }
+
+                if (!claimed_flag_struct[s].m.test_and_set(std::memory_order_relaxed)) {
                     for (int i = s * MODIFY_GRAINSIZE; i < (s + 1) * MODIFY_GRAINSIZE && i < nlocal; i++) {
                         const int itype = atom_type[i];
 
@@ -3616,7 +3642,8 @@ public:
         }
 
         for (int i = 0; i < num_chunks; i++) {
-            claimed_flag[i].clear(std::memory_order_relaxed);
+            // claimed_flag[i].clear(std::memory_order_relaxed);
+            claimed_flag_struct[i].m.clear(std::memory_order_relaxed);
         }
     }
 
@@ -4355,6 +4382,13 @@ public:
             curr->sorted_ghost_bin_indices.push_back(ghost_bin);
         }
     }
+
+    // PIPELINE Flattening of tasks
+    struct task {
+        int zoid_num;
+        int chunk_num;
+    };
+
 };
 
 }

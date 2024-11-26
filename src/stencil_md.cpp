@@ -1299,12 +1299,14 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
                     atom_->claimed = new std::atomic<bool>[num_chunks];
                     atom_->claimed_int = new std::atomic<int>[num_chunks];
                     atom_->claimed_flag = new std::atomic_flag[num_chunks];
+                    atom_->claimed_flag_struct = new Atom::ClaimedFlag[num_chunks];
                     atom_->spinlocks = new spinlock[atom_->nlocal + atom_->nghost];
 
                     for (int i = 0; i < num_chunks; i++) {
                         atom_->claimed[i] = false;
                         atom_->claimed_int[i] = 0;
                         atom_->claimed_flag[i].clear();
+                        atom_->claimed_flag_struct[i].m.clear();
                     }
                 }
             }
