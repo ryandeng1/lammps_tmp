@@ -62,8 +62,6 @@
 
 using namespace LAMMPS_NS;
 
-static constexpr bool TEST_AGAINST_LAMMPS_LOCAL = TEST_AGAINST_LAMMPS;
-
 static cilk::opadd_reducer<int64_t> unpack_duration = 0;
 static cilk::opadd_reducer<int64_t> send_comm_duration = 0;
 static cilk::opadd_reducer<int64_t> recv_comm_duration = 0;
@@ -5271,7 +5269,7 @@ void Verlet::setup_stencil_md() {
 
     int total_evaled = 0;
 
-    if (TEST_AGAINST_LAMMPS_LOCAL) {
+    if (TEST_AGAINST_LAMMPS) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
                 queue_info &zoid = lmp->queues[dep][j];
@@ -5472,7 +5470,7 @@ void Verlet::run(int n) {
     double* send_x;
     double* send_v;
 
-    if (TEST_AGAINST_LAMMPS_LOCAL) {
+    if (TEST_AGAINST_LAMMPS) {
         for (int i = 0; i < test_num_timesteps; i++) {
             test_f[i] = new double[3 * (atom->natoms + 1)];
             test_x[i] = new double[3 * (atom->natoms + 1)];
@@ -5511,254 +5509,387 @@ void Verlet::run(int n) {
     int64_t lammps_modify_post_force_duration = 0;
     int64_t lammps_num_atoms = 0;
 
-    // for (int i = 0; i < n; i++) {
-    auto begin_lammps = std::chrono::high_resolution_clock::now();
-    // cilk_scope {
-            for (int i = 0; i < n + 1; i++) {
-                if (ONLY_RUN_STENCIL_MD) {
-                    break;
-                }
-                /*
-                if (timer->check_timeout(i)) {
-                    assert(false);
-                    update->nsteps = i;
-                    break;
-                }
-                */
+    // Do warmup
+    for (int i = 0; i < 2 * NUM_TIMESTEPS_IN_PARALLEL; i++) {
+        if (ONLY_RUN_STENCIL_MD) {
+            break;
+        }
 
-                // ntimestep = ++update->ntimestep;
-                // ev_set(ntimestep);
+        modify->initial_integrate(vflag);
 
-                // initial time integration
+        if (n_post_integrate) {
+            assert(false);
+            modify->post_integrate();
+        }
 
+        // regular communication vs neighbor list rebuild
+        nflag = neighbor->decide();
+
+        if (nflag == 0) {
+            timer->stamp();
+            comm->forward_comm();
+        } else {
+            assert(false);
+            if (n_pre_exchange) {
                 timer->stamp();
-
-                // Begin stencil md code
-                if (TEST_AGAINST_LAMMPS_LOCAL) {
-                    // memset(send_f, 0, sizeof(send_f));
-                    for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
-                        send_f[j] = 0;
-                    }
-                    for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
-                        send_x[j] = 0;
-                    }
-                    for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
-                        send_v[j] = 0;
-                    }
-
-                    for (int j = 0; j < atom->nlocal; j++) {
-                        int tag = atom->tag[j];
-                        assert(tag >= 0 && tag <= atom->natoms);
-                        send_f[tag * 3 + 0] = atom->f[j][0];
-                        send_f[tag * 3 + 1] = atom->f[j][1];
-                        send_f[tag * 3 + 2] = atom->f[j][2];
-
-                        send_x[tag * 3 + 0] = atom->x[j][0];
-                        send_x[tag * 3 + 1] = atom->x[j][1];
-                        send_x[tag * 3 + 2] = atom->x[j][2];
-
-                        send_v[tag * 3 + 0] = atom->v[j][0];
-                        send_v[tag * 3 + 1] = atom->v[j][1];
-                        send_v[tag * 3 + 2] = atom->v[j][2];
-                    }
-
-                    MPI_Allreduce(send_f, test_f[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
-                                  MPI_SUM, world);
-
-                    MPI_Allreduce(send_x, test_x[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
-                                  MPI_SUM, world);
-
-                    MPI_Allreduce(send_v, test_v[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
-                                  MPI_SUM, world);
-                }
-
-                if (i == n) {
-                    break;
-                }
-                // end stencil md code
-
-                // auto begin_m = std::chrono::high_resolution_clock::now();
-                modify->initial_integrate(vflag);
-                // auto end_m = std::chrono::high_resolution_clock::now();
-                // auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
-                // lammps_modify_initial_integrate_duration += duration_m;
-                if (n_post_integrate) {
-                    assert(false);
-                    modify->post_integrate();
-                }
+                modify->pre_exchange();
                 timer->stamp(Timer::MODIFY);
+            }
+            if (triclinic)
+                domain->x2lamda(atom->nlocal);
+            domain->pbc();
+            if (domain->box_change) {
+                domain->reset_box();
+                comm->setup();
+                if (neighbor->style)
+                    neighbor->setup_bins();
+            }
+            timer->stamp();
+            comm->exchange();
+            if (sortflag && ntimestep >= atom->nextsort) {
+                atom->sort();
+            }
+            comm->borders();
+            if (triclinic)
+                domain->lamda2x(atom->nlocal + atom->nghost);
+            timer->stamp(Timer::COMM);
+            if (n_pre_neighbor) {
+                modify->pre_neighbor();
+                timer->stamp(Timer::MODIFY);
+            }
+            neighbor->build(1);
+            timer->stamp(Timer::NEIGH);
+            if (n_post_neighbor) {
+                modify->post_neighbor();
+                timer->stamp(Timer::MODIFY);
+            }
+        }
 
-                // regular communication vs neighbor list rebuild
+        // force computations
+        // important for pair to come before bonded contributions
+        // since some bonded potentials tally pairwise energy/virial
+        // and Pair:ev_tally() needs to be called before any tallying
 
-                nflag = neighbor->decide();
+        force_clear();
 
-                if (nflag == 0) {
-                    timer->stamp();
-                    // auto begin = std::chrono::high_resolution_clock::now();
-                    comm->forward_comm();
-                    // auto end = std::chrono::high_resolution_clock::now();
-                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    // lammps_comm_duration += duration;
-                    // lammps_forward_comm_duration += duration;
-                    // lammps_forward_comm_times.push_back(duration);
-                    timer->stamp(Timer::COMM);
+        if (n_pre_force) {
+            modify->pre_force(vflag);
+        }
+
+        if (pair_compute_flag) {
+            // auto begin = std::chrono::high_resolution_clock::now();
+            if (!LAMMPS_USE_BINS) {
+                force->pair->compute(eflag, vflag);
+            } else {
+                assert(false);
+                stencilMD->lammps_fuse_reduce2();
+            }
+        }
+
+        if (atom->molecular != Atom::ATOMIC) {
+            if (force->bond) {
+                if (!LAMMPS_USE_BINS) {
+                    force->bond->compute(eflag, vflag);
                 } else {
                     assert(false);
-                    if (n_pre_exchange) {
-                        timer->stamp();
-                        modify->pre_exchange();
-                        timer->stamp(Timer::MODIFY);
-                    }
-                    if (triclinic)
-                        domain->x2lamda(atom->nlocal);
-                    domain->pbc();
-                    if (domain->box_change) {
-                        domain->reset_box();
-                        comm->setup();
-                        if (neighbor->style)
-                            neighbor->setup_bins();
-                    }
-                    timer->stamp();
-                    comm->exchange();
-                    if (sortflag && ntimestep >= atom->nextsort) {
-                        atom->sort();
-                    }
-                    comm->borders();
-                    if (triclinic)
-                        domain->lamda2x(atom->nlocal + atom->nghost);
-                    timer->stamp(Timer::COMM);
-                    if (n_pre_neighbor) {
-                        modify->pre_neighbor();
-                        timer->stamp(Timer::MODIFY);
-                    }
-                    neighbor->build(1);
-                    timer->stamp(Timer::NEIGH);
-                    if (n_post_neighbor) {
-                        modify->post_neighbor();
-                        timer->stamp(Timer::MODIFY);
-                    }
                 }
-
-                // force computations
-                // important for pair to come before bonded contributions
-                // since some bonded potentials tally pairwise energy/virial
-                // and Pair:ev_tally() needs to be called before any tallying
-
-                force_clear();
-
-                timer->stamp();
-
-                if (n_pre_force) {
-                    // auto begin = std::chrono::high_resolution_clock::now();
-                    modify->pre_force(vflag);
-                    // auto end = std::chrono::high_resolution_clock::now();
-                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    // lammps_modify_pre_force_duration += duration;
-                    timer->stamp(Timer::MODIFY);
-                }
-
-                if (pair_compute_flag) {
-                    // auto begin = std::chrono::high_resolution_clock::now();
-                    if (!LAMMPS_USE_BINS) {
-                        force->pair->compute(eflag, vflag);
-                    } else {
-                        assert(false);
-                        // stencilMD->lammps_fuse_reduce();
-                        stencilMD->lammps_fuse_reduce2();
-                        // stencilMD->lammps_fuse_force_compute_lammps_bins_split();
-                        // stencilMD->lammps_fuse_force_compute_lammps_bins();
-                        // stencilMD->lammps_fuse_force_compute();
-                        // stencilMD->lammps_fuse_force_compute2();
-                        // stencilMD->lammps_fuse_force_compute_atomics();
-                    }
-                    // auto end = std::chrono::high_resolution_clock::now();
-                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    // lammps_pair_duration += duration;
-                    // lammps_num_atoms += atom->nlocal;
-                    timer->stamp(Timer::PAIR);
-                }
-
-                if (atom->molecular != Atom::ATOMIC) {
-                    if (force->bond) {
-                        // auto begin = std::chrono::high_resolution_clock::now();
-                        if (!LAMMPS_USE_BINS) {
-                            force->bond->compute(eflag, vflag);
-                        } else {
-                            assert(false);
-                        }
-                        // auto end = std::chrono::high_resolution_clock::now();
-                        // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                        // lammps_bond_duration += duration;
-                    }
-                    if (force->angle) {
-                        assert(false);
-                        force->angle->compute(eflag, vflag);
-                    }
-                    if (force->dihedral) {
-                        assert(false);
-                        force->dihedral->compute(eflag, vflag);
-                    }
-                    if (force->improper) {
-                        assert(false);
-                        force->improper->compute(eflag, vflag);
-                    }
-                    timer->stamp(Timer::BOND);
-                }
-
-                if (kspace_compute_flag) {
-                    assert(false);
-                    force->kspace->compute(eflag, vflag);
-                    timer->stamp(Timer::KSPACE);
-                }
-
-                if (n_pre_reverse) {
-                    assert(false);
-                    modify->pre_reverse(eflag, vflag);
-                    timer->stamp(Timer::MODIFY);
-                }
-
-                // reverse communication of forces
-                if (force->newton) {
-                    // auto begin = std::chrono::high_resolution_clock::now();
-                    comm->reverse_comm();
-                    // auto end = std::chrono::high_resolution_clock::now();
-                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    // lammps_comm_duration += duration;
-                    // lammps_reverse_comm_duration += duration;
-                    // lammps_reverse_comm_times.push_back(duration);
-                    timer->stamp(Timer::COMM);
-                }
-
-                // force modifications, final time integration, diagnostics
-                if (n_post_force_any) {
-                    // auto begin = std::chrono::high_resolution_clock::now();
-                    modify->post_force(vflag);
-                    // auto end = std::chrono::high_resolution_clock::now();
-                    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    // lammps_modify_post_force_duration += duration;
-                }
-
-                // auto begin_m2 = std::chrono::high_resolution_clock::now();
-                modify->final_integrate();
-                // auto end_m2 = std::chrono::high_resolution_clock::now();
-                // auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
-                // lammps_modify_final_integrate_duration += duration_m2;
-                if (n_end_of_step) {
-                    // modify->end_of_step();
-                }
-                timer->stamp(Timer::MODIFY);
-
-                // all output
-
-                /*
-                if (ntimestep == output->next) {
-                    timer->stamp();
-                    output->write(ntimestep);
-                    timer->stamp(Timer::OUTPUT);
-                }
-                */
             }
-    // }
+            if (force->angle) {
+                assert(false);
+                force->angle->compute(eflag, vflag);
+            }
+            if (force->dihedral) {
+                assert(false);
+                force->dihedral->compute(eflag, vflag);
+            }
+            if (force->improper) {
+                assert(false);
+                force->improper->compute(eflag, vflag);
+            }
+        }
+
+        if (kspace_compute_flag) {
+            assert(false);
+            force->kspace->compute(eflag, vflag);
+        }
+
+        if (n_pre_reverse) {
+            assert(false);
+            modify->pre_reverse(eflag, vflag);
+        }
+
+        // reverse communication of forces
+        if (force->newton) {
+            comm->reverse_comm();
+        }
+
+        // force modifications, final time integration, diagnostics
+        if (n_post_force_any) {
+            modify->post_force(vflag);
+        }
+
+        modify->final_integrate();
+        if (n_end_of_step) {
+            // modify->end_of_step();
+        }
+
+        // all output
+
+        /*
+        if (ntimestep == output->next) {
+            timer->stamp();
+            output->write(ntimestep);
+            timer->stamp(Timer::OUTPUT);
+        }
+        */
+    }
+
+    // for (int i = 0; i < n; i++) {
+    auto begin_lammps = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < n + 1; i++) {
+        if (ONLY_RUN_STENCIL_MD) {
+            break;
+        }
+        /*
+        if (timer->check_timeout(i)) {
+            assert(false);
+            update->nsteps = i;
+            break;
+        }
+        */
+
+        // ntimestep = ++update->ntimestep;
+        // ev_set(ntimestep);
+
+        // initial time integration
+
+        timer->stamp();
+
+        // Begin stencil md code
+        if (TEST_AGAINST_LAMMPS) {
+            // memset(send_f, 0, sizeof(send_f));
+            for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+                send_f[j] = 0;
+            }
+            for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+                send_x[j] = 0;
+            }
+            for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
+                send_v[j] = 0;
+            }
+
+            for (int j = 0; j < atom->nlocal; j++) {
+                int tag = atom->tag[j];
+                assert(tag >= 0 && tag <= atom->natoms);
+                send_f[tag * 3 + 0] = atom->f[j][0];
+                send_f[tag * 3 + 1] = atom->f[j][1];
+                send_f[tag * 3 + 2] = atom->f[j][2];
+
+                send_x[tag * 3 + 0] = atom->x[j][0];
+                send_x[tag * 3 + 1] = atom->x[j][1];
+                send_x[tag * 3 + 2] = atom->x[j][2];
+
+                send_v[tag * 3 + 0] = atom->v[j][0];
+                send_v[tag * 3 + 1] = atom->v[j][1];
+                send_v[tag * 3 + 2] = atom->v[j][2];
+            }
+
+            MPI_Allreduce(send_f, test_f[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
+                          MPI_SUM, world);
+
+            MPI_Allreduce(send_x, test_x[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
+                          MPI_SUM, world);
+
+            MPI_Allreduce(send_v, test_v[i], (atom->natoms + 1) * 3, MPI_DOUBLE,
+                          MPI_SUM, world);
+        }
+
+        if (i == n) {
+            break;
+        }
+        // end stencil md code
+
+        // auto begin_m = std::chrono::high_resolution_clock::now();
+        modify->initial_integrate(vflag);
+        // auto end_m = std::chrono::high_resolution_clock::now();
+        // auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
+        // lammps_modify_initial_integrate_duration += duration_m;
+        if (n_post_integrate) {
+            assert(false);
+            modify->post_integrate();
+        }
+        timer->stamp(Timer::MODIFY);
+
+        // regular communication vs neighbor list rebuild
+
+        nflag = neighbor->decide();
+
+        if (nflag == 0) {
+            timer->stamp();
+            // auto begin = std::chrono::high_resolution_clock::now();
+            comm->forward_comm();
+            // auto end = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            // lammps_comm_duration += duration;
+            // lammps_forward_comm_duration += duration;
+            // lammps_forward_comm_times.push_back(duration);
+            timer->stamp(Timer::COMM);
+        } else {
+            assert(false);
+            if (n_pre_exchange) {
+                timer->stamp();
+                modify->pre_exchange();
+                timer->stamp(Timer::MODIFY);
+            }
+            if (triclinic)
+                domain->x2lamda(atom->nlocal);
+            domain->pbc();
+            if (domain->box_change) {
+                domain->reset_box();
+                comm->setup();
+                if (neighbor->style)
+                    neighbor->setup_bins();
+            }
+            timer->stamp();
+            comm->exchange();
+            if (sortflag && ntimestep >= atom->nextsort) {
+                atom->sort();
+            }
+            comm->borders();
+            if (triclinic)
+                domain->lamda2x(atom->nlocal + atom->nghost);
+            timer->stamp(Timer::COMM);
+            if (n_pre_neighbor) {
+                modify->pre_neighbor();
+                timer->stamp(Timer::MODIFY);
+            }
+            neighbor->build(1);
+            timer->stamp(Timer::NEIGH);
+            if (n_post_neighbor) {
+                modify->post_neighbor();
+                timer->stamp(Timer::MODIFY);
+            }
+        }
+
+        // force computations
+        // important for pair to come before bonded contributions
+        // since some bonded potentials tally pairwise energy/virial
+        // and Pair:ev_tally() needs to be called before any tallying
+
+        force_clear();
+
+        timer->stamp();
+
+        if (n_pre_force) {
+            // auto begin = std::chrono::high_resolution_clock::now();
+            modify->pre_force(vflag);
+            // auto end = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            // lammps_modify_pre_force_duration += duration;
+            timer->stamp(Timer::MODIFY);
+        }
+
+        if (pair_compute_flag) {
+            // auto begin = std::chrono::high_resolution_clock::now();
+            if (!LAMMPS_USE_BINS) {
+                force->pair->compute(eflag, vflag);
+            } else {
+                assert(false);
+                // stencilMD->lammps_fuse_reduce();
+                stencilMD->lammps_fuse_reduce2();
+                // stencilMD->lammps_fuse_force_compute_lammps_bins_split();
+                // stencilMD->lammps_fuse_force_compute_lammps_bins();
+                // stencilMD->lammps_fuse_force_compute();
+                // stencilMD->lammps_fuse_force_compute2();
+                // stencilMD->lammps_fuse_force_compute_atomics();
+            }
+            // auto end = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            // lammps_pair_duration += duration;
+            // lammps_num_atoms += atom->nlocal;
+            timer->stamp(Timer::PAIR);
+        }
+
+        if (atom->molecular != Atom::ATOMIC) {
+            if (force->bond) {
+                // auto begin = std::chrono::high_resolution_clock::now();
+                if (!LAMMPS_USE_BINS) {
+                    force->bond->compute(eflag, vflag);
+                } else {
+                    assert(false);
+                }
+                // auto end = std::chrono::high_resolution_clock::now();
+                // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                // lammps_bond_duration += duration;
+            }
+            if (force->angle) {
+                assert(false);
+                force->angle->compute(eflag, vflag);
+            }
+            if (force->dihedral) {
+                assert(false);
+                force->dihedral->compute(eflag, vflag);
+            }
+            if (force->improper) {
+                assert(false);
+                force->improper->compute(eflag, vflag);
+            }
+            timer->stamp(Timer::BOND);
+        }
+
+        if (kspace_compute_flag) {
+            assert(false);
+            force->kspace->compute(eflag, vflag);
+            timer->stamp(Timer::KSPACE);
+        }
+
+        if (n_pre_reverse) {
+            assert(false);
+            modify->pre_reverse(eflag, vflag);
+            timer->stamp(Timer::MODIFY);
+        }
+
+        // reverse communication of forces
+        if (force->newton) {
+            // auto begin = std::chrono::high_resolution_clock::now();
+            comm->reverse_comm();
+            // auto end = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            // lammps_comm_duration += duration;
+            // lammps_reverse_comm_duration += duration;
+            // lammps_reverse_comm_times.push_back(duration);
+            timer->stamp(Timer::COMM);
+        }
+
+        // force modifications, final time integration, diagnostics
+        if (n_post_force_any) {
+            // auto begin = std::chrono::high_resolution_clock::now();
+            modify->post_force(vflag);
+            // auto end = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            // lammps_modify_post_force_duration += duration;
+        }
+
+        // auto begin_m2 = std::chrono::high_resolution_clock::now();
+        modify->final_integrate();
+        // auto end_m2 = std::chrono::high_resolution_clock::now();
+        // auto duration_m2 = std::chrono::duration_cast<std::chrono::microseconds>(end_m2 - begin_m2).count();
+        // lammps_modify_final_integrate_duration += duration_m2;
+        if (n_end_of_step) {
+            // modify->end_of_step();
+        }
+        timer->stamp(Timer::MODIFY);
+
+        // all output
+
+        /*
+        if (ntimestep == output->next) {
+            timer->stamp();
+            output->write(ntimestep);
+            timer->stamp(Timer::OUTPUT);
+        }
+        */
+    }
 
     auto end_lammps = std::chrono::high_resolution_clock::now();
     auto duration_lammps = std::chrono::duration_cast<std::chrono::microseconds>(end_lammps - begin_lammps).count();
@@ -5853,7 +5984,7 @@ void Verlet::run(int n) {
     }
     */
 
-    if (TEST_AGAINST_LAMMPS_LOCAL) {
+    if (TEST_AGAINST_LAMMPS) {
         delete[] send_f;
         delete[] send_x;
         delete[] send_v;
@@ -5949,9 +6080,14 @@ void Verlet::run(int n) {
         std::cout << BOLDYELLOW << "------ RUN STENCILMD -------" << RESET_COLOR << std::endl;
     }
 
+    // Warmup
+    cilk_scope {
+        run_stencil_md_pipelined(2 * NUM_TIMESTEPS_IN_PARALLEL, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, true);
+    }
+
     auto begin = std::chrono::high_resolution_clock::now();
     cilk_scope {
-        run_stencil_md_pipelined(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
+        run_stencil_md_pipelined(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, false);
     }
     // run_stencil_md_no_cilk_for(n, test_f, test_x, test_v);
     auto end = std::chrono::high_resolution_clock::now();
@@ -5963,56 +6099,6 @@ void Verlet::run(int n) {
     std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << " total duration: " << total_duration_stencil_md << std::endl;
 
     MPI_Barrier(world);
-
-    int64_t stencil_md_total_compute_time_curr_dt_dep[NUM_DEPS] = {0};
-    int64_t stencil_md_total_compute_time_next_dt_dep[NUM_DEPS] = {0};
-
-    int64_t stencil_md_total_num_atoms_curr_dt_dep[NUM_DEPS] = {0};
-    int64_t stencil_md_total_num_atoms_next_dt_dep[NUM_DEPS] = {0};
-    /*
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        int64_t total_compute_time_curr_dt_dep = 0;
-        int64_t total_compute_time_next_dt_dep = 0;
-
-        MPI_Allreduce(&curr_dt_compute_dep_time[dep], &total_compute_time_curr_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
-        MPI_Allreduce(&next_dt_compute_dep_time[dep], &total_compute_time_next_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
-
-        stencil_md_total_compute_time_curr_dt_dep[dep] = total_compute_time_curr_dt_dep;
-        stencil_md_total_compute_time_next_dt_dep[dep] = total_compute_time_next_dt_dep;
-
-        int64_t total_num_atoms_curr_dt_dep = 0;
-        int64_t total_num_atoms_next_dt_dep = 0;
-
-        MPI_Allreduce(&curr_dt_num_atoms[dep], &total_num_atoms_curr_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
-        MPI_Allreduce(&next_dt_num_atoms[dep], &total_num_atoms_next_dt_dep, 1, MPI_INT64_T, MPI_SUM, world);
-
-        stencil_md_total_num_atoms_curr_dt_dep[dep] = total_num_atoms_curr_dt_dep;
-        stencil_md_total_num_atoms_next_dt_dep[dep] = total_num_atoms_next_dt_dep;
-    }
-    */
-
-    if (TIME_STENCIL_MD) {
-        /*
-        for (int zoid_num = 0; zoid_num < NUM_ZOIDS; zoid_num++) {
-            if (zoid_num % comm->nprocs == comm->me) {
-                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    std::cout << GREEN << "curr dt zoid: " << zoid_num << " timestep: " << t << " running time: " << curr_dt_compute_dep_time[zoid_num][t]
-                              << " num edges: " << curr_dt_num_edges[zoid_num][t]
-                              << " ratio: " << (double)curr_dt_num_edges[zoid_num][t] / curr_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
-
-                }
-
-                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    std::cout << GREEN << "next dt zoid: " << zoid_num << " timestep: " << t << " running time: " << next_dt_compute_dep_time[zoid_num][t]
-                              << " num edges: " << next_dt_num_edges[zoid_num][t]
-                              << " ratio: " << (double)next_dt_num_edges[zoid_num][t] / next_dt_compute_dep_time[zoid_num][t] << RESET_COLOR << std::endl;
-                }
-            }
-
-            MPI_Barrier(world);
-        }
-        */
-    }
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
@@ -6033,8 +6119,6 @@ void Verlet::run(int n) {
     int64_t stencil_md_total_misc_duration = 0;
     int64_t stencil_md_total_pre_recv_time = 0;
     int64_t stencil_md_total_unpack_self_time = 0;
-
-    // int64_t my_compute_duration = curr_dt_compute_duration + next_dt_compute_duration;
 
     MPI_Allreduce(&pair_duration, &stencil_md_total_pair_duration, 1, MPI_INT64_T, MPI_SUM, world);
     MPI_Allreduce(&bond_duration, &stencil_md_total_bond_duration, 1, MPI_INT64_T, MPI_SUM, world);
@@ -6091,7 +6175,7 @@ void Verlet::run(int n) {
 
 // assume already have all the data necessary to run the zoid
 template <bool curr_dt>
-void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x, double** test_v) {
+void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x, double** test_v, bool warmup) {
     int n_pre_force = modify->n_pre_force;
     int n_post_force_any = modify->n_post_force_any;
     int n_end_of_step = modify->n_end_of_step;
@@ -6116,7 +6200,7 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
         Modify* modify_ = lmp->modify_stencil_md[zoid_num];
 #endif
 
-        if (TEST_AGAINST_LAMMPS_LOCAL) {
+        if (!warmup && TEST_AGAINST_LAMMPS) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
 
             stencilMD->COMPARE_FORCE_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_f);
@@ -6311,7 +6395,7 @@ void Verlet::run_stencil_md_zoid_no_cilk_for(int starting_timestep, int zoid_num
     Modify* modify_ = lmp->modify_stencil_md[zoid_num];
 #endif
 
-    if (TEST_AGAINST_LAMMPS_LOCAL) {
+    if (TEST_AGAINST_LAMMPS) {
         int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
 
         stencilMD->COMPARE_FORCE_AGAINST_LAMMPS(curr_dt, timestep_to_compare_against, atom_, zoid, test_f);
@@ -6372,7 +6456,7 @@ template <bool curr_dt>
 void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start_t, int end_t, int* dep_to_recv_idx,
                                           std::vector<MPI_Request> *send_requests, std::vector<MPI_Request>& receive_requests,
                                           std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
-                                          double **test_f, double **test_x, double** test_v, int pipeline_stage) {
+                                          double **test_f, double **test_x, double** test_v, int pipeline_stage, bool warmup) {
     if (comm->nprocs != 1) {
         if (dep > 0) {
             auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
@@ -6407,7 +6491,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
             unpack_duration += duration;
         }
 
-        run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v);
+        run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
         // run_stencil_md_zoid_pipelined<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, pipeline_stage);
 
         if (comm->nprocs != 1) {
@@ -6470,7 +6554,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
 template <bool curr_dt>
 void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
                                              std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                             double** test_f, double** test_x, double** test_v) {
+                                             double** test_f, double** test_x, double** test_v, bool warmup) {
     constexpr int start_t = 1;
     constexpr int mid_t = NUM_TIMESTEPS_IN_PARALLEL / 2 + 1;
     constexpr int end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
@@ -6524,13 +6608,13 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
             run_stencil_md_dep_templated<curr_dt>(dep, starting_timestep, start_t, end_t, dep_to_idx,
                                                   send_requests, receive_requests,
                                                   dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x,
-                                                  test_v, 0);
+                                                  test_v, 0, warmup);
         }
     } else {
         auto b1 = std::chrono::high_resolution_clock::now();
         run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, start_t, mid_t, dep_to_idx,
                                               send_requests, receive_requests,
-                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0, warmup);
         auto e1 = std::chrono::high_resolution_clock::now();
         auto d1 = std::chrono::duration_cast<std::chrono::microseconds>(e1 - b1).count();
 
@@ -6553,11 +6637,11 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         cilk_scope {
                 cilk_spawn run_stencil_md_dep_templated<curr_dt>(0, starting_timestep, mid_t, end_t, dep_to_idx,
                 send_requests2, receive_requests2,
-                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1, warmup);
 
                 run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, start_t, mid_t, dep_to_idx,
                 send_requests, receive_requests,
-                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0, warmup);
         }
 
         auto e2 = std::chrono::high_resolution_clock::now();
@@ -6591,11 +6675,11 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         cilk_scope {
                 cilk_spawn run_stencil_md_dep_templated<curr_dt>(1, starting_timestep, mid_t, end_t, dep_to_idx,
                 send_requests2, receive_requests2,
-                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1, warmup);
 
                 run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, start_t, mid_t, dep_to_idx,
                 send_requests, receive_requests,
-                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0, warmup);
         }
 
         auto e3 = std::chrono::high_resolution_clock::now();
@@ -6628,11 +6712,11 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         cilk_scope {
                 cilk_spawn run_stencil_md_dep_templated<curr_dt>(2, starting_timestep, mid_t, end_t, dep_to_idx,
                 send_requests2, receive_requests2,
-                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1, warmup);
 
                 run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, start_t, mid_t, dep_to_idx,
                 send_requests, receive_requests,
-                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0);
+                dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 0, warmup);
         }
 
         auto e4 = std::chrono::high_resolution_clock::now();
@@ -6664,7 +6748,7 @@ void Verlet::run_stencil_md_pipelined_helper(int starting_timestep,
         auto b5 = std::chrono::high_resolution_clock::now();
         run_stencil_md_dep_templated<curr_dt>(3, starting_timestep, mid_t, end_t, dep_to_idx,
                                               send_requests2, receive_requests2,
-                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1);
+                                              dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, 1, warmup);
         auto e5 = std::chrono::high_resolution_clock::now();
         auto d5 = std::chrono::duration_cast<std::chrono::microseconds>(e5 - b5).count();
         if (false && comm->me == 0) {
@@ -6761,12 +6845,12 @@ void Verlet::run_stencil_md_no_cilk_for(int num_timesteps, double **test_f, doub
 }
 
 void Verlet::run_stencil_md_pipelined(int num_timesteps, std::vector<int> *dep_to_wait_idxs, std::vector<int> *dep_to_wait_idxs_next_dt,
-                                      double **test_f, double **test_x, double** test_v) {
+                                      double **test_f, double **test_x, double** test_v, bool warmup) {
 
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
         // curr dt
-        run_stencil_md_pipelined_helper<true>(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
-        run_stencil_md_pipelined_helper<false>(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v);
+        run_stencil_md_pipelined_helper<true>(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, warmup);
+        run_stencil_md_pipelined_helper<false>(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, warmup);
     }
 }
 

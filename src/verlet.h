@@ -65,21 +65,21 @@ class Verlet : public Integrate {
   void cleanup_stencil_md();
 
   template <bool curr_dt>
-  void run_stencil_md_zoid(int start_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x, double** test_v);
+  void run_stencil_md_zoid(int start_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x, double** test_v, bool warmup);
 
   template <bool curr_dt>
   void run_stencil_md_dep_templated(int dep, int start_timestep, int start_t, int end_t, int* dep_to_idxs,
                                     std::vector<MPI_Request>* send_requests, std::vector<MPI_Request>& receive_requests,
                                     std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                    double** test_f, double** test_x, double** test_v, int pipeline_stage=0);
+                                    double** test_f, double** test_x, double** test_v, int pipeline_stage=0, bool warmup=false);
 
   template <bool curr_dt>
   void run_stencil_md_pipelined_helper(int starting_timestep,
                                        std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                       double** test_f, double** test_x, double** test_v);
+                                       double** test_f, double** test_x, double** test_v, bool warmup);
 
   void run_stencil_md_pipelined(int num_timesteps, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                double** test_f, double** test_x, double** test_v);
+                                double** test_f, double** test_x, double** test_v, bool warmup);
 
   template <bool curr_dt>
   void run_stencil_md_zoid_no_cilk_for(int start_timestep, int zoid_num,
