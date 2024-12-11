@@ -495,10 +495,70 @@ struct cuts {
   cut_info cuts[3];
 };
 
+struct spinlock {
+    std::atomic<bool> lock_ = {0};
+
+    void lock() noexcept {
+        for (;;) {
+            // Optimistically assume the lock is free on the first try
+            if (!lock_.exchange(true, std::memory_order_acquire)) {
+                return;
+            }
+            // Wait for lock to be released without generating cache misses
+            while (lock_.load(std::memory_order_relaxed)) {
+                // Issue X86 PAUSE or ARM YIELD instruction to reduce contention between
+                // hyper-threads
+#ifdef __SSE__
+                __builtin_ia32_pause();
+#endif
+#ifdef __aarch64__
+                __builtin_arm_yield();
+#endif
+            }
+        }
+    }
+
+    bool try_lock() noexcept {
+        // First do a relaxed load to check if lock is free in order to prevent
+        // unnecessary cache misses if someone does while(!try_lock())
+        return !lock_.load(std::memory_order_relaxed) &&
+               !lock_.exchange(true, std::memory_order_acquire);
+    }
+
+    void unlock() noexcept {
+        lock_.store(false, std::memory_order_release);
+    }
+};
+
 typedef struct cuts cuts_t;
+
+constexpr int DOUBLE_BUFFERING = 2;
+constexpr int NUM_DIMENSIONS = 3;
 
 // struct that holds information for queue
 struct queue_info {
+  /* Start stuff for 2 timesteps */
+  std::vector<dbl3_t_stencil_md>* x_stencil_md;
+  std::vector<dbl3_t_stencil_md>* v_stencil_md;
+  std::vector<dbl3_t_stencil_md>* eval_f_stencil_md;
+  std::vector<dbl3_t_stencil_md>* f_stencil_md;
+
+  std::vector<int>* tag_stencil_md;
+  std::vector<int>* type_stencil_md;
+  std::vector<int>* mask_stencil_md;
+  std::vector<int>* image_stencil_md;
+  spinlock** spinlocks_stencil_md;
+
+  std::vector<int>* local_idxs_per_timestep;
+
+  std::vector<std::vector<int>>* neighbor_list;
+  std::vector<std::vector<std::pair<int, int>>>* bond_list;
+
+  // TODO:
+  std::vector<int>** send_force_idxs_double_buffering;
+  std::vector<int>** recv_force_idxs_double_buffering;
+  /* end for two timesteps */
+
   std::vector<bool>* local_bins_comm;
   std::vector<IDX_3D>* no_comm_local_bins;
   std::vector<IDX_3D>* comm_local_bins;
@@ -685,41 +745,6 @@ inline __attribute__((always_inline)) int get_bin_idx(const IDX_3D& bin) {
     assert(z < NUM_BINS && z >= 0);
     return z * NUM_BINS * NUM_BINS + y * NUM_BINS + x;
 }
-
-struct spinlock {
-    std::atomic<bool> lock_ = {0};
-
-    void lock() noexcept {
-        for (;;) {
-            // Optimistically assume the lock is free on the first try
-            if (!lock_.exchange(true, std::memory_order_acquire)) {
-                return;
-            }
-            // Wait for lock to be released without generating cache misses
-            while (lock_.load(std::memory_order_relaxed)) {
-                // Issue X86 PAUSE or ARM YIELD instruction to reduce contention between
-                // hyper-threads
-#ifdef __SSE__
-                __builtin_ia32_pause();
-#endif
-#ifdef __aarch64__
-                __builtin_arm_yield();
-#endif
-            }
-        }
-    }
-
-    bool try_lock() noexcept {
-        // First do a relaxed load to check if lock is free in order to prevent
-        // unnecessary cache misses if someone does while(!try_lock())
-        return !lock_.load(std::memory_order_relaxed) &&
-               !lock_.exchange(true, std::memory_order_acquire);
-    }
-
-    void unlock() noexcept {
-        lock_.store(false, std::memory_order_release);
-    }
-};
 
 inline __attribute__((always_inline)) double min_dist_to_boundary(const std::array<std::vector<double>, 3>& bounds, dbl3_t_stencil_md pos) {
     double dist = 10000000;

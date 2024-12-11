@@ -1375,6 +1375,186 @@ void CommBrick::exchange_stencil_md_initial_receive(Atom *atom_, Domain *domain_
   }
 }
 
+void CommBrick::exchange_stencil_md_initial_receive_double_buffering(queue_info &zoid, int timestep) {
+    // No need to grow recv buffers as already sent before. This is a complete hack.
+    double double_buffering_bounds_lo[3];
+    double double_buffering_bounds_hi[3];
+
+    int DOUBLE_BUFFERING_IDX = timestep % DOUBLE_BUFFERING;
+
+    for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
+        double lo = std::numeric_limits<double>::infinity();
+        double hi = -std::numeric_limits<double>::infinity();
+        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            double zoid_lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+            double zoid_hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+            lo = std::min<double>(lo, zoid_lo);
+            hi = std::max<double>(hi, zoid_hi);
+        }
+
+        double_buffering_bounds_lo[dim] = lo;
+        double_buffering_bounds_hi[dim] = hi;
+    }
+
+    std::set<int> tag_set;
+    std::map<int, int> tag_to_source;
+    int zoid_num = zoid.num;
+    int num_in_zoid = 0;
+
+    for (int i = 0; i < comm->nprocs; i++) {
+        int nrecv;
+        MPI_Recv(&nrecv, 1, MPI_INT, i, zoid_num, world, MPI_STATUS_IGNORE);
+        if (nrecv > maxrecv) {
+            grow_recv(nrecv);
+        }
+        MPI_Recv(buf_recv, nrecv, MPI_DOUBLE, i, zoid_num, world, MPI_STATUS_IGNORE);
+        int m = 0;
+        while (m < nrecv) {
+            // try remapping the zoid
+            bool in_zoid = true;
+            for (int dim = 0; dim < domain->dimension; dim++) {
+                double lo = double_buffering_bounds_lo[dim];
+                double hi = double_buffering_bounds_hi[dim];
+                double value = buf_recv[m + dim + 1];
+
+                while (value < lo) { value += domain->prd[dim]; }
+                while (value > hi) { value -= domain->prd[dim]; }
+
+                in_zoid = in_zoid && value >= lo && value < hi;
+            }
+
+            if (in_zoid) {
+                // m += atom_->avec->unpack_exchange_stencil_md(&buf_recv[m], atom_, domain_, LAMMPS_SEND_LOCAL);
+                auto start_buf = &buf_recv[m];
+                int recv_buf_idx = 1;
+                double x0 = start_buf[recv_buf_idx++];
+                double x1 = start_buf[recv_buf_idx++];
+                double x2 = start_buf[recv_buf_idx++];
+
+                double v0 = start_buf[recv_buf_idx++];
+                double v1 = start_buf[recv_buf_idx++];
+                double v2 = start_buf[recv_buf_idx++];
+
+                tagint tag_ = (tagint) ubuf(start_buf[recv_buf_idx++]).i;
+                int type_ = (int) ubuf(start_buf[recv_buf_idx++]).i;
+                int mask_ = (int) ubuf(start_buf[recv_buf_idx++]).i;
+                int image_ = (imageint) ubuf(start_buf[recv_buf_idx++]).i;
+
+                zoid.x_stencil_md[DOUBLE_BUFFERING_IDX].push_back({x0, x1, x2});
+                zoid.v_stencil_md[DOUBLE_BUFFERING_IDX].push_back({v0, v1, v2});
+                zoid.f_stencil_md[DOUBLE_BUFFERING_IDX].push_back({0.0, 0.0, 0.0});
+                zoid.eval_f_stencil_md[DOUBLE_BUFFERING_IDX].push_back({0.0, 0.0, 0.0});
+
+                if (timestep == 0) {
+                    zoid.tag_stencil_md[DOUBLE_BUFFERING_IDX].push_back(tag_);
+                    zoid.type_stencil_md[DOUBLE_BUFFERING_IDX].push_back(type_);
+                    zoid.mask_stencil_md[DOUBLE_BUFFERING_IDX].push_back(mask_);
+                    zoid.image_stencil_md[DOUBLE_BUFFERING_IDX].push_back(image_);
+                }
+
+                m += static_cast<int>(buf_recv[m]);
+                num_in_zoid++;
+            } else {
+                m += static_cast<int>(buf_recv[m]);
+            }
+        }
+    }
+
+    assert(num_in_zoid == zoid.x_stencil_md[DOUBLE_BUFFERING_IDX].size());
+
+    auto& zoid_pos = zoid.x_stencil_md[DOUBLE_BUFFERING_IDX];
+    auto* zoid_img = zoid.image_stencil_md[DOUBLE_BUFFERING_IDX].data();
+
+    imageint idim, otherdims;
+
+    for (int i = 0; i < num_in_zoid; i++) {
+        auto &pos = zoid_pos[i];
+
+        assert(domain->xperiodic);
+        assert(domain->yperiodic);
+        assert(domain->zperiodic);
+
+        /*
+           while (x[i][0] < lo[0]) {
+                x[i][0] += period[0];
+                idim = image[i] & IMGMASK;
+                otherdims = image[i] ^ idim;
+                idim--;
+                idim &= IMGMASK;
+                image[i] = otherdims | idim;
+            }
+            while (x[i][0] >= hi[0]) {
+                x[i][0] -= period[0];
+                idim = image[i] & IMGMASK;
+                otherdims = image[i] ^ idim;
+                idim++;
+                idim &= IMGMASK;
+                image[i] = otherdims | idim;
+            }
+            x[i][0] = MAX(x[i][0], lo[0]);
+         */
+
+
+        while (pos.x < double_buffering_bounds_lo[0]) {
+            pos.x += domain->prd[0];
+            idim = zoid_img[i] & IMGMASK;
+            otherdims = zoid_img[i] ^ idim;
+            idim--;
+            idim &= IMGMASK;
+            zoid_img[i] = otherdims | idim;
+        }
+        while (pos.x >= double_buffering_bounds_hi[0]) {
+            pos.x -= domain->prd[0];
+            idim = zoid_img[i] & IMGMASK;
+            otherdims = zoid_img[i] ^ idim;
+            idim++;
+            idim &= IMGMASK;
+            zoid_img[i] = otherdims | idim;
+        }
+        zoid_pos[i].x = MAX(zoid_pos[i].x, double_buffering_bounds_lo[0]);
+
+        while (pos.y < double_buffering_bounds_lo[1]) {
+            pos.y += domain->prd[1];
+            idim = zoid_img[i] & IMGMASK;
+            otherdims = zoid_img[i] ^ idim;
+            idim--;
+            idim &= IMGMASK;
+            zoid_img[i] = otherdims | idim;
+        }
+        while (pos.y >= double_buffering_bounds_hi[1]) {
+            pos.y -= domain->prd[1];
+            idim = zoid_img[i] & IMGMASK;
+            otherdims = zoid_img[i] ^ idim;
+            idim++;
+            idim &= IMGMASK;
+            zoid_img[i] = otherdims | idim;
+        }
+        zoid_pos[i].y = MAX(zoid_pos[i].y, double_buffering_bounds_lo[1]);
+
+        while (pos.z < double_buffering_bounds_lo[2]) {
+            pos.z += domain->prd[2];
+            idim = zoid_img[i] & IMGMASK;
+            otherdims = zoid_img[i] ^ idim;
+            idim--;
+            idim &= IMGMASK;
+            zoid_img[i] = otherdims | idim;
+        }
+        while (pos.z >= double_buffering_bounds_hi[2]) {
+            pos.z -= domain->prd[2];
+            idim = zoid_img[i] & IMGMASK;
+            otherdims = zoid_img[i] ^ idim;
+            idim++;
+            idim &= IMGMASK;
+            zoid_img[i] = otherdims | idim;
+        }
+        zoid_pos[i].z = MAX(zoid_pos[i].z, double_buffering_bounds_lo[2]);
+
+    }
+
+    // Copy the remap_all implementation
+    // domain_->remap_all_stencil_md(atom_);
+}
+
 // send ghosts to other zoid for the to compute their second send list which is based on local atoms in previous timesteps
 // local t --> ghost t + 1, we need to send ghost t + 1 in order for the receiving zoid to order their local t (or ghost t + 1) to match accordingly
 void CommBrick::construct_second_send_list_stencil_md_send(std::array<Atom *, NUM_TIMESTEPS_IN_PARALLEL + 1> &atom_arr, queue_info &zoid,
@@ -1628,7 +1808,9 @@ void CommBrick::construct_send_list_stencil_md_send(
                         idx_vec_pos[t].push_back(j);
                     }
 
-                    if (zoid.relevant_atom_idxs[t].find(j) != zoid.relevant_atom_idxs[t].end()) {
+                    // TODO: change back
+                    // if (zoid.relevant_atom_idxs[t].find(j) != zoid.relevant_atom_idxs[t].end()) {
+                    if (j >= atom_->nlocal) {
                         idx_vec_force[t].push_back(j);
                     } else {
                         assert(PURELY_LOCAL_POTENTIAL);
@@ -4345,6 +4527,316 @@ void CommBrick::borders_stencil_md_initial_receive(Atom *atom_, Domain *domain_,
     // atom->map_set();
   }
 }
+
+
+/* START DOUBLE BUFFERING */
+void CommBrick::receive_data_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                                 MPI_Request* request, int recv_zoid_num, int pipeline_stage) {
+
+    assert(pipeline_stage >= 0 && pipeline_stage < NUM_PIPELINE_STAGES);
+
+    if (recv_zoid_num % comm->nprocs == comm->me) {
+        std::cout << "ERROR. proc: " << comm->me << " recv zoid num: " << recv_zoid_num << std::endl;
+        assert(false);
+        return;
+    }
+
+    auto& recv_from_neighbors_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
+    auto it = std::find(recv_from_neighbors_procs.begin(), recv_from_neighbors_procs.end(), recv_zoid_num);
+
+    assert(it != recv_from_neighbors_procs.end());
+
+    int idx_recv_zoid = -1;
+    idx_recv_zoid = std::distance(recv_from_neighbors_procs.begin(), it);
+
+    assert(idx_recv_zoid != -1);
+
+    // int mpi_tag = (comm->me << 16 | recv_zoid_num);
+    int mpi_tag = get_mpi_tag(comm->me, recv_zoid_num, start_timestep, end_timestep);
+    int nrecv_force = 0;
+    int nrecv_pos = 0;
+    int nrecv_vel = 0;
+
+    for (int t = start_timestep; t < end_timestep; t++) {
+        if (curr_dt) {
+            nrecv_force += lmp->num_recv_force_from_zoid[t][idx_recv_zoid];
+            // nrecv_pos += lmp->num_recv_pos_from_zoid[t][idx_recv_zoid];
+            // nrecv_vel += lmp->num_recv_vel_from_zoid[t][idx_recv_zoid];
+        } else {
+            nrecv_force += lmp->num_recv_force_from_zoid_next_dt[t][idx_recv_zoid];
+            // nrecv_pos += lmp->num_recv_pos_from_zoid_next_dt[t][idx_recv_zoid];
+            // nrecv_vel += lmp->num_recv_vel_from_zoid_next_dt[t][idx_recv_zoid];
+        }
+    }
+
+    int nrecv;
+    if (DEBUG_SEND_RECV_DATA) {
+        nrecv = nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + nrecv_vel * (3 + 1);
+    } else {
+        nrecv = nrecv_force * (3) + nrecv_pos * (3) + nrecv_vel * (3);
+    }
+
+    if (nrecv > maxrecv_stencil_md[idx_recv_zoid]) {
+        grow_recv_stencil_md(nrecv, idx_recv_zoid);
+    }
+
+    int buf_offset = pipeline_stage * maxrecv_stencil_md[idx_recv_zoid];
+    assert(idx_recv_zoid >= 0 && idx_recv_zoid < 26);
+
+    MPI_Irecv(&buf_recv_stencil_md[idx_recv_zoid][buf_offset], nrecv, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, world,
+              request);
+}
+
+void CommBrick::pack_data_to_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                                 std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
+                                                                 queue_info& zoid, int proc, int pipeline_stage) {
+    int zoid_num = zoid.num;
+    auto &send_to_neighbors = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+
+    int send_request_vec_idx = 0;
+
+    auto begin = std::chrono::high_resolution_clock::now();
+
+    // pack data into buffer
+    int nsend_force = 0;
+    std::vector<int> neighbors_in_proc;
+    for (int i = 0; i < send_to_neighbors.size(); i++) {
+        int neighbor = send_to_neighbors[i];
+        if (neighbor % comm->nprocs == proc) {
+            neighbors_in_proc.push_back(i);
+        }
+    }
+
+    if (neighbors_in_proc.size() == 0) {
+        return;
+    }
+
+    int num_elems_send;
+    if (start_timestep == 0) {
+        for (int t = start_timestep; t < end_timestep; t++) {
+            for (int i = 0; i < send_to_neighbors.size(); i++) {
+                int neighbor = send_to_neighbors[i];
+                if (neighbor % comm->nprocs == proc) {
+                    int num_force_segments = zoid.send_force_num_segments[t][i];
+                    for (int j = 0; j < num_force_segments; j++) {
+                        nsend_force += zoid.send_force_sizes[t][i][j];
+                    }
+                }
+            }
+        }
+
+        int nsend_vel = 0;
+        /*
+        for (int t = start_timestep; t < end_timestep; t++) {
+            for (int i = 0; i < send_to_neighbors.size(); i++) {
+                int neighbor = send_to_neighbors[i];
+                if (neighbor % comm->nprocs == proc) {
+                    int num_vel_segments = zoid.send_pos_num_segments[t][i];
+                    for (int j = 0; j < num_vel_segments; j++) {
+                        nsend_vel += zoid.send_pos_sizes[t][i][j];
+                    }
+                }
+            }
+        }
+        */
+
+        // count positions
+        int nsend_pos = 0;
+
+        /*
+        for (int t = start_timestep; t < end_timestep; t++) {
+            nsend_pos += zoid.num_elems_send_process[t][proc];
+        }
+        */
+
+        // force = 3 elems + 1 for tag, send pos is 3 elems for pos and 3 elems for velocity
+        if (DEBUG_SEND_RECV_DATA) {
+            num_elems_send = nsend_force * (3 + 1) + nsend_pos * (3 + 1) + nsend_vel * (3 + 1);
+        } else {
+            num_elems_send = nsend_force * (3) + nsend_pos * (3) + nsend_vel * (3);
+        }
+    } else {
+        num_elems_send = zoid.num_send_process[proc];
+    }
+
+    if (num_elems_send > maxsend_stencil_md[proc]) {
+        // grow_send_stencil_md(num_elems_send, proc, 0);
+        grow_send_stencil_md(num_elems_send, proc, 1);
+    }
+
+    std::vector<int> idxs;
+    idxs.push_back(0);
+    for (int t = start_timestep; t < end_timestep; t++) {
+        // idxs.push_back(zoid.num_send_process_timestep[proc][t] + idxs[idxs.size() - 1]);
+        for (int i = 0; i < send_to_neighbors.size(); i++) {
+            if (send_to_neighbors[i] % comm->nprocs == proc) {
+                if (DEBUG_SEND_RECV_DATA) {
+                    idxs.push_back(4 * zoid.send_force_idxs_double_buffering[t][i].size() + idxs[idxs.size() - 1]);
+                } else {
+                    idxs.push_back(3 * zoid.send_force_idxs_double_buffering[t][i].size() + idxs[idxs.size() - 1]);
+                }
+            }
+        }
+    }
+
+    int buf_offset = pipeline_stage * maxsend_stencil_md[proc];
+
+    for (int t = start_timestep; t < end_timestep; t++) {
+        Atom* atom_;
+        if (curr_dt) {
+            atom_ = atom_arr[t];
+        } else {
+            atom_ = atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+        }
+
+        int starting_idx = idxs[t - start_timestep];
+        int n = atom_->avec->pack_data_to_process_stencil_md_double_buffering(
+                neighbors_in_proc,
+                zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % 2], zoid.send_force_idxs_double_buffering[t],
+                &buf_send_stencil_md[proc][starting_idx + buf_offset]);
+    }
+}
+
+void CommBrick::unpack_data_process_zoid_stencil_md_double_buffering(bool curr_dt, queue_info& zoid,
+                                                                     int start_timestep, int end_timestep, int pipeline_stage) {
+    // assume the sender will have done all of the unpacking
+    assert(pipeline_stage >= 0 && pipeline_stage < NUM_PIPELINE_STAGES);
+
+    int zoid_num = zoid.num;
+    auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+    auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+
+    for (int recv_idx = 0; recv_idx < recv_from.size(); recv_idx++) {
+        int recv_zoid_num = recv_from[recv_idx];
+        if (recv_zoid_num % comm->nprocs == comm->me) {
+            continue;
+        }
+        int receive_request_idx = curr_dt ? lmp->recv_from_neighbors_procs_idxs[recv_zoid_num] : lmp->recv_from_neighbors_procs_idxs_next_dt[recv_zoid_num];
+        assert(receive_request_idx >= 0 && receive_request_idx < 26);
+        queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[recv_zoid_num] : lmp->zoid_num_to_zoid_next_dt[recv_zoid_num];
+
+        double* buf;
+        int buf_offset;
+        if (recv_zoid_num % comm->nprocs == comm->me) {
+            assert(false);
+            auto c_recv_zoid = (CommBrick*) lmp->comm_stencil_md[recv_zoid_num];
+            buf = c_recv_zoid->buf_send_stencil_md[comm->me];
+            buf_offset = pipeline_stage * c_recv_zoid->maxsend_stencil_md[comm->me];
+        } else {
+            auto c = (CommBrick*) lmp->comm;
+            buf = c->buf_recv_stencil_md[receive_request_idx];
+            buf_offset = pipeline_stage * c->maxrecv_stencil_md[receive_request_idx];
+        }
+
+        std::vector<int> idxs;
+        idxs.push_back(0);
+        for (int t = start_timestep; t < end_timestep; t++) {
+            if (DEBUG_SEND_RECV_DATA) {
+                idxs.push_back(4 * zoid.recv_force_idxs_double_buffering[t][recv_idx].size() + idxs[idxs.size() - 1]);
+            } else {
+                idxs.push_back(3 * zoid.recv_force_idxs_double_buffering[t][recv_idx].size() + idxs[idxs.size() - 1]);
+            }
+        }
+
+        for (int t = start_timestep; t < end_timestep; t++) {
+            Atom *atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+            int starting_idx = idxs[t - start_timestep];
+
+            atom_->avec->unpack_data_from_process_stencil_md_double_buffering(
+                    zoid.recv_process_force_offset[t][recv_idx],
+                    zoid.tag_stencil_md[0], zoid.f_stencil_md[t % 2],
+                    zoid.recv_force_idxs_double_buffering[t][recv_idx],
+                    &buf[starting_idx + buf_offset]);
+        }
+    }
+}
+
+bool CommBrick::send_packed_data_to_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                                        queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage) {
+    int zoid_num = zoid.num;
+
+    auto &send_to_neighbors = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+
+    // int num_elems_send = zoid.num_send_process[proc];
+    int num_elems_send = 0;
+    for (int t = start_timestep; t < end_timestep; t++) {
+        for (int j = 0; j < send_to_neighbors.size(); j++) {
+            if (send_to_neighbors[j] % comm->nprocs == proc) {
+                num_elems_send += DEBUG_SEND_RECV_DATA ? 4 * zoid.send_force_idxs_double_buffering[t][j].size() : 3 * zoid.send_force_idxs_double_buffering[t][j].size();
+            }
+        }
+        // num_elems_send += zoid.num_send_process_timestep[proc][t];
+    }
+
+    int buf_offset = pipeline_stage * maxsend_stencil_md[proc];
+
+    if (proc != comm->me) {
+        int mpi_tag = get_mpi_tag(proc, zoid_num, start_timestep, end_timestep);
+        MPI_Isend(&buf_send_stencil_md[proc][buf_offset], num_elems_send, MPI_DOUBLE, proc, mpi_tag, world,
+                  request);
+        return true;
+    } else {
+        auto& recv_from_neighbor_procs = curr_dt ? lmp->recv_from_neighbors_procs : lmp->recv_from_neighbors_procs_next_dt;
+        int receive_request_idx = curr_dt ? lmp->recv_from_neighbors_procs_idxs[zoid_num] : lmp->recv_from_neighbors_procs_idxs_next_dt[zoid_num];
+        if (curr_dt) {
+            assert(receive_request_idx >= 0 && receive_request_idx < lmp->recv_from_neighbors_procs.size());
+        } else {
+            assert(receive_request_idx >= 0 && receive_request_idx < lmp->recv_from_neighbors_procs_next_dt.size());
+        }
+
+        queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
+        auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[zoid_num];
+
+        for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
+            int other_zoid_num = zoid_num_idxs_recv[i].first;
+            int recv_idx = zoid_num_idxs_recv[i].second;
+
+            auto& other_atom_arr = lmp->atom_stencil_md[other_zoid_num];
+            auto& other_recv_from = curr_dt ? lmp->recv_from_neighbors[other_zoid_num] : lmp->recv_from_neighbors_next_dt[other_zoid_num];
+            queue_info& other_zoid = curr_dt ? lmp->zoid_num_to_zoid[other_zoid_num] : lmp->zoid_num_to_zoid_next_dt[other_zoid_num];
+
+            std::vector<int> idxs;
+            idxs.push_back(0);
+            for (int t = start_timestep; t < end_timestep; t++) {
+                if (DEBUG_SEND_RECV_DATA) {
+                    idxs.push_back(4 * other_zoid.recv_force_idxs_double_buffering[t][recv_idx].size() + idxs[idxs.size() - 1]);
+                } else {
+                    idxs.push_back(3 * other_zoid.recv_force_idxs_double_buffering[t][recv_idx].size() + idxs[idxs.size() - 1]);
+                }
+            }
+
+            for (int t = start_timestep; t < end_timestep; t++) {
+                Atom* atom_;
+                int nrecv_force;
+
+                if (curr_dt) {
+                    atom_ = other_atom_arr[t];
+                    // nrecv_force = lmp->num_recv_force_from_zoid[t][receive_request_idx];
+                    // nrecv_pos = lmp->num_recv_pos_from_zoid[t][receive_request_idx];
+                    // nrecv_vel = lmp->num_recv_vel_from_zoid[t][receive_request_idx];
+                } else {
+                    atom_ = other_atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+                    // nrecv_force = lmp->num_recv_force_from_zoid_next_dt[t][receive_request_idx];
+                    // nrecv_pos = lmp->num_recv_pos_from_zoid_next_dt[t][receive_request_idx];
+                    // nrecv_vel = lmp->num_recv_vel_from_zoid_next_dt[t][receive_request_idx];
+                }
+
+                int other_starting_idx = idxs[t - start_timestep];
+
+                atom_->avec->unpack_data_from_process_stencil_md_double_buffering(
+                        other_zoid.recv_process_force_offset[t][recv_idx],
+                        other_zoid.tag_stencil_md[0], other_zoid.f_stencil_md[t % 2],
+                        other_zoid.recv_force_idxs_double_buffering[t][recv_idx],
+                        &buf_send_stencil_md[comm->me][other_starting_idx + buf_offset]);
+            }
+        }
+        return false;
+    }
+}
+
+
+/* END DOUBLE BUFFERING */
+
 
 /* ----------------------------------------------------------------------
    borders: list nearby atoms to send to neighboring procs at every timestep

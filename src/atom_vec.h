@@ -179,6 +179,18 @@ class AtomVec : protected Pointers {
                                       int num_recv_ghost, int* recv_ghost_idx_list, int* recv_ghost_size_list,
                                       double* buf);
 
+  /* START DOUBLE BUFFERING */
+  virtual int pack_data_to_process_stencil_md_double_buffering(std::vector<int>& neighbors_in_proc,
+                                                               std::vector<int>& tags,
+                                                               std::vector<dbl3_t_stencil_md>& forces,
+                                                               std::vector<int>* send_force_idxs, double* buf);
+
+  virtual void unpack_data_from_process_stencil_md_double_buffering(int force_offset_buf,
+                                                                    std::vector<int>& tags,
+                                                                    std::vector<dbl3_t_stencil_md>& forces,
+                                                                    std::vector<int>& recv_force_idxs, double* buf);
+  /* END DOUBLE BUFFERING */
+
   virtual int pack_exchange_bonus(int, double *) { return 0; }
   virtual int unpack_exchange_bonus(int, double *) { return 0; }
 

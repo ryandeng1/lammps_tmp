@@ -37,6 +37,7 @@ class CommBrick : public Comm {
   void exchange_stencil_md_initial_send_to_dep0() override;                     // move atoms to new procs, stencil_md version
   void exchange_stencil_md_initial_send(std::vector<MPI_Request>& r) override;                     // move atoms to new procs, stencil_md version
   void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) override;                     // move atoms to new procs, stencil_md version
+  void exchange_stencil_md_initial_receive_double_buffering(queue_info&, int) override;
 
   void borders_stencil_md_initial_send(std::vector<MPI_Request>& r) override;                     // move atoms to new procs, stencil_md version
   void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) override;                     // move atoms to new procs, stencil_md version
@@ -111,6 +112,24 @@ class CommBrick : public Comm {
 
   void construct_second_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
   void construct_second_send_list_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) override;
+
+  /* Start double buffering */
+
+  void receive_data_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                        MPI_Request*, int recv_zoid_num, int pipeline_stage) override;
+
+  void pack_data_to_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                        std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                                        queue_info&, int proc, int pipeline_stage) override;
+
+  bool send_packed_data_to_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                               queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage) override;
+
+  void unpack_data_process_zoid_stencil_md_double_buffering(bool curr_dt, queue_info& zoid,
+                                                            int start_timestep, int end_timestep,
+                                                            int pipeline_stage) override;
+
+  /* End double buffering */
 
   void forward_comm(class Pair *) override;                 // forward comm from a Pair
   void reverse_comm(class Pair *) override;                 // reverse comm from a Pair

@@ -85,6 +85,8 @@ class Comm : protected Pointers {
   virtual void exchange_stencil_md_initial_send(std::vector<MPI_Request>& r) { assert(false); };
   virtual void exchange_stencil_md_initial_receive(Atom*, Domain*, queue_info&) { assert(false); };
 
+  virtual void exchange_stencil_md_initial_receive_double_buffering(queue_info&, int) { assert(false); };
+
   virtual void borders_stencil_md_initial_send(std::vector<MPI_Request>& r) { assert(false); };
   virtual void borders_stencil_md_initial_receive_from_lammps(Atom*, Domain*, queue_info&, int) { assert(false); }
 
@@ -115,8 +117,10 @@ class Comm : protected Pointers {
   // combine curr_dt and next_dt implementations
   virtual bool send_data_to_process_stencil_md(bool curr_dt, std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&, queue_info&, MPI_Request*,
                                                int proc, bool is_initial, int pipeline_stage=0) {assert(false);}
+
   virtual void receive_data_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
                                                MPI_Request*, int recv_zoid_num, int pipeline_stage=0) {assert(false);}
+
   virtual void unpack_data_process_stencil_md(bool curr_dt, int start_timestep, int end_timestep,
                                               int recv_zoid_num, int pipeline_stage=0) { assert(false); }
 
@@ -158,6 +162,30 @@ class Comm : protected Pointers {
 
   virtual void construct_second_send_list_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
   virtual void construct_second_send_list_stencil_md_next_dt(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr, queue_info& zoid) {assert(false);}
+
+  /* Start double buffering */
+  virtual void receive_data_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                                MPI_Request*, int recv_zoid_num, int pipeline_stage) {
+      assert(false);
+  }
+
+  virtual void pack_data_to_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                                std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>&,
+                                                                queue_info&, int proc, int pipeline_stage) {
+      assert(false);
+  }
+
+  virtual bool send_packed_data_to_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                                       queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage=0) {
+      assert(false);
+  }
+
+  virtual void unpack_data_process_zoid_stencil_md_double_buffering(bool curr_dt, queue_info& zoid, int start_timestep, int end_timestep,
+                                                                    int pipeline_stage) {
+      assert(false);
+  }
+
+  /* End double buffering */
 
   // forward/reverse comm from a Pair, Bond, Fix, Compute, Dump
   virtual void forward_comm(class Pair *) = 0;

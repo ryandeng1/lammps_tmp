@@ -3479,6 +3479,100 @@ void AtomVec::add_local_atom_stencil_md(Atom* atom_, Domain* domain_, double* co
     atom_->nlocal++;
 }
 
+/* START DOUBLE BUFFERING */
+int AtomVec::pack_data_to_process_stencil_md_double_buffering(std::vector<int>& neighbors_in_proc,
+                                                              std::vector<int>& tags,
+                                                              std::vector<dbl3_t_stencil_md>& forces,
+                                                              std::vector<int>* send_force_idxs,
+                                                              double* buf) {
+    if (DEBUG_SEND_RECV_DATA) {
+        int m = 0;
+
+        for (int i = 0; i < neighbors_in_proc.size(); i++) {
+            int send_zoid_idx = neighbors_in_proc[i];
+            auto& send_force_idxs_zoid = send_force_idxs[send_zoid_idx];
+
+            assert(send_zoid_idx >= 0 && send_zoid_idx <= 26);
+
+            for (int j = 0; j < send_force_idxs_zoid.size(); j++) {
+                int idx = send_force_idxs_zoid[j];
+                const auto& tag_ = tags[idx];
+                buf[m++] = ubuf(tag_).d;
+                buf[m++] = forces[idx].x;
+                buf[m++] = forces[idx].y;
+                buf[m++] = forces[idx].z;
+            }
+        }
+
+        return m;
+    } else {
+        int m = 0;
+
+        for (int i = 0; i < neighbors_in_proc.size(); i++) {
+            int zoid_idx = neighbors_in_proc[i];
+            auto& send_force_idxs_zoid = send_force_idxs[zoid_idx];
+            assert(zoid_idx >= 0 && zoid_idx <= 26);
+
+            for (int j = 0; j < send_force_idxs_zoid.size(); j++) {
+                int idx = send_force_idxs_zoid[j];
+                auto& send_force = forces[idx];
+                buf[m++] = forces[idx].x;
+                buf[m++] = forces[idx].y;
+                buf[m++] = forces[idx].z;
+            }
+        }
+
+        return m;
+    }
+}
+
+void AtomVec::unpack_data_from_process_stencil_md_double_buffering(int force_offset_buf,
+                                                                   std::vector<int>& tags,
+                                                                   std::vector<dbl3_t_stencil_md>& forces,
+                                                                   std::vector<int>& recv_force_idxs,
+                                                                   double* buf) {
+    if (DEBUG_SEND_RECV_DATA) {
+        // 0 is the starting idx of the buffeer
+        int m = 0 + force_offset_buf * (3 + 1);
+
+        for (int i = 0; i < recv_force_idxs.size(); i++) {
+            tagint target_tag = (tagint) ubuf(buf[m++]).i;
+            double f_x = buf[m++];
+            double f_y = buf[m++];
+            double f_z = buf[m++];
+
+            int idx = recv_force_idxs[i];
+
+            if (target_tag != tags[idx]) {
+                std::cout << RED << "process: " << comm->me << " error recv local force. Received tag: " << target_tag << " but I want tag: " << tags[idx]
+                    << " at idx: " << idx << " i: " << i << " out of: " << recv_force_idxs.size()
+                    << " force offset in buf: " << force_offset_buf << RESET_COLOR << std::endl;
+            }
+            assert(tags[idx] == target_tag);
+
+            forces[idx].x += f_x;
+            forces[idx].y += f_y;
+            forces[idx].z += f_z;
+        }
+    } else {
+        // 0 is the starting idx of the buffeer
+        int m = 0 + force_offset_buf * (3);
+
+        for (int i = 0; i < recv_force_idxs.size(); i++) {
+            double f_x = buf[m++];
+            double f_y = buf[m++];
+            double f_z = buf[m++];
+
+            int idx = recv_force_idxs[i];
+
+            forces[idx].x += f_x;
+            forces[idx].y += f_y;
+            forces[idx].z += f_z;
+        }
+    }
+}
+
+/* END DOUBLE BUFFERING */
 
 /* ----------------------------------------------------------------------
    size of restart data for all atoms owned by this proc
