@@ -4848,11 +4848,13 @@ public:
                                 fztmp += delz * fpair;
 
                                 if (newton_pair || j < nlocal) {
+                                    /*
                                     spinlocks[j].lock();
                                     f[j].x -= delx * fpair;
                                     f[j].y -= dely * fpair;
                                     f[j].z -= delz * fpair;
                                     spinlocks[j].unlock();
+                                    */
                                 }
                             }
                         }
@@ -4904,11 +4906,13 @@ public:
                             }
 
                             if (newton_pair || i2 < nlocal) {
+                                /*
                                 spinlocks[i2].lock();
                                 f[i2].x -= delx * fbond;
                                 f[i2].y -= dely * fbond;
                                 f[i2].z -= delz * fbond;
                                 spinlocks[i2].unlock();
+                                */
                             }
                         }
 
