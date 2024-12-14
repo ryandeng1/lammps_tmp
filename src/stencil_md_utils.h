@@ -100,7 +100,7 @@ constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
-constexpr bool DEBUG_SEND_RECV_DATA = true;
+constexpr bool DEBUG_SEND_RECV_DATA = false;
 
 constexpr bool TEST_AGAINST_LAMMPS = true;
 

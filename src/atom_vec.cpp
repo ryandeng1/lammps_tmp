@@ -3599,6 +3599,72 @@ void AtomVec::unpack_data_from_process_stencil_md_double_buffering(std::vector<i
             vel[idx].y = v_y;
             vel[idx].z = v_z;
         }
+    } else {
+        // 0 is the starting idx of the buffeer
+        int m = 0 + force_offset_buf * (3);
+
+        for (int i = 0; i < recv_force_idxs.size(); i++) {
+            double f_x = buf[m++];
+            double f_y = buf[m++];
+            double f_z = buf[m++];
+
+            int idx = recv_force_idxs[i];
+
+            forces[idx].x += f_x;
+            forces[idx].y += f_y;
+            forces[idx].z += f_z;
+        }
+
+        int pos_start_idx = nrecv_force * (3);
+
+        int local_list_idx = 0;
+        int ghost_list_idx = 0;
+
+        for (int i = 0; i < num_pos_segments_buf; i++) {
+            bool segment_type = segment_types_buf[i];
+            int segment_size = segment_sizes_buf[i];
+            int segment_idx = segment_idxs_buf[i];
+            int counter = segment_idx * (3) + pos_start_idx;
+
+            if (segment_type == RECV_DATA_PROCESS_LOCAL) {
+                for (int j = 0; j < segment_size; j++) {
+                    double x_x = buf[counter++];
+                    double x_y = buf[counter++];
+                    double x_z = buf[counter++];
+
+                    int idx = recv_pos_local_idxs[local_list_idx++];
+                    pos[idx].x = x_x + domain->prd[0] * pbc_flags_[0];
+                    pos[idx].y = x_y + domain->prd[1] * pbc_flags_[1];
+                    pos[idx].z = x_z + domain->prd[2] * pbc_flags_[2];
+                }
+            } else {
+                assert(segment_type == RECV_DATA_PROCESS_GHOST);
+                for (int j = 0; j < segment_size; j++) {
+                    double x_x = buf[counter++];
+                    double x_y = buf[counter++];
+                    double x_z = buf[counter++];
+
+                    int idx = recv_pos_ghost_idxs[ghost_list_idx++];
+                    pos[idx].x = x_x + domain->prd[0] * pbc_flags_[0];
+                    pos[idx].y = x_y + domain->prd[1] * pbc_flags_[1];
+                    pos[idx].z = x_z + domain->prd[2] * pbc_flags_[2];
+                }
+            }
+        }
+
+        int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
+        m = vel_start_idx;
+
+        for (int i = 0; i < recv_vel_idxs.size(); i++) {
+            double v_x = buf[m++];
+            double v_y = buf[m++];
+            double v_z = buf[m++];
+
+            int idx = recv_vel_idxs[i];
+            vel[idx].x = v_x;
+            vel[idx].y = v_y;
+            vel[idx].z = v_z;
+        }
     }
 }
 

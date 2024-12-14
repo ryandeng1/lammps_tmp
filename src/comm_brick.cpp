@@ -4667,7 +4667,7 @@ void CommBrick::pack_data_to_process_stencil_md_double_buffering(bool curr_dt, i
 
     int buf_offset = pipeline_stage * maxsend_stencil_md[proc];
 
-    for (int t = start_timestep; t < end_timestep; t++) {
+    cilk_for (int t = start_timestep; t < end_timestep; t++) {
         Atom* atom_;
         if (curr_dt) {
             atom_ = atom_arr[t];
@@ -4754,7 +4754,7 @@ void CommBrick::unpack_data_process_zoid_stencil_md_double_buffering(bool curr_d
         }
         */
 
-        for (int t = start_timestep; t < end_timestep; t++) {
+        cilk_for (int t = start_timestep; t < end_timestep; t++) {
             Atom *atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
             int nrecv_force;
             int nrecv_pos;

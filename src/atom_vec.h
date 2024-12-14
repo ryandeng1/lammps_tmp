@@ -242,7 +242,50 @@ class AtomVec : protected Pointers {
 
           return m;
       } else {
-          assert(false);
+          int m = 0;
+
+          for (int i = 0; i < neighbors_in_proc.size(); i++) {
+              int send_zoid_idx = neighbors_in_proc[i];
+              auto& send_force_idxs_zoid = send_force_idxs[send_zoid_idx];
+
+              assert(send_zoid_idx >= 0 && send_zoid_idx <= 26);
+
+              for (int j = 0; j < send_force_idxs_zoid.size(); j++) {
+                  int idx = send_force_idxs_zoid[j];
+                  buf[m++] = forces[idx].x;
+                  buf[m++] = forces[idx].y;
+                  buf[m++] = forces[idx].z;
+
+                  if (!is_initial) {
+                      forces[idx].x = 0;
+                      forces[idx].y = 0;
+                      forces[idx].z = 0;
+                  }
+              }
+          }
+
+          for (int i = 0; i < send_pos_idxs.size(); i++) {
+              int idx = send_pos_idxs[i];
+              buf[m++] = pos[idx].x;
+              buf[m++] = pos[idx].y;
+              buf[m++] = pos[idx].z;
+          }
+
+          for (int i = 0; i < neighbors_in_proc.size(); i++) {
+              int send_zoid_idx = neighbors_in_proc[i];
+
+              assert(send_zoid_idx >= 0 && send_zoid_idx <= 26);
+              auto& send_vel_idxs_zoid = send_vel_idxs[send_zoid_idx];
+
+              for (int j = 0; j < send_vel_idxs_zoid.size(); j++) {
+                  int idx = send_vel_idxs_zoid[j];
+                  buf[m++] = vel[idx].x;
+                  buf[m++] = vel[idx].y;
+                  buf[m++] = vel[idx].z;
+              }
+          }
+
+          return m;
       }
   }
 

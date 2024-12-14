@@ -4417,7 +4417,7 @@ public:
 
         const auto& tags = zoid.tag_stencil_md[0];
 
-        if (true || num_chunks == 1) {
+        if (num_chunks == 1) {
             for (int idx = 0; idx < local_idxs.size(); idx++) {
                 int i = local_idxs[idx];
                 const double dtfm = dtf / mass[type[i]];
@@ -4512,7 +4512,7 @@ public:
 
         const auto& tags = zoid.tag_stencil_md[0];
 
-        if (true || num_chunks == 1) {
+        if (num_chunks == 1) {
             for (int idx = 0; idx < local_idxs.size(); idx++) {
                 int i = local_idxs[idx];
                 const double dtfm = dtf / mass[type[i]];
