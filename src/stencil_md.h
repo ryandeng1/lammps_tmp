@@ -73,6 +73,8 @@ public:
 
     void INIT_ALL();
 
+    void INIT_DOUBLE_BUFFERING_SEND_RECV_DATA();
+
     void SETUP();
 
     void MODIFY_PRE_FORCE_SETUP(int);
@@ -4390,7 +4392,7 @@ public:
 
 
     /* Start double buffering code */
-    void initial_integrate_stencil_md_double_buffering_affinity(queue_info& zoid, int timestep, Atom* atom_) {
+    void initial_integrate_stencil_md_affinity_double_buffering(queue_info& zoid, int timestep, Atom* atom_) {
         auto& curr_x = zoid.x_stencil_md[timestep % 2];
         auto& next_x = zoid.x_stencil_md[(timestep + 1) % 2];
 
@@ -4400,19 +4402,26 @@ public:
         auto& curr_f = zoid.f_stencil_md[timestep % 2];
         auto& curr_eval_f = zoid.eval_f_stencil_md[timestep % 2];
 
-        auto& mask = zoid.mask_stencil_md[timestep % 2];
+        auto& mask = zoid.mask_stencil_md[0];
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
+
+        const auto& type = zoid.type_stencil_md[0];
 
         int num_chunks = atom_->num_chunks;
         auto claimed_flag_struct = atom_->claimed_flag_struct;
         int num_workers = __cilkrts_get_nworkers();
         double dtv = update->dt;
-        auto& local_dtfm = atom_->local_dtfm;
 
-        if (num_chunks == 1) {
+        const double * const mass = atom->mass;
+        double dtf = 0.5 * update->dt * force->ftm2v;
+
+        const auto& tags = zoid.tag_stencil_md[0];
+
+        if (true || num_chunks == 1) {
             for (int idx = 0; idx < local_idxs.size(); idx++) {
-                int i = local_idxs[i];
-                const double dtfm = local_dtfm[i];
+                int i = local_idxs[idx];
+                const double dtfm = dtf / mass[type[i]];
+
                 next_v[i].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
                 next_v[i].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
                 next_v[i].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
@@ -4447,8 +4456,9 @@ public:
 
                 if (!claimed_flag_struct[s].m.test_and_set(std::memory_order_relaxed)) {
                     for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < local_idxs.size(); idx++) {
-                        int i = local_idxs[i];
-                        const double dtfm = local_dtfm[i];
+                        int i = local_idxs[idx];
+
+                        const double dtfm = dtf / mass[type[i]];
                         next_v[i].x = curr_v[i].x + dtfm * (curr_f[i].x + curr_eval_f[i].x);
                         next_v[i].y = curr_v[i].y + dtfm * (curr_f[i].y + curr_eval_f[i].y);
                         next_v[i].z = curr_v[i].z + dtfm * (curr_f[i].z + curr_eval_f[i].z);
@@ -4474,18 +4484,17 @@ public:
         }
     }
 
-    inline void fuse_post_force_final_integrate_stencil_md_double_buffering_affinity(queue_info& zoid, int timestep, Atom* next, Modify* modify_) {
+    inline void fuse_post_force_final_integrate_stencil_md_affinity_double_buffering(queue_info& zoid, int timestep, Atom* next, Modify* modify_) {
         auto& next_v = zoid.v_stencil_md[(timestep % 2)];
-        auto& f = zoid.v_stencil_md[(timestep % 2)];
-        auto& eval_f = zoid.v_stencil_md[(timestep % 2)];
-        auto& mask = zoid.mask_stencil_md[(timestep % 2)];
-        auto& type = zoid.type_stencil_md[timestep];
+        auto& f = zoid.f_stencil_md[(timestep % 2)];
+        auto& eval_f = zoid.eval_f_stencil_md[(timestep % 2)];
+
+        auto& mask = zoid.mask_stencil_md[0];
+        auto& type = zoid.type_stencil_md[0];
 
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
 
-        const double * const mass = atom->mass;
-
-        auto& local_dtfm = next->local_dtfm;
+        // auto& local_dtfm = next->local_dtfm;
         auto claimed_flag_struct = next->claimed_flag_struct;
 
         int num_chunks = next->num_chunks;
@@ -4498,11 +4507,16 @@ public:
         // fix_post_force->compute_target();
         auto tsqrt = fix_post_force->tsqrt;
 
-        if (num_chunks == 1) {
-            for (int idx = 0; idx < local_idxs.size(); idx++) {
-                const double dtfm = local_dtfm[idx];
+        const double * const mass = atom->mass;
+        double dtf = 0.5 * update->dt * force->ftm2v;
 
-                int i = local_idxs[i];
+        const auto& tags = zoid.tag_stencil_md[0];
+
+        if (true || num_chunks == 1) {
+            for (int idx = 0; idx < local_idxs.size(); idx++) {
+                int i = local_idxs[idx];
+                const double dtfm = dtf / mass[type[i]];
+
                 double gamma1 = gfactor1[type[i]];
                 double gamma2 = gfactor2[type[i]] * tsqrt;
 
@@ -4516,23 +4530,33 @@ public:
                 double v_y = next_v[i].y;
                 double v_z = next_v[i].z;
 
-                // dbl3_t_stencil_md fdrag = {gamma1 * v_x, gamma1 * v_y, gamma1 * v_z};
+                constexpr bool USE_ONE_FORCE = false;
 
-                // double f_x = eval_f[i].x + gamma1 * v_x + fran.x;
-                // double f_y = eval_f[i].y + gamma1 * v_y + fran.y;
-                // double f_z = eval_f[i].z + gamma1 * v_z + fran.z;
+                if (USE_ONE_FORCE) {
+                    double f0 = f[i].x + eval_f[i].x;
+                    double f1 = f[i].y + eval_f[i].y;
+                    double f2 = f[i].z + eval_f[i].z;
 
-                eval_f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
-                eval_f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
-                eval_f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+                    f0 += gamma1 * v_x + gamma2 * (rand_x - 0.5);
+                    f1 += gamma1 * v_y + gamma2 * (rand_x - 0.5);
+                    f2 += gamma1 * v_z + gamma2 * (rand_x - 0.5);
 
-                next_v[i].x = v_x + dtfm * (f[i].x + eval_f[i].x);
-                next_v[i].y = v_y + dtfm * (f[i].y + eval_f[i].y);
-                next_v[i].z = v_z + dtfm * (f[i].z + eval_f[i].z);
+                    next_v[i].x = v_x + dtfm * (f0);
+                    next_v[i].y = v_y + dtfm * (f1);
+                    next_v[i].z = v_z + dtfm * (f2);
+                } else {
+                    double f0 = eval_f[i].x;
+                    double f1 = eval_f[i].y;
+                    double f2 = eval_f[i].z;
 
-                // next_v[i].x = v_x + dtfm * (f[i].x + f_x);
-                // next_v[i].y = v_y + dtfm * (f[i].y + f_y);
-                // next_v[i].z = v_z + dtfm * (f[i].z + f_z);
+                    eval_f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
+                    eval_f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
+                    eval_f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+
+                    next_v[i].x = v_x + dtfm * (f[i].x + eval_f[i].x);
+                    next_v[i].y = v_y + dtfm * (f[i].y + eval_f[i].y);
+                    next_v[i].z = v_z + dtfm * (f[i].z + eval_f[i].z);
+                }
             }
 
             return;
@@ -4553,9 +4577,9 @@ public:
 
                 if (!claimed_flag_struct[s].m.test_and_set(std::memory_order_relaxed)) {
                     for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < local_idxs.size(); idx++) {
-                        const double dtfm = local_dtfm[idx];
-
                         int i = local_idxs[idx];
+
+                        const double dtfm = dtf / mass[type[i]];
 
                         double gamma1 = gfactor1[type[i]];
                         double gamma2 = gfactor2[type[i]] * tsqrt;
@@ -4647,7 +4671,7 @@ public:
 
         const auto& tags = zoid.tag_stencil_md[0];
 
-        if (false && num_chunks == 1) {
+        if (num_chunks == 1) {
             for (int ii = 0; ii < nlocal; ii++) {
                 int i = local_idxs[ii];
 
@@ -4902,42 +4926,6 @@ public:
         for (int i = 0; i < num_chunks; i++) {
             claimed_flag_struct[i].m.clear(std::memory_order_relaxed);
         }
-
-        if (zoid.num == 23) {
-            std::cout << "RYAN TARGET ZOID: " << zoid.num << std::endl;
-            for (int i = 0; i < local_idxs.size(); i++) {
-                if (tags[local_idxs[i]] == 171036) {
-                    std::cout << "RESULTING EVAL FORCE: " << f[i].x << " " << f[i].y << " " << f[i].z << " idx: " << i << std::endl;
-                }
-            }
-        }
-
-        if (true) {
-            for (int i = 0; i < local_idxs.size(); i++) {
-                int idx = local_idxs[i];
-                auto& force = zoid.eval_f_stencil_md[0][idx];
-
-                for (int kk = 0; kk < neighbor_list[idx].size(); kk++) {
-                    if (tags[idx] == 171036 || tags[neighbor_list[idx][kk]] == 171036) {
-                        std::cout << BOLDCYAN << "zoid: " << zoid.num << " STENCILMD PAIR NEIGHBORS: " << tags[idx] << " " << tags[neighbor_list[idx][kk]]
-                            << " idxs: " << idx << " " << neighbor_list[idx][kk]
-                            << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z
-                            << " other pos: " << x[neighbor_list[idx][kk]].x << " " << x[neighbor_list[idx][kk]].y << " " << x[neighbor_list[idx][kk]].z
-                            << " type: " << zoid.type_stencil_md[0][idx] << " " << zoid.type_stencil_md[0][neighbor_list[idx][kk]]
-                            << RESET_COLOR << std::endl;
-                    }
-                }
-                for (int kk = 0; kk < bond_list[idx].size(); kk++) {
-                    int bond_neigh = bond_list[idx][kk].first;
-                    int bond_type = bond_list[idx][kk].second;
-                    if (tags[idx] == 171036 || tags[bond_neigh] == 171036) {
-                        std::cout << BOLDCYAN << "zoid: " << zoid.num << " STENCILMD BOND NEIGHBORS: " << tags[idx] << " " << tags[bond_neigh]
-                        << " idxs: " << idx << " " << bond_neigh
-                        << " bond type: " << bond_type << RESET_COLOR << std::endl;
-                    }
-                }
-            }
-        }
     }
 
     template <bool curr_dt>
@@ -4995,29 +4983,6 @@ public:
                 }
             }
         }
-
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < my_queue[dep].size(); j++) {
-                auto &zoid = my_queue[dep][j];
-                int zoid_num = zoid.num;
-                auto &send_to = curr_dt ? lmp->send_to_neighbors[zoid.num] : lmp->send_to_neighbors_next_dt[zoid.num];
-                if (zoid.num % comm->nprocs == comm->me) {
-                    if (send_to.size() == 0) {
-                        continue;
-                    }
-
-                    for (int i = 0; i < send_to.size(); i++) {
-                        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                            int total_num_force = 0;
-                            for (int k = 0; k < zoid.send_force_num_segments[t][i]; k++) {
-                                total_num_force += zoid.send_force_sizes[t][i][k];
-                            }
-                            assert(zoid.send_force_idxs_double_buffering[t][i].size() == total_num_force);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     template <bool curr_dt>
@@ -5045,6 +5010,7 @@ public:
                     }
 
                     for (int i = 0; i < recv_from.size(); i++) {
+                        std::set<int> all_idxs;
                         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                             // std::set<int> recv_force_idxs;
                             std::vector<int> recv_force_idxs;
@@ -5060,64 +5026,47 @@ public:
                                 // recv_force_idxs.insert(double_buffering_idx);
                                 assert(std::find(recv_force_idxs.begin(), recv_force_idxs.end(), double_buffering_idx) == recv_force_idxs.end());
                                 recv_force_idxs.push_back(double_buffering_idx);
+
+                                assert(all_idxs.find(double_buffering_idx) == all_idxs.end());
+                                all_idxs.insert(double_buffering_idx);
                             }
 
                             assert(zoid_tag_to_idx.size() == zoid.tag_stencil_md[0].size());
-                            zoid.recv_force_idxs_double_buffering[t][i] = std::vector<int>(recv_force_idxs.begin(), recv_force_idxs.end());
+                            zoid.recv_force_idxs_double_buffering[t][i] = recv_force_idxs;
                         }
                     }
                 }
             }
         }
-
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queue[dep].size(); j++) {
-                auto &zoid = queue[dep][j];
-                int zoid_num = zoid.num;
-                auto &recv_from = curr_dt ? lmp->recv_from_neighbors[zoid.num] : lmp->recv_from_neighbors_next_dt[zoid.num];
-                if (zoid.num % comm->nprocs == comm->me) {
-                    if (recv_from.size() == 0) {
-                        continue;
-                    }
-
-                    for (int i = 0; i < recv_from.size(); i++) {
-                        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                            int total_num_force = zoid.recv_list_local_num_force_only[t][i];
-                            assert(zoid.recv_force_idxs_double_buffering[t][i].size() == total_num_force);
-                        }
-                    }
-                }
-            }
-        }
-
     }
 
     template <bool curr_dt>
     void CONSTRUCT_SEND_POS_DOUBLE_BUFFERING() {
-        /*
-        auto& queue = curr_dt ? lmp->queues : lmp->queues_next_dt;
+        auto& my_queue = curr_dt ? lmp->queues : lmp->queues_next_dt;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queue[dep].size(); j++) {
-                auto& zoid = queue[dep][j];
+            for (int j = 0; j < my_queue[dep].size(); j++) {
+                auto& zoid = my_queue[dep][j];
                 int zoid_num = zoid.num;
                 if (zoid.num % comm->nprocs == comm->me) {
                     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                        zoid.send_pos_idxs_per_timestep[t] = new std::vector<int>[comm->nprocs];
+                        zoid.send_pos_idxs_double_buffering[t] = new std::vector<int>[comm->nprocs];
                         Atom* atom_ = curr_dt ? lmp->atom_stencil_md[zoid.num][t] : lmp->atom_stencil_md[zoid.num][NUM_TIMESTEPS_IN_PARALLEL - t];
 
                         std::map<int, int> zoid_tag_to_idx;
-                        for (int k = 0; k < zoid.tag_stencil_md[t % 2].size(); k++) {
-                            zoid_tag_to_idx[zoid.tag_stencil_md[t % 2][k]] = k;
+                        for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
+                            zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
                         }
 
                         for (int proc = 0; proc < comm->nprocs; proc++) {
                             int num_segments = zoid.send_process_num_segments[t][proc];
                             auto segment_types = zoid.send_process_segment_types[t][proc];
-                            auto local_list = zoid.send_process_local_list[t][proc];
                             auto segment_idxs = zoid.send_process_segment_idxs[t][proc];
                             auto segment_sizes = zoid.send_process_segment_sizes[t][proc];
 
-                            std::set<int> all_idxs;
+                            auto local_list = zoid.send_process_local_list[t][proc];
+
+                            std::vector<int> all_idxs;
+
                             int local_list_idx = 0;
                             for (int k = 0; k < num_segments; k++) {
                                 auto segment_type = segment_types[k];
@@ -5127,19 +5076,19 @@ public:
                                 if (segment_type == SEND_DATA_PROCESS_LOCAL) {
                                     for (int h = 0; h < segment_size; h++) {
                                         int idx = local_list[local_list_idx++];
-                                        all_idxs.insert(idx);
+                                        all_idxs.push_back(idx);
                                     }
                                 } else if (segment_type == SEND_DATA_PROCESS_GHOST) {
                                     for (int h = 0; h < segment_size; h++) {
                                         int idx = segment_idx + h;
-                                        all_idxs.insert(idx);
+                                        all_idxs.push_back(idx);
                                     }
                                 } else {
                                     assert(false);
                                 }
                             }
 
-                            assert(zoid_tag_to_idx.size() == zoid.tag_stencil_md[t % 2].size());
+                            assert(zoid_tag_to_idx.size() == zoid.tag_stencil_md[0].size());
 
                             std::vector<int> idxs_in_double_buffering;
                             for (auto& idx : all_idxs) {
@@ -5147,94 +5096,367 @@ public:
                                 idxs_in_double_buffering.push_back(zoid_tag_to_idx[atom_->tag[idx]]);
                             }
 
-                            std::sort(idxs_in_double_buffering.begin(), idxs_in_double_buffering.end());
-                            zoid.send_pos_idxs_per_timestep[t][proc] = idxs_in_double_buffering;
+                            zoid.send_pos_idxs_double_buffering[t][proc] = idxs_in_double_buffering;
                         }
                     }
                 }
             }
         }
-        */
     }
 
     template <bool curr_dt>
-    void CONSTRUCT_RECV_POS_DOUBLE_BUFFERING_SEND_DATA(int** send_sizes, std::vector<int>** send_idxs, std::vector<MPI_Request>& send_requests) {
-        /*
-        auto& queue = curr_dt ? lmp->queues : lmp->queues_next_dt;
+    void CONSTRUCT_RECV_POS_DOUBLE_BUFFERING() {
+        auto& my_queue = curr_dt ? lmp->queues : lmp->queues_next_dt;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queue[dep].size(); j++) {
-                auto &zoid = queue[dep][j];
-                int zoid_num = zoid.num;
-                if (zoid.num % comm->nprocs == comm->me) {
-                    for (int proc = 0; proc < comm->nprocs; proc++) {
-                        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                            send_idxs[zoid_num][proc].insert(send_idxs.end(), zoid.send_pos_idxs_per_timestep[t][proc].begin(), zoid.send_pos_idxs_per_timestep[t][proc].end());
-                        }
-
-                        send_sizes[zoid_num][proc] = send_idxs[zoid_num][proc].size();
-
-                        MPI_Request r1;
-                        MPI_Request r2;
-
-                        int mpi_tag = zoid_num;
-
-                        MPI_Isend(&send_sizes[zoid_num][proc], 1, MPI_INT, proc, mpi_tag, world, &r1);
-                        MPI_Isend(send_idxs[zoid_num][proc].data(), send_sizes[zoid_num][proc], MPI_INT, proc, mpi_tag, world, &r2);
-
-                        send_requests.push_back(std::move(r1));
-                        send_requests.push_back(std::move(r2));
-                    }
-                }
-            }
-        }
-        */
-    }
-
-    template <bool curr_dt>
-    void CONSTRUCT_RECV_POS_DOUBLE_BUFFERING_RECV_DATA(int** send_sizes, std::vector<int>** send_idxs, std::vector<MPI_Request>& send_requests) {
-        /*
-        auto& queue = curr_dt ? lmp->queues : lmp->queues_next_dt;
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queue[dep].size(); j++) {
-                auto &zoid = queue[dep][j];
+            for (int j = 0; j < my_queue[dep].size(); j++) {
+                auto& zoid = my_queue[dep][j];
                 int zoid_num = zoid.num;
                 if (zoid.num % comm->nprocs == comm->me) {
                     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
-                    for (auto& recv_zoid_num : recv_from) {
-                        MPI_Request r1;
 
-                        int num_idxs;
-                        int recv_proc = recv_zoid_num % comm->nprocs;
-                        int mpi_tag = recv_zoid_num;
-
-                        MPI_Recv(&num_idxs, 1, MPI_INT, recv_proc, recv_zoid_num, world, MPI_STATUS_IGNORE);
+                    std::map<int, int> zoid_tag_to_idx;
+                    for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
+                        zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
                     }
 
-                    for (int proc = 0; proc < comm->nprocs; proc++) {
-                        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                            send_idxs[zoid_num][proc].insert(send_idxs.end(), zoid.send_pos_idxs_per_timestep[t][proc].begin(), zoid.send_pos_idxs_per_timestep[t][proc].end());
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        // TODO: flatten all of the buf idxs into 1 single vector, vector to vector mapping
+                        // for i, buf_idx in buf_idxs: my_idx = my_idxs[i]; f[my_idx] += buf[buf_idx];
+                        zoid.recv_pos_local_idxs_double_buffering[t] = new std::vector<int>[recv_from.size()];
+                        zoid.recv_pos_ghost_idxs_double_buffering[t] = new std::vector<int>[recv_from.size()];
+
+                        Atom* atom_ = curr_dt ? lmp->atom_stencil_md[zoid.num][t] : lmp->atom_stencil_md[zoid.num][NUM_TIMESTEPS_IN_PARALLEL - t];
+
+                        for (int i = 0; i < recv_from.size(); i++) {
+                            auto num_in_local_list = zoid.recv_list_local_num_force_pos[t][i];
+                            auto local_list = zoid.recv_list_local_force_pos[t][i];
+
+                            // int num_segments = zoid.recv_process_num_segments[t][i];
+                            // auto segment_types = zoid.recv_process_segment_types[t][i];
+                            // auto segment_idxs = zoid.recv_process_segment_idxs[t][i];
+                            // auto segment_sizes = zoid.recv_process_segment_sizes[t][i];
+
+                            int num_segments = zoid.recv_ghost_num_segments[t][i];
+                            auto segment_idxs = zoid.recv_ghost_idxs[t][i];
+                            auto segment_sizes = zoid.recv_ghost_sizes[t][i];
+
+                            std::vector<int> local_idxs;
+                            std::vector<int> ghost_idxs;
+
+                            for (int k = 0; k < num_in_local_list; k++) {
+                                int idx = local_list[k];
+                                int double_buffering_idx = zoid_tag_to_idx[atom_->tag[idx]];
+                                local_idxs.push_back(double_buffering_idx);
+                            }
+
+                            for (int k = 0; k < num_segments; k++) {
+                                auto segment_idx = segment_idxs[k];
+                                auto segment_size = segment_sizes[k];
+                                for (int h = 0; h < segment_size; h++) {
+                                    int idx = segment_idx + h;
+                                    int double_buffering_idx = zoid_tag_to_idx[atom_->tag[idx]];
+                                    ghost_idxs.push_back(double_buffering_idx);
+                                }
+                            }
+
+                            zoid.recv_pos_local_idxs_double_buffering[t][i] = local_idxs;
+                            zoid.recv_pos_ghost_idxs_double_buffering[t][i] = ghost_idxs;
                         }
-
-                        send_sizes[zoid_num][proc] = send_idxs[zoid_num][proc].size();
-
-                        MPI_Request r1;
-                        MPI_Request r2;
-
-                        int mpi_tag = zoid_num;
-
-                        MPI_Isend(&send_sizes[zoid_num][proc], 1, MPI_INT, proc, mpi_tag, world, &r1);
-                        MPI_Isend(send_idxs[zoid_num][proc].data(), send_sizes[zoid_num][proc], MPI_INT, proc, mpi_tag, world, &r2);
-
-                        send_requests.push_back(std::move(r1));
-                        send_requests.push_back(std::move(r2));
                     }
                 }
             }
         }
-        */
     }
 
-    void TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(double* test_f, queue_info& zoid, int timestep) {
+    template <bool curr_dt>
+    void CONSTRUCT_SEND_VEL_DOUBLE_BUFFERING() {
+        auto& my_queue = curr_dt ? lmp->queues : lmp->queues_next_dt;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queue[dep].size(); j++) {
+                auto& zoid = my_queue[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid.num % comm->nprocs == comm->me) {
+                    auto& send_to = curr_dt ? lmp->send_to_neighbors[zoid_num] : lmp->send_to_neighbors_next_dt[zoid_num];
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        zoid.send_vel_idxs_double_buffering[t] = new std::vector<int>[send_to.size()];
+                        Atom* atom_ = curr_dt ? lmp->atom_stencil_md[zoid.num][t] : lmp->atom_stencil_md[zoid.num][NUM_TIMESTEPS_IN_PARALLEL - t];
+
+                        std::map<int, int> zoid_tag_to_idx;
+                        for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
+                            zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
+                        }
+
+                        for (int i = 0; i < send_to.size(); i++) {
+                            int num_segments = zoid.send_pos_num_segments[t][i];
+                            auto segment_idxs = zoid.send_pos_idxs[t][i];
+                            auto segment_sizes = zoid.send_pos_sizes[t][i];
+
+                            std::vector<int> all_idxs;
+
+                            for (int k = 0; k < num_segments; k++) {
+                                auto segment_idx = segment_idxs[k];
+                                auto segment_size = segment_sizes[k];
+
+                                for (int h = 0; h < segment_size; h++) {
+                                    int idx = segment_idx + h;
+                                    all_idxs.push_back(idx);
+                                }
+                            }
+
+                            assert(zoid_tag_to_idx.size() == zoid.tag_stencil_md[0].size());
+
+                            std::vector<int> idxs_in_double_buffering;
+                            for (auto& idx : all_idxs) {
+                                assert(zoid_tag_to_idx.count(atom_->tag[idx]));
+                                idxs_in_double_buffering.push_back(zoid_tag_to_idx[atom_->tag[idx]]);
+                            }
+
+                            zoid.send_vel_idxs_double_buffering[t][i] = idxs_in_double_buffering;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    template <bool curr_dt>
+    void CONSTRUCT_RECV_VEL_DOUBLE_BUFFERING() {
+        auto& my_queue = curr_dt ? lmp->queues : lmp->queues_next_dt;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queue[dep].size(); j++) {
+                auto& zoid = my_queue[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid.num % comm->nprocs == comm->me) {
+                    auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        zoid.recv_vel_idxs_double_buffering[t] = new std::vector<int>[recv_from.size()];
+                        Atom* atom_ = curr_dt ? lmp->atom_stencil_md[zoid.num][t] : lmp->atom_stencil_md[zoid.num][NUM_TIMESTEPS_IN_PARALLEL - t];
+
+                        std::map<int, int> zoid_tag_to_idx;
+                        for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
+                            zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
+                        }
+
+                        for (int i = 0; i < recv_from.size(); i++) {
+                            auto nrecv_vel = zoid.recv_list_local_num_force_pos[t][i];
+                            auto local_list = zoid.recv_list_local_force_pos[t][i];
+
+                            std::vector<int> all_idxs;
+
+                            for (int k = 0; k < nrecv_vel; k++) {
+                                all_idxs.push_back(local_list[k]);
+                            }
+
+                            assert(zoid_tag_to_idx.size() == zoid.tag_stencil_md[0].size());
+
+                            std::vector<int> idxs_in_double_buffering;
+                            for (auto& idx : all_idxs) {
+                                assert(zoid_tag_to_idx.count(atom_->tag[idx]));
+                                idxs_in_double_buffering.push_back(zoid_tag_to_idx[atom_->tag[idx]]);
+                            }
+
+                            zoid.recv_vel_idxs_double_buffering[t][i] = idxs_in_double_buffering;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_f) {
+        const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
+        const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
+        const auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
+        const auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+
+        std::map<int, int> zoid_tag_to_idx;
+        for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+            zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+        }
+
+        for (int k = 0; k < atom_->nlocal; k++) {
+            // compare forces on local atoms?
+            int tag = atom_->tag[k];
+            int test_idx = zoid_tag_to_idx[tag];
+
+            double my_f[3] = {f[test_idx].x,
+                              f[test_idx].y,
+                              f[test_idx].z};
+
+            double my_eval_f[3] = {eval_f[test_idx].x,
+                                   eval_f[test_idx].y,
+                                   eval_f[test_idx].z};
+
+            for (int dim = 0; dim < 3; dim++) {
+                double my_force = my_f[dim] + my_eval_f[dim];
+                if (fabs(my_force - test_f[timestep][tag * 3 + dim]) > 1e-6) {
+                    if (curr_dt) {
+                        std::cout << "------FORCE DIFF--------"
+                                  << std::endl;
+                    } else {
+                        std::cout << "------NEXT DT FORCE DIFF--------"
+                                  << std::endl;
+                    }
+
+                    std::cout << "idx: " << k << " out of: " << atom_->nlocal << " double buffering idx: " << test_idx << std::endl;
+                    std::cout << "Dim: " << dim << " Zoid: " << zoid.num << " timestep: " << timestep << " tag: " << tag << std::endl;
+                    std::cout << "what I have: " << my_f[0] + my_eval_f[0] << " " << my_f[1] + my_eval_f[1] << " " << my_f[2] + my_eval_f[2] << std::endl;
+                    std::cout << "my f: " << my_f[0] << " " << my_f[1] << " " << my_f[2]
+                              << " my eval f: " << my_eval_f[0] << " " << my_eval_f[1] << " " << my_eval_f[2]
+                              << std::endl;
+                    std::cout << "What does LAMMPS have? "
+                              << test_f[timestep][tag * 3 + 0] << " "
+                              << test_f[timestep][tag * 3 + 1] << " "
+                              << test_f[timestep][tag * 3 + 2]
+                              << std::endl;
+                    std::cout << "Diff: " << fabs(my_force - test_f[timestep][tag * 3 + dim]) << std::endl;
+                    std::cout << "pos: " << x[test_idx].x << " " << x[test_idx].y << " " << x[test_idx].z << std::endl;
+
+                    for (int tmp = 0; tmp < 3; tmp++) {
+                        std::cout << "lo: " << zoid.zoid.cuts[tmp].lower +
+                        zoid.zoid.cuts[tmp].slope_lower * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                        << std::endl;
+                        std::cout << "hi: "
+                                  << zoid.zoid.cuts[tmp].upper +
+                                  zoid.zoid.cuts[tmp].slope_upper * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                    }
+
+                    assert(false);
+                }
+            }
+        }
+    }
+
+    void TEST_POS_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_x) {
+        const auto& x = zoid.x_stencil_md[timestep % 2];
+        const auto& v = zoid.v_stencil_md[timestep % 2];
+        const auto& f = zoid.f_stencil_md[timestep % 2];
+        const auto& eval_f = zoid.eval_f_stencil_md[timestep % 2];
+
+        std::map<int, int> zoid_tag_to_idx;
+        for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+            zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+        }
+
+        for (int k = 0; k < atom_->nlocal; k++) {
+            // compare forces on local atoms?
+            int tag = atom_->tag[k];
+            int test_idx = zoid_tag_to_idx[tag];
+
+            double my_x[3] = {x[test_idx].x, x[test_idx].y, x[test_idx].z};
+
+            for (int dim = 0; dim < 3; dim++) {
+                double my_pos = my_x[dim];
+                if (my_pos < 0) {
+                    my_pos += domain->prd[dim];
+                } else if (my_pos >= domain->prd[dim]) {
+                    my_pos -= domain->prd[dim];
+                }
+
+                double test_pos = test_x[timestep][tag * 3 + dim];
+                if (test_pos < 0) {
+                    test_pos += domain->prd[dim];
+                } else if (test_pos >= domain->prd[dim]) {
+                    test_pos -= domain->prd[dim];
+                }
+
+                if (fabs(my_pos - test_pos) > 1e-6) {
+                    if (curr_dt) {
+                        std::cout << "------POS DIFF--------"
+                                  << std::endl;
+                    } else {
+                        std::cout << "------NEXT DT POS DIFF--------"
+                                  << std::endl;
+                    }
+
+                    std::cout << "my pos: " << my_pos << " test pos: " << test_pos << std::endl;
+                    std::cout << "idx: " << k << " out of: " << atom_->nlocal << " atom: " << atom_ << std::endl;
+                    std::cout << "Dim: " << dim << " Zoid: " << zoid.num << " timestep: " << timestep << " tag: " << tag << std::endl;
+                    std::cout << "what I have: " << my_x[0] << " " << my_x[1] << " " << my_x[2] << std::endl;
+                    std::cout << "What does LAMMPS have? "
+                              << test_x[timestep][tag * 3 + 0] << " "
+                              << test_x[timestep][tag * 3 + 1] << " "
+                              << test_x[timestep][tag * 3 + 2]
+                              << std::endl;
+                    std::cout << "Diff: " << fabs(my_x[dim] - test_x[timestep][tag * 3 + dim]) << std::endl;
+                    std::cout << "pos: " << x[test_idx].x << " " << x[test_idx].y << " " << x[test_idx].z << std::endl;
+
+                    for (int tmp = 0; tmp < 3; tmp++) {
+                        std::cout << "lo: " << zoid.zoid.cuts[tmp].lower +
+                                               zoid.zoid.cuts[tmp].slope_lower * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                        std::cout << "hi: "
+                                  << zoid.zoid.cuts[tmp].upper +
+                                     zoid.zoid.cuts[tmp].slope_upper * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                    }
+
+                    assert(false);
+                }
+            }
+        }
+    }
+
+    void TEST_VEL_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_v) {
+        const auto& x = zoid.x_stencil_md[timestep % 2];
+        const auto& v = zoid.v_stencil_md[timestep % 2];
+        const auto& f = zoid.f_stencil_md[timestep % 2];
+        const auto& eval_f = zoid.eval_f_stencil_md[timestep % 2];
+
+        std::map<int, int> zoid_tag_to_idx;
+        for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+            zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+        }
+
+        for (int k = 0; k < atom_->nlocal; k++) {
+            // compare forces on local atoms?
+            int tag = atom_->tag[k];
+            int test_idx = zoid_tag_to_idx[tag];
+
+            double my_v[3] = {v[test_idx].x, v[test_idx].y, v[test_idx].z};
+
+            for (int dim = 0; dim < 3; dim++) {
+                if (fabs(my_v[dim] - test_v[timestep][tag * 3 + dim]) > 1e-6) {
+                    if (curr_dt) {
+                        std::cout << "------VEL DIFF--------" << std::endl;
+                    } else {
+                        std::cout << "------NEXT DT VEL DIFF--------" << std::endl;
+                    }
+
+                    std::cout << "idx: " << k << " out of: " << atom_->nlocal << " atom: " << atom_ << std::endl;
+                    std::cout << "Dim: " << dim << " Zoid: " << zoid.num << " timestep: " << timestep << " tag: " << tag << std::endl;
+                    std::cout << "what I have: " << my_v[0] << " " << my_v[1] << " " << my_v[2] << std::endl;
+                    std::cout << "What does LAMMPS have? "
+                              << test_v[timestep][tag * 3 + 0] << " "
+                              << test_v[timestep][tag * 3 + 1] << " "
+                              << test_v[timestep][tag * 3 + 2]
+                              << std::endl;
+                    std::cout << "What does LAMMPS have prev? "
+                              << test_v[timestep - 1][tag * 3 + 0] << " "
+                              << test_v[timestep - 1][tag * 3 + 1] << " "
+                              << test_v[timestep - 1][tag * 3 + 2]
+                              << std::endl;
+                    std::cout << "Diff: " << fabs(my_v[dim] - test_v[timestep][tag * 3 + dim]) << std::endl;
+                    std::cout << "pos: " << x[test_idx].x << " " << x[test_idx].y << " " << x[test_idx].z << std::endl;
+
+                    for (int tmp = 0; tmp < 3; tmp++) {
+                        std::cout << "lo: " << zoid.zoid.cuts[tmp].lower +
+                                               zoid.zoid.cuts[tmp].slope_lower * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                        std::cout << "hi: "
+                                  << zoid.zoid.cuts[tmp].upper +
+                                     zoid.zoid.cuts[tmp].slope_upper * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                    }
+
+                    assert(false);
+                }
+            }
+        }
+    }
+
+    void TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(double* test_f, queue_info& zoid, int timestep) {
         auto& x = zoid.x_stencil_md[timestep % 2];
         auto& f = zoid.f_stencil_md[timestep % 2];
         auto& eval_f = zoid.eval_f_stencil_md[timestep % 2];

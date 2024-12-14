@@ -441,6 +441,13 @@ void StencilMD::INIT_ZOID_DATA() {
 
                 zoid.send_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_pos_local_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_pos_ghost_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 /* end stuff for 2 timesteps */
 
                 int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
@@ -629,7 +636,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.x_stencil_md = lmp->queues[coord.first][coord.second].x_stencil_md;
                 zoid.v_stencil_md = lmp->queues[coord.first][coord.second].v_stencil_md;
                 zoid.f_stencil_md = lmp->queues[coord.first][coord.second].f_stencil_md;
-                zoid.eval_f_stencil_md = lmp->queues[coord.first][coord.second].x_stencil_md;
+                zoid.eval_f_stencil_md = lmp->queues[coord.first][coord.second].eval_f_stencil_md;
                 zoid.tag_stencil_md = lmp->queues[coord.first][coord.second].tag_stencil_md;
                 zoid.type_stencil_md = lmp->queues[coord.first][coord.second].type_stencil_md;
                 zoid.mask_stencil_md = lmp->queues[coord.first][coord.second].mask_stencil_md;
@@ -642,6 +649,13 @@ void StencilMD::INIT_ZOID_DATA() {
 
                 zoid.send_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_pos_local_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_pos_ghost_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 /* end stuff for 2 timesteps */
 
                 int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
@@ -1218,26 +1232,6 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID_DOUBLE_BUFFERING() {
             }
         }
     }
-
-    /*
-    for (int t = 0; t < DOUBLE_BUFFERING; t++) {
-        std::vector<MPI_Request> r(2 * NUM_ZOIDS, MPI_REQUEST_NULL);
-        comm->exchange_stencil_md_initial_send(r);
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < lmp->queues[dep].size(); j++) {
-                queue_info& zoid = lmp->queues[dep][j];
-                int zoid_num = zoid.num;
-                // receive only if the zoid belongs to me
-                if (zoid_num % comm->nprocs == comm->me) {
-                    lmp->comm_stencil_md[zoid_num]->exchange_stencil_md_initial_receive_double_buffering(zoid, t);
-                }
-            }
-        }
-
-        MPI_Barrier(world);
-        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
-    }
-    */
 }
 
 void StencilMD::GET_GHOST_ATOMS_ZOID() {
@@ -1477,9 +1471,9 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
                     tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                 }
 
-                for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     std::vector<int> tags;
-                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][t2];
+                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][t];
                     for (int i = 0; i < atom_->nlocal; i++) {
                         tags.push_back(atom_->tag[i]);
                     }
@@ -1494,15 +1488,8 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
                         real_idxs.push_back(tag_to_idx[tags[i]]);
                     }
 
-                    /*
-                    std::vector<int> tmp_segment_idxs;
-                    std::vector<int> tmp_segment_sizes;
-                    int num_segments = get_segments(real_idxs, tmp_segment_idxs, tmp_segment_sizes);
-                    std::cout << YELLOW << "ZOID: " << zoid.num << " time: " << t2 << " nlocal: " << atom_->nlocal << " SEGMENTS: " << num_segments << RESET_COLOR << std::endl;
-                    */
-
-                    zoid.local_idxs_per_timestep[t2] = real_idxs;
-                    assert(zoid.local_idxs_per_timestep[t2].size() == atom_->nlocal);
+                    zoid.local_idxs_per_timestep[t] = real_idxs;
+                    assert(zoid.local_idxs_per_timestep[t].size() == atom_->nlocal);
                 }
             }
         }
@@ -1519,9 +1506,9 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
                     tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                 }
 
-                for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     std::vector<int> tags;
-                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t2];
+                    Atom* atom_ = lmp->atom_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t];
                     for (int i = 0; i < atom_->nlocal; i++) {
                         tags.push_back(atom_->tag[i]);
                     }
@@ -1536,12 +1523,34 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
                         real_idxs.push_back(tag_to_idx[tags[i]]);
                     }
 
-                    zoid.local_idxs_per_timestep[t2] = real_idxs;
-                    assert(zoid.local_idxs_per_timestep[t2].size() == atom_->nlocal);
+                    zoid.local_idxs_per_timestep[t] = real_idxs;
+                    assert(zoid.local_idxs_per_timestep[t].size() == atom_->nlocal);
                 }
             }
         }
     }
+
+    /*
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            queue_info &zoid = lmp->queues_next_dt[dep][j];
+            int zoid_num = zoid.num;
+            // receive only if the zoid belongs to me
+            if (zoid_num % comm->nprocs == comm->me) {
+                if (zoid_num == 58) {
+                    std::cout << "POINTER COMPARISON: " << zoid.local_idxs_per_timestep << " " << lmp->zoid_num_to_zoid_next_dt[zoid_num].local_idxs_per_timestep << std::endl;
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        std::cout << "POINTER COMPARISON: " << &(zoid.local_idxs_per_timestep[t]) << " " << &(lmp->zoid_num_to_zoid_next_dt[zoid_num].local_idxs_per_timestep[t]) << std::endl;
+                    }
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        std::cout << "SIZE COMPARISON time: " << t << " " << zoid.local_idxs_per_timestep[t].size() << " " << lmp->zoid_num_to_zoid_next_dt[zoid_num].local_idxs_per_timestep[t].size() << std::endl;
+                    }
+                    assert(false);
+                }
+            }
+        }
+    }
+    */
 }
 
 void StencilMD::CREATE_ATOM_IDX_MAPPING() {
@@ -1792,6 +1801,23 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
             }
         }
     }
+}
+
+void StencilMD::INIT_DOUBLE_BUFFERING_SEND_RECV_DATA() {
+    stencilMD->CONSTRUCT_SEND_FORCE_DOUBLE_BUFFERING<true>();
+    stencilMD->CONSTRUCT_SEND_FORCE_DOUBLE_BUFFERING<false>();
+    stencilMD->CONSTRUCT_RECV_FORCE_DOUBLE_BUFFERING<true>();
+    stencilMD->CONSTRUCT_RECV_FORCE_DOUBLE_BUFFERING<false>();
+
+    stencilMD->CONSTRUCT_SEND_POS_DOUBLE_BUFFERING<true>();
+    stencilMD->CONSTRUCT_SEND_POS_DOUBLE_BUFFERING<false>();
+    stencilMD->CONSTRUCT_RECV_POS_DOUBLE_BUFFERING<true>();
+    stencilMD->CONSTRUCT_RECV_POS_DOUBLE_BUFFERING<false>();
+
+    stencilMD->CONSTRUCT_SEND_VEL_DOUBLE_BUFFERING<true>();
+    stencilMD->CONSTRUCT_SEND_VEL_DOUBLE_BUFFERING<false>();
+    stencilMD->CONSTRUCT_RECV_VEL_DOUBLE_BUFFERING<true>();
+    stencilMD->CONSTRUCT_RECV_VEL_DOUBLE_BUFFERING<false>();
 }
 
 // TODO: what to do with inum per timestep

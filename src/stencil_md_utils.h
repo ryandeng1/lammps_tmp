@@ -93,7 +93,7 @@ constexpr int NUM_DEPS_BINS = 8;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 3;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 constexpr double ADDITIONAL_CUTOFF = 0.401;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
@@ -557,6 +557,14 @@ struct queue_info {
   // TODO:
   std::vector<int>** send_force_idxs_double_buffering;
   std::vector<int>** recv_force_idxs_double_buffering;
+
+  std::vector<int>** send_pos_idxs_double_buffering;
+
+  std::vector<int>** recv_pos_local_idxs_double_buffering;
+  std::vector<int>** recv_pos_ghost_idxs_double_buffering;
+
+  std::vector<int>** send_vel_idxs_double_buffering;
+  std::vector<int>** recv_vel_idxs_double_buffering;
   /* end for two timesteps */
 
   std::vector<bool>* local_bins_comm;

@@ -180,15 +180,85 @@ class AtomVec : protected Pointers {
                                       double* buf);
 
   /* START DOUBLE BUFFERING */
-  virtual int pack_data_to_process_stencil_md_double_buffering(std::vector<int>& neighbors_in_proc,
-                                                               std::vector<int>& tags,
-                                                               std::vector<dbl3_t_stencil_md>& forces,
-                                                               std::vector<int>* send_force_idxs, double* buf);
+  template <bool is_initial>
+  int pack_data_to_process_stencil_md_double_buffering(std::vector<int>& neighbors_in_proc,
+                                                       std::vector<int>& tags,
+                                                       std::vector<dbl3_t_stencil_md>& forces,
+                                                       std::vector<int>* send_force_idxs,
+                                                       std::vector<dbl3_t_stencil_md>& pos,
+                                                       std::vector<int>& send_pos_idxs,
+                                                       std::vector<dbl3_t_stencil_md>& vel,
+                                                       std::vector<int>* send_vel_idxs,
+                                                       double* buf) {
+      if (DEBUG_SEND_RECV_DATA) {
+          int m = 0;
 
-  virtual void unpack_data_from_process_stencil_md_double_buffering(int force_offset_buf,
-                                                                    std::vector<int>& tags,
+          for (int i = 0; i < neighbors_in_proc.size(); i++) {
+              int send_zoid_idx = neighbors_in_proc[i];
+              auto& send_force_idxs_zoid = send_force_idxs[send_zoid_idx];
+
+              assert(send_zoid_idx >= 0 && send_zoid_idx <= 26);
+
+              for (int j = 0; j < send_force_idxs_zoid.size(); j++) {
+                  int idx = send_force_idxs_zoid[j];
+                  const auto& tag_ = tags[idx];
+                  buf[m++] = ubuf(tag_).d;
+                  buf[m++] = forces[idx].x;
+                  buf[m++] = forces[idx].y;
+                  buf[m++] = forces[idx].z;
+
+                  if (!is_initial) {
+                      forces[idx].x = 0;
+                      forces[idx].y = 0;
+                      forces[idx].z = 0;
+                  }
+              }
+          }
+
+          for (int i = 0; i < send_pos_idxs.size(); i++) {
+              int idx = send_pos_idxs[i];
+              const auto& tag_ = tags[idx];
+              buf[m++] = ubuf(tag_).d;
+              buf[m++] = pos[idx].x;
+              buf[m++] = pos[idx].y;
+              buf[m++] = pos[idx].z;
+          }
+
+          for (int i = 0; i < neighbors_in_proc.size(); i++) {
+              int send_zoid_idx = neighbors_in_proc[i];
+
+              assert(send_zoid_idx >= 0 && send_zoid_idx <= 26);
+              auto& send_vel_idxs_zoid = send_vel_idxs[send_zoid_idx];
+
+              for (int j = 0; j < send_vel_idxs_zoid.size(); j++) {
+                  int idx = send_vel_idxs_zoid[j];
+                  const auto& tag_ = tags[idx];
+                  buf[m++] = ubuf(tag_).d;
+                  buf[m++] = vel[idx].x;
+                  buf[m++] = vel[idx].y;
+                  buf[m++] = vel[idx].z;
+              }
+          }
+
+          return m;
+      } else {
+          assert(false);
+      }
+  }
+
+  virtual void unpack_data_from_process_stencil_md_double_buffering(std::vector<int>& tags,
+                                                                    int nrecv_force, int nrecv_pos,
+                                                                    int force_offset_buf,
+                                                                    int vel_offset_buf,
                                                                     std::vector<dbl3_t_stencil_md>& forces,
-                                                                    std::vector<int>& recv_force_idxs, double* buf);
+                                                                    std::vector<int>& recv_force_idxs,
+                                                                    std::vector<dbl3_t_stencil_md>& pos,
+                                                                    std::vector<int>& recv_pos_local_idxs, std::vector<int>& recv_pos_ghost_idxs,
+                                                                    std::vector<dbl3_t_stencil_md>& vel,
+                                                                    std::vector<int>& recv_vel_idxs,
+                                                                    int num_pos_segments_buf, bool* segment_types_buf, int* segment_idxs_buf, int* segment_sizes_buf,
+                                                                    int* pbc_flags_,
+                                                                    double* buf);
   /* END DOUBLE BUFFERING */
 
   virtual int pack_exchange_bonus(int, double *) { return 0; }

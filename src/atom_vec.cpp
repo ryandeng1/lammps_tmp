@@ -3480,56 +3480,20 @@ void AtomVec::add_local_atom_stencil_md(Atom* atom_, Domain* domain_, double* co
 }
 
 /* START DOUBLE BUFFERING */
-int AtomVec::pack_data_to_process_stencil_md_double_buffering(std::vector<int>& neighbors_in_proc,
-                                                              std::vector<int>& tags,
-                                                              std::vector<dbl3_t_stencil_md>& forces,
-                                                              std::vector<int>* send_force_idxs,
-                                                              double* buf) {
-    if (DEBUG_SEND_RECV_DATA) {
-        int m = 0;
-
-        for (int i = 0; i < neighbors_in_proc.size(); i++) {
-            int send_zoid_idx = neighbors_in_proc[i];
-            auto& send_force_idxs_zoid = send_force_idxs[send_zoid_idx];
-
-            assert(send_zoid_idx >= 0 && send_zoid_idx <= 26);
-
-            for (int j = 0; j < send_force_idxs_zoid.size(); j++) {
-                int idx = send_force_idxs_zoid[j];
-                const auto& tag_ = tags[idx];
-                buf[m++] = ubuf(tag_).d;
-                buf[m++] = forces[idx].x;
-                buf[m++] = forces[idx].y;
-                buf[m++] = forces[idx].z;
-            }
-        }
-
-        return m;
-    } else {
-        int m = 0;
-
-        for (int i = 0; i < neighbors_in_proc.size(); i++) {
-            int zoid_idx = neighbors_in_proc[i];
-            auto& send_force_idxs_zoid = send_force_idxs[zoid_idx];
-            assert(zoid_idx >= 0 && zoid_idx <= 26);
-
-            for (int j = 0; j < send_force_idxs_zoid.size(); j++) {
-                int idx = send_force_idxs_zoid[j];
-                auto& send_force = forces[idx];
-                buf[m++] = forces[idx].x;
-                buf[m++] = forces[idx].y;
-                buf[m++] = forces[idx].z;
-            }
-        }
-
-        return m;
-    }
-}
-
-void AtomVec::unpack_data_from_process_stencil_md_double_buffering(int force_offset_buf,
-                                                                   std::vector<int>& tags,
+void AtomVec::unpack_data_from_process_stencil_md_double_buffering(std::vector<int>& tags,
+                                                                   int nrecv_force, int nrecv_pos,
+                                                                   int force_offset_buf,
+                                                                   int vel_offset_buf,
                                                                    std::vector<dbl3_t_stencil_md>& forces,
                                                                    std::vector<int>& recv_force_idxs,
+                                                                   std::vector<dbl3_t_stencil_md>& pos,
+                                                                   std::vector<int>& recv_pos_local_idxs,
+                                                                   std::vector<int>& recv_pos_ghost_idxs,
+                                                                   std::vector<dbl3_t_stencil_md>& vel,
+                                                                   std::vector<int>& recv_vel_idxs,
+                                                                   int num_pos_segments_buf, bool* segment_types_buf,
+                                                                   int* segment_idxs_buf, int* segment_sizes_buf,
+                                                                   int* pbc_flags_,
                                                                    double* buf) {
     if (DEBUG_SEND_RECV_DATA) {
         // 0 is the starting idx of the buffeer
@@ -3554,20 +3518,86 @@ void AtomVec::unpack_data_from_process_stencil_md_double_buffering(int force_off
             forces[idx].y += f_y;
             forces[idx].z += f_z;
         }
-    } else {
-        // 0 is the starting idx of the buffeer
-        int m = 0 + force_offset_buf * (3);
 
-        for (int i = 0; i < recv_force_idxs.size(); i++) {
-            double f_x = buf[m++];
-            double f_y = buf[m++];
-            double f_z = buf[m++];
+        int pos_start_idx = nrecv_force * (3 + 1);
 
-            int idx = recv_force_idxs[i];
+        int local_list_idx = 0;
+        int ghost_list_idx = 0;
 
-            forces[idx].x += f_x;
-            forces[idx].y += f_y;
-            forces[idx].z += f_z;
+        for (int i = 0; i < num_pos_segments_buf; i++) {
+            bool segment_type = segment_types_buf[i];
+            int segment_size = segment_sizes_buf[i];
+            int segment_idx = segment_idxs_buf[i];
+            int counter = segment_idx * (3 + 1) + pos_start_idx;
+
+            if (segment_type == RECV_DATA_PROCESS_LOCAL) {
+                for (int j = 0; j < segment_size; j++) {
+                    tagint target_tag = (tagint) ubuf(buf[counter++]).i;
+                    double x_x = buf[counter++];
+                    double x_y = buf[counter++];
+                    double x_z = buf[counter++];
+
+                    int idx = recv_pos_local_idxs[local_list_idx++];
+                    if (tags[idx] != target_tag) {
+                        std::cout << BOLDRED << "me: " << comm->me << " RECV DATA PROCESS LOCAL ERROR. Got tag: " << target_tag << " wanted tag: " << tags[idx]
+                        << " nrecv force: " << nrecv_force << " i: " << i
+                        << " segment idx: " << segment_idx
+                        << " segment size: " << segment_size
+                        << " local list idx: " << local_list_idx
+                        << " counter: " << counter
+                        << RESET_COLOR << std::endl;
+                        assert(false);
+                    }
+
+                    assert(tags[idx] == target_tag);
+                    pos[idx].x = x_x + domain->prd[0] * pbc_flags_[0];
+                    pos[idx].y = x_y + domain->prd[1] * pbc_flags_[1];
+                    pos[idx].z = x_z + domain->prd[2] * pbc_flags_[2];
+                }
+            } else {
+                assert(segment_type == RECV_DATA_PROCESS_GHOST);
+                for (int j = 0; j < segment_size; j++) {
+                    tagint target_tag = (tagint) ubuf(buf[counter++]).i;
+                    double x_x = buf[counter++];
+                    double x_y = buf[counter++];
+                    double x_z = buf[counter++];
+
+                    int idx = recv_pos_ghost_idxs[ghost_list_idx++];
+                    if (tags[idx] != target_tag) {
+                        std::cout << BOLDRED << "me: " << comm->me << " RECV DATA PROCESS GHOST ERROR. Got tag: " << target_tag << " wanted tag: " << tags[idx]
+                                  << " nrecv force: " << nrecv_force << " i: " << i
+                                  << " segment idx: " << segment_idx
+                                  << " segment size: " << segment_size
+                                  << " local list idx: " << local_list_idx
+                                  << " counter: " << counter
+                                  << " ghost list idx: " << ghost_list_idx - 1
+                                  << RESET_COLOR << std::endl;
+                        assert(false);
+                    }
+                    assert(target_tag == tags[idx]);
+
+                    pos[idx].x = x_x + domain->prd[0] * pbc_flags_[0];
+                    pos[idx].y = x_y + domain->prd[1] * pbc_flags_[1];
+                    pos[idx].z = x_z + domain->prd[2] * pbc_flags_[2];
+                }
+            }
+        }
+
+        int vel_start_idx = nrecv_force * (3 + 1) + nrecv_pos * (3 + 1) + vel_offset_buf * (3 + 1);
+        m = vel_start_idx;
+
+        for (int i = 0; i < recv_vel_idxs.size(); i++) {
+            tagint target_tag = (tagint) ubuf(buf[m++]).i;
+            double v_x = buf[m++];
+            double v_y = buf[m++];
+            double v_z = buf[m++];
+
+            int idx = recv_vel_idxs[i];
+            assert(tags[idx] == target_tag);
+
+            vel[idx].x = v_x;
+            vel[idx].y = v_y;
+            vel[idx].z = v_z;
         }
     }
 }

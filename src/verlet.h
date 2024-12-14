@@ -92,6 +92,27 @@ class Verlet : public Integrate {
 
   void run_stencil_md_no_cilk_for(int num_timesteps, double** test_f, double** test_x, double** test_v);
 
+  /* BEGIN DOUBLE BUFFERING */
+  template <bool curr_dt>
+  void run_stencil_md_zoid_double_buffering(int start_timestep, int start_eval, int end_eval, int zoid_num,
+                                            double** test_f, double** test_x, double** test_v, bool warmup);
+
+  void run_stencil_md_pipelined_double_buffering(int num_timesteps, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
+                                                 double** test_f, double** test_x, double** test_v, bool warmup);
+
+  template <bool curr_dt>
+  void run_stencil_md_pipelined_double_buffering_helper(int starting_timestep,
+                                                        std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
+                                                        double** test_f, double** test_x, double** test_v, bool warmup);
+
+  template <bool curr_dt>
+  void run_stencil_md_dep_double_buffering(int dep, int start_timestep, int start_t, int end_t, int* dep_to_idxs,
+                                           std::vector<MPI_Request>* send_requests, std::vector<MPI_Request>& receive_requests,
+                                           std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
+                                           double** test_f, double** test_x, double** test_v, int pipeline_stage=0, bool warmup=false);
+
+  /* END DOUBLE BUFFERING */
+
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic
   int torqueflag, extraflag;
