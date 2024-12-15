@@ -438,6 +438,8 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.neighbor_list = new std::vector<int>*[1];
+                // zoid.bond_list = new std::vector<std::pair<int, int>>*[1];
 
                 zoid.send_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -646,6 +648,8 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                // zoid.neighbor_list = lmp->queues[coord.first][coord.second].neighbor_list;
+                // zoid.bond_list = lmp->queues[coord.first][coord.second].bond_list;
 
                 zoid.send_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -1246,9 +1250,8 @@ void StencilMD::GET_GHOST_ATOMS_ZOID() {
                 // receive only if the zoid belongs to me
                 if (zoid_num % comm->nprocs == comm->me) {
                     Atom* first = lmp->atom_stencil_md[zoid_num][t];
-                    lmp->comm_stencil_md[zoid_num]
-                            ->borders_stencil_md_initial_receive_from_lammps(
-                                    first, lmp->domain_stencil_md[zoid_num][t], zoid, t);
+                    lmp->comm_stencil_md[zoid_num]->borders_stencil_md_initial_receive_from_lammps(
+                            first, lmp->domain_stencil_md[zoid_num][t], zoid, t);
                 }
             }
         }
@@ -1490,6 +1493,12 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
 
                     zoid.local_idxs_per_timestep[t] = real_idxs;
                     assert(zoid.local_idxs_per_timestep[t].size() == atom_->nlocal);
+
+                    std::vector<int> tmp_segments_idxs;
+                    std::vector<int> tmp_segments_sizes;
+                    int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp_segments_idxs, tmp_segments_sizes);
+                    std::cout << BOLDYELLOW << "zoid: " << zoid.num << " total size: " << tag_to_idx.size()
+                        << " time: " << t << " num segments: " << num_segments << RESET_COLOR << std::endl;
                 }
             }
         }
@@ -1657,7 +1666,6 @@ void StencilMD::BUILD_NEIGHBOR_LIST_NEXT_DT() {
 }
 
 void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
-    // build one for curr dt
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -1681,11 +1689,12 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
 
                     for (int ii = 0; ii < atom_->nlocal; ii++) {
                         int i = ilist[ii];
+                        int src_idx = tag_to_idx[atom_->tag[i]];
+
                         auto neigh_list = firstneigh[i];
 
                         for (int k = 0; k < numneigh[i]; k++) {
                             auto neigh_atom = neigh_list[k];
-                            int src_idx = tag_to_idx[atom_->tag[i]];
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
                             zoid.neighbor_list[t][src_idx].push_back(dst_idx);
                         }
@@ -1719,10 +1728,10 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                     for (int ii = 0; ii < atom_->nlocal; ii++) {
                         int i = ilist[ii];
                         auto neigh_list = firstneigh[i];
+                        int src_idx = tag_to_idx[atom_->tag[i]];
 
                         for (int k = 0; k < numneigh[i]; k++) {
                             auto neigh_atom = neigh_list[k];
-                            int src_idx = tag_to_idx[atom_->tag[i]];
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
                             assert(src_idx >= 0 && src_idx < zoid.x_stencil_md[0].size());
                             zoid.neighbor_list[t][src_idx].push_back(dst_idx);
@@ -1735,7 +1744,6 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
 }
 
 void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
-    // build one for curr dt
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < lmp->queues[dep].size(); j++) {
@@ -1754,12 +1762,13 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
 
                     for (int ii = 0; ii < atom_->nlocal; ii++) {
                         auto& lst_bonds = neigh->atom_bondlist[ii];
+                        int src_idx = tag_to_idx[atom_->tag[ii]];
+
                         for (int k = 0; k < lst_bonds.size(); k++) {
                             auto bond_info = lst_bonds[k];
                             auto neigh_atom = bond_info.first;
                             auto bond_type = bond_info.second;
 
-                            int src_idx = tag_to_idx[atom_->tag[ii]];
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
                             zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
                         }

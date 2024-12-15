@@ -4495,7 +4495,7 @@ public:
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
 
         // auto& local_dtfm = next->local_dtfm;
-        auto claimed_flag_struct = next->claimed_flag_struct;
+        auto* claimed_flag_struct = next->claimed_flag_struct;
 
         int num_chunks = next->num_chunks;
         int num_workers = __cilkrts_get_nworkers();
@@ -4624,14 +4624,16 @@ public:
     void stencil_md_fuse_force_computation_atomics_affinity_double_buffering(queue_info& zoid, int timestep,
                                                                              Atom* next, Neighbor* neigh_next,
                                                                              Force* next_force, Modify* modify_) {
-        const auto& x = zoid.x_stencil_md[timestep % 2];
-        auto& f = zoid.eval_f_stencil_md[timestep % 2];
+        const auto * _noalias const x = zoid.x_stencil_md[timestep % 2].data();
+        // const auto& x = zoid.x_stencil_md[timestep % 2];
+        // auto& f = zoid.eval_f_stencil_md[timestep % 2];
+        auto * _noalias const f = zoid.eval_f_stencil_md[timestep % 2].data();
 
         auto pair = (PairLJCut*) next_force->pair;
         auto bond = (BondFENE*) next_force->bond;
 
-        auto& bond_list = zoid.bond_list[timestep];
-        auto& neighbor_list = zoid.neighbor_list[timestep];
+        const auto& bond_list = zoid.bond_list[timestep];
+        const auto& neighbor_list = zoid.neighbor_list[timestep];
 
         const int * _noalias const ilist = pair->list->ilist;
         // const int * _noalias const numneigh = pair->list->numneigh;
@@ -4639,7 +4641,7 @@ public:
         const double * _noalias const special_lj = force->special_lj;
 
         // auto* spinlocks = next->spinlocks;
-        auto* spinlocks = zoid.spinlocks_stencil_md[0];
+        auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
 
         assert(pair->list->inum == next->nlocal);
 
@@ -4664,127 +4666,12 @@ public:
 
         int num_chunks = next->num_chunks;
         int num_workers = __cilkrts_get_nworkers();
-        auto claimed = next->claimed;
-        auto claimed_int = next->claimed_int;
-        auto claimed_flag = next->claimed_flag;
-        auto claimed_flag_struct = next->claimed_flag_struct;
+        auto* claimed = next->claimed;
+        auto* claimed_int = next->claimed_int;
+        auto* claimed_flag = next->claimed_flag;
+        auto* claimed_flag_struct = next->claimed_flag_struct;
 
         const auto& tags = zoid.tag_stencil_md[0];
-
-        if (num_chunks == 1) {
-            for (int ii = 0; ii < nlocal; ii++) {
-                int i = local_idxs[ii];
-
-                const int itype = atom_type[i];
-
-                // const int *_noalias const jlist = firstneigh[i];
-                const double *_noalias const cutsqi = cutsq[itype];
-                const double *_noalias const offseti = offset[itype];
-                const double *_noalias const lj1i = lj1[itype];
-                const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
-
-                double xtmp = x[i].x;
-                double ytmp = x[i].y;
-                double ztmp = x[i].z;
-                // int jnum = numneigh[i];
-
-                double fxtmp = 0.0;
-                double fytmp = 0.0;
-                double fztmp = 0.0;
-
-                for (int jj = 0; jj < neighbor_list[i].size(); jj++) {
-                    double evdwl = 0.0;
-                    // int j = jlist[jj];
-                    int j = neighbor_list[i][jj];
-                    double factor_lj = special_lj[pair->sbmask(j)];
-                    j &= NEIGHMASK;
-
-                    double delx = xtmp - x[j].x;
-                    double dely = ytmp - x[j].y;
-                    double delz = ztmp - x[j].z;
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    int jtype = atom_type[j];
-
-                    if (rsq < cutsqi[jtype]) {
-                        double r2inv = 1.0 / rsq;
-                        double r6inv = r2inv * r2inv * r2inv;
-                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
-                        double fpair = factor_lj * forcelj * r2inv;
-
-                        fxtmp += delx * fpair;
-                        fytmp += dely * fpair;
-                        fztmp += delz * fpair;
-
-                        if (newton_pair || j < nlocal) {
-                            f[j].x -= delx * fpair;
-                            f[j].y -= dely * fpair;
-                            f[j].z -= delz * fpair;
-                        }
-                    }
-                }
-
-                auto &lst_bonds = bond_list[i];
-                for (int j = 0; j < lst_bonds.size(); j++) {
-                    auto &bond_info = lst_bonds[j];
-                    int i2 = bond_info.first;
-                    int type = bond_info.second;
-
-                    double delx = xtmp - x[i2].x;
-                    double dely = ytmp - x[i2].y;
-                    double delz = ztmp - x[i2].z;
-
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    double r0sq = r0[type] * r0[type];
-                    double rlogarg = 1.0 - rsq / r0sq;
-
-                    if (rlogarg < 0.1) {
-                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                        //                                return;
-                        assert(false);
-
-                        rlogarg = 0.1;
-                    }
-
-                    double fbond = -k[type] / rlogarg;
-
-                    // force from LJ term
-                    double sr2 = 0.0;
-                    double sr6 = 0.0;
-
-                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                        sr2 = sigma[type] * sigma[type] / rsq;
-                        sr6 = sr2 * sr2 * sr2;
-                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                    }
-
-                    // energy
-
-                    // apply force to each of 2 atoms
-
-                    if (newton_pair || i < nlocal) {
-                        fxtmp += delx * fbond;
-                        fytmp += dely * fbond;
-                        fztmp += delz * fbond;
-                    }
-
-                    if (newton_pair || i2 < nlocal) {
-                        f[i2].x -= delx * fbond;
-                        f[i2].y -= dely * fbond;
-                        f[i2].z -= delz * fbond;
-                    }
-                }
-
-                f[i].x += fxtmp;
-                f[i].y += fytmp;
-                f[i].z += fztmp;
-            }
-
-            return;
-        }
 
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = next->chunk_size;
@@ -4792,6 +4679,7 @@ public:
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
             int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
 
@@ -4947,7 +4835,7 @@ public:
                     }
 
                     // technically the same for both timesteps
-                    std::map<int, int> zoid_tag_to_idx;
+                    std::unordered_map<int, int> zoid_tag_to_idx;
                     for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
                         zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
                     }
@@ -5004,7 +4892,7 @@ public:
                     }
 
                     // technically the same for both timesteps
-                    std::map<int, int> zoid_tag_to_idx;
+                    std::unordered_map<int, int> zoid_tag_to_idx;
                     for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
                         zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
                     }
@@ -5052,7 +4940,7 @@ public:
                         zoid.send_pos_idxs_double_buffering[t] = new std::vector<int>[comm->nprocs];
                         Atom* atom_ = curr_dt ? lmp->atom_stencil_md[zoid.num][t] : lmp->atom_stencil_md[zoid.num][NUM_TIMESTEPS_IN_PARALLEL - t];
 
-                        std::map<int, int> zoid_tag_to_idx;
+                        std::unordered_map<int, int> zoid_tag_to_idx;
                         for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
                             zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
                         }
@@ -5114,7 +5002,7 @@ public:
                 if (zoid.num % comm->nprocs == comm->me) {
                     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
 
-                    std::map<int, int> zoid_tag_to_idx;
+                    std::unordered_map<int, int> zoid_tag_to_idx;
                     for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
                         zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
                     }
@@ -5181,7 +5069,7 @@ public:
                         zoid.send_vel_idxs_double_buffering[t] = new std::vector<int>[send_to.size()];
                         Atom* atom_ = curr_dt ? lmp->atom_stencil_md[zoid.num][t] : lmp->atom_stencil_md[zoid.num][NUM_TIMESTEPS_IN_PARALLEL - t];
 
-                        std::map<int, int> zoid_tag_to_idx;
+                        std::unordered_map<int, int> zoid_tag_to_idx;
                         for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
                             zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
                         }
@@ -5232,7 +5120,7 @@ public:
                         zoid.recv_vel_idxs_double_buffering[t] = new std::vector<int>[recv_from.size()];
                         Atom* atom_ = curr_dt ? lmp->atom_stencil_md[zoid.num][t] : lmp->atom_stencil_md[zoid.num][NUM_TIMESTEPS_IN_PARALLEL - t];
 
-                        std::map<int, int> zoid_tag_to_idx;
+                        std::unordered_map<int, int> zoid_tag_to_idx;
                         for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
                             zoid_tag_to_idx[zoid.tag_stencil_md[0][k]] = k;
                         }
@@ -5269,7 +5157,7 @@ public:
         const auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
         const auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
 
-        std::map<int, int> zoid_tag_to_idx;
+        std::unordered_map<int, int> zoid_tag_to_idx;
         for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
             zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
         }
@@ -5334,7 +5222,7 @@ public:
         const auto& f = zoid.f_stencil_md[timestep % 2];
         const auto& eval_f = zoid.eval_f_stencil_md[timestep % 2];
 
-        std::map<int, int> zoid_tag_to_idx;
+        std::unordered_map<int, int> zoid_tag_to_idx;
         for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
             zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
         }
@@ -5404,7 +5292,7 @@ public:
         const auto& f = zoid.f_stencil_md[timestep % 2];
         const auto& eval_f = zoid.eval_f_stencil_md[timestep % 2];
 
-        std::map<int, int> zoid_tag_to_idx;
+        std::unordered_map<int, int> zoid_tag_to_idx;
         for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
             zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
         }

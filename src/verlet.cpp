@@ -77,7 +77,7 @@ static cilk::opadd_reducer<int64_t> misc_time = 0;
 static cilk::opadd_reducer<int64_t> unpack_self_time = 0;
 static cilk::opadd_reducer<int64_t> pre_recv_time = 0;
 
-constexpr bool USE_DOUBLE_BUFFERING = false;
+constexpr bool USE_DOUBLE_BUFFERING = true;
 
 /* ---------------------------------------------------------------------- */
 
@@ -2313,6 +2313,10 @@ void Verlet::setup_stencil_md() {
 
     stencilMD->GET_LOCAL_ATOMS_ZOID();
 
+    if (comm->me == 0) {
+        std::cout << "got local atoms zoid" << std::endl;
+    }
+
     // check to make sure each timestep has all of the local atoms needed
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         int total = 0;
@@ -2374,11 +2378,21 @@ void Verlet::setup_stencil_md() {
         assert(total == atom->natoms);
     }
 
+    if (comm->me == 0) {
+        std::cout << "did some testing" << std::endl;
+    }
+
     MPI_Barrier(world);
 
-
     stencilMD->GET_GHOST_ATOMS_ZOID();
+    if (comm->me == 0) {
+        std::cout << "got ghost atoms zoid" << std::endl;
+    }
+
     stencilMD->SORT_LOCAL_ATOMS_BINS();
+    if (comm->me == 0) {
+        std::cout << "sort local atoms bins" << std::endl;
+    }
 
     // check atom map is correct
     /*
@@ -2473,6 +2487,10 @@ void Verlet::setup_stencil_md() {
 
     stencilMD->BUILD_NEIGHBOR_LIST();
     stencilMD->BUILD_NEIGHBOR_LIST_NEXT_DT();
+
+    if (comm->me == 0) {
+        std::cout << "finished building neighbor list" << std::endl;
+    }
 
     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -6926,14 +6944,11 @@ void Verlet::run_stencil_md_zoid_double_buffering(int starting_timestep, int sta
 #endif
 
         if (!warmup && TEST_AGAINST_LAMMPS) {
-            auto b = std::chrono::high_resolution_clock::now();
             int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
             // TODO:
             stencilMD->TEST_POS_AGAINST_LAMMPS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, zoid, atom_, test_x);
             stencilMD->TEST_VEL_AGAINST_LAMMPS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, zoid, atom_, test_v);
             stencilMD->TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, zoid, atom_, test_f);
-            auto e = std::chrono::high_resolution_clock::now();
-            auto d = std::chrono::duration_cast<std::chrono::microseconds>(e - b).count();
         }
 
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
@@ -7065,7 +7080,6 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
     if (dep > 0) {
         auto &wait_idxs = curr_dt ? dep_to_wait_idxs[dep] : dep_to_wait_idxs_next_dt[dep];
         int recv_idx = dep_to_recv_idx[dep];
-
         auto begin_mpi = std::chrono::high_resolution_clock::now();
         MPI_Waitall(wait_idxs.size(), &receive_requests[recv_idx], MPI_STATUSES_IGNORE);
         auto end_mpi = std::chrono::high_resolution_clock::now();
@@ -7102,7 +7116,7 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
             constexpr bool flag = true;
 
             if (flag) {
-                for (int proc = 0; proc < comm->nprocs; proc++) {
+                cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                     bool found = (send_to_neighbors_procs.find(proc) != send_to_neighbors_procs.end());
                     if (proc != comm->me && found) {
                         comm_->pack_data_to_process_stencil_md_double_buffering(curr_dt, start_t, end_t,

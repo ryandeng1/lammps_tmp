@@ -1282,8 +1282,6 @@ void CommBrick::borders_stencil_md_initial_receive_from_lammps(Atom *atom_, Doma
                 }
                 m += static_cast<int>(buf_recv[m]);
             }
-
-            // std::cout << "m: " << m << " out of: " << nrecv << " zoid: " << zoid.num << " timestep: " << timestep << std::endl;
         }
     }
 
@@ -4829,25 +4827,13 @@ bool CommBrick::send_packed_data_to_process_stencil_md_double_buffering(bool cur
         queue_info& recv_zoid = curr_dt? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
         auto& zoid_num_idxs_recv = curr_dt ? lmp->recv_zoid_to_my_zoids[zoid_num] : lmp->recv_zoid_to_my_zoids_next_dt[zoid_num];
 
-        for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
+        cilk_for (int i = 0; i < zoid_num_idxs_recv.size(); i++) {
             int other_zoid_num = zoid_num_idxs_recv[i].first;
             int recv_idx = zoid_num_idxs_recv[i].second;
 
             auto& other_atom_arr = lmp->atom_stencil_md[other_zoid_num];
             auto& other_recv_from = curr_dt ? lmp->recv_from_neighbors[other_zoid_num] : lmp->recv_from_neighbors_next_dt[other_zoid_num];
             queue_info& other_zoid = curr_dt ? lmp->zoid_num_to_zoid[other_zoid_num] : lmp->zoid_num_to_zoid_next_dt[other_zoid_num];
-
-            /*
-            std::vector<int> idxs;
-            idxs.push_back(0);
-            for (int t = start_timestep; t < end_timestep; t++) {
-                if (DEBUG_SEND_RECV_DATA) {
-                    idxs.push_back(4 * other_zoid.recv_force_idxs_double_buffering[t][recv_idx].size() + idxs[idxs.size() - 1]);
-                } else {
-                    idxs.push_back(3 * other_zoid.recv_force_idxs_double_buffering[t][recv_idx].size() + idxs[idxs.size() - 1]);
-                }
-            }
-            */
 
             int pbc_flag_[3] = {0};
             for (int dim = 0; dim < 3; dim++) {
@@ -5694,6 +5680,7 @@ void CommBrick::grow_send(int n, int flag)
 
 void CommBrick::grow_send_stencil_md(int n, int idx, int flag)
 {
+  std::cout << "GROW SEND STENCILMD" << std::endl;
   if (flag == 0) {
     maxsend_stencil_md[idx] = static_cast<int>(BUFFACTOR * n);
     memory->destroy(buf_send_stencil_md[idx]);
@@ -5723,6 +5710,7 @@ void CommBrick::grow_recv(int n)
 
 void CommBrick::grow_recv_stencil_md(int n, int idx)
 {
+  std::cout << "GROW RECV STENCILMD" << std::endl;
   maxrecv_stencil_md[idx] = static_cast<int>(BUFFACTOR * n);
   memory->destroy(buf_recv_stencil_md[idx]);
   memory->create(buf_recv_stencil_md[idx], maxrecv_stencil_md[idx] * NUM_PIPELINE_STAGES, "comm:buf_recv");
