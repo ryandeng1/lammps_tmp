@@ -1436,7 +1436,8 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       }
 
                       // TODO: maybe sort by something later here?
-                      return tag_a < tag_b;
+                      // return tag_a < tag_b;
+                      return tag_to_idx[tag_a] < tag_to_idx[tag_b];
                 });
 
                 for (int t = 0; t < DOUBLE_BUFFERING; t++) {
