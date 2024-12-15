@@ -1373,6 +1373,18 @@ void apply_permutation_in_place(
 }
 
 void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
+    // setup lammps code
+    double binsize = 0.5 * neighbor->cutneighmax;
+    double bininv = 1.0/binsize;
+
+    int nbinx = static_cast<int> ((domain->boxhi[0] - domain->boxlo[0]) * bininv);
+    int nbiny = static_cast<int> ((domain->boxhi[1] - domain->boxlo[1]) * bininv);
+    int nbinz = static_cast<int> ((domain->boxhi[2] - domain->boxlo[2]) * bininv);
+
+    double bininvx = nbinx / (domain->boxhi[0] - domain->boxlo[0]);
+    double bininvy = nbiny / (domain->boxhi[1] - domain->boxlo[1]);
+    double bininvz = nbinz / (domain->boxhi[2] - domain->boxlo[2]);
+
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < lmp->queues[dep].size(); j++) {
             queue_info& zoid = lmp->queues[dep][j];
@@ -1434,6 +1446,35 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       if (last_timestep_a != last_timestep_b) {
                           return last_timestep_a > last_timestep_b;
                       }
+
+                      // USE LAMMPS SORTING
+                      const auto& pos_a = zoid.x_stencil_md[0][idx_a];
+                      int ix_a = static_cast<int> ((pos_a.x - domain->boxlo[0]) * bininvx);
+                      int iy_a = static_cast<int> ((pos_a.y - domain->boxlo[1]) * bininvy);
+                      int iz_a = static_cast<int> ((pos_a.z - domain->boxlo[2]) * bininvz);
+
+                      ix_a = MAX(ix_a,0);
+                      iy_a = MAX(iy_a,0);
+                      iz_a = MAX(iz_a,0);
+                      ix_a = MIN(ix_a,nbinx-1);
+                      iy_a = MIN(iy_a,nbiny-1);
+                      iz_a = MIN(iz_a,nbinz-1);
+                      int ibin_a = iz_a*nbiny*nbinx + iy_a*nbinx + ix_a;
+
+                      const auto& pos_b = zoid.x_stencil_md[0][idx_b];
+                      int ix_b = static_cast<int> ((pos_b.x - domain->boxlo[0]) * bininvx);
+                      int iy_b = static_cast<int> ((pos_b.y - domain->boxlo[1]) * bininvy);
+                      int iz_b = static_cast<int> ((pos_b.z - domain->boxlo[2]) * bininvz);
+
+                      ix_b = MAX(ix_b,0);
+                      iy_b = MAX(iy_b,0);
+                      iz_b = MAX(iz_b,0);
+                      ix_b = MIN(ix_b,nbinx-1);
+                      iy_b = MIN(iy_b,nbiny-1);
+                      iz_b = MIN(iz_b,nbinz-1);
+                      int ibin_b = iz_b*nbiny*nbinx + iy_b*nbinx + ix_b;
+
+                      return ibin_a < ibin_b;
 
                       // TODO: maybe sort by something later here?
                       // return tag_a < tag_b;
