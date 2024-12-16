@@ -3603,10 +3603,14 @@ void AtomVec::unpack_data_from_process_stencil_md_double_buffering(std::vector<i
         // 0 is the starting idx of the buffeer
         int m = 0 + force_offset_buf * (3);
 
-        for (int i = 0; i < recv_force_idxs.size(); i++) {
-            double f_x = buf[m++];
-            double f_y = buf[m++];
-            double f_z = buf[m++];
+        #pragma cilk grainsize 4096
+        cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
+            // double f_x = buf[m++];
+            // double f_y = buf[m++];
+            // double f_z = buf[m++];
+            double f_x = buf[m + i * 3];
+            double f_y = buf[m + i * 3 + 1];
+            double f_z = buf[m + i * 3 + 2];
 
             int idx = recv_force_idxs[i];
 
@@ -3655,10 +3659,14 @@ void AtomVec::unpack_data_from_process_stencil_md_double_buffering(std::vector<i
         int vel_start_idx = nrecv_force * (3) + nrecv_pos * (3) + vel_offset_buf * (3);
         m = vel_start_idx;
 
-        for (int i = 0; i < recv_vel_idxs.size(); i++) {
-            double v_x = buf[m++];
-            double v_y = buf[m++];
-            double v_z = buf[m++];
+        #pragma cilk grainsize 4096
+        cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
+            // double v_x = buf[m++];
+            // double v_y = buf[m++];
+            // double v_z = buf[m++];
+            double v_x = buf[m + i * 3];
+            double v_y = buf[m + i * 3 + 1];
+            double v_z = buf[m + i * 3 + 2];
 
             int idx = recv_vel_idxs[i];
             vel[idx].x = v_x;
