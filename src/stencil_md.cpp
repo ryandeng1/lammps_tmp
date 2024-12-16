@@ -1401,7 +1401,6 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       int idx_a = tag_to_idx[tag_a];
                       int idx_b = tag_to_idx[tag_b];
 
-                      /*
                       // sort based on last timestep they are in the zoid
                       int last_timestep_a = -1;
                       int last_timestep_b = -1;
@@ -1447,7 +1446,6 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       if (last_timestep_a != last_timestep_b) {
                           return last_timestep_a > last_timestep_b;
                       }
-                      */
 
                       // USE LAMMPS SORTING
                       const auto& pos_a = zoid.x_stencil_md[0][idx_a];

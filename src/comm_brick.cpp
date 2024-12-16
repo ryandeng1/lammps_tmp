@@ -4677,16 +4677,16 @@ void CommBrick::pack_data_to_process_stencil_md_double_buffering(bool curr_dt, i
         if (start_timestep == 0) {
             int n = atom_->avec->pack_data_to_process_stencil_md_double_buffering<true>(
                     neighbors_in_proc,
-                    zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % 2], zoid.send_force_idxs_double_buffering[t],
-                    zoid.x_stencil_md[t % 2], zoid.send_pos_idxs_double_buffering[t][proc],
-                    zoid.v_stencil_md[t % 2], zoid.send_vel_idxs_double_buffering[t],
+                    zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % DOUBLE_BUFFERING], zoid.send_force_idxs_double_buffering[t],
+                    zoid.x_stencil_md[t % DOUBLE_BUFFERING], zoid.send_pos_idxs_double_buffering[t][proc],
+                    zoid.v_stencil_md[t % DOUBLE_BUFFERING], zoid.send_vel_idxs_double_buffering[t],
                     &buf_send_stencil_md[proc][starting_idx + buf_offset]);
         } else {
             int n = atom_->avec->pack_data_to_process_stencil_md_double_buffering<false>(
                     neighbors_in_proc,
-                    zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % 2], zoid.send_force_idxs_double_buffering[t],
-                    zoid.x_stencil_md[t % 2], zoid.send_pos_idxs_double_buffering[t][proc],
-                    zoid.v_stencil_md[t % 2], zoid.send_vel_idxs_double_buffering[t],
+                    zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % DOUBLE_BUFFERING], zoid.send_force_idxs_double_buffering[t],
+                    zoid.x_stencil_md[t % DOUBLE_BUFFERING], zoid.send_pos_idxs_double_buffering[t][proc],
+                    zoid.v_stencil_md[t % DOUBLE_BUFFERING], zoid.send_vel_idxs_double_buffering[t],
                     &buf_send_stencil_md[proc][starting_idx + buf_offset]);
         }
     }
@@ -4773,9 +4773,9 @@ void CommBrick::unpack_data_process_zoid_stencil_md_double_buffering(bool curr_d
                     nrecv_force, nrecv_pos,
                     zoid.recv_process_force_offset[t][recv_idx],
                     zoid.recv_process_vel_offset[t][recv_idx],
-                    zoid.f_stencil_md[t % 2], zoid.recv_force_idxs_double_buffering[t][recv_idx],
-                    zoid.x_stencil_md[t % 2], zoid.recv_pos_local_idxs_double_buffering[t][recv_idx], zoid.recv_pos_ghost_idxs_double_buffering[t][recv_idx],
-                    zoid.v_stencil_md[t % 2], zoid.recv_vel_idxs_double_buffering[t][recv_idx],
+                    zoid.f_stencil_md[t % DOUBLE_BUFFERING], zoid.recv_force_idxs_double_buffering[t][recv_idx],
+                    zoid.x_stencil_md[t % DOUBLE_BUFFERING], zoid.recv_pos_local_idxs_double_buffering[t][recv_idx], zoid.recv_pos_ghost_idxs_double_buffering[t][recv_idx],
+                    zoid.v_stencil_md[t % DOUBLE_BUFFERING], zoid.recv_vel_idxs_double_buffering[t][recv_idx],
                     zoid.recv_process_num_segments[t][recv_idx], zoid.recv_process_segment_types[t][recv_idx],
                     zoid.recv_process_segment_idxs[t][recv_idx], zoid.recv_process_segment_sizes[t][recv_idx],
                     pbc_flag_,
@@ -4881,9 +4881,9 @@ bool CommBrick::send_packed_data_to_process_stencil_md_double_buffering(bool cur
                         nrecv_force, nrecv_pos,
                         other_zoid.recv_process_force_offset[t][recv_idx],
                         other_zoid.recv_process_vel_offset[t][recv_idx],
-                        other_zoid.f_stencil_md[t % 2], other_zoid.recv_force_idxs_double_buffering[t][recv_idx],
-                        other_zoid.x_stencil_md[t % 2], other_zoid.recv_pos_local_idxs_double_buffering[t][recv_idx], other_zoid.recv_pos_ghost_idxs_double_buffering[t][recv_idx],
-                        other_zoid.v_stencil_md[t % 2], other_zoid.recv_vel_idxs_double_buffering[t][recv_idx],
+                        other_zoid.f_stencil_md[t % DOUBLE_BUFFERING], other_zoid.recv_force_idxs_double_buffering[t][recv_idx],
+                        other_zoid.x_stencil_md[t % DOUBLE_BUFFERING], other_zoid.recv_pos_local_idxs_double_buffering[t][recv_idx], other_zoid.recv_pos_ghost_idxs_double_buffering[t][recv_idx],
+                        other_zoid.v_stencil_md[t % DOUBLE_BUFFERING], other_zoid.recv_vel_idxs_double_buffering[t][recv_idx],
                         other_zoid.recv_process_num_segments[t][recv_idx], other_zoid.recv_process_segment_types[t][recv_idx],
                         other_zoid.recv_process_segment_idxs[t][recv_idx], other_zoid.recv_process_segment_sizes[t][recv_idx],
                         pbc_flag_,
