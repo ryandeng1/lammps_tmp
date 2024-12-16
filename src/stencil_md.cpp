@@ -1401,6 +1401,7 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       int idx_a = tag_to_idx[tag_a];
                       int idx_b = tag_to_idx[tag_b];
 
+                      /*
                       // sort based on last timestep they are in the zoid
                       int last_timestep_a = -1;
                       int last_timestep_b = -1;
@@ -1446,6 +1447,7 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       if (last_timestep_a != last_timestep_b) {
                           return last_timestep_a > last_timestep_b;
                       }
+                      */
 
                       // USE LAMMPS SORTING
                       const auto& pos_a = zoid.x_stencil_md[0][idx_a];
@@ -1491,13 +1493,15 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                 apply_permutation_in_place(zoid.image_stencil_md[0], permutation);
                 apply_permutation_in_place(zoid.mask_stencil_md[0], permutation);
 
-                assert(zoid.x_stencil_md[0].size() == zoid.x_stencil_md[1].size());
-                assert(zoid.v_stencil_md[0].size() == zoid.v_stencil_md[1].size());
+                if (DOUBLE_BUFFERING == 2) {
+                    assert(zoid.x_stencil_md[0].size() == zoid.x_stencil_md[1].size());
+                    assert(zoid.v_stencil_md[0].size() == zoid.v_stencil_md[1].size());
 
-                for (int i = 0; i < zoid.x_stencil_md[0].size(); i++) {
-                    assert(fabs(zoid.x_stencil_md[0][i].x - zoid.x_stencil_md[1][i].x) < 1e-6);
-                    assert(fabs(zoid.x_stencil_md[0][i].y - zoid.x_stencil_md[1][i].y) < 1e-6);
-                    assert(fabs(zoid.x_stencil_md[0][i].z - zoid.x_stencil_md[1][i].z) < 1e-6);
+                    for (int i = 0; i < zoid.x_stencil_md[0].size(); i++) {
+                        assert(fabs(zoid.x_stencil_md[0][i].x - zoid.x_stencil_md[1][i].x) < 1e-6);
+                        assert(fabs(zoid.x_stencil_md[0][i].y - zoid.x_stencil_md[1][i].y) < 1e-6);
+                        assert(fabs(zoid.x_stencil_md[0][i].z - zoid.x_stencil_md[1][i].z) < 1e-6);
+                    }
                 }
             }
         }
@@ -1725,7 +1729,7 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                     zoid.neighbor_list[t].resize(zoid.x_stencil_md[0].size());
 
                     std::map<tagint, int> tag_to_idx;
-                    for (int i = 0; i < zoid.x_stencil_md[t % 2].size(); i++) {
+                    for (int i = 0; i < zoid.x_stencil_md[t % DOUBLE_BUFFERING].size(); i++) {
                         tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                     }
 
@@ -1763,7 +1767,7 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                     zoid.neighbor_list[t].resize(zoid.x_stencil_md[0].size());
 
                     std::map<tagint, int> tag_to_idx;
-                    for (int i = 0; i < zoid.x_stencil_md[t % 2].size(); i++) {
+                    for (int i = 0; i < zoid.x_stencil_md[t % DOUBLE_BUFFERING].size(); i++) {
                         tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                     }
 
