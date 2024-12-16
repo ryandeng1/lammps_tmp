@@ -1344,7 +1344,7 @@ void CommBrick::exchange_stencil_md_initial_receive(Atom *atom_, Domain *domain_
         double value = buf_recv[m + dim + 1];
 
         while (value < lo) { value += domain->prd[dim]; }
-        while (value > hi) { value -= domain->prd[dim]; }
+        while (value >= hi) { value -= domain->prd[dim]; }
 
         in_zoid = in_zoid && value >= lo && value < hi;
 
