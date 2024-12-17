@@ -129,6 +129,10 @@ class CommBrick : public Comm {
                                                             int start_timestep, int end_timestep,
                                                             int pipeline_stage) override;
 
+  void pack_and_send_data_to_process_stencil_md_double_buffering(bool curr_dt, int start_timestep, int end_timestep,
+                                                                 std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>& atom_arr,
+                                                                 queue_info& zoid, MPI_Request* request, int proc, int pipeline_stage=0) override;
+
   /* End double buffering */
 
   void forward_comm(class Pair *) override;                 // forward comm from a Pair

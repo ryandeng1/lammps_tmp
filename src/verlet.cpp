@@ -6561,7 +6561,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
                 constexpr bool flag = true;
 
                 if (flag) {
-                    cilk_for(int proc = 0; proc < comm->nprocs; proc++) {
+                    cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
                         bool found = (send_to_neighbors_procs.find(proc) != send_to_neighbors_procs.end());
                         if (proc != comm->me && found) {
                             comm_->pack_data_to_process_stencil_md(curr_dt, start_t, end_t,
@@ -7113,7 +7113,7 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
             auto &send_to_neighbors_procs = curr_dt ? lmp->send_to_neighbors_procs[zoid_num]
                                                     : lmp->send_to_neighbors_procs_next_dt[zoid_num];
 
-            constexpr bool flag = true;
+            constexpr bool flag = false;
 
             if (flag) {
                 cilk_for (int proc = 0; proc < comm->nprocs; proc++) {
@@ -7130,6 +7130,21 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
                                                                                 atom_arr, zoid, proc, pipeline_stage);
                     }
                 }
+            } else {
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    bool found = (send_to_neighbors_procs.find(proc) != send_to_neighbors_procs.end());
+                    if (proc != comm->me && found) {
+                        cilk_spawn comm_->pack_and_send_data_to_process_stencil_md_double_buffering(curr_dt, start_t, end_t,
+                                                                                                    atom_arr, zoid, &send_requests[zoid_num][proc],
+                                                                                                    proc, pipeline_stage);
+                    }
+                }
+
+                if (send_to_neighbors_procs.find(comm->me) != send_to_neighbors_procs.end()) {
+                    comm_->pack_data_to_process_stencil_md_double_buffering(curr_dt, start_t, end_t,
+                                                                            atom_arr, zoid, comm->me, pipeline_stage);
+                }
+
             }
 
             auto end = std::chrono::high_resolution_clock::now();
@@ -7149,6 +7164,7 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
             assert(zoid_num % comm->nprocs == comm->me);
             auto comm_ = lmp->comm_stencil_md[zoid_num];
             auto &atom_arr = lmp->atom_stencil_md[zoid_num];
+
 
             bool sent = comm_->send_packed_data_to_process_stencil_md_double_buffering(curr_dt, start_t,
                                                                                        end_t, zoid,
