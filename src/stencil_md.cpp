@@ -434,6 +434,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.mask_stencil_md = new std::vector<int>[1];
                 zoid.image_stencil_md = new std::vector<int>[1];
                 zoid.spinlocks_stencil_md = new spinlock*[1];
+                zoid.claimed_flags_stencil_md = new std::atomic_flag*[1];
 
                 zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -644,6 +645,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.mask_stencil_md = lmp->queues[coord.first][coord.second].mask_stencil_md;
                 zoid.image_stencil_md = lmp->queues[coord.first][coord.second].image_stencil_md;
                 zoid.spinlocks_stencil_md = lmp->queues[coord.first][coord.second].spinlocks_stencil_md;
+                zoid.claimed_flags_stencil_md = lmp->queues[coord.first][coord.second].claimed_flags_stencil_md;
 
                 zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -1903,6 +1905,24 @@ void StencilMD::SET_CLAIMED_ATOMIC_BOOLS() {
             }
         }
     }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            queue_info& zoid = lmp->queues[dep][j];
+            int zoid_num = zoid.num;
+            if (zoid_num % comm->nprocs == comm->me) {
+                int num_chunks = zoid.x_stencil_md[0].size() / MODIFY_GRAINSIZE + 1;
+                int chunk_size = MODIFY_GRAINSIZE;
+
+                zoid.claimed_flags_stencil_md[0] = new std::atomic_flag[num_chunks];
+
+                for (int i = 0; i < num_chunks; i++) {
+                    zoid.claimed_flags_stencil_md[0]->clear();
+                }
+            }
+        }
+    }
+
 }
 
 // TODO: what to do with inum per timestep
