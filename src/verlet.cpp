@@ -2824,9 +2824,12 @@ void Verlet::setup_stencil_md() {
                                 assert(fabs(atom_->x[i][1] - zoid.x_stencil_md[t][idx].y) < 1e-6);
                                 assert(fabs(atom_->x[i][2] - zoid.x_stencil_md[t][idx].z) < 1e-6);
 
-                                assert(fabs(atom_->v[i][0] - zoid.v_stencil_md[t][idx].x) < 1e-6);
-                                assert(fabs(atom_->v[i][1] - zoid.v_stencil_md[t][idx].y) < 1e-6);
-                                assert(fabs(atom_->v[i][2] - zoid.v_stencil_md[t][idx].z) < 1e-6);
+                                // assert(fabs(atom_->v[i][0] - zoid.v_stencil_md[t][idx].x) < 1e-6);
+                                // assert(fabs(atom_->v[i][1] - zoid.v_stencil_md[t][idx].y) < 1e-6);
+                                // assert(fabs(atom_->v[i][2] - zoid.v_stencil_md[t][idx].z) < 1e-6);
+                                assert(fabs(atom_->v[i][0] - zoid.v_stencil_md[0][idx].x) < 1e-6);
+                                assert(fabs(atom_->v[i][1] - zoid.v_stencil_md[0][idx].y) < 1e-6);
+                                assert(fabs(atom_->v[i][2] - zoid.v_stencil_md[0][idx].z) < 1e-6);
 
                                 assert(atom_->tag[i] == zoid.tag_stencil_md[0][idx]);
                                 assert(atom_->type[i] == zoid.type_stencil_md[0][idx]);

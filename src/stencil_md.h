@@ -2143,7 +2143,8 @@ public:
     }
 
     inline void post_force_stencil_md_double_buffering(queue_info& zoid, int timestep, Modify* modify_) {
-        const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
+        // const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
+        const auto& v = zoid.v_stencil_md[timestep % 1];
         auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
 
         const auto& type = zoid.type_stencil_md[0];
@@ -4396,11 +4397,15 @@ public:
         auto& curr_x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
         auto& next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING];
 
-        auto& curr_v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
-        auto& next_v = zoid.v_stencil_md[(timestep + 1) % DOUBLE_BUFFERING];
+        // auto& curr_v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
+        // auto& next_v = zoid.v_stencil_md[(timestep + 1) % DOUBLE_BUFFERING];
+        auto& curr_v = zoid.v_stencil_md[timestep % 1];
+        auto& next_v = zoid.v_stencil_md[(timestep + 1) % 1];
 
-        auto& curr_f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
-        auto& curr_eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+        // auto& curr_f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
+        // auto& curr_eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+        auto& curr_f = zoid.f_stencil_md[timestep % 1];
+        auto& curr_eval_f = zoid.eval_f_stencil_md[timestep % 1];
 
         auto& mask = zoid.mask_stencil_md[0];
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
@@ -4470,9 +4475,12 @@ public:
     }
 
     inline void fuse_post_force_final_integrate_stencil_md_affinity_double_buffering(queue_info& zoid, int timestep, Atom* next, Modify* modify_) {
-        auto& next_v = zoid.v_stencil_md[(timestep % DOUBLE_BUFFERING)];
-        auto& f = zoid.f_stencil_md[(timestep % DOUBLE_BUFFERING)];
-        auto& eval_f = zoid.eval_f_stencil_md[(timestep % DOUBLE_BUFFERING)];
+        // auto& next_v = zoid.v_stencil_md[(timestep % DOUBLE_BUFFERING)];
+        auto& next_v = zoid.v_stencil_md[(timestep % 1)];
+        // auto& f = zoid.f_stencil_md[(timestep % DOUBLE_BUFFERING)];
+        // auto& eval_f = zoid.eval_f_stencil_md[(timestep % DOUBLE_BUFFERING)];
+        auto& f = zoid.f_stencil_md[(timestep % 1)];
+        auto& eval_f = zoid.eval_f_stencil_md[(timestep % 1)];
 
         auto& mask = zoid.mask_stencil_md[0];
         auto& type = zoid.type_stencil_md[0];
@@ -4576,7 +4584,8 @@ public:
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         // const auto& x = zoid.x_stencil_md[timestep % 2];
         // auto& f = zoid.eval_f_stencil_md[timestep % 2];
-        auto * _noalias const f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        // auto * _noalias const f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias const f = zoid.eval_f_stencil_md[timestep % 1].data();
 
         auto pair = (PairLJCut*) next_force->pair;
         auto bond = (BondFENE*) next_force->bond;
@@ -4627,6 +4636,8 @@ public:
 
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = next->chunk_size;
+
+        Cilksan_fake_mutex fake_lock;
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -4695,6 +4706,7 @@ public:
                                 fztmp += delz * fpair;
 
                                 if (newton_pair || j < nlocal) {
+                                    Cilksan_fake_lock_guard guard(&fake_lock);
                                     spinlocks[j].lock();
                                     f[j].x -= delx * fpair;
                                     f[j].y -= dely * fpair;
@@ -4751,6 +4763,7 @@ public:
                             }
 
                             if (newton_pair || i2 < nlocal) {
+                                Cilksan_fake_lock_guard guard(&fake_lock);
                                 spinlocks[i2].lock();
                                 f[i2].x -= delx * fbond;
                                 f[i2].y -= dely * fbond;
@@ -4759,6 +4772,7 @@ public:
                             }
                         }
 
+                        Cilksan_fake_lock_guard guard(&fake_lock);
                         spinlocks[i].lock();
                         f[i].x += fxtmp;
                         f[i].y += fytmp;
@@ -4779,6 +4793,7 @@ public:
         for (int i = 0; i < num_chunks; i++) {
             claimed[i].clear(std::memory_order_relaxed);
         }
+
     }
 
     template <bool curr_dt>
@@ -4864,6 +4879,9 @@ public:
 
                     for (int i = 0; i < recv_from.size(); i++) {
                         std::set<int> all_idxs;
+
+                        std::set<int> all_idxs_across_timesteps;
+                        std::map<int, int> idx_to_timestep;
                         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                             // std::set<int> recv_force_idxs;
                             std::vector<int> recv_force_idxs;
@@ -4886,6 +4904,17 @@ public:
 
                             assert(zoid_tag_to_idx.size() == zoid.tag_stencil_md[0].size());
                             zoid.recv_force_idxs_double_buffering[t][i] = recv_force_idxs;
+
+                            for (auto& idx: recv_force_idxs) {
+                                if (all_idxs_across_timesteps.find(idx) != all_idxs_across_timesteps.end()) {
+                                    std::cout << BOLDRED << "LOCAL zoid: " << zoid.num << " time: " << t
+                                              << " DUPLICATE IDX. Prev timestep: " << idx_to_timestep[idx]
+                                              << RESET_COLOR << std::endl;
+                                    assert(false);
+                                }
+                                all_idxs_across_timesteps.insert(idx);
+                                idx_to_timestep[idx] = t;
+                            }
                         }
                     }
                 }
@@ -5112,6 +5141,9 @@ public:
                 int zoid_num = zoid.num;
                 if (zoid.num % comm->nprocs == comm->me) {
                     auto& recv_from = curr_dt ? lmp->recv_from_neighbors[zoid_num] : lmp->recv_from_neighbors_next_dt[zoid_num];
+
+                    std::set<int> all_idxs_across_timesteps;
+                    std::map<int, int> idx_to_timestep;
                     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                         zoid.recv_vel_idxs_double_buffering[t] = new std::vector<int>[recv_from.size()];
                         Atom* atom_ = curr_dt ? lmp->atom_stencil_md[zoid.num][t] : lmp->atom_stencil_md[zoid.num][NUM_TIMESTEPS_IN_PARALLEL - t];
@@ -5140,6 +5172,17 @@ public:
                             }
 
                             zoid.recv_vel_idxs_double_buffering[t][i] = idxs_in_double_buffering;
+
+                            for (auto& idx: idxs_in_double_buffering) {
+                                if (all_idxs_across_timesteps.find(idx) != all_idxs_across_timesteps.end()) {
+                                    std::cout << BOLDRED << "LOCAL zoid: " << zoid.num << " time: " << t
+                                              << " DUPLICATE IDX. Prev timestep: " << idx_to_timestep[idx]
+                                              << RESET_COLOR << std::endl;
+                                    assert(false);
+                                }
+                                all_idxs_across_timesteps.insert(idx);
+                                idx_to_timestep[idx] = t;
+                            }
                         }
                     }
                 }
@@ -5149,9 +5192,11 @@ public:
 
     void TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_f) {
         const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+
+        // const auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
+        // const auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+        const auto& f = zoid.f_stencil_md[timestep % 1];
+        const auto& eval_f = zoid.eval_f_stencil_md[timestep % 1];
 
         std::unordered_map<int, int> zoid_tag_to_idx;
         for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
@@ -5214,9 +5259,6 @@ public:
 
     void TEST_POS_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_x) {
         const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
 
         std::unordered_map<int, int> zoid_tag_to_idx;
         for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
@@ -5284,9 +5326,8 @@ public:
 
     void TEST_VEL_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_v) {
         const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
-        const auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+        // const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
+        const auto& v = zoid.v_stencil_md[timestep % 1];
 
         std::unordered_map<int, int> zoid_tag_to_idx;
         for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
@@ -5342,8 +5383,10 @@ public:
 
     void TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(double* test_f, queue_info& zoid, int timestep) {
         auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
-        auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
-        auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+        // auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
+        // auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+        auto& f = zoid.f_stencil_md[timestep % 1];
+        auto& eval_f = zoid.eval_f_stencil_md[timestep % 1];
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
         auto& tags = zoid.tag_stencil_md[timestep % DOUBLE_BUFFERING];
 

@@ -425,9 +425,12 @@ void StencilMD::INIT_ZOID_DATA() {
             if (zoid.num % comm->nprocs == comm->me) {
                 /* start stuff for 2 timesteps */
                 zoid.x_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
-                zoid.v_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
-                zoid.f_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
-                zoid.eval_f_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
+                // zoid.v_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
+                // zoid.f_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
+                // zoid.eval_f_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
+                zoid.v_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
+                zoid.f_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
+                zoid.eval_f_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
 
                 zoid.tag_stencil_md = new std::vector<int>[1];
                 zoid.type_stencil_md = new std::vector<int>[1];
@@ -1221,15 +1224,18 @@ void StencilMD::GET_LOCAL_ATOMS_ZOID_DOUBLE_BUFFERING() {
                                 int image_ = atom_->image[i];
 
                                 zoid.x_stencil_md[t].push_back({x[0], x[1], x[2]});
-                                zoid.v_stencil_md[t].push_back({v[0], v[1], v[2]});
-                                zoid.f_stencil_md[t].push_back({0.0, 0.0, 0.0});
-                                zoid.eval_f_stencil_md[t].push_back({0.0, 0.0, 0.0});
+                                // zoid.v_stencil_md[t].push_back({v[0], v[1], v[2]});
+                                // zoid.f_stencil_md[t].push_back({0.0, 0.0, 0.0});
+                                // zoid.eval_f_stencil_md[t].push_back({0.0, 0.0, 0.0});
 
                                 if (t == 0) {
                                     zoid.tag_stencil_md[t].push_back(tag_);
                                     zoid.type_stencil_md[t].push_back(type_);
                                     zoid.mask_stencil_md[t].push_back(mask_);
                                     zoid.image_stencil_md[t].push_back(image_);
+                                    zoid.f_stencil_md[t].push_back({0.0, 0.0, 0.0});
+                                    zoid.eval_f_stencil_md[t].push_back({0.0, 0.0, 0.0});
+                                    zoid.v_stencil_md[t].push_back({v[0], v[1], v[2]});
                                 }
                             }
                         }
@@ -1286,15 +1292,18 @@ void StencilMD::GET_GHOST_ATOMS_ZOID_DOUBLE_BUFFERING() {
 
                             for (int t = 0; t < DOUBLE_BUFFERING; t++) {
                                 zoid.x_stencil_md[t].push_back({x[0], x[1], x[2]});
-                                zoid.v_stencil_md[t].push_back({v[0], v[1], v[2]});
-                                zoid.f_stencil_md[t].push_back({0.0, 0.0, 0.0});
-                                zoid.eval_f_stencil_md[t].push_back({0.0, 0.0, 0.0});
+                                // zoid.v_stencil_md[t].push_back({v[0], v[1], v[2]});
+                                // zoid.f_stencil_md[t].push_back({0.0, 0.0, 0.0});
+                                // zoid.eval_f_stencil_md[t].push_back({0.0, 0.0, 0.0});
                             }
 
                             zoid.tag_stencil_md[0].push_back(tag_);
                             zoid.type_stencil_md[0].push_back(type_);
                             zoid.mask_stencil_md[0].push_back(mask_);
                             zoid.image_stencil_md[0].push_back(image_);
+                            zoid.f_stencil_md[0].push_back({0.0, 0.0, 0.0});
+                            zoid.eval_f_stencil_md[0].push_back({0.0, 0.0, 0.0});
+                            zoid.v_stencil_md[0].push_back({v[0], v[1], v[2]});
                         }
                     }
                 }
@@ -1485,17 +1494,18 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
 
                 for (int t = 0; t < DOUBLE_BUFFERING; t++) {
                     apply_permutation_in_place(zoid.x_stencil_md[t], permutation);
-                    apply_permutation_in_place(zoid.v_stencil_md[t], permutation);
+                    // apply_permutation_in_place(zoid.v_stencil_md[t], permutation);
                 }
 
                 apply_permutation_in_place(zoid.tag_stencil_md[0], permutation);
                 apply_permutation_in_place(zoid.type_stencil_md[0], permutation);
                 apply_permutation_in_place(zoid.image_stencil_md[0], permutation);
                 apply_permutation_in_place(zoid.mask_stencil_md[0], permutation);
+                apply_permutation_in_place(zoid.v_stencil_md[0], permutation);
 
                 if (DOUBLE_BUFFERING == 2) {
                     assert(zoid.x_stencil_md[0].size() == zoid.x_stencil_md[1].size());
-                    assert(zoid.v_stencil_md[0].size() == zoid.v_stencil_md[1].size());
+                    // assert(zoid.v_stencil_md[0].size() == zoid.v_stencil_md[1].size());
 
                     for (int i = 0; i < zoid.x_stencil_md[0].size(); i++) {
                         assert(fabs(zoid.x_stencil_md[0][i].x - zoid.x_stencil_md[1][i].x) < 1e-6);
