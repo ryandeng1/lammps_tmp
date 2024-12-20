@@ -4394,7 +4394,8 @@ public:
 
     /* Start double buffering code */
     void initial_integrate_stencil_md_affinity_double_buffering(queue_info& zoid, int timestep, Atom* atom_) {
-        auto * _noalias x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        // auto * _noalias x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias x = zoid.x_stencil_md[timestep % 1].data();
         auto * _noalias next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
 
         auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
@@ -4447,15 +4448,13 @@ public:
                         eval_f[i].y = 0.0;
                         eval_f[i].z = 0.0;
 
-                        next_x[i].x = x[i].x + dtv * v[i].x;
-                        next_x[i].y = x[i].y + dtv * v[i].y;
-                        next_x[i].z = x[i].z + dtv * v[i].z;
+                        // next_x[i].x = x[i].x + dtv * v[i].x;
+                        // next_x[i].y = x[i].y + dtv * v[i].y;
+                        // next_x[i].z = x[i].z + dtv * v[i].z;
 
-                        /*
                         x[i].x = x[i].x + dtv * v[i].x;
                         x[i].y = x[i].y + dtv * v[i].y;
                         x[i].z = x[i].z + dtv * v[i].z;
-                        */
                     }
                     break;
                 }
@@ -4716,7 +4715,8 @@ public:
     void stencil_md_fuse_force_computation_atomics_affinity_double_buffering(queue_info& zoid, int timestep,
                                                                              Atom* next, Neighbor* neigh_next,
                                                                              Force* next_force, Modify* modify_) {
-        const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        // const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        const auto * _noalias const x = zoid.x_stencil_md[timestep % 1].data();
         // const auto& x = zoid.x_stencil_md[timestep % 2];
         // auto& f = zoid.eval_f_stencil_md[timestep % 2];
         // auto * _noalias const f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING].data();
