@@ -4447,12 +4447,15 @@ public:
                         eval_f[i].y = 0.0;
                         eval_f[i].z = 0.0;
 
-                        // next_x[i].x = x[i].x + dtv * v[i].x;
-                        // next_x[i].y = x[i].y + dtv * v[i].y;
-                        // next_x[i].z = x[i].z + dtv * v[i].z;
+                        next_x[i].x = x[i].x + dtv * v[i].x;
+                        next_x[i].y = x[i].y + dtv * v[i].y;
+                        next_x[i].z = x[i].z + dtv * v[i].z;
+
+                        /*
                         x[i].x = x[i].x + dtv * v[i].x;
                         x[i].y = x[i].y + dtv * v[i].y;
                         x[i].z = x[i].z + dtv * v[i].z;
+                        */
                     }
                     break;
                 }
