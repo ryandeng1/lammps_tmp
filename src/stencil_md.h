@@ -4424,7 +4424,7 @@ public:
 
         #pragma cilk grainsize 1024
         cilk_for (int idx = 0; idx < nlocal; idx++) {
-            int i = local_idxs[i];
+            int i = local_idxs[idx];
             const double dtfm = dtf / mass[type[i]];
             v[i].x += dtfm * (f[i].x + eval_f[i].x);
             v[i].y += dtfm * (f[i].y + eval_f[i].y);
@@ -4592,7 +4592,7 @@ public:
 
         #pragma cilk grainsize 1024
         cilk_for (int idx = 0; idx < nlocal; idx++) {
-            int i = local_idxs[i];
+            int i = local_idxs[idx];
             const double dtfm = dtf / mass[type[i]];
 
             double gamma1 = gfactor1[type[i]];
