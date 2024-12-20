@@ -4588,6 +4588,7 @@ public:
 
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = next->chunk_size;
+        int nlocal = local_idxs.size();
 
         #pragma cilk grainsize 1024
         cilk_for (int idx = 0; idx < nlocal; idx++) {
