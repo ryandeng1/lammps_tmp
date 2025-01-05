@@ -1413,8 +1413,13 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       int idx_b = tag_to_idx[tag_b];
 
                       // sort based on last timestep they are in the zoid
-                      int last_timestep_a = -1;
-                      int last_timestep_b = -1;
+                      // int last_timestep_a = -1;
+                      // int last_timestep_b = -1;
+                      int last_timestep_a = 0;
+                      int last_timestep_b = 0;
+
+                      std::set<int> timesteps_a;
+                      std::set<int> timesteps_b;
 
                       for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
                           bool in_zoid = true;
@@ -1431,7 +1436,9 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                           }
 
                           if (in_zoid) {
-                              last_timestep_a = t2;
+                              // last_timestep_a = t2;
+                              last_timestep_a++;
+                              timesteps_a.insert(t2);
                           }
                       }
 
@@ -1450,12 +1457,18 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                           }
 
                           if (in_zoid) {
-                              last_timestep_b = t2;
+                              // last_timestep_b = t2;
+                              last_timestep_b++;
+                              timesteps_b.insert(t2);
                           }
                       }
 
                       if (last_timestep_a != last_timestep_b) {
                           return last_timestep_a > last_timestep_b;
+                      }
+
+                      if (timesteps_a != timesteps_b) {
+                          return timesteps_a > timesteps_b;
                       }
 
                       // USE LAMMPS SORTING
@@ -1513,9 +1526,80 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                         assert(fabs(zoid.x_stencil_md[0][i].z - zoid.x_stencil_md[1][i].z) < 1e-6);
                     }
                 }
+
+                if (zoid.num == 43) {
+                    for (int k = 0; k < zoid.x_stencil_md[0].size(); k++) {
+                        // sort based on last timestep they are in the zoid
+                        std::set<int> timesteps;
+                        int last_timestep = -1;
+
+                        for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
+                            bool in_zoid = true;
+                            double pos[3] = {zoid.x_stencil_md[0][k].x,
+                                             zoid.x_stencil_md[0][k].y,
+                                             zoid.x_stencil_md[0][k].z};
+
+                            for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
+                                double lo = zoid.zoid.cuts[dim].lower + t2 * zoid.zoid.cuts[dim].slope_lower;
+                                double hi = zoid.zoid.cuts[dim].upper + t2 * zoid.zoid.cuts[dim].slope_upper;
+                                if (!(pos[dim] >= lo && pos[dim] < hi)) {
+                                    in_zoid = false;
+                                }
+                            }
+
+                            if (in_zoid) {
+                                last_timestep = t2;
+                                timesteps.insert(t2);
+                            }
+                        }
+
+                        // std::cout << "zoid: " << zoid.num << " idx: " << k << " last timestep: " << last_timestep << std::endl;
+                        std::stringstream s1;
+                        for (auto& t : timesteps) {
+                            s1 << t << " ";
+                        }
+                        // std::cout << "zoid: " << zoid.num << " idx: " << k << " last timestep: " << last_timestep << std::endl;
+                        // std::cout << "RYAN zoid: " << zoid.num << " idx: " << k << " timesteps local: " << s1.str() << std::endl;
+                    }
+                }
             }
         }
     }
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        auto& send_to = lmp->send_to_neighbors[i];
+        int num_in_different_proc = 0;
+        for (auto& send_zoid_num : send_to) {
+            if (true || get_zoid_dep(send_zoid_num) == get_zoid_dep(i) + 1) {
+                if (send_zoid_num % comm->nprocs != i % comm->nprocs) {
+                    num_in_different_proc++;
+                }
+            }
+        }
+
+        if (comm->me == 0) {
+            std::cout << "zoid: " << i << " num send to different proc: " << num_in_different_proc << std::endl;
+        }
+    }
+
+    for (int i = 0; i < NUM_ZOIDS; i++) {
+        auto& send_to = lmp->send_to_neighbors_next_dt[i];
+        int num_in_different_proc = 0;
+        for (auto& send_zoid_num : send_to) {
+            if (true || get_zoid_dep_next_dt(send_zoid_num) == get_zoid_dep_next_dt(i) + 1) {
+                if (send_zoid_num % comm->nprocs != i % comm->nprocs) {
+                    num_in_different_proc++;
+                }
+            }
+        }
+
+        if (comm->me == 0) {
+            std::cout << "NEXT DT zoid: " << i << " num send to different proc: " << num_in_different_proc << std::endl;
+        }
+    }
+
+    MPI_Barrier(world);
+    // assert(false);
 }
 
 void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
@@ -1554,7 +1638,12 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
                     std::vector<int> tmp_segments_sizes;
                     int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp_segments_idxs, tmp_segments_sizes);
                     std::cout << BOLDYELLOW << "zoid: " << zoid.num << " total size: " << tag_to_idx.size()
-                        << " time: " << t << " num segments: " << num_segments << RESET_COLOR << std::endl;
+                              << " time: " << t << " num segments: " << num_segments << RESET_COLOR << std::endl;
+                    /*
+                    for (int k2 = 0; k2 < tmp_segments_idxs.size(); k2++) {
+                        std::cout << "segment: " << k2 << " idx: " << tmp_segments_idxs[k2] << " size: " << tmp_segments_sizes[k2] << std::endl;
+                    }
+                    */
                 }
             }
         }
@@ -1590,6 +1679,12 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
 
                     zoid.local_idxs_per_timestep[t] = real_idxs;
                     assert(zoid.local_idxs_per_timestep[t].size() == atom_->nlocal);
+
+                    std::vector<int> tmp_segments_idxs;
+                    std::vector<int> tmp_segments_sizes;
+                    int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp_segments_idxs, tmp_segments_sizes);
+                    std::cout << BOLDYELLOW << "NEXT DT zoid: " << zoid.num << " total size: " << tag_to_idx.size()
+                              << " time: " << t << " num segments: " << num_segments << RESET_COLOR << std::endl;
                 }
             }
         }
@@ -1752,7 +1847,16 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                         for (int k = 0; k < numneigh[i]; k++) {
                             auto neigh_atom = neigh_list[k];
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
-                            zoid.neighbor_list[t][src_idx].push_back(dst_idx);
+
+                            if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
+                                if (src_idx < dst_idx) {
+                                    zoid.neighbor_list[t][src_idx].push_back(dst_idx);
+                                } else {
+                                    zoid.neighbor_list[t][dst_idx].push_back(src_idx);
+                                }
+                            } else {
+                                zoid.neighbor_list[t][src_idx].push_back(dst_idx);
+                            }
                         }
                     }
                 }
@@ -1790,7 +1894,16 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                             auto neigh_atom = neigh_list[k];
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
                             assert(src_idx >= 0 && src_idx < zoid.x_stencil_md[0].size());
-                            zoid.neighbor_list[t][src_idx].push_back(dst_idx);
+
+                            if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
+                                if (src_idx < dst_idx) {
+                                    zoid.neighbor_list[t][src_idx].push_back(dst_idx);
+                                } else {
+                                    zoid.neighbor_list[t][dst_idx].push_back(src_idx);
+                                }
+                            } else {
+                                zoid.neighbor_list[t][src_idx].push_back(dst_idx);
+                            }
                         }
                     }
                 }
@@ -1826,7 +1939,23 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
                             auto bond_type = bond_info.second;
 
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
-                            zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+
+                            if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
+                                if (src_idx < dst_idx) {
+                                    zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+                                } else {
+                                    zoid.bond_list[t][dst_idx].push_back({src_idx, bond_type});
+                                }
+                                if (neigh_atom >= atom_->nlocal && src_idx > dst_idx) {
+                                    std::cout << "CURR DT. weird shit: " << zoid.num << " time: " << t << " nlocal: " << atom_->nlocal
+                                              << " idx: " << ii << " " << neigh_atom
+                                              << " real idx: " << src_idx << " " << dst_idx
+                                              << " tag: " << atom_->tag[ii] << " " << atom_->tag[neigh_atom] << std::endl;
+                                    assert(false);
+                                }
+                            } else {
+                                zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+                            }
                         }
                     }
                 }
@@ -1859,7 +1988,24 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
 
                             int src_idx = tag_to_idx[atom_->tag[ii]];
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
-                            zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+
+                            if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
+                                if (src_idx < dst_idx) {
+                                    zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+                                } else {
+                                    zoid.bond_list[t][dst_idx].push_back({src_idx, bond_type});
+                                }
+                                if (neigh_atom >= atom_->nlocal && src_idx > dst_idx) {
+                                    std::cout << "NEXT DT. weird shit: " << zoid.num << " time: " << t << " nlocal: " << atom_->nlocal
+                                              << " idx: " << ii << " " << neigh_atom
+                                              << " real idx: " << src_idx << " " << dst_idx
+                                              << " tag: " << atom_->tag[ii] << " " << atom_->tag[neigh_atom] << std::endl;
+                                    assert(false);
+                                }
+
+                            } else {
+                                zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+                            }
                         }
                     }
                 }
