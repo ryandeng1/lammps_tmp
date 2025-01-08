@@ -7331,7 +7331,7 @@ void Verlet::run_stencil_md_pipelined_double_buffering_helper(int starting_times
         dep_to_idx[dep] = wait_idxs.size() + dep_to_idx[dep - 1];
     }
 
-    constexpr bool PIPELINE = true;
+    constexpr bool PIPELINE = false;
 
     if (comm->nprocs != 1) {
         int recv_idx = 0;
