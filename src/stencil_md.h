@@ -5309,19 +5309,6 @@ public:
                             }
                         }
 
-                        const double dtfm = dtf / mass[itype];
-
-                        double gamma1 = gfactor1[itype];
-                        double gamma2 = gfactor2[itype] * tsqrt;
-
-                        double rand_x = 0.6;
-                        double rand_y = 0.6;
-                        double rand_z = 0.6;
-
-                        double v_x = v[i].x;
-                        double v_y = v[i].y;
-                        double v_z = v[i].z;
-
                         spinlocks[i].lock();
                         f[i].x += fxtmp;
                         f[i].y += fytmp;
