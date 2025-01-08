@@ -2413,8 +2413,8 @@ void StencilMD::CONSTRUCT_START_END_BIG_ZOIDS_HELPER_SHRINKING(queue_info& zoid)
     int timestep_to_start = 0;
     int sum_so_far = 0;
     for (int idx = 0; idx < num_timesteps_to_eval + 1; idx++) {
-        sum_so_far += mapping[idx] * idx;
-        if (sum_so_far >= total / 2) {
+        sum_so_far += mapping[idx];
+        if (sum_so_far >= zoid.local_idxs_per_timestep[0].size() / 2) {
             timestep_to_start = idx;
             break;
         }
