@@ -6522,13 +6522,27 @@ void Verlet::run_stencil_md_big_zoid(int starting_timestep, int start_eval, int 
 
         assert(USE_AFFINITY);
 
+        auto begin = std::chrono::high_resolution_clock::now();
         stencilMD->stencil_md_initial_integrate_affinity_double_buffering_start_end(zoid, t, atom_,
                                                                                     zoid.space_cut_idxs[t][1]);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+        modify_initial_duration += duration;
+
+        end = std::chrono::high_resolution_clock::now();
         stencilMD->stencil_md_force_computation_start_end(zoid, t + 1, atom_next_timestep,
                                                           neigh_next_timestep, next_force, modify_,
                                                           zoid.space_cut_idxs[t + 1][1]);
+        end = std::chrono::high_resolution_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+        pair_duration += duration;
+
+        begin = std::chrono::high_resolution_clock::now();
         stencilMD->fuse_post_force_final_integrate_stencil_md_start_end(zoid, t + 1, atom_next_timestep,
                                                                         modify_, zoid.space_cut_idxs[t + 1][1]);
+        end = std::chrono::high_resolution_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+        modify_final_duration += duration;
     }
 }
 
