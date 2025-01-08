@@ -7233,7 +7233,7 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
             unpack_duration += duration;
         }
 
-        if (false && dep == 0) {
+        if (dep == 0) {
             run_stencil_md_big_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
         } else {
             run_stencil_md_zoid_double_buffering<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
