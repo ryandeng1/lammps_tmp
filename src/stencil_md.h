@@ -5175,16 +5175,7 @@ public:
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = next->chunk_size;
 
-        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
-        auto gfactor1 = fix_post_force->gfactor1;
-        auto gfactor2 = fix_post_force->gfactor2;
-        auto tsqrt = fix_post_force->tsqrt;
-
         int nprocess = space_cut_idxs.size();
-        double dtf = 0.5 * update->dt * force->ftm2v;
-        auto* mass = atom->mass;
-
-        auto& tags = zoid.tag_stencil_md[0];
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
