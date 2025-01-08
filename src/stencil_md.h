@@ -111,6 +111,10 @@ public:
 
     void SET_CLAIMED_ATOMIC_BOOLS();
 
+    void CONSTRUCT_START_END_BIG_ZOIDS();
+    void CONSTRUCT_START_END_BIG_ZOIDS_HELPER_SHRINKING(queue_info& zoid);
+    void CONSTRUCT_START_END_BIG_ZOIDS_HELPER_EXPANDING(queue_info& zoid);
+
     std::vector<double>& GET_BOUNDS(bool curr_dt, int timestep);
 
     std::vector<double>& LAMMPS_GET_BOUNDS(bool curr_dt, int timestep);
@@ -4869,6 +4873,8 @@ public:
 
         // Cilksan_fake_mutex fake_lock;
 
+        // dbl3_t_stencil_md* test_f = new dbl3_t_stencil_md[zoid.x_stencil_md[0].size()];
+
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
             int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
@@ -5001,6 +5007,9 @@ public:
                         f[i].y += fytmp;
                         f[i].z += fztmp;
                         spinlocks[i].unlock();
+                        // test_f[i].x = f[i].x;
+                        // test_f[i].y = f[i].y;
+                        // test_f[i].z = f[i].z;
                     }
                     break;
                 }
@@ -5012,6 +5021,396 @@ public:
             claimed_flag_struct[i].m.clear(std::memory_order_relaxed);
         }
         */
+
+        for (int i = 0; i < num_chunks; i++) {
+            claimed[i].clear(std::memory_order_relaxed);
+        }
+
+        /*
+        if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
+            for (int i = 0; i < local_idxs.size(); i++) {
+                int idx = local_idxs[i];
+                assert(fabs(f[i].x - test_f[i].x) < 1e-5);
+                assert(fabs(f[i].y - test_f[i].y) < 1e-5);
+                assert(fabs(f[i].z - test_f[i].z) < 1e-5);
+            }
+        }
+        delete[] test_f;
+        */
+    }
+
+    /* Start double buffering code */
+    void stencil_md_initial_integrate_affinity_double_buffering_start_end(queue_info& zoid, int timestep,
+                                                                          Atom* atom_, const std::vector<int>& space_cut_idxs) {
+
+        assert(get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1);
+
+        auto * _noalias x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
+
+        auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
+        auto * _noalias f = zoid.f_stencil_md[timestep % 1].data();
+        auto * _noalias eval_f = zoid.eval_f_stencil_md[timestep % 1].data();
+
+        auto * _noalias mask = zoid.mask_stencil_md[0].data();
+        auto * _noalias local_idxs = zoid.local_idxs_per_timestep[timestep].data();
+        auto * _noalias type = zoid.type_stencil_md[0].data();
+
+        int num_chunks = space_cut_idxs.size() / MODIFY_GRAINSIZE + 1;
+        // int num_chunks = atom_->num_chunks;
+        // auto claimed_flag_struct = atom_->claimed_flag_struct;
+        auto* claimed = zoid.claimed_flags_stencil_md[0];
+        int num_workers = __cilkrts_get_nworkers();
+        double dtv = update->dt;
+
+        const double * const mass = atom->mass;
+        double dtf = 0.5 * update->dt * force->ftm2v;
+
+        const auto& tags = zoid.tag_stencil_md[0];
+
+        int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = atom_->chunk_size;
+
+        int nprocess = space_cut_idxs.size();
+
+        #pragma cilk grainsize 1
+        cilk_for (int ii = 0; ii < num_chunks; ii++) {
+            int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+            for (int c = 0; c < num_chunks; ++c) {
+                int s = (c + start_chunk) % num_chunks;
+
+                if (claimed[s].test(std::memory_order_relaxed)) {
+                    continue;
+                }
+
+                if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                    for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nprocess; idx++) {
+                        // int i = local_idxs[idx];
+                        // int i = idx_start + idx;
+                        // assert(i == local_idxs[idx + start]);
+                        int i = space_cut_idxs[idx];
+
+                        double v_x = v[i].x;
+                        double v_y = v[i].y;
+                        double v_z = v[i].z;
+
+                        const double dtfm = dtf / mass[type[i]];
+                        v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                        v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                        v[i].z += dtfm * (f[i].z + eval_f[i].z);
+
+                        double f_x = eval_f[i].x;
+                        double f_y = eval_f[i].y;
+                        double f_z = eval_f[i].z;
+
+                        f[i].x = 0.0;
+                        f[i].y = 0.0;
+                        f[i].z = 0.0;
+                        eval_f[i].x = 0.0;
+                        eval_f[i].y = 0.0;
+                        eval_f[i].z = 0.0;
+
+                        next_x[i].x = x[i].x + dtv * v[i].x;
+                        next_x[i].y = x[i].y + dtv * v[i].y;
+                        next_x[i].z = x[i].z + dtv * v[i].z;
+                    }
+                    break;
+                }
+            }
+        }
+
+        for (int i = 0; i < num_chunks; i++) {
+            claimed[i].clear(std::memory_order_relaxed);
+        }
+
+        return;
+    }
+
+    void stencil_md_force_computation_start_end(queue_info& zoid, int timestep,
+                                                Atom* next, Neighbor* neigh_next,
+                                                Force* next_force, Modify* modify_,
+                                                std::vector<int>& space_cut_idxs) {
+
+        assert(get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1);
+
+        const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias const f = zoid.eval_f_stencil_md[timestep % 1].data();
+        auto* _noalias f2 = zoid.f_stencil_md[timestep % 1].data();
+        auto* _noalias type = zoid.type_stencil_md[0].data();
+        auto * _noalias const v = zoid.v_stencil_md[timestep % 1].data();
+
+        auto pair = (PairLJCut*) next_force->pair;
+        auto bond = (BondFENE*) next_force->bond;
+
+        const auto& bond_list = zoid.bond_list[timestep];
+        const auto& neighbor_list = zoid.neighbor_list[timestep];
+
+        const int * _noalias const ilist = pair->list->ilist;
+        const double * _noalias const special_lj = force->special_lj;
+
+        auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
+
+        assert(pair->list->inum == next->nlocal);
+
+        const auto* cutsq = pair->cutsq;
+        const auto* offset = pair->offset;
+        const auto* lj1 = pair->lj1;
+        const auto* lj2 = pair->lj2;
+        const auto* lj3 = pair->lj3;
+        const auto* lj4 = pair->lj4;
+        auto newton_pair = force->newton_pair;
+
+        const auto* _noalias const sigma = bond->sigma;
+        const auto* _noalias const epsilon = bond->epsilon;
+        const auto* _noalias const r0 = bond->r0;
+        const auto* _noalias const k = bond->k;
+
+        const auto& atom_type = zoid.type_stencil_md[0];
+
+        int num_chunks = space_cut_idxs.size() / MODIFY_GRAINSIZE + 1;
+        int num_workers = __cilkrts_get_nworkers();
+
+        auto* claimed = zoid.claimed_flags_stencil_md[0];
+
+        int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = next->chunk_size;
+
+        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
+        auto gfactor1 = fix_post_force->gfactor1;
+        auto gfactor2 = fix_post_force->gfactor2;
+        auto tsqrt = fix_post_force->tsqrt;
+
+        int nprocess = space_cut_idxs.size();
+        double dtf = 0.5 * update->dt * force->ftm2v;
+        auto* mass = atom->mass;
+
+        auto& tags = zoid.tag_stencil_md[0];
+
+        #pragma cilk grainsize 1
+        cilk_for (int ii = 0; ii < num_chunks; ii++) {
+            int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+
+            for (int c = 0; c < num_chunks; ++c) {
+                int s = (c + start_chunk) % num_chunks;
+
+                if (claimed[s].test(std::memory_order_relaxed)) {
+                    continue;
+                }
+
+                if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                    for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nprocess; idx++) {
+                        // int i = idx_start + idx;
+                        // assert(i == local_idxs[start + idx]);
+                        int i = space_cut_idxs[idx];
+
+                        const int itype = atom_type[i];
+
+                        const auto& jlist = neighbor_list[i];
+                        const double *_noalias const cutsqi = cutsq[itype];
+                        const double *_noalias const offseti = offset[itype];
+                        const double *_noalias const lj1i = lj1[itype];
+                        const double *_noalias const lj2i = lj2[itype];
+                        const double *_noalias const lj3i = lj3[itype];
+                        const double *_noalias const lj4i = lj4[itype];
+
+                        double xtmp = x[i].x;
+                        double ytmp = x[i].y;
+                        double ztmp = x[i].z;
+
+                        int jnum = jlist.size();
+
+                        double fxtmp = 0.0;
+                        double fytmp = 0.0;
+                        double fztmp = 0.0;
+
+                        for (int jj = 0; jj < jnum; jj++) {
+                            double evdwl = 0.0;
+                            int j = jlist[jj];
+                            double factor_lj = special_lj[pair->sbmask(j)];
+                            j &= NEIGHMASK;
+
+                            double delx = xtmp - x[j].x;
+                            double dely = ytmp - x[j].y;
+                            double delz = ztmp - x[j].z;
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            int jtype = atom_type[j];
+
+                            if (rsq < cutsqi[jtype]) {
+                                double r2inv = 1.0 / rsq;
+                                double r6inv = r2inv * r2inv * r2inv;
+                                double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                                double fpair = factor_lj * forcelj * r2inv;
+
+                                fxtmp += delx * fpair;
+                                fytmp += dely * fpair;
+                                fztmp += delz * fpair;
+
+                                if (newton_pair) {
+                                    spinlocks[j].lock();
+                                    f[j].x -= delx * fpair;
+                                    f[j].y -= dely * fpair;
+                                    f[j].z -= delz * fpair;
+                                    spinlocks[j].unlock();
+                                }
+                            }
+                        }
+
+                        auto& lst_bonds = bond_list[i];
+                        for (int j = 0; j < lst_bonds.size(); j++) {
+                            auto& bond_info = lst_bonds[j];
+                            int i2 = bond_info.first;
+                            int type = bond_info.second;
+
+                            double delx = xtmp - x[i2].x;
+                            double dely = ytmp - x[i2].y;
+                            double delz = ztmp - x[i2].z;
+
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            double r0sq = r0[type] * r0[type];
+                            double rlogarg = 1.0 - rsq / r0sq;
+
+                            if (rlogarg < 0.1) {
+                                error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                               update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                                //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                                //                                return;
+                                assert(false);
+
+                                rlogarg = 0.1;
+                            }
+
+                            double fbond = -k[type] / rlogarg;
+
+                            // force from LJ term
+                            double sr2 = 0.0;
+                            double sr6 = 0.0;
+
+                            if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                                sr2 = sigma[type] * sigma[type] / rsq;
+                                sr6 = sr2 * sr2 * sr2;
+                                fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                            }
+
+                            // energy
+
+                            // apply force to each of 2 atoms
+                            if (newton_pair) {
+                                fxtmp += delx * fbond;
+                                fytmp += dely * fbond;
+                                fztmp += delz * fbond;
+                            }
+
+                            if (newton_pair) {
+                                spinlocks[i2].lock();
+                                f[i2].x -= delx * fbond;
+                                f[i2].y -= dely * fbond;
+                                f[i2].z -= delz * fbond;
+                                spinlocks[i2].unlock();
+                            }
+                        }
+
+                        const double dtfm = dtf / mass[itype];
+
+                        double gamma1 = gfactor1[itype];
+                        double gamma2 = gfactor2[itype] * tsqrt;
+
+                        double rand_x = 0.6;
+                        double rand_y = 0.6;
+                        double rand_z = 0.6;
+
+                        double v_x = v[i].x;
+                        double v_y = v[i].y;
+                        double v_z = v[i].z;
+
+                        spinlocks[i].lock();
+                        f[i].x += fxtmp;
+                        f[i].y += fytmp;
+                        f[i].z += fztmp;
+                        spinlocks[i].unlock();
+                    }
+                    break;
+                }
+            }
+        }
+
+        for (int i = 0; i < num_chunks; i++) {
+            claimed[i].clear(std::memory_order_relaxed);
+        }
+    }
+
+    inline void fuse_post_force_final_integrate_stencil_md_start_end(queue_info& zoid, int timestep,
+                                                                     Atom* next, Modify* modify_, std::vector<int>& space_cut_idxs) {
+        auto* _noalias v = zoid.v_stencil_md[timestep % 1].data();
+        auto* _noalias f = zoid.f_stencil_md[timestep % 1].data();
+        auto* _noalias eval_f = zoid.eval_f_stencil_md[timestep % 1].data();
+        auto* _noalias type = zoid.type_stencil_md[0].data();
+
+        auto* _noalias claimed = zoid.claimed_flags_stencil_md[0];
+
+        int num_chunks = space_cut_idxs.size() / MODIFY_GRAINSIZE + 1;
+        int num_workers = __cilkrts_get_nworkers();
+
+        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
+
+        auto gfactor1 = fix_post_force->gfactor1;
+        auto gfactor2 = fix_post_force->gfactor2;
+        // fix_post_force->compute_target();
+        auto tsqrt = fix_post_force->tsqrt;
+
+        const double * const mass = atom->mass;
+        double dtf = 0.5 * update->dt * force->ftm2v;
+
+        const auto& tags = zoid.tag_stencil_md[0];
+
+        int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = next->chunk_size;
+
+        int nprocess = space_cut_idxs.size();
+
+        #pragma cilk grainsize 1
+        cilk_for (int ii = 0; ii < num_chunks; ii++) {
+            int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+            for (int c = 0; c < num_chunks; ++c) {
+                int s = (c + start_chunk) % num_chunks;
+
+                if (claimed[s].test(std::memory_order_relaxed)) {
+                    continue;
+                }
+
+                if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                    for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nprocess; idx++) {
+                        // int i = local_idxs[idx];
+                        int i = space_cut_idxs[idx];
+
+                        const double dtfm = dtf / mass[type[i]];
+
+                        double gamma1 = gfactor1[type[i]];
+                        double gamma2 = gfactor2[type[i]] * tsqrt;
+
+                        double rand_x = 0.6;
+                        double rand_y = 0.6;
+                        double rand_z = 0.6;
+
+                        double v_x = v[i].x;
+                        double v_y = v[i].y;
+                        double v_z = v[i].z;
+
+                        double f_x = eval_f[i].x;
+                        double f_y = eval_f[i].y;
+                        double f_z = eval_f[i].z;
+
+                        eval_f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
+                        eval_f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
+                        eval_f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+
+                        v[i].x += dtfm * (f[i].x + eval_f[i].x);
+                        v[i].y += dtfm * (f[i].y + eval_f[i].y);
+                        v[i].z += dtfm * (f[i].z + eval_f[i].z);
+                    }
+                    break;
+                }
+            }
+        }
 
         for (int i = 0; i < num_chunks; i++) {
             claimed[i].clear(std::memory_order_relaxed);
@@ -5413,6 +5812,7 @@ public:
     }
 
     void TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_f) {
+
         const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
 
         // const auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
@@ -5547,6 +5947,7 @@ public:
     }
 
     void TEST_VEL_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_v) {
+
         const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
         // const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
         const auto& v = zoid.v_stencil_md[timestep % 1];
@@ -5571,7 +5972,7 @@ public:
                         std::cout << "------NEXT DT VEL DIFF--------" << std::endl;
                     }
 
-                    std::cout << "idx: " << k << " out of: " << atom_->nlocal << " atom: " << atom_ << std::endl;
+                    std::cout << "idx: " << k << " out of: " << atom_->nlocal << " atom: " << atom_ << " real idx: " << test_idx << std::endl;
                     std::cout << "Dim: " << dim << " Zoid: " << zoid.num << " timestep: " << timestep << " tag: " << tag << std::endl;
                     std::cout << "what I have: " << my_v[0] << " " << my_v[1] << " " << my_v[2] << std::endl;
                     std::cout << "What does LAMMPS have? "
@@ -5634,6 +6035,215 @@ public:
 
                 std::cout << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z << std::endl;
                 assert(false);
+            }
+        }
+    }
+
+    void TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_f, std::vector<int>& space_cut_idxs) {
+        std::set<int> space_cut_idxs_set(space_cut_idxs.begin(), space_cut_idxs.end());
+
+        const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
+
+        // const auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
+        // const auto& eval_f = zoid.eval_f_stencil_md[timestep % DOUBLE_BUFFERING];
+        const auto& f = zoid.f_stencil_md[timestep % 1];
+        const auto& eval_f = zoid.eval_f_stencil_md[timestep % 1];
+
+        std::unordered_map<int, int> zoid_tag_to_idx;
+        for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+            zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+        }
+
+        for (int k = 0; k < atom_->nlocal; k++) {
+            // compare forces on local atoms?
+            int tag = atom_->tag[k];
+            int test_idx = zoid_tag_to_idx[tag];
+
+            if (space_cut_idxs_set.find(test_idx) == space_cut_idxs_set.end()) {
+                continue;
+            }
+
+            double my_f[3] = {f[test_idx].x,
+                              f[test_idx].y,
+                              f[test_idx].z};
+
+            double my_eval_f[3] = {eval_f[test_idx].x,
+                                   eval_f[test_idx].y,
+                                   eval_f[test_idx].z};
+
+            for (int dim = 0; dim < 3; dim++) {
+                double my_force = my_f[dim] + my_eval_f[dim];
+                if (fabs(my_force - test_f[timestep][tag * 3 + dim]) > 1e-6) {
+                    if (curr_dt) {
+                        std::cout << "------FORCE DIFF--------"
+                                  << std::endl;
+                    } else {
+                        std::cout << "------NEXT DT FORCE DIFF--------"
+                                  << std::endl;
+                    }
+
+                    std::cout << "idx: " << k << " out of: " << atom_->nlocal << " double buffering idx: " << test_idx << std::endl;
+                    std::cout << "Dim: " << dim << " Zoid: " << zoid.num << " timestep: " << timestep << " tag: " << tag << std::endl;
+                    std::cout << "what I have: " << my_f[0] + my_eval_f[0] << " " << my_f[1] + my_eval_f[1] << " " << my_f[2] + my_eval_f[2] << std::endl;
+                    std::cout << "my f: " << my_f[0] << " " << my_f[1] << " " << my_f[2]
+                              << " my eval f: " << my_eval_f[0] << " " << my_eval_f[1] << " " << my_eval_f[2]
+                              << std::endl;
+                    std::cout << "What does LAMMPS have? "
+                              << test_f[timestep][tag * 3 + 0] << " "
+                              << test_f[timestep][tag * 3 + 1] << " "
+                              << test_f[timestep][tag * 3 + 2]
+                              << std::endl;
+                    std::cout << "Diff: " << fabs(my_force - test_f[timestep][tag * 3 + dim]) << std::endl;
+                    std::cout << "pos: " << x[test_idx].x << " " << x[test_idx].y << " " << x[test_idx].z << std::endl;
+
+                    for (int tmp = 0; tmp < 3; tmp++) {
+                        std::cout << "lo: " << zoid.zoid.cuts[tmp].lower +
+                                               zoid.zoid.cuts[tmp].slope_lower * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                        std::cout << "hi: "
+                                  << zoid.zoid.cuts[tmp].upper +
+                                     zoid.zoid.cuts[tmp].slope_upper * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                    }
+
+                    assert(false);
+                }
+            }
+        }
+    }
+
+    void TEST_POS_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_x, std::vector<int>& space_cut_idxs) {
+        const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
+
+        std::set<int> space_cut_idxs_set(space_cut_idxs.begin(), space_cut_idxs.end());
+
+        std::unordered_map<int, int> zoid_tag_to_idx;
+        for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+            zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+        }
+
+        for (int k = 0; k < atom_->nlocal; k++) {
+            // compare forces on local atoms?
+            int tag = atom_->tag[k];
+            int test_idx = zoid_tag_to_idx[tag];
+
+            if (space_cut_idxs_set.find(test_idx) == space_cut_idxs_set.end()) {
+                continue;
+            }
+
+            double my_x[3] = {x[test_idx].x, x[test_idx].y, x[test_idx].z};
+
+            for (int dim = 0; dim < 3; dim++) {
+                double my_pos = my_x[dim];
+                if (my_pos < 0) {
+                    my_pos += domain->prd[dim];
+                } else if (my_pos >= domain->prd[dim]) {
+                    my_pos -= domain->prd[dim];
+                }
+
+                double test_pos = test_x[timestep][tag * 3 + dim];
+                if (test_pos < 0) {
+                    test_pos += domain->prd[dim];
+                } else if (test_pos >= domain->prd[dim]) {
+                    test_pos -= domain->prd[dim];
+                }
+
+                if (fabs(my_pos - test_pos) > 1e-6) {
+                    if (curr_dt) {
+                        std::cout << "------POS DIFF--------"
+                                  << std::endl;
+                    } else {
+                        std::cout << "------NEXT DT POS DIFF--------"
+                                  << std::endl;
+                    }
+
+                    std::cout << "my pos: " << my_pos << " test pos: " << test_pos << std::endl;
+                    std::cout << "idx: " << k << " out of: " << atom_->nlocal << " atom: " << atom_ << " real idx: " << test_idx << std::endl;
+                    std::cout << "Dim: " << dim << " Zoid: " << zoid.num << " timestep: " << timestep << " tag: " << tag << std::endl;
+                    std::cout << "what I have: " << my_x[0] << " " << my_x[1] << " " << my_x[2] << std::endl;
+                    std::cout << "What does LAMMPS have? "
+                              << test_x[timestep][tag * 3 + 0] << " "
+                              << test_x[timestep][tag * 3 + 1] << " "
+                              << test_x[timestep][tag * 3 + 2]
+                              << std::endl;
+                    std::cout << "Diff: " << fabs(my_x[dim] - test_x[timestep][tag * 3 + dim]) << std::endl;
+                    std::cout << "pos: " << x[test_idx].x << " " << x[test_idx].y << " " << x[test_idx].z << std::endl;
+
+                    for (int tmp = 0; tmp < 3; tmp++) {
+                        std::cout << "lo: " << zoid.zoid.cuts[tmp].lower +
+                                               zoid.zoid.cuts[tmp].slope_lower * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                        std::cout << "hi: "
+                                  << zoid.zoid.cuts[tmp].upper +
+                                     zoid.zoid.cuts[tmp].slope_upper * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                    }
+
+                    assert(false);
+                }
+            }
+        }
+    }
+
+    void TEST_VEL_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_v, std::vector<int>& space_cut_idxs) {
+        const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
+        // const auto& v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING];
+        const auto& v = zoid.v_stencil_md[timestep % 1];
+
+        std::set<int> space_cut_idxs_set(space_cut_idxs.begin(), space_cut_idxs.end());
+
+        std::unordered_map<int, int> zoid_tag_to_idx;
+        for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+            zoid_tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+        }
+
+        for (int k = 0; k < atom_->nlocal; k++) {
+            // compare forces on local atoms?
+            int tag = atom_->tag[k];
+            int test_idx = zoid_tag_to_idx[tag];
+
+            if (space_cut_idxs_set.find(test_idx) == space_cut_idxs_set.end()) {
+                continue;
+            }
+
+            double my_v[3] = {v[test_idx].x, v[test_idx].y, v[test_idx].z};
+
+            for (int dim = 0; dim < 3; dim++) {
+                if (fabs(my_v[dim] - test_v[timestep][tag * 3 + dim]) > 1e-6) {
+                    if (curr_dt) {
+                        std::cout << "------VEL DIFF--------" << std::endl;
+                    } else {
+                        std::cout << "------NEXT DT VEL DIFF--------" << std::endl;
+                    }
+
+                    std::cout << "idx: " << k << " out of: " << atom_->nlocal << " atom: " << atom_ << " real idx: " << test_idx << std::endl;
+                    std::cout << "Dim: " << dim << " Zoid: " << zoid.num << " timestep: " << timestep << " tag: " << tag << std::endl;
+                    std::cout << "what I have: " << my_v[0] << " " << my_v[1] << " " << my_v[2] << std::endl;
+                    std::cout << "What does LAMMPS have? "
+                              << test_v[timestep][tag * 3 + 0] << " "
+                              << test_v[timestep][tag * 3 + 1] << " "
+                              << test_v[timestep][tag * 3 + 2]
+                              << std::endl;
+                    std::cout << "What does LAMMPS have prev? "
+                              << test_v[timestep - 1][tag * 3 + 0] << " "
+                              << test_v[timestep - 1][tag * 3 + 1] << " "
+                              << test_v[timestep - 1][tag * 3 + 2]
+                              << std::endl;
+                    std::cout << "Diff: " << fabs(my_v[dim] - test_v[timestep][tag * 3 + dim]) << std::endl;
+                    std::cout << "pos: " << x[test_idx].x << " " << x[test_idx].y << " " << x[test_idx].z << std::endl;
+
+                    for (int tmp = 0; tmp < 3; tmp++) {
+                        std::cout << "lo: " << zoid.zoid.cuts[tmp].lower +
+                                               zoid.zoid.cuts[tmp].slope_lower * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                        std::cout << "hi: "
+                                  << zoid.zoid.cuts[tmp].upper +
+                                     zoid.zoid.cuts[tmp].slope_upper * (timestep % (NUM_TIMESTEPS_IN_PARALLEL + 1))
+                                  << std::endl;
+                    }
+
+                    assert(false);
+                }
             }
         }
     }

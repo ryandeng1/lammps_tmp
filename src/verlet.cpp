@@ -2326,6 +2326,7 @@ void Verlet::setup_stencil_md() {
                 if (zoid.num % comm->nprocs == comm->me) {
                     Atom* atom_ = lmp->atom_stencil_md[zoid.num][t];
                     total += atom_->nlocal;
+                    std::cout << "zoid: " << zoid.num << " time: " << t << " nlocal: " << atom_->nlocal << std::endl;
                     std::set<int> tags;
                     for (int i = 0; i < atom_->nlocal; i++) {
                         assert(atom_->tag[i] >= 0 && atom_->tag[i] <= atom->natoms);
@@ -2792,6 +2793,7 @@ void Verlet::setup_stencil_md() {
         stencilMD->CREATE_ATOM_IDXS_DOUBLE_BUFFERING();
         stencilMD->BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING();
         stencilMD->BUILD_BOND_LIST_DOUBLE_BUFFERING();
+        stencilMD->CONSTRUCT_START_END_BIG_ZOIDS();
 
         for (int t = 0; t < DOUBLE_BUFFERING; t++) {
             for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -6423,6 +6425,99 @@ void Verlet::run_stencil_md_zoid(int starting_timestep, int start_eval, int end_
     }
 }
 
+// assume already have all the data necessary to run the zoid
+template <bool curr_dt>
+void Verlet::run_stencil_md_big_zoid(int starting_timestep, int start_eval, int end_eval,
+                                     int zoid_num, double** test_f, double** test_x, double** test_v, bool warmup) {
+    int n_pre_force = modify->n_pre_force;
+    int n_post_force_any = modify->n_post_force_any;
+    int n_end_of_step = modify->n_end_of_step;
+
+    queue_info& zoid = curr_dt ? lmp->zoid_num_to_zoid[zoid_num] : lmp->zoid_num_to_zoid_next_dt[zoid_num];
+    auto& atom_arr = lmp->atom_stencil_md[zoid_num];
+    int** atom_idx_mapping = zoid.atom_idx_mapping;
+    int** reverse_atom_idx_mapping = zoid.reverse_atom_idx_mapping;
+    std::vector<int>* reverse_atom_idx_mapping_idxs = zoid.reverse_atom_idx_mapping_idxs;
+
+    constexpr bool USE_AFFINITY = true;
+
+    auto& local_idxs = zoid.local_idxs_per_timestep[start_eval];
+    int num_idxs = local_idxs.size();
+
+    int start = 0;
+    int mid = local_idxs.size() / 2;
+
+    // first phase
+    for (int t = start_eval; t < end_eval; t++) {
+        Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+        Atom* atom_next_timestep = curr_dt ? atom_arr[t + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+        Neighbor* neigh_next_timestep = curr_dt ? lmp->neighbor_stencil_md[zoid_num][t + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][t + 1];
+
+#ifdef LMP_OPENMP
+        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][t + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+#else
+        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
+#endif
+        Force* next_force;
+        if (!PURELY_LOCAL_POTENTIAL) {
+            next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+        } else {
+            next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md_next_dt[zoid_num][t + 1];
+        }
+
+        if (!warmup && TEST_AGAINST_LAMMPS) {
+            int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
+            stencilMD->TEST_POS_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(curr_dt, timestep_to_compare_against, zoid, atom_, test_x, zoid.space_cut_idxs[t][0]);
+            stencilMD->TEST_VEL_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(curr_dt, timestep_to_compare_against, zoid, atom_, test_v, zoid.space_cut_idxs[t][0]);
+            stencilMD->TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(curr_dt, timestep_to_compare_against, zoid, atom_, test_f, zoid.space_cut_idxs[t][0]);
+        }
+
+        stencilMD->stencil_md_initial_integrate_affinity_double_buffering_start_end(zoid, t, atom_,
+                                                                                    zoid.space_cut_idxs[t][0]);
+        stencilMD->stencil_md_force_computation_start_end(zoid, t + 1, atom_next_timestep,
+                                                          neigh_next_timestep, next_force, modify_,
+                                                          zoid.space_cut_idxs[t + 1][0]);
+        stencilMD->fuse_post_force_final_integrate_stencil_md_start_end(zoid, t + 1, atom_next_timestep,
+                                                                            modify_, zoid.space_cut_idxs[t + 1][0]);
+    }
+
+    // second phase
+    for (int t = start_eval; t < end_eval; t++) {
+        Atom* atom_ = curr_dt ? atom_arr[t] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t];
+        Atom* atom_next_timestep = curr_dt ? atom_arr[t + 1] : atom_arr[NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+        Neighbor* neigh_next_timestep = curr_dt ? lmp->neighbor_stencil_md[zoid_num][t + 1] : lmp->neighbor_stencil_md_next_dt[zoid_num][t + 1];
+
+#ifdef LMP_OPENMP
+        Modify* modify_ = curr_dt ? lmp->modify_stencil_md_omp[zoid_num][t + 1] : lmp->modify_stencil_md_omp[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+#else
+        Modify* modify_ = lmp->modify_stencil_md[zoid_num];
+#endif
+        Force* next_force;
+        if (!PURELY_LOCAL_POTENTIAL) {
+            next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md[zoid_num][NUM_TIMESTEPS_IN_PARALLEL - t - 1];
+        } else {
+            next_force = curr_dt ? lmp->force_stencil_md[zoid_num][t + 1] : lmp->force_stencil_md_next_dt[zoid_num][t + 1];
+        }
+
+        if (!warmup && TEST_AGAINST_LAMMPS) {
+            int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
+            stencilMD->TEST_POS_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(curr_dt, timestep_to_compare_against, zoid, atom_, test_x, zoid.space_cut_idxs[t][1]);
+            stencilMD->TEST_VEL_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(curr_dt, timestep_to_compare_against, zoid, atom_, test_v, zoid.space_cut_idxs[t][1]);
+            stencilMD->TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING_SPACE_CUT(curr_dt, timestep_to_compare_against, zoid, atom_, test_f, zoid.space_cut_idxs[t][1]);
+        }
+
+        assert(USE_AFFINITY);
+
+        stencilMD->stencil_md_initial_integrate_affinity_double_buffering_start_end(zoid, t, atom_,
+                                                                                    zoid.space_cut_idxs[t][1]);
+        stencilMD->stencil_md_force_computation_start_end(zoid, t + 1, atom_next_timestep,
+                                                          neigh_next_timestep, next_force, modify_,
+                                                          zoid.space_cut_idxs[t + 1][1]);
+        stencilMD->fuse_post_force_final_integrate_stencil_md_start_end(zoid, t + 1, atom_next_timestep,
+                                                                        modify_, zoid.space_cut_idxs[t + 1][1]);
+    }
+}
+
 template <bool curr_dt>
 void Verlet::run_stencil_md_zoid_no_cilk_for(int starting_timestep, int zoid_num,
                                              double** test_f, double** test_x, double** test_v,
@@ -6551,6 +6646,7 @@ void Verlet::run_stencil_md_dep_templated(int dep, int start_timestep, int start
         }
 
         run_stencil_md_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
+
         // run_stencil_md_zoid_pipelined<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, pipeline_stage);
 
         if (comm->nprocs != 1) {
@@ -7109,7 +7205,11 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
             unpack_duration += duration;
         }
 
-        run_stencil_md_zoid_double_buffering<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
+        if (dep == 0) {
+            run_stencil_md_big_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
+        } else {
+            run_stencil_md_zoid_double_buffering<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
+        }
 
         if (dep < NUM_DEPS - 1) {
             auto begin = std::chrono::high_resolution_clock::now();

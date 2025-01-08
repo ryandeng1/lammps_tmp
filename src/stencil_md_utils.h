@@ -538,6 +538,8 @@ constexpr int NUM_DIMENSIONS = 3;
 // struct that holds information for queue
 struct queue_info {
   /* Start stuff for 2 timesteps */
+  std::vector<int>** space_cut_idxs;
+
   std::vector<dbl3_t_stencil_md>* x_stencil_md;
   std::vector<dbl3_t_stencil_md>* v_stencil_md;
   std::vector<dbl3_t_stencil_md>* eval_f_stencil_md;
@@ -548,6 +550,7 @@ struct queue_info {
   std::vector<int>* mask_stencil_md;
   std::vector<int>* image_stencil_md;
   spinlock** spinlocks_stencil_md;
+  std::atomic_flag** claimed_flags_stencil_md;
 
   std::vector<int>* local_idxs_per_timestep;
 
