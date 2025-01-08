@@ -146,7 +146,8 @@ using dbl3_t_stencil_md = struct { double x,y,z; };
 
 using IDX_3D = std::array<int, 3>;
 
-constexpr int MODIFY_GRAINSIZE = 2048;
+constexpr int MODIFY_GRAINSIZE = 1024;
+constexpr int MAX_NEIGHBORS_PER_ATOM = 20;
 
 const std::map<IDX_3D, int> partition_to_dep = {
         {{LEFT,   LEFT,   LEFT},   0},
@@ -538,6 +539,7 @@ constexpr int NUM_DIMENSIONS = 3;
 // struct that holds information for queue
 struct queue_info {
   /* Start stuff for 2 timesteps */
+  std::pair<int, dbl3_t_stencil_md>** per_worker_force_updates;
   std::vector<int>** space_cut_idxs;
 
   std::vector<dbl3_t_stencil_md>* x_stencil_md;

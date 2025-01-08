@@ -4875,9 +4875,16 @@ public:
 
         // dbl3_t_stencil_md* test_f = new dbl3_t_stencil_md[zoid.x_stencil_md[0].size()];
 
+        auto* per_worker_updates = zoid.per_worker_force_updates;
+        auto& lock = spinlocks[0];
+
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
-            int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+            int worker_number = __cilkrts_get_worker_number();
+            int start_chunk = worker_number * chunks_per_worker;
+
+            auto* updates = per_worker_updates[worker_number];
+            int update_size = 0;
 
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
@@ -4936,11 +4943,14 @@ public:
 
                                 if (newton_pair || j < nlocal) {
                                     // Cilksan_fake_lock_guard guard(&fake_lock);
+                                    /*
                                     spinlocks[j].lock();
                                     f[j].x -= delx * fpair;
                                     f[j].y -= dely * fpair;
                                     f[j].z -= delz * fpair;
                                     spinlocks[j].unlock();
+                                    */
+                                    updates[update_size++] = {j, {-delx * fpair, -dely * fpair, -delz * fpair}};
                                 }
                             }
                         }
@@ -4993,24 +5003,38 @@ public:
 
                             if (newton_pair || i2 < nlocal) {
                                 // Cilksan_fake_lock_guard guard(&fake_lock);
+                                /*
                                 spinlocks[i2].lock();
                                 f[i2].x -= delx * fbond;
                                 f[i2].y -= dely * fbond;
                                 f[i2].z -= delz * fbond;
                                 spinlocks[i2].unlock();
+                                */
+                                updates[update_size++] = {i2, {-delx * fbond, -dely * fbond, -delz * fbond}};
                             }
                         }
 
                         // Cilksan_fake_lock_guard guard(&fake_lock);
-                        spinlocks[i].lock();
+                        // spinlocks[i].lock();
                         f[i].x += fxtmp;
                         f[i].y += fytmp;
                         f[i].z += fztmp;
-                        spinlocks[i].unlock();
+                        // spinlocks[i].unlock();
                         // test_f[i].x = f[i].x;
                         // test_f[i].y = f[i].y;
                         // test_f[i].z = f[i].z;
                     }
+
+                    lock.lock();
+                    for (int i = 0; i < update_size; i++) {
+                        auto& p = updates[i];
+                        int force_idx = p.first;
+                        auto& force_update = p.second;
+                        f[force_idx].x += force_update.x;
+                        f[force_idx].y += force_update.y;
+                        f[force_idx].z += force_update.z;
+                    }
+                    lock.unlock();
                     break;
                 }
             }
