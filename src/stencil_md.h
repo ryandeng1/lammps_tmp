@@ -5042,6 +5042,9 @@ public:
     /* Start double buffering code */
     void stencil_md_initial_integrate_affinity_double_buffering_start_end(queue_info& zoid, int timestep,
                                                                           Atom* atom_, const std::vector<int>& space_cut_idxs) {
+        if (space_cut_idxs.size() == 0) {
+            return;
+        }
 
         assert(get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1);
 
@@ -5072,6 +5075,7 @@ public:
         int chunk_size = atom_->chunk_size;
 
         int nprocess = space_cut_idxs.size();
+        int start = space_cut_idxs[0];
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -5088,7 +5092,10 @@ public:
                         // int i = local_idxs[idx];
                         // int i = idx_start + idx;
                         // assert(i == local_idxs[idx + start]);
-                        int i = space_cut_idxs[idx];
+                        // int i = space_cut_idxs[idx];
+                        int i = start + idx;
+
+                        assert(i == space_cut_idxs[idx]);
 
                         double v_x = v[i].x;
                         double v_y = v[i].y;
@@ -5130,6 +5137,10 @@ public:
                                                 Atom* next, Neighbor* neigh_next,
                                                 Force* next_force, Modify* modify_,
                                                 std::vector<int>& space_cut_idxs) {
+
+        if (space_cut_idxs.size() == 0) {
+            return;
+        }
 
         assert(get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1);
 
@@ -5176,6 +5187,7 @@ public:
         int chunk_size = next->chunk_size;
 
         int nprocess = space_cut_idxs.size();
+        int start = space_cut_idxs[0];
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -5192,7 +5204,10 @@ public:
                     for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nprocess; idx++) {
                         // int i = idx_start + idx;
                         // assert(i == local_idxs[start + idx]);
-                        int i = space_cut_idxs[idx];
+                        // int i = space_cut_idxs[idx];
+                        int i = start + idx;
+
+                        assert(i == space_cut_idxs[idx]);
 
                         const int itype = atom_type[i];
 
@@ -5318,6 +5333,10 @@ public:
 
     inline void fuse_post_force_final_integrate_stencil_md_start_end(queue_info& zoid, int timestep,
                                                                      Atom* next, Modify* modify_, std::vector<int>& space_cut_idxs) {
+        if (space_cut_idxs.size() == 0) {
+            return;
+        }
+
         auto* _noalias v = zoid.v_stencil_md[timestep % 1].data();
         auto* _noalias f = zoid.f_stencil_md[timestep % 1].data();
         auto* _noalias eval_f = zoid.eval_f_stencil_md[timestep % 1].data();
@@ -5344,6 +5363,7 @@ public:
         int chunk_size = next->chunk_size;
 
         int nprocess = space_cut_idxs.size();
+        int start = space_cut_idxs[0];
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -5358,7 +5378,9 @@ public:
                 if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
                     for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nprocess; idx++) {
                         // int i = local_idxs[idx];
-                        int i = space_cut_idxs[idx];
+                        // int i = space_cut_idxs[idx];
+                        int i = start + idx;
+                        assert(i == space_cut_idxs[idx]);
 
                         const double dtfm = dtf / mass[type[i]];
 
@@ -5372,10 +5394,6 @@ public:
                         double v_x = v[i].x;
                         double v_y = v[i].y;
                         double v_z = v[i].z;
-
-                        double f_x = eval_f[i].x;
-                        double f_y = eval_f[i].y;
-                        double f_z = eval_f[i].z;
 
                         eval_f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
                         eval_f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
