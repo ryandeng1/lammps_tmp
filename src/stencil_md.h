@@ -27,7 +27,7 @@
 #include "fix_langevin.h"
 #include <cilk/opadd_reducer.h>
 
-constexpr bool USE_BREAK = true;
+constexpr bool USE_BREAK = false;
 
 namespace LAMMPS_NS {
 
@@ -5074,7 +5074,9 @@ public:
                         next_x[i].y = x[i].y + dtv * v[i].y;
                         next_x[i].z = x[i].z + dtv * v[i].z;
                     }
-                    break;
+                    if (USE_BREAK) {
+                        break;
+                    }
                 }
             }
         }
@@ -5271,7 +5273,9 @@ public:
                         f[i].z += fztmp;
                         spinlocks[i].unlock();
                     }
-                    break;
+                    if (USE_BREAK) {
+                        break;
+                    }
                 }
             }
         }
@@ -5353,7 +5357,9 @@ public:
                         v[i].y += dtfm * (f[i].y + eval_f[i].y);
                         v[i].z += dtfm * (f[i].z + eval_f[i].z);
                     }
-                    break;
+                    if (USE_BREAK) {
+                        break;
+                    }
                 }
             }
         }
