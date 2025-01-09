@@ -1428,6 +1428,7 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       // sort based on last timestep they are in the zoid
                       // int last_timestep_a = -1;
                       // int last_timestep_b = -1;
+                      /*
                       int last_timestep_a = 0;
                       int last_timestep_b = 0;
 
@@ -1532,6 +1533,7 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                               return timesteps_local_a > timesteps_local_b;
                           }
                       }
+                      */
 
                       // USE LAMMPS SORTING
                       const auto& pos_a = zoid.x_stencil_md[0][idx_a];
@@ -1896,6 +1898,25 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                         tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                     }
 
+                    // cut in largest dimension
+                    double widest_width = -1;
+                    int widest_dim = -1;
+
+                    for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
+                        double lo = zoid.zoid.cuts[dim].lower + 0 * zoid.zoid.cuts[dim].slope_lower;
+                        double hi = zoid.zoid.cuts[dim].upper + 0 * zoid.zoid.cuts[dim].slope_upper;
+                        double width = hi - lo;
+                        if (width > widest_width) {
+                            widest_dim = dim;
+                            widest_width = width;
+                        }
+                    }
+
+                    int dt = NUM_TIMESTEPS_IN_PARALLEL;
+                    double xm = 0.5 * (zoid.zoid.cuts[widest_dim].lower + zoid.zoid.cuts[widest_dim].upper)
+                                + 0.25 * dt * (zoid.zoid.cuts[widest_dim].slope_lower + zoid.zoid.cuts[widest_dim].slope_upper) + 0.5 * dt;
+                    double boundary = xm - t * ALLEGRO_SLOPE;
+
                     for (int ii = 0; ii < atom_->nlocal; ii++) {
                         int i = ilist[ii];
                         int src_idx = tag_to_idx[atom_->tag[i]];
@@ -1906,6 +1927,7 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                             auto neigh_atom = neigh_list[k];
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
 
+                            /*
                             if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
                                 if (src_idx < dst_idx) {
                                     zoid.neighbor_list[t][src_idx].push_back(dst_idx);
@@ -1915,8 +1937,46 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                             } else {
                                 zoid.neighbor_list[t][src_idx].push_back(dst_idx);
                             }
+                            */
+
+                            double pos_src = atom_->x[i][widest_dim];
+                            double pos_dst = atom_->x[neigh_atom][widest_dim];
+
+                            if (pos_dst < boundary && neigh_atom < atom_->nlocal) {
+                                zoid.neighbor_list[t][dst_idx].push_back(src_idx);
+                            } else {
+                                zoid.neighbor_list[t][src_idx].push_back(dst_idx);
+                            }
+
+                            // zoid.neighbor_list[t][src_idx].push_back(dst_idx);
                         }
                     }
+
+                    /*
+                    int num_pairs = 0;
+                    int num_diff = 0;
+
+                    const auto& local_idxs = zoid.local_idxs_per_timestep[t];
+                    for (int i = 0; i < local_idxs.size(); i += MODIFY_GRAINSIZE) {
+                        std::set<int> idxs_accessed_in_chunk;
+                        for (int k = i; k < i + MODIFY_GRAINSIZE && k < local_idxs.size(); k++) {
+                            int idx = local_idxs[k];
+                            idxs_accessed_in_chunk.insert(idx);
+                        }
+                        for (int k = i; k < i + MODIFY_GRAINSIZE && k < local_idxs.size(); k++) {
+                            int idx = local_idxs[k];
+                            num_pairs += zoid.neighbor_list[t][idx].size();
+                            for (int neigh_idx : zoid.neighbor_list[t][idx]) {
+                                if (idxs_accessed_in_chunk.find(neigh_idx) == idxs_accessed_in_chunk.end()) {
+                                    num_diff++;
+                                }
+                            }
+                        }
+                    }
+
+                    std::cout << BOLDCYAN << "PAY ATTENTION zoid: " << zoid.num << " timestep: " << t << " nlocal: " << local_idxs.size() << " total num pairs: " << num_pairs
+                              << " num big diff: " << num_diff << RESET_COLOR << std::endl;
+                    */
                 }
             }
         }
@@ -1943,6 +2003,25 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                         tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                     }
 
+                    // cut in largest dimension
+                    double widest_width = -1;
+                    int widest_dim = -1;
+
+                    for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
+                        double lo = zoid.zoid.cuts[dim].lower + 0 * zoid.zoid.cuts[dim].slope_lower;
+                        double hi = zoid.zoid.cuts[dim].upper + 0 * zoid.zoid.cuts[dim].slope_upper;
+                        double width = hi - lo;
+                        if (width > widest_width) {
+                            widest_dim = dim;
+                            widest_width = width;
+                        }
+                    }
+
+                    int dt = NUM_TIMESTEPS_IN_PARALLEL;
+                    double xm = 0.5 * (zoid.zoid.cuts[widest_dim].lower + zoid.zoid.cuts[widest_dim].upper)
+                                + 0.25 * dt * (zoid.zoid.cuts[widest_dim].slope_lower + zoid.zoid.cuts[widest_dim].slope_upper) + 0.5 * dt;
+                    double boundary = xm - t * ALLEGRO_SLOPE;
+
                     for (int ii = 0; ii < atom_->nlocal; ii++) {
                         int i = ilist[ii];
                         auto neigh_list = firstneigh[i];
@@ -1953,6 +2032,16 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
                             assert(src_idx >= 0 && src_idx < zoid.x_stencil_md[0].size());
 
+                            double pos_src = atom_->x[i][widest_dim];
+                            double pos_dst = atom_->x[neigh_atom][widest_dim];
+
+                            if (pos_dst < boundary && neigh_atom < atom_->nlocal) {
+                                zoid.neighbor_list[t][dst_idx].push_back(src_idx);
+                            } else {
+                                zoid.neighbor_list[t][src_idx].push_back(dst_idx);
+                            }
+
+                            /*
                             if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
                                 if (src_idx < dst_idx) {
                                     zoid.neighbor_list[t][src_idx].push_back(dst_idx);
@@ -1962,6 +2051,8 @@ void StencilMD::BUILD_NEIGHBOR_LIST_DOUBLE_BUFFERING() {
                             } else {
                                 zoid.neighbor_list[t][src_idx].push_back(dst_idx);
                             }
+                            */
+                            // zoid.neighbor_list[t][src_idx].push_back(dst_idx);
                         }
                     }
                 }
@@ -1987,6 +2078,25 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
                         tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                     }
 
+                    // cut in largest dimension
+                    double widest_width = -1;
+                    int widest_dim = -1;
+
+                    for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
+                        double lo = zoid.zoid.cuts[dim].lower + 0 * zoid.zoid.cuts[dim].slope_lower;
+                        double hi = zoid.zoid.cuts[dim].upper + 0 * zoid.zoid.cuts[dim].slope_upper;
+                        double width = hi - lo;
+                        if (width > widest_width) {
+                            widest_dim = dim;
+                            widest_width = width;
+                        }
+                    }
+
+                    int dt = NUM_TIMESTEPS_IN_PARALLEL;
+                    double xm = 0.5 * (zoid.zoid.cuts[widest_dim].lower + zoid.zoid.cuts[widest_dim].upper)
+                                + 0.25 * dt * (zoid.zoid.cuts[widest_dim].slope_lower + zoid.zoid.cuts[widest_dim].slope_upper) + 0.5 * dt;
+                    double boundary = xm - t * ALLEGRO_SLOPE;
+
                     for (int ii = 0; ii < atom_->nlocal; ii++) {
                         auto& lst_bonds = neigh->atom_bondlist[ii];
                         int src_idx = tag_to_idx[atom_->tag[ii]];
@@ -1998,6 +2108,7 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
 
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
 
+                            /*
                             if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
                                 if (src_idx < dst_idx) {
                                     zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
@@ -2014,6 +2125,18 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
                             } else {
                                 zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
                             }
+                            */
+
+                            double pos_src = atom_->x[ii][widest_dim];
+                            double pos_dst = atom_->x[neigh_atom][widest_dim];
+
+                            if (pos_dst < boundary && neigh_atom < atom_->nlocal) {
+                                zoid.bond_list[t][dst_idx].push_back({src_idx, bond_type});
+                            } else {
+                                zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+                            }
+
+                            // zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
                         }
                     }
                 }
@@ -2037,6 +2160,25 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
                         tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                     }
 
+                    // cut in largest dimension
+                    double widest_width = -1;
+                    int widest_dim = -1;
+
+                    for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
+                        double lo = zoid.zoid.cuts[dim].lower + 0 * zoid.zoid.cuts[dim].slope_lower;
+                        double hi = zoid.zoid.cuts[dim].upper + 0 * zoid.zoid.cuts[dim].slope_upper;
+                        double width = hi - lo;
+                        if (width > widest_width) {
+                            widest_dim = dim;
+                            widest_width = width;
+                        }
+                    }
+
+                    int dt = NUM_TIMESTEPS_IN_PARALLEL;
+                    double xm = 0.5 * (zoid.zoid.cuts[widest_dim].lower + zoid.zoid.cuts[widest_dim].upper)
+                                + 0.25 * dt * (zoid.zoid.cuts[widest_dim].slope_lower + zoid.zoid.cuts[widest_dim].slope_upper) + 0.5 * dt;
+                    double boundary = xm - t * ALLEGRO_SLOPE;
+
                     for (int ii = 0; ii < atom_->nlocal; ii++) {
                         auto& lst_bonds = neigh->atom_bondlist[ii];
                         for (int k = 0; k < lst_bonds.size(); k++) {
@@ -2047,6 +2189,7 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
                             int src_idx = tag_to_idx[atom_->tag[ii]];
                             int dst_idx = tag_to_idx[atom_->tag[neigh_atom]];
 
+                            /*
                             if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
                                 if (src_idx < dst_idx) {
                                     zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
@@ -2060,6 +2203,16 @@ void StencilMD::BUILD_BOND_LIST_DOUBLE_BUFFERING() {
                                               << " tag: " << atom_->tag[ii] << " " << atom_->tag[neigh_atom] << std::endl;
                                     assert(false);
                                 }
+                            } else {
+                                zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+                            }
+                            */
+                            // zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
+                            double pos_src = atom_->x[ii][widest_dim];
+                            double pos_dst = atom_->x[neigh_atom][widest_dim];
+
+                            if (pos_dst < boundary && neigh_atom < atom_->nlocal) {
+                                zoid.bond_list[t][dst_idx].push_back({src_idx, bond_type});
                             } else {
                                 zoid.bond_list[t][src_idx].push_back({dst_idx, bond_type});
                             }
@@ -2476,9 +2629,91 @@ void StencilMD::CONSTRUCT_START_END_BIG_ZOIDS_HELPER_EXPANDING(queue_info& zoid)
     }
 }
 
+void StencilMD::CONSTRUCT_START_END_BIG_ZOIDS_HELPER(queue_info& zoid) {
+    constexpr int NUM_STAGES = 2;
+
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+        std::vector<int> stage0_idxs;
+        std::vector<int> stage1_idxs;
+
+        auto& curr_local_idxs = zoid.local_idxs_per_timestep[t];
+
+        // cut in largest dimension
+        double widest_width = -1;
+        int widest_dim = -1;
+
+        for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
+            double lo = zoid.zoid.cuts[dim].lower + 0 * zoid.zoid.cuts[dim].slope_lower;
+            double hi = zoid.zoid.cuts[dim].upper + 0 * zoid.zoid.cuts[dim].slope_upper;
+            double width = hi - lo;
+            assert(width > 0);
+            if (width > widest_width) {
+                widest_dim = dim;
+                widest_width = width;
+            }
+        }
+
+        int dt = NUM_TIMESTEPS_IN_PARALLEL;
+        double xm = 0.5 * (zoid.zoid.cuts[widest_dim].lower + zoid.zoid.cuts[widest_dim].upper)
+                    + 0.25 * dt * (zoid.zoid.cuts[widest_dim].slope_lower + zoid.zoid.cuts[widest_dim].slope_upper) + 0.5 * dt;
+        double boundary = xm - t * ALLEGRO_SLOPE;
+
+        for (int local_idx : curr_local_idxs) {
+            // double pos = zoid.x_stencil_md[0][local_idx][widest_dim];
+            double pos;
+            if (widest_dim == 0) {
+                pos = zoid.x_stencil_md[0][local_idx].x;
+            } else if (widest_dim == 1) {
+                pos = zoid.x_stencil_md[0][local_idx].y;
+            } else if (widest_dim == 2) {
+                pos = zoid.x_stencil_md[0][local_idx].z;
+            } else {
+                assert(false);
+            }
+
+            if (pos < boundary) {
+                stage0_idxs.push_back(local_idx);
+            } else {
+                stage1_idxs.push_back(local_idx);
+            }
+
+            if (zoid.num == 3 && zoid.tag_stencil_md[0][local_idx] == 119879) {
+                std::cout << "SPACE CUT CONSTRUCTION zoid: " << zoid.num << " timestep: " << t << " local idx: " << local_idx << " pos: " << pos << " boundary: " << boundary << std::endl;
+            }
+        }
+
+        zoid.space_cut_idxs[t] = new std::vector<int>[NUM_STAGES];
+        zoid.space_cut_idxs[t][0] = stage0_idxs;
+        zoid.space_cut_idxs[t][1] = stage1_idxs;
+    }
+}
+
 void StencilMD::CONSTRUCT_START_END_BIG_ZOIDS() {
     constexpr int NUM_STAGES = 2;
 
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues[dep].size(); j++) {
+            auto &zoid = lmp->queues[dep][j];
+            if (zoid.num % comm->nprocs != comm->me) {
+                continue;
+            }
+
+            CONSTRUCT_START_END_BIG_ZOIDS_HELPER(zoid);
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < lmp->queues_next_dt[dep].size(); j++) {
+            auto &zoid = lmp->queues_next_dt[dep][j];
+            if (zoid.num % comm->nprocs != comm->me) {
+                continue;
+            }
+
+            CONSTRUCT_START_END_BIG_ZOIDS_HELPER(zoid);
+        }
+    }
+
+    /*
     // setup zoids with shrinking in every dimension
     for (int j = 0; j < lmp->queues[0].size(); j++) {
         auto &zoid = lmp->queues[0][j];
@@ -2516,6 +2751,7 @@ void StencilMD::CONSTRUCT_START_END_BIG_ZOIDS() {
         }
         CONSTRUCT_START_END_BIG_ZOIDS_HELPER_EXPANDING(zoid);
     }
+    */
 }
 
 void StencilMD::COMPARE_POS_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info &zoid,

@@ -112,6 +112,7 @@ public:
     void SET_CLAIMED_ATOMIC_BOOLS();
 
     void CONSTRUCT_START_END_BIG_ZOIDS();
+    void CONSTRUCT_START_END_BIG_ZOIDS_HELPER(queue_info& zoid);
     void CONSTRUCT_START_END_BIG_ZOIDS_HELPER_SHRINKING(queue_info& zoid);
     void CONSTRUCT_START_END_BIG_ZOIDS_HELPER_EXPANDING(queue_info& zoid);
 
@@ -4425,7 +4426,7 @@ public:
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = atom_->chunk_size;
 
-        if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
+        if (false && (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1)) {
             int start = local_idxs[0];
 
             #pragma cilk grainsize 1
@@ -4615,7 +4616,7 @@ public:
         int chunk_size = next->chunk_size;
         int nlocal = local_idxs.size();
 
-        if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
+        if (false && (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1)) {
             int start = local_idxs[0];
 
             #pragma cilk grainsize 1
@@ -4873,18 +4874,16 @@ public:
 
         // Cilksan_fake_mutex fake_lock;
 
-        // dbl3_t_stencil_md* test_f = new dbl3_t_stencil_md[zoid.x_stencil_md[0].size()];
-
-        auto* per_worker_updates = zoid.per_worker_force_updates;
-        auto& lock = spinlocks[0];
+        // auto* per_worker_updates = zoid.per_worker_force_updates;
+        // auto& lock = spinlocks[0];
 
         #pragma cilk grainsize 1
         cilk_for (int ii = 0; ii < num_chunks; ii++) {
             int worker_number = __cilkrts_get_worker_number();
             int start_chunk = worker_number * chunks_per_worker;
 
-            auto* updates = per_worker_updates[worker_number];
-            int update_size = 0;
+            // auto* updates = per_worker_updates[worker_number];
+            // int update_size = 0;
 
             for (int c = 0; c < num_chunks; ++c) {
                 int s = (c + start_chunk) % num_chunks;
@@ -4942,15 +4941,12 @@ public:
                                 fztmp += delz * fpair;
 
                                 if (newton_pair || j < nlocal) {
-                                    // Cilksan_fake_lock_guard guard(&fake_lock);
-                                    /*
                                     spinlocks[j].lock();
                                     f[j].x -= delx * fpair;
                                     f[j].y -= dely * fpair;
                                     f[j].z -= delz * fpair;
                                     spinlocks[j].unlock();
-                                    */
-                                    updates[update_size++] = {j, {-delx * fpair, -dely * fpair, -delz * fpair}};
+                                    // updates[update_size++] = {j, {-delx * fpair, -dely * fpair, -delz * fpair}};
                                 }
                             }
                         }
@@ -5003,28 +4999,25 @@ public:
 
                             if (newton_pair || i2 < nlocal) {
                                 // Cilksan_fake_lock_guard guard(&fake_lock);
-                                /*
                                 spinlocks[i2].lock();
                                 f[i2].x -= delx * fbond;
                                 f[i2].y -= dely * fbond;
                                 f[i2].z -= delz * fbond;
                                 spinlocks[i2].unlock();
-                                */
-                                updates[update_size++] = {i2, {-delx * fbond, -dely * fbond, -delz * fbond}};
+                                // updates[update_size++] = {i2, {-delx * fbond, -dely * fbond, -delz * fbond}};
                             }
                         }
 
-                        // Cilksan_fake_lock_guard guard(&fake_lock);
-                        // spinlocks[i].lock();
+                        spinlocks[i].lock();
                         f[i].x += fxtmp;
                         f[i].y += fytmp;
                         f[i].z += fztmp;
-                        // spinlocks[i].unlock();
-                        // test_f[i].x = f[i].x;
-                        // test_f[i].y = f[i].y;
-                        // test_f[i].z = f[i].z;
+                        spinlocks[i].unlock();
                     }
 
+                    break;
+
+                    /*
                     bool did = false;
                     for (int try_num = 0; try_num < 10; try_num++) {
                         if (lock.try_lock()) {
@@ -5046,6 +5039,7 @@ public:
                     if (did) {
                         break;
                     }
+                    */
 
                     /*
                     lock.lock();
@@ -5063,6 +5057,7 @@ public:
                 }
             }
 
+            /*
             if (update_size > MODIFY_GRAINSIZE * MAX_NEIGHBORS_PER_ATOM) {
                 std::cout << "TROUBLE. zoid: " << zoid.num << " timestep: " << timestep << " update size: " << update_size << std::endl;
             }
@@ -5079,6 +5074,7 @@ public:
                 }
                 lock.unlock();
             }
+            */
         }
 
         /*
@@ -5110,8 +5106,6 @@ public:
         if (space_cut_idxs.size() == 0) {
             return;
         }
-
-        assert(get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1);
 
         auto * _noalias x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
@@ -5157,10 +5151,8 @@ public:
                         // int i = local_idxs[idx];
                         // int i = idx_start + idx;
                         // assert(i == local_idxs[idx + start]);
-                        // int i = space_cut_idxs[idx];
-                        int i = start + idx;
-
-                        assert(i == space_cut_idxs[idx]);
+                        int i = space_cut_idxs[idx];
+                        // int i = start + idx;
 
                         double v_x = v[i].x;
                         double v_y = v[i].y;
@@ -5206,8 +5198,6 @@ public:
         if (space_cut_idxs.size() == 0) {
             return;
         }
-
-        assert(get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1);
 
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.eval_f_stencil_md[timestep % 1].data();
@@ -5269,10 +5259,9 @@ public:
                     for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nprocess; idx++) {
                         // int i = idx_start + idx;
                         // assert(i == local_idxs[start + idx]);
-                        // int i = space_cut_idxs[idx];
-                        int i = start + idx;
-
-                        assert(i == space_cut_idxs[idx]);
+                        int i = space_cut_idxs[idx];
+                        // int i = start + idx;
+                        // assert(i == space_cut_idxs[idx]);
 
                         const int itype = atom_type[i];
 
@@ -5443,9 +5432,9 @@ public:
                 if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
                     for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nprocess; idx++) {
                         // int i = local_idxs[idx];
-                        // int i = space_cut_idxs[idx];
-                        int i = start + idx;
-                        assert(i == space_cut_idxs[idx]);
+                        int i = space_cut_idxs[idx];
+                        // int i = start + idx;
+                        // assert(i == space_cut_idxs[idx]);
 
                         const double dtfm = dtf / mass[type[i]];
 
@@ -6285,11 +6274,13 @@ public:
                               << test_v[timestep][tag * 3 + 1] << " "
                               << test_v[timestep][tag * 3 + 2]
                               << std::endl;
-                    std::cout << "What does LAMMPS have prev? "
-                              << test_v[timestep - 1][tag * 3 + 0] << " "
-                              << test_v[timestep - 1][tag * 3 + 1] << " "
-                              << test_v[timestep - 1][tag * 3 + 2]
-                              << std::endl;
+                    if (timestep > 0) {
+                        std::cout << "What does LAMMPS have prev? "
+                                  << test_v[timestep - 1][tag * 3 + 0] << " "
+                                  << test_v[timestep - 1][tag * 3 + 1] << " "
+                                  << test_v[timestep - 1][tag * 3 + 2]
+                                  << std::endl;
+                    }
                     std::cout << "Diff: " << fabs(my_v[dim] - test_v[timestep][tag * 3 + dim]) << std::endl;
                     std::cout << "pos: " << x[test_idx].x << " " << x[test_idx].y << " " << x[test_idx].z << std::endl;
 

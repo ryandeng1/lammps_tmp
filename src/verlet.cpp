@@ -6493,6 +6493,8 @@ void Verlet::run_stencil_md_big_zoid(int starting_timestep, int start_eval, int 
         end = std::chrono::high_resolution_clock::now();
         duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
         modify_final_duration += duration;
+
+        // std::cout << BOLDCYAN << "FIRST. zoid: " << zoid.num << " timestep: " << t << " size: " << zoid.space_cut_idxs[t + 1][0].size() << RESET_COLOR << std::endl;
     }
 
     // second phase
@@ -6543,6 +6545,8 @@ void Verlet::run_stencil_md_big_zoid(int starting_timestep, int start_eval, int 
         end = std::chrono::high_resolution_clock::now();
         duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
         modify_final_duration += duration;
+
+        // std::cout << BOLDCYAN << "SECOND. zoid: " << zoid.num << " timestep: " << t << " size: " << zoid.space_cut_idxs[t + 1][1].size() << RESET_COLOR << std::endl;
     }
 }
 
@@ -7233,7 +7237,7 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
             unpack_duration += duration;
         }
 
-        if (false && dep == 0) {
+        if (true) {
             run_stencil_md_big_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
         } else {
             run_stencil_md_zoid_double_buffering<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
