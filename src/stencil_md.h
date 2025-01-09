@@ -27,6 +27,8 @@
 #include "fix_langevin.h"
 #include <cilk/opadd_reducer.h>
 
+constexpr bool USE_BREAK = true;
+
 namespace LAMMPS_NS {
 
 class StencilMD : protected Pointers {
@@ -4456,7 +4458,10 @@ public:
                         next_x[i].y = x[i].y + dtv * v[i].y;
                         next_x[i].z = x[i].z + dtv * v[i].z;
                     }
-                    break;
+
+                    if (USE_BREAK) {
+                        break;
+                    }
                 }
             }
         }
@@ -4614,7 +4619,9 @@ public:
                         v[i].y += dtfm * (f[i].y + eval_f[i].y);
                         v[i].z += dtfm * (f[i].z + eval_f[i].z);
                     }
-                    break;
+                    if (USE_BREAK) {
+                        break;
+                    }
                 }
             }
         }
@@ -4914,7 +4921,9 @@ public:
                         spinlocks[i].unlock();
                     }
 
-                    break;
+                    if (USE_BREAK) {
+                        break;
+                    }
 
                     /*
                     bool did = false;
@@ -4985,18 +4994,6 @@ public:
         for (int i = 0; i < num_chunks; i++) {
             claimed[i].clear(std::memory_order_relaxed);
         }
-
-        /*
-        if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
-            for (int i = 0; i < local_idxs.size(); i++) {
-                int idx = local_idxs[i];
-                assert(fabs(f[i].x - test_f[i].x) < 1e-5);
-                assert(fabs(f[i].y - test_f[i].y) < 1e-5);
-                assert(fabs(f[i].z - test_f[i].z) < 1e-5);
-            }
-        }
-        delete[] test_f;
-        */
     }
 
     /* Start double buffering code */

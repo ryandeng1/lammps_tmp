@@ -1428,7 +1428,6 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                       // sort based on last timestep they are in the zoid
                       // int last_timestep_a = -1;
                       // int last_timestep_b = -1;
-                      /*
                       int last_timestep_a = 0;
                       int last_timestep_b = 0;
 
@@ -1485,6 +1484,7 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                           return timesteps_a > timesteps_b;
                       }
 
+                      /*
                       if (get_zoid_dep(zoid.num) == 0 || get_zoid_dep(zoid.num) == NUM_DEPS - 1) {
                           std::set<int> timesteps_local_a;
                           std::set<int> timesteps_local_b;
@@ -1584,42 +1584,6 @@ void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
                         assert(fabs(zoid.x_stencil_md[0][i].x - zoid.x_stencil_md[1][i].x) < 1e-6);
                         assert(fabs(zoid.x_stencil_md[0][i].y - zoid.x_stencil_md[1][i].y) < 1e-6);
                         assert(fabs(zoid.x_stencil_md[0][i].z - zoid.x_stencil_md[1][i].z) < 1e-6);
-                    }
-                }
-
-                if (zoid.num == 43) {
-                    for (int k = 0; k < zoid.x_stencil_md[0].size(); k++) {
-                        // sort based on last timestep they are in the zoid
-                        std::set<int> timesteps;
-                        int last_timestep = -1;
-
-                        for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
-                            bool in_zoid = true;
-                            double pos[3] = {zoid.x_stencil_md[0][k].x,
-                                             zoid.x_stencil_md[0][k].y,
-                                             zoid.x_stencil_md[0][k].z};
-
-                            for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
-                                double lo = zoid.zoid.cuts[dim].lower + t2 * zoid.zoid.cuts[dim].slope_lower;
-                                double hi = zoid.zoid.cuts[dim].upper + t2 * zoid.zoid.cuts[dim].slope_upper;
-                                if (!(pos[dim] >= lo && pos[dim] < hi)) {
-                                    in_zoid = false;
-                                }
-                            }
-
-                            if (in_zoid) {
-                                last_timestep = t2;
-                                timesteps.insert(t2);
-                            }
-                        }
-
-                        // std::cout << "zoid: " << zoid.num << " idx: " << k << " last timestep: " << last_timestep << std::endl;
-                        std::stringstream s1;
-                        for (auto& t : timesteps) {
-                            s1 << t << " ";
-                        }
-                        // std::cout << "zoid: " << zoid.num << " idx: " << k << " last timestep: " << last_timestep << std::endl;
-                        // std::cout << "RYAN zoid: " << zoid.num << " idx: " << k << " timesteps local: " << s1.str() << std::endl;
                     }
                 }
             }
