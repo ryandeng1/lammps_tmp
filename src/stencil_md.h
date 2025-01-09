@@ -5025,6 +5025,21 @@ public:
                         // test_f[i].z = f[i].z;
                     }
 
+                    if (lock.try_lock()) {
+                        for (int i = 0; i < update_size; i++) {
+                            auto& p = updates[i];
+                            int force_idx = p.first;
+                            auto& force_update = p.second;
+                            f[force_idx].x += force_update.x;
+                            f[force_idx].y += force_update.y;
+                            f[force_idx].z += force_update.z;
+                        }
+                        lock.unlock();
+                        update_size = 0;
+                        break;
+                    }
+
+                    /*
                     lock.lock();
                     for (int i = 0; i < update_size; i++) {
                         auto& p = updates[i];
@@ -5036,7 +5051,25 @@ public:
                     }
                     lock.unlock();
                     break;
+                    */
                 }
+            }
+
+            if (update_size > MODIFY_GRAINSIZE * MAX_NEIGHBORS_PER_ATOM) {
+                std::cout << "TROUBLE" << std::endl;
+            }
+
+            if (update_size > 0) {
+                lock.lock();
+                for (int i = 0; i < update_size; i++) {
+                    auto& p = updates[i];
+                    int force_idx = p.first;
+                    auto& force_update = p.second;
+                    f[force_idx].x += force_update.x;
+                    f[force_idx].y += force_update.y;
+                    f[force_idx].z += force_update.z;
+                }
+                lock.unlock();
             }
         }
 
