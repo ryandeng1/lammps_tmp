@@ -5056,7 +5056,7 @@ public:
             }
 
             if (update_size > MODIFY_GRAINSIZE * MAX_NEIGHBORS_PER_ATOM) {
-                std::cout << "TROUBLE" << std::endl;
+                std::cout << "TROUBLE. zoid: " << zoid.num << " timestep: " << timestep << " update size: " << update_size << std::endl;
             }
 
             if (update_size > 0) {
