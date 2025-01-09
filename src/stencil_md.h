@@ -27,7 +27,7 @@
 #include "fix_langevin.h"
 #include <cilk/opadd_reducer.h>
 
-constexpr bool USE_BREAK = false;
+constexpr bool USE_BREAK = true;
 
 namespace LAMMPS_NS {
 
