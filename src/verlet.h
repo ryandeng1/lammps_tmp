@@ -36,6 +36,7 @@ class Verlet : public Integrate {
   void cleanup() override;
 
   void setup_stencil_md();
+  void setup_stencil_md_many_zoids();
 
   void sort_ghost_atoms_stencil_md_bins(Atom*, queue_info&, int);
   void construct_send_force_bins(bool curr_dt, Atom*, queue_info& zoid, int);

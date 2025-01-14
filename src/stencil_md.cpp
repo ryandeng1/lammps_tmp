@@ -1358,44 +1358,6 @@ void StencilMD::SORT_LOCAL_ATOMS_BINS() {
     }
 }
 
-// Helper functions for sort local atoms double buffering
-template <typename T, typename Compare>
-std::vector<std::size_t> sort_permutation(
-        const std::vector<T>& vec,
-        Compare compare)
-{
-    std::vector<std::size_t> p(vec.size());
-    std::iota(p.begin(), p.end(), 0);
-    std::sort(p.begin(), p.end(),
-              [&](std::size_t i, std::size_t j){ return compare(vec[i], vec[j]); });
-    return p;
-}
-
-template <typename T>
-void apply_permutation_in_place(
-        std::vector<T>& vec,
-        const std::vector<std::size_t>& p)
-{
-    std::vector<bool> done(vec.size());
-    for (std::size_t i = 0; i < vec.size(); ++i)
-    {
-        if (done[i])
-        {
-            continue;
-        }
-        done[i] = true;
-        std::size_t prev_j = i;
-        std::size_t j = p[i];
-        while (i != j)
-        {
-            std::swap(vec[prev_j], vec[j]);
-            done[j] = true;
-            prev_j = j;
-            j = p[j];
-        }
-    }
-}
-
 void StencilMD::SORT_LOCAL_ATOMS_DOUBLE_BUFFERING() {
     // setup lammps code
     double binsize = 0.5 * neighbor->cutneighmax;
@@ -2640,15 +2602,20 @@ void StencilMD::CONSTRUCT_START_END_BIG_ZOIDS_HELPER(queue_info& zoid) {
             } else {
                 stage1_idxs.push_back(local_idx);
             }
-
-            if (zoid.num == 3 && zoid.tag_stencil_md[0][local_idx] == 119879) {
-                std::cout << "SPACE CUT CONSTRUCTION zoid: " << zoid.num << " timestep: " << t << " local idx: " << local_idx << " pos: " << pos << " boundary: " << boundary << std::endl;
-            }
         }
 
         zoid.space_cut_idxs[t] = new std::vector<int>[NUM_STAGES];
         zoid.space_cut_idxs[t][0] = stage0_idxs;
         zoid.space_cut_idxs[t][1] = stage1_idxs;
+
+        std::vector<int> tmp1;
+        std::vector<int> tmp2;
+        std::vector<int> tmp3;
+        std::vector<int> tmp4;
+
+        int num_segments_stage0 = get_segments(stage0_idxs, tmp1, tmp2);
+        int num_segments_stage1 = get_segments(stage1_idxs, tmp3, tmp4);
+        std::cout << "zoid: " << zoid.num << " timestep: " << t << " space cut num segments: " << num_segments_stage0 << " " << num_segments_stage1 << std::endl;
     }
 }
 
@@ -3100,3 +3067,4 @@ std::vector<double>& StencilMD::LAMMPS_GET_BOUNDS(bool curr_dt, int timestep) {
     // assert(false);
     return bounds_at_timestep;
 }
+

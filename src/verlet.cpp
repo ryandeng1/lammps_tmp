@@ -274,6 +274,7 @@ void Verlet::setup(int flag) {
     std::cout << GREEN << "------------------- LAMMPS SETUP DONE -------------------------" << RESET_COLOR << std::endl;
 
     if (!ONLY_RUN_LAMMPS) {
+        setup_stencil_md_many_zoids();
         setup_stencil_md();
     }
 
@@ -5429,6 +5430,98 @@ void Verlet::setup_stencil_md() {
     */
 }
 
+void Verlet::setup_stencil_md_many_zoids() {
+    /* LAMMPS TESTING CODE */
+    double *send_f = new double[(atom->natoms + 1) * 3];
+    for (int i = 0; i < (atom->natoms + 1) * 3; i++) {
+        send_f[i] = 0.0;
+    }
+
+    for (int i = 0; i < atom->nlocal; i++) {
+        int tag = atom->tag[i];
+        if (!(tag >= 0 && tag <= atom->natoms)) {
+            std::cout << "ERROR. "
+                      << " idx: " << i << " out of nlocal: " << atom->nlocal
+                      << " tag: " << atom->tag[i] << std::endl;
+        }
+        assert(tag >= 0 && tag <= atom->natoms);
+        send_f[tag * 3 + 0] = atom->f[i][0];
+        send_f[tag * 3 + 1] = atom->f[i][1];
+        send_f[tag * 3 + 2] = atom->f[i][2];
+    }
+
+    double *recv_f = new double[(atom->natoms + 1) * 3];
+
+    for (int i = 0; i < (atom->natoms + 1) * 3; i++) {
+        recv_f[i] = 0.0;
+    }
+
+    MPI_Allreduce(send_f, recv_f, (atom->natoms + 1) * 3, MPI_DOUBLE, MPI_SUM,
+                  world);
+
+    for (int i = 0; i < atom->nlocal; i++) {
+        int tag = atom->tag[i];
+
+        for (int dim = 0; dim < 3; dim++) {
+            if (fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) > 5e-5) {
+                std::cout << "error in recv tag: " << tag << " idx: " << i
+                          << " dim: " << dim
+                          << " what I have: " << atom->f[i][dim]
+                          << " what I got: " << recv_f[tag * 3 + dim]
+                          << " diff: "
+                          << fabs(recv_f[tag * 3 + dim] - atom->f[i][dim])
+                          << std::endl;
+            }
+            assert(fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) <= 5e-5);
+        }
+    }
+
+    MPI_Barrier(world);
+
+    stencilMD->INIT_ZOIDS_MANY_CUTS();
+    stencilMD->INIT_ZOID_DATA_MANY_CUTS();
+    stencilMD->INIT_ZOID_MANY_CUTS_NEIGHBORS();
+    auto begin = std::chrono::high_resolution_clock::now();
+    stencilMD->GET_ATOMS_ZOID_MANY_CUTS();
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
+    std::cout << BOLDMAGENTA << "GET ATOMS: " << duration << " seconds." << RESET_COLOR << std::endl;
+    stencilMD->SORT_LOCAL_ATOMS_ZOID_MANY_CUTS();
+
+    begin = std::chrono::high_resolution_clock::now();
+    stencilMD->CREATE_NEIGHBOR_LIST();
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
+    std::cout << BOLDMAGENTA << "GET NEIGHBOR LIST: " << duration << " seconds." << RESET_COLOR << std::endl;
+
+    begin = std::chrono::high_resolution_clock::now();
+    stencilMD->CREATE_BOND_LIST();
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
+    std::cout << BOLDMAGENTA << "GET BOND LIST: " << duration << " seconds." << RESET_COLOR << std::endl;
+
+    stencilMD->INIT_AFFINITY_AND_LOCKS();
+
+    stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS(true);
+
+    /*
+    for (int dep = 0; dep < 1; dep++) {
+        for (int j = 0; j < stencilMD->queues_many_cuts[dep].size(); j++) {
+            auto& zoid = stencilMD->queues_many_cuts[dep][j];
+            if (zoid.num % comm->nprocs == comm->me) {
+                stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, 0);
+                stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
+                stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
+            }
+        }
+    }
+
+    std::cout << BOLDGREEN << "DEP 0 passed" << RESET_COLOR << std::endl;
+    MPI_Barrier(world);
+    */
+    assert(false);
+}
+
 /* ----------------------------------------------------------------------
    setup without output
    flag = 0 = just force calculation
@@ -7077,9 +7170,9 @@ void Verlet::run_stencil_md_zoid_double_buffering(int starting_timestep, int sta
         if (!warmup && TEST_AGAINST_LAMMPS) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
             // TODO:
+            stencilMD->TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, zoid, atom_, test_f);
             stencilMD->TEST_POS_AGAINST_LAMMPS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, zoid, atom_, test_x);
             stencilMD->TEST_VEL_AGAINST_LAMMPS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, zoid, atom_, test_v);
-            stencilMD->TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, zoid, atom_, test_f);
         }
 
         auto begin_initial_integrate = std::chrono::high_resolution_clock::now();
@@ -7237,7 +7330,7 @@ void Verlet::run_stencil_md_dep_double_buffering(int dep, int start_timestep, in
             unpack_duration += duration;
         }
 
-        if (true) {
+        if (false) {
             run_stencil_md_big_zoid<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
         } else {
             run_stencil_md_zoid_double_buffering<curr_dt>(start_timestep, start_t - 1, end_t - 1, zoid_num, test_f, test_x, test_v, warmup);
