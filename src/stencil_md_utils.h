@@ -564,6 +564,7 @@ struct queue_info {
   std::vector<int>** recv_force_idxs_double_buffering;
 
   std::vector<int>** send_pos_idxs_double_buffering;
+  std::vector<int>** recv_pos_idxs_double_buffering;
 
   std::vector<int>** recv_pos_local_idxs_double_buffering;
   std::vector<int>** recv_pos_ghost_idxs_double_buffering;
