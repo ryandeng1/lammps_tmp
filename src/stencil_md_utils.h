@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <mpi.h>
 #include <map>
 #include <cassert>
