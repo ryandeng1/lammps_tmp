@@ -5529,6 +5529,10 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
 
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
+    }
+
     /*
     for (int dep = 0; dep < 1; dep++) {
         for (int j = 0; j < stencilMD->queues_many_cuts[dep].size(); j++) {
