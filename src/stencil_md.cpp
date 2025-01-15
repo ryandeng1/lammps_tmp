@@ -2989,6 +2989,7 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
     double last_avg = (last_lo + last_hi) / 2;
     points_coords.push_back(last_avg);
 
+    /*
     std::vector<Point> points(NUM_BINS * NUM_BINS * NUM_BINS);
     // points.reserve(points_coords.size() * points_coords.size() * points_coords.size());
     for (int bin_x = 0; bin_x < points_coords.size(); bin_x++) {
@@ -3008,6 +3009,7 @@ std::vector<double>& StencilMD::GET_BOUNDS(bool curr_dt, int timestep) {
     for (int i = 0; i < points.size(); i++) {
         indices.push_back(i);
     }
+    */
 
     /*
     CGAL::spatial_sort(indices.begin(),
@@ -3044,6 +3046,7 @@ std::vector<double>& StencilMD::LAMMPS_GET_BOUNDS(bool curr_dt, int timestep) {
         points_coords.push_back(avg);
     }
 
+    /*
     std::vector<Point> points(LAMMPS_NUM_REGIONS * LAMMPS_NUM_REGIONS * LAMMPS_NUM_REGIONS);
     for (int bin_x = 0; bin_x < points_coords.size(); bin_x++) {
         for (int bin_y = 0; bin_y < points_coords.size(); bin_y++) {
@@ -3065,6 +3068,7 @@ std::vector<double>& StencilMD::LAMMPS_GET_BOUNDS(bool curr_dt, int timestep) {
     CGAL::spatial_sort(indices.begin(),
                        indices.end(),
                        Search_traits(CGAL::make_property_map(points)));
+    */
 
     // assert(false);
     return bounds_at_timestep;

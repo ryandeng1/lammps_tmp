@@ -734,7 +734,7 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
 
     // std::map<std::array<int, 3>, Data_vector> bin_to_data_points;
     // std::map<std::tuple<int, int, int>, Data_vector> bin_to_data_points;
-    std::map<IDX_3D, Data_vector> bin_to_data_points;
+    // std::map<IDX_3D, Data_vector> bin_to_data_points;
 
     for (int i = atom_->nlocal; i < atom_->nlocal + atom_->nghost; i++) {
         double* pos = atom_->x[i];
@@ -751,7 +751,7 @@ void Verlet::sort_ghost_atoms_stencil_md_bins(Atom* atom_, queue_info& zoid, int
         }
         auto bin = get_bin(bin_bounds, pos, domain->boxlo, domain->boxhi);
         // bin_to_data_points[bin].push_back(std::make_pair(Point(pos[0], pos[1], pos[2]), i));
-        bin_to_data_points[bin].push_back(std::make_pair(Point(new_pos[0], new_pos[1], new_pos[2]), i));
+        // bin_to_data_points[bin].push_back(std::make_pair(Point(new_pos[0], new_pos[1], new_pos[2]), i));
     }
 
     std::map<int, int> bin_to_idx;

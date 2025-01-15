@@ -4,16 +4,17 @@
 
 #pragma once
 
+#include <array>
 #include <mpi.h>
 #include <map>
 #include <cassert>
 #include <chrono>
 #include <set>
-
 #include <deque>
 #include <iostream>
 
 // Used for spatial sorting
+/*
 #include <CGAL/spatial_sort.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/point_generators_3.h>
@@ -30,6 +31,7 @@ typedef std::vector<Point_with_info>      Data_vector;
 typedef CGAL::Spatial_sort_traits_adapter_3<K,
         CGAL::First_of_pair_property_map<Point_with_info>
 > Search_traits_pair;
+*/
 
 /*
 //property map and get as friend
@@ -94,7 +96,8 @@ constexpr int NUM_DEPS_BINS = 8;
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 8;
-constexpr double ADDITIONAL_CUTOFF = 0.4001;
+// constexpr double ADDITIONAL_CUTOFF = 0.4001;
+constexpr double ADDITIONAL_CUTOFF = 0.4;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 
