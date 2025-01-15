@@ -6651,7 +6651,6 @@ public:
     }
 
     void GET_ATOMS_ZOID_MANY_CUTS() {
-        std::cout << BOLDCYAN << "GET LOCAL ATOMS ZOID" << RESET_COLOR << std::endl;
         int total_num_entries = atom->natoms + 1;
         auto* all_pos = new double[3 * total_num_entries];
         auto* all_vel = new double[3 * total_num_entries];
@@ -6687,8 +6686,8 @@ public:
         MPI_Allreduce(MPI_IN_PLACE, all_image, total_num_entries, MPI_INT, MPI_SUM, world);
 
         // process local atoms first
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 auto& zoid = queues_many_cuts[dep][j];
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
@@ -6760,7 +6759,6 @@ public:
     }
 
     void SORT_LOCAL_ATOMS_ZOID_MANY_CUTS() {
-        std::cout << BOLDCYAN << "SORT LOCAL ATOMS ZOID" << RESET_COLOR << std::endl;
         // setup lammps code
         double binsize = 0.5 * neighbor->cutneighmax;
         double bininv = 1.0 / binsize;
@@ -6773,8 +6771,8 @@ public:
         double bininvy = nbiny / (domain->boxhi[1] - domain->boxlo[1]);
         double bininvz = nbinz / (domain->boxhi[2] - domain->boxlo[2]);
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 queue_info &zoid = queues_many_cuts[dep][j];
                 int zoid_num = zoid.num;
                 // receive only if the zoid belongs to me
@@ -6895,8 +6893,8 @@ public:
             }
         }
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 queue_info &zoid = queues_many_cuts[dep][j];
                 int zoid_num = zoid.num;
                 if (zoid_num % comm->nprocs != comm->me) {
@@ -6937,8 +6935,8 @@ public:
             }
         }
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
                 queue_info &zoid = queues_many_cuts_next_dt[dep][j];
                 int zoid_num = zoid.num;
                 if (zoid_num % comm->nprocs != comm->me) {
@@ -7129,8 +7127,8 @@ public:
         delete[] counts;
         delete[] displacements;
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 auto& zoid = queues_many_cuts[dep][j];
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
@@ -7139,8 +7137,8 @@ public:
             }
         }
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
                 auto& zoid = queues_many_cuts_next_dt[dep][j];
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
@@ -7307,8 +7305,8 @@ public:
         delete[] counts;
         delete[] displacements;
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 auto& zoid = queues_many_cuts[dep][j];
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
@@ -7318,8 +7316,8 @@ public:
             }
         }
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
                 auto& zoid = queues_many_cuts_next_dt[dep][j];
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
@@ -7446,8 +7444,8 @@ public:
     void CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues[dep].size(); j++) {
                 auto& zoid = queues[dep][j];
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
@@ -7557,8 +7555,8 @@ public:
     template <bool curr_dt>
     void CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues[dep].size(); j++) {
                 auto& zoid = queues[dep][j];
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
@@ -7671,8 +7669,8 @@ public:
     void CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues[dep].size(); j++) {
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues[dep].size(); j++) {
                 auto& zoid = queues[dep][j];
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
