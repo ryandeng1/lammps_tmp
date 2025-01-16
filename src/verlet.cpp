@@ -5520,14 +5520,14 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<false>();
 
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
+    stencilMD->CONSTRUCT_RECV_PROC_SIZES<true>();
+    stencilMD->CONSTRUCT_RECV_PROC_SIZES<false>();
 
     stencilMD->INIT_SEND_RECV_BUFFERS();
-    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS<true>();
-    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS<false>();
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
+    stencilMD->CONSTRUCT_SEND_PROC_SIZES<true>();
+    stencilMD->CONSTRUCT_SEND_PROC_SIZES<false>();
+    stencilMD->CONSTRUCT_RECV_PROC_SIZES<true>();
+    stencilMD->CONSTRUCT_RECV_PROC_SIZES<false>();
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
