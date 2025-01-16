@@ -5485,20 +5485,30 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->GET_ATOMS_ZOID_MANY_CUTS();
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
-    std::cout << BOLDMAGENTA << "GET ATOMS: " << duration << " seconds." << RESET_COLOR << std::endl;
+    if (comm->me == 0) {
+        std::cout << BOLDMAGENTA << "GET ATOMS: " << duration << " seconds." << RESET_COLOR << std::endl;
+    }
     stencilMD->SORT_LOCAL_ATOMS_ZOID_MANY_CUTS();
+
+    if (comm->me == 0) {
+        std::cout << BOLDMAGENTA << "SORT ATOMS: " << duration << " seconds." << RESET_COLOR << std::endl;
+    }
 
     begin = std::chrono::high_resolution_clock::now();
     stencilMD->CREATE_NEIGHBOR_LIST();
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
-    std::cout << BOLDMAGENTA << "GET NEIGHBOR LIST: " << duration << " seconds." << RESET_COLOR << std::endl;
+    if (comm->me == 0) {
+        std::cout << BOLDMAGENTA << "GET NEIGHBOR LIST: " << duration << " seconds." << RESET_COLOR << std::endl;
+    }
 
     begin = std::chrono::high_resolution_clock::now();
     stencilMD->CREATE_BOND_LIST();
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
-    std::cout << BOLDMAGENTA << "GET BOND LIST: " << duration << " seconds." << RESET_COLOR << std::endl;
+    if (comm->me == 0) {
+        std::cout << BOLDMAGENTA << "GET BOND LIST: " << duration << " seconds." << RESET_COLOR << std::endl;
+    }
 
     stencilMD->INIT_AFFINITY_AND_LOCKS();
 
@@ -5520,10 +5530,11 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<false>();
 
+    stencilMD->INIT_SEND_RECV_BUFFERS();
+
     stencilMD->CONSTRUCT_RECV_PROC_SIZES<true>();
     stencilMD->CONSTRUCT_RECV_PROC_SIZES<false>();
 
-    stencilMD->INIT_SEND_RECV_BUFFERS();
     stencilMD->CONSTRUCT_SEND_PROC_SIZES<true>();
     stencilMD->CONSTRUCT_SEND_PROC_SIZES<false>();
     stencilMD->CONSTRUCT_RECV_PROC_SIZES<true>();
