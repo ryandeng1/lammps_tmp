@@ -5529,26 +5529,41 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_PROC_SIZES<true>();
     stencilMD->CONSTRUCT_RECV_PROC_SIZES<false>();
 
+    std::vector<MPI_Request> send_r[NUM_DEPS];
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-        stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
-        stencilMD->PACK_DATA_MANY_CUTS<false>(dep);
+        send_r[dep].reserve(comm->nprocs);
     }
 
-    /*
-    for (int dep = 0; dep < 1; dep++) {
+    std::vector<MPI_Request> recv_r[NUM_DEPS];
+    for (int dep = 1; dep < NUM_DEPS; dep++) {
+        recv_r[dep].reserve(comm->nprocs);
+    }
+
+    for (int dep = 1; dep < NUM_DEPS; dep++) {
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            recv_r[dep].emplace_back();
+            stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r[dep].size() - 1]);
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < stencilMD->queues_many_cuts[dep].size(); j++) {
             auto& zoid = stencilMD->queues_many_cuts[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
-                stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, 0);
-                stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
-                stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
+                // stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, 0);
+                // stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
+                // stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
             }
+        }
+
+        if (dep < NUM_DEPS - 1) {
+            stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
+            stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_r[dep]);
         }
     }
 
     std::cout << BOLDGREEN << "DEP 0 passed" << RESET_COLOR << std::endl;
     MPI_Barrier(world);
-    */
     assert(false);
 }
 

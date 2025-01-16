@@ -8353,7 +8353,7 @@ public:
     }
 
     template <bool curr_dt>
-    void RECEIVE_DATA_PROCESS_ZOID_MANY_CUTS(int dep, int proc, MPI_Request* request) {
+    void RECEIVE_DATA_MANY_CUTS(int dep, int proc, MPI_Request* request) {
         auto& queues = curr_dt ? queues_many_cuts[dep] : queues_many_cuts_next_dt[dep];
 
         int total_recv_from_proc = 0;
@@ -8485,6 +8485,25 @@ public:
                 assert(npack == expected_size);
                 num_times_packed[proc]++;
                 buf_offsets[proc] += npack;
+            }
+        }
+    }
+
+    template <bool curr_dt>
+    void SEND_DATA_MANY_CUTS(int dep, std::vector<MPI_Request>& r) {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            auto& sizes = curr_dt ? send_proc_sizes[dep][proc] : send_proc_sizes_next_dt[dep][proc];
+            int total_elems = 0;
+            for (auto& size : sizes) {
+                total_elems += size;
+            }
+            int size_sent = DEBUG_SEND_RECV_DATA ? (3 + 1) * total_elems : 3 * total_elems;
+            int mpi_tag = get_mpi_tag(proc, comm->me);
+            if (size_sent) {
+                r.emplace_back();
+                MPI_Isend(buf_send_many_cuts[proc], size_sent, MPI_DOUBLE, proc, mpi_tag, world, &r[r.size() - 1]);
             }
         }
     }
