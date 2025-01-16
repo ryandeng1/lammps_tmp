@@ -8353,7 +8353,7 @@ public:
     }
 
     template <bool curr_dt>
-    void RECEIVE_DATA_MANY_CUTS(int dep, int proc, MPI_Request* request) {
+    bool RECEIVE_DATA_MANY_CUTS(int dep, int proc, MPI_Request* request) {
         auto& queues = curr_dt ? queues_many_cuts[dep] : queues_many_cuts_next_dt[dep];
 
         int total_recv_from_proc = 0;
@@ -8371,6 +8371,100 @@ public:
             int mpi_tag = get_mpi_tag(comm->me, proc);
             MPI_Irecv(buf_recv_many_cuts[proc], total_doubles_recv_from_proc, MPI_DOUBLE, proc, mpi_tag, world,
                       request);
+            return true;
+        }
+
+        return false;
+    }
+
+    template <bool curr_dt>
+    void UNPACK_DATA_MANY_CUTS(int dep, int proc) {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+        auto* buf = buf_recv_many_cuts[proc];
+        int offset_idx = 0;
+        int offset = 0;
+
+        for (int j = 0; j < queues[dep - 1].size(); j++) {
+            auto& send_zoid = queues[dep - 1][j];
+            if (send_zoid.num % comm->nprocs != proc) {
+                continue;
+            }
+
+            auto* curr_buf = &buf[offset];
+            int curr_idx = 0;
+
+            for (int k = 0; k < queues[dep].size(); k++) {
+                auto& my_zoid = queues[dep][k];
+                if (my_zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                int pbc_flag_[3] = {0};
+                for (int dim = 0; dim < 3; dim++) {
+                    if (send_zoid.where[dim] == RIGHT && my_zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
+
+                    if (send_zoid.where[dim] == PBC && my_zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+                }
+
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[my_zoid.num]
+                                               : recv_from_neighbors_many_cuts_next_dt[my_zoid.num];
+
+                auto find = std::find(recv_neighbors.begin(), recv_neighbors.end(), send_zoid.num);
+                if (find != recv_neighbors.end()) {
+                    int find_idx = std::distance(recv_neighbors.begin(), find);
+
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        auto& recv_force_idxs = my_zoid.recv_force_idxs_double_buffering[t][find_idx];
+                        auto& recv_pos_idxs = my_zoid.recv_pos_idxs_double_buffering[t][find_idx];
+                        auto& recv_vel_idxs = my_zoid.recv_vel_idxs_double_buffering[t][find_idx];
+
+                        assert(DEBUG_SEND_RECV_DATA);
+
+                        for (int i = 0; i < recv_force_idxs.size(); i++) {
+                            int idx = recv_force_idxs[i];
+                            auto target_tag = (tagint) ubuf(curr_buf[curr_idx++]).i;
+                            double f_x = curr_buf[curr_idx++];
+                            double f_y = curr_buf[curr_idx++];
+                            double f_z = curr_buf[curr_idx++];
+                            if (target_tag != my_zoid.tag_stencil_md[0][idx]) {
+                                std::cout << "me: " << comm->me << " my zoid: " << my_zoid.num << " recv from: " << send_zoid.num << " time: " << t
+                                << " send proc: " << proc << " tag I got: " << target_tag << " tag I want: " << my_zoid.tag_stencil_md[0][idx]
+                                << std::endl;
+                            }
+                            assert(target_tag == my_zoid.tag_stencil_md[0][idx]);
+                            my_zoid.f_stencil_md[0][idx].x += f_x;
+                            my_zoid.f_stencil_md[0][idx].y += f_y;
+                            my_zoid.f_stencil_md[0][idx].z += f_z;
+                        }
+
+                        for (int i = 0; i < recv_pos_idxs.size(); i++) {
+                            int idx = recv_pos_idxs[i];
+                            auto target_tag = (tagint) ubuf(curr_buf[curr_idx++]).i;
+                            double x_x = curr_buf[curr_idx++];
+                            double x_y = curr_buf[curr_idx++];
+                            double x_z = curr_buf[curr_idx++];
+                            assert(target_tag == my_zoid.tag_stencil_md[0][idx]);
+                            my_zoid.x_stencil_md[0][idx].x = x_x + pbc_flag_[0] * domain->prd[0];
+                            my_zoid.x_stencil_md[0][idx].y = x_y + pbc_flag_[1] * domain->prd[1];
+                            my_zoid.x_stencil_md[0][idx].z = x_z + pbc_flag_[2] * domain->prd[2];
+                        }
+
+                        for (int i = 0; i < recv_vel_idxs.size(); i++) {
+                            int idx = recv_vel_idxs[i];
+                            auto target_tag = (tagint) ubuf(curr_buf[curr_idx++]).i;
+                            double v_x = curr_buf[curr_idx++];
+                            double v_y = curr_buf[curr_idx++];
+                            double v_z = curr_buf[curr_idx++];
+                            assert(target_tag == my_zoid.tag_stencil_md[0][idx]);
+                            my_zoid.v_stencil_md[0][idx].x = v_x;
+                            my_zoid.v_stencil_md[0][idx].y = v_y;
+                            my_zoid.v_stencil_md[0][idx].z = v_z;
+                        }
+                    }
+                }
+            }
+
+            offset += curr_dt ? recv_proc_sizes[dep][proc][offset_idx++] : recv_proc_sizes_next_dt[dep][proc][offset_idx++];
         }
     }
 
@@ -8379,15 +8473,6 @@ public:
         auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] : send_to_neighbors_many_cuts_next_dt[zoid.num];
 
         int buf_idx = 0;
-
-        if (zoid.num == 1 && proc == 1) {
-            std::stringstream s1;
-            for (auto& neigh : send_to_neighbors) {
-                s1 << neigh << " ";
-            }
-
-            std::cout << "ZOID neighbors: " << s1.str() << std::endl;
-        }
 
         for (int i = 0; i < send_to_neighbors.size(); i++) {
             if (send_to_neighbors[i] % comm->nprocs != proc) {
@@ -8435,10 +8520,6 @@ public:
             }
         }
 
-        if (zoid.num == 2 && proc == 1) {
-            std::cout << "ZOID HERE buf idx: " << buf_idx << std::endl;
-        }
-
         return buf_idx;
     }
 
@@ -8469,7 +8550,6 @@ public:
 
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 int npack = PACK_DATA_TO_PROC_HELPER<curr_dt>(zoid, proc, &buf_send_many_cuts[proc][buf_offsets[proc]]);
-                std::cout << "me: " << comm->me << " curr dt: " << curr_dt << " dep: " << dep << " proc: " << proc << std::endl;
                 auto& sizes = curr_dt ? send_proc_sizes[dep][proc] : send_proc_sizes_next_dt[dep][proc];
                 int expected_size = DEBUG_SEND_RECV_DATA ? sizes[num_times_packed[proc]] * (3 + 1) : sizes[num_times_packed[proc]] * 3;
 

@@ -1215,7 +1215,7 @@ void CommBrick::borders_stencil_md_initial_receive_from_lammps(Atom *atom_, Doma
 
     double **x = atom_->x;
 
-    std::set<tagint> tags_set;
+    std::unordered_set<tagint> tags_set;
     for (int i = 0; i < atom_->nlocal; i++) {
         tags_set.insert(atom_->tag[i]);
     }
@@ -4678,8 +4678,8 @@ void CommBrick::pack_data_to_process_stencil_md_double_buffering(bool curr_dt, i
         if (start_timestep == 0) {
             int n = atom_->avec->pack_data_to_process_stencil_md_double_buffering<true>(
                     neighbors_in_proc,
-                    // zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % DOUBLE_BUFFERING], zoid.send_force_idxs_double_buffering[t],
-                    zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % 1], zoid.send_force_idxs_double_buffering[t],
+                    // zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % 1], zoid.send_force_idxs_double_buffering[t],
+                    zoid.tag_stencil_md[0], zoid.f_stencil_md[t % 1], zoid.send_force_idxs_double_buffering[t],
                     zoid.x_stencil_md[t % DOUBLE_BUFFERING], zoid.send_pos_idxs_double_buffering[t][proc],
                     // zoid.v_stencil_md[t % DOUBLE_BUFFERING], zoid.send_vel_idxs_double_buffering[t],
                     zoid.v_stencil_md[t % 1], zoid.send_vel_idxs_double_buffering[t],
@@ -4687,8 +4687,8 @@ void CommBrick::pack_data_to_process_stencil_md_double_buffering(bool curr_dt, i
         } else {
             int n = atom_->avec->pack_data_to_process_stencil_md_double_buffering<false>(
                     neighbors_in_proc,
-                    // zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % DOUBLE_BUFFERING], zoid.send_force_idxs_double_buffering[t],
-                    zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % 1], zoid.send_force_idxs_double_buffering[t],
+                    // zoid.tag_stencil_md[0], zoid.eval_f_stencil_md[t % 1], zoid.send_force_idxs_double_buffering[t],
+                    zoid.tag_stencil_md[0], zoid.f_stencil_md[t % 1], zoid.send_force_idxs_double_buffering[t],
                     zoid.x_stencil_md[t % DOUBLE_BUFFERING], zoid.send_pos_idxs_double_buffering[t][proc],
                     // zoid.v_stencil_md[t % DOUBLE_BUFFERING], zoid.send_vel_idxs_double_buffering[t],
                     zoid.v_stencil_md[t % 1], zoid.send_vel_idxs_double_buffering[t],
@@ -4952,6 +4952,10 @@ void CommBrick::borders()
   iswap = 0;
   smax = rmax = 0;
 
+  std::cout << "me: " << comm->me << " my lo: " << domain->sublo[0] << " " << domain->sublo[1] << " " << domain->sublo[2]
+  << " my hi: " << domain->subhi[0] << " " << domain->subhi[1] << " " << domain->subhi[2] << std::endl;
+  MPI_Barrier(world);
+
   for (dim = 0; dim < 3; dim++) {
     nlast = 0;
     twoneed = 2 * maxneed[dim];
@@ -5078,6 +5082,11 @@ void CommBrick::borders()
         n = avec->pack_border_vel(nsend, sendlist[iswap], buf_send, pbc_flag[iswap], pbc[iswap]);
       else
         n = avec->pack_border(nsend, sendlist[iswap], buf_send, pbc_flag[iswap], pbc[iswap]);
+
+      if (comm->me == 0) {
+          std::cout << "dim: " << dim << " ineed: " << ineed << " iswap: " << iswap << " send to proc: " << sendproc[iswap]
+                    << " slablo: " << slablo[iswap] << " slabhi: " << slabhi[iswap] << " nsend: " << nsend << std::endl;
+      }
 
       // swap atoms with other proc
       // no MPI calls except SendRecv if nsend/nrecv = 0
