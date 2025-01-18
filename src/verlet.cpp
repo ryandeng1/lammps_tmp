@@ -5515,6 +5515,8 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<false>();
 
+    assert(false);
+
     stencilMD->CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS<false>();
 
@@ -5573,9 +5575,9 @@ void Verlet::setup_stencil_md_many_zoids() {
         for (int j = 0; j < stencilMD->queues_many_cuts[dep].size(); j++) {
             auto& zoid = stencilMD->queues_many_cuts[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
-                // stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, 0);
-                // stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
-                // stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
+                stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, 0);
+                stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
+                stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
             }
         }
 
@@ -5585,7 +5587,8 @@ void Verlet::setup_stencil_md_many_zoids() {
         }
     }
 
-    std::cout << BOLDGREEN << "DEP 0 passed" << RESET_COLOR << std::endl;
+    MPI_Barrier(world);
+    std::cout << BOLDGREEN << "Send Recv passed" << RESET_COLOR << std::endl;
     MPI_Barrier(world);
     assert(false);
 }

@@ -7441,12 +7441,14 @@ public:
         }
     }
 
+    // Sending forces is strictly ghost to local. There is no point propagating things.
     template <bool curr_dt>
     void CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS_HELPER(queue_info& zoid) {
         int zoid_num = zoid.num;
         auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num] : send_to_neighbors_many_cuts_next_dt[zoid_num];
 
         std::map<int, int> idx_to_zoid;
+        std::set<int> all_force_neighbors;
 
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             zoid.send_force_idxs_double_buffering[t] = new std::vector<int>[send_to_neighbors.size()];
@@ -7502,34 +7504,34 @@ public:
                 // TODO: pick first neighbor that allows us to map a path to get the force where it eventually belongs
                 for (int j = 0; j < send_to_neighbors.size(); j++) {
                     auto send_zoid_num = send_to_neighbors[j];
-                    auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num] : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+                    auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
+                            : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
 
-                    bool found_zoid = false;
-
+                    bool in_neighbor_zoid = true;
                     for (int dim = 0; dim < domain->dimension; dim++) {
-                        if (!dim_out_of_bounds[dim]) {
-                            continue;
+                        double lo = send_zoid.zoid.cuts[dim].lower + t * send_zoid.zoid.cuts[dim].slope_lower;
+                        double hi = send_zoid.zoid.cuts[dim].upper + t * send_zoid.zoid.cuts[dim].slope_upper;
+                        double p = atom_pos[dim];
+                        while (p < lo) {
+                            p += domain->prd[dim];
+                        }
+                        while (p >= hi) {
+                            p -= domain->prd[dim];
                         }
 
-                        int out_of_bounds_factor = out_of_bounds[dim];
-                        int where_diff = zoid.where[dim] - send_zoid.where[dim];
-
-                        if (out_of_bounds_factor == -1 && (where_diff == 1 || where_diff == - (NUM_ZOIDS_PER_DIMENSION - 1))) {
-                            idx_to_zoid[i] = send_zoid_num;
-                            found_zoid = true;
-                        } else if (out_of_bounds_factor == 1 && (where_diff == -1 || where_diff == NUM_ZOIDS_PER_DIMENSION - 1)) {
-                            idx_to_zoid[i] = send_zoid_num;
-                            found_zoid = true;
-                        }
+                        in_neighbor_zoid = in_neighbor_zoid && p >= lo && p < hi;
                     }
 
-                    if (found_zoid) {
+                    if (in_neighbor_zoid) {
                         zoid.send_force_idxs_double_buffering[t][j].push_back(i);
+                        all_force_neighbors.insert(send_to_neighbors[j]);
                         break;
                     }
                 }
             }
         }
+
+        std::cout << "curr_dt? " << curr_dt << " zoid: " << zoid.num << " num force neighbors: " << all_force_neighbors.size() << std::endl;
     }
 
     template <bool curr_dt>
@@ -8465,7 +8467,7 @@ public:
                     int find_idx = std::distance(recv_neighbors.begin(), find);
 
                     if (comm->me == 0 && proc == 0) {
-                        std::cout << "my zoid: " << my_zoid.num << " unpacking from: " << send_zoid.num << " offset: " << offset << std::endl;
+                        // std::cout << "my zoid: " << my_zoid.num << " unpacking from: " << send_zoid.num << " offset: " << offset << std::endl;
                     }
 
                     for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
@@ -8487,7 +8489,7 @@ public:
                                 for (auto& s : recv_proc_sizes[dep][proc]) {
                                     s_sizes << s << " ";
                                 }
-                                std::cout << "me: " << comm->me << " my zoid: " << my_zoid.num << " recv from: " << send_zoid.num << " time: " << t
+                                std::cout << "FORCE me: " << comm->me << " my zoid: " << my_zoid.num << " recv from: " << send_zoid.num << " time: " << t
                                           << " send proc: " << proc << " tag I got: " << target_tag << " tag I want: " << my_zoid.tag_stencil_md[0][idx]
                                           << " offset: " << offset << " offset idx: " << offset_idx << " buf value: " << tmp
                                           << " sizes: " << s_sizes.str() << std::endl;
@@ -8505,6 +8507,16 @@ public:
                             double x_y = curr_buf[curr_idx++];
                             double x_z = curr_buf[curr_idx++];
                             assert(target_tag == my_zoid.tag_stencil_md[0][idx]);
+                            if (target_tag != my_zoid.tag_stencil_md[0][idx]) {
+                                std::stringstream s_sizes;
+                                for (auto& s : recv_proc_sizes[dep][proc]) {
+                                    s_sizes << s << " ";
+                                }
+                                std::cout << "POS me: " << comm->me << " my zoid: " << my_zoid.num << " recv from: " << send_zoid.num << " time: " << t
+                                          << " recv proc: " << proc << " tag I got: " << target_tag << " tag I want: " << my_zoid.tag_stencil_md[0][idx]
+                                          << " offset: " << offset << " offset idx: " << offset_idx
+                                          << " sizes: " << s_sizes.str() << std::endl;
+                            }
                             my_zoid.x_stencil_md[0][idx].x = x_x + pbc_flag_[0] * domain->prd[0];
                             my_zoid.x_stencil_md[0][idx].y = x_y + pbc_flag_[1] * domain->prd[1];
                             my_zoid.x_stencil_md[0][idx].z = x_z + pbc_flag_[2] * domain->prd[2];
@@ -8522,17 +8534,16 @@ public:
                             my_zoid.v_stencil_md[0][idx].z = v_z;
                         }
                     }
-                }
 
-                auto& tmp_sizes = curr_dt ? recv_proc_sizes[dep][proc] : recv_proc_sizes_next_dt[dep][proc];
-                if (offset_idx > tmp_sizes.size()) {
-                    std::cout << "offset idx: " << offset_idx << " sizes: " << tmp_sizes.size() << " me: " << comm->me << " recv from proc: " << proc
-                    << " ok man. zoid: " << my_zoid.num << " recv from: " << send_zoid.num << std::endl;
-                    assert(false);
+                    auto& tmp_sizes = curr_dt ? recv_proc_sizes[dep][proc] : recv_proc_sizes_next_dt[dep][proc];
+                    if (offset_idx > tmp_sizes.size()) {
+                        std::cout << "offset idx: " << offset_idx << " sizes: " << tmp_sizes.size() << " me: " << comm->me << " recv from proc: " << proc
+                                  << " ok man. zoid: " << my_zoid.num << " recv from: " << send_zoid.num << std::endl;
+                        assert(false);
+                    }
+                    int num_sent_from_zoid = curr_dt ? recv_proc_sizes[dep][proc][offset_idx++] : recv_proc_sizes_next_dt[dep][proc][offset_idx++];
+                    offset += DEBUG_SEND_RECV_DATA ? (3 + 1) * num_sent_from_zoid : 3 * num_sent_from_zoid;
                 }
-                int num_sent_from_zoid = curr_dt ? recv_proc_sizes[dep][proc][offset_idx++] : recv_proc_sizes_next_dt[dep][proc][offset_idx++];
-                offset += DEBUG_SEND_RECV_DATA ? (3 + 1) * num_sent_from_zoid : 3 * num_sent_from_zoid;
-
             }
         }
     }
@@ -8556,10 +8567,6 @@ public:
                 for (int k = 0; k < send_force_idxs.size(); k++) {
                     int idx = send_force_idxs[k];
                     int tag = zoid.tag_stencil_md[0][idx];
-
-                    if (zoid.num == 0 && proc == 0) {
-                        // std::cout << "FOUND ZOID sending. time: " << t << " idx: " << idx << " tag: " << tag << " buf idx: " << buf_idx << std::endl;
-                    }
 
                     buf[buf_idx++] = ubuf(tag).d;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].x;
@@ -8627,8 +8634,8 @@ public:
                 auto& sizes = curr_dt ? send_proc_sizes[dep][proc] : send_proc_sizes_next_dt[dep][proc];
                 int expected_size = DEBUG_SEND_RECV_DATA ? sizes[num_times_packed[proc]] * (3 + 1) : sizes[num_times_packed[proc]] * 3;
 
-                if (comm->me == 0 && proc == 0) {
-                    std::cout << "zoid: " << zoid.num << " PACKING DATA. offset: " << buf_offsets[proc] << " buf: " << buf_send_many_cuts[proc] << " first val: " << buf_send_many_cuts[proc][buf_offsets[proc]] << std::endl;
+                if (comm->me == 1 && proc == 5) {
+                    // std::cout << "zoid: " << zoid.num << " PACKING DATA. offset: " << buf_offsets[proc] << " buf: " << buf_send_many_cuts[proc] << " first val: " << buf_send_many_cuts[proc][buf_offsets[proc]] << std::endl;
                 }
 
                 if (npack != expected_size) {
