@@ -5515,8 +5515,6 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<false>();
 
-    assert(false);
-
     stencilMD->CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS<false>();
 
@@ -5532,15 +5530,13 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<false>();
 
-    stencilMD->INIT_SEND_RECV_BUFFERS();
+    stencilMD->INIT_SEND_RECV_BUFFERS_MANY_CUTS();
 
-    stencilMD->CONSTRUCT_RECV_PROC_SIZES<true>();
-    stencilMD->CONSTRUCT_RECV_PROC_SIZES<false>();
+    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
+    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
 
-    stencilMD->CONSTRUCT_SEND_PROC_SIZES<true>();
-    stencilMD->CONSTRUCT_SEND_PROC_SIZES<false>();
-    stencilMD->CONSTRUCT_RECV_PROC_SIZES<true>();
-    stencilMD->CONSTRUCT_RECV_PROC_SIZES<false>();
+    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS<true>();
+    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS<false>();
 
     std::vector<MPI_Request> send_r[NUM_DEPS];
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
