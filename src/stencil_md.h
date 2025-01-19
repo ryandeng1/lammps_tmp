@@ -6620,7 +6620,9 @@ public:
                 // expanding zoid in this dimension based on numbering
                 if (where_a[dim] % 2 == 1) {
                     if (diff != -1 && diff != 1) {
-                        return false;
+                        if (!(where_a[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && where_b[dim] == 0)) {
+                            return false;
+                        }
                     }
                 } else {
                     return false;
@@ -6760,6 +6762,10 @@ public:
 
                         double new_pos[3] = {0};
                         double new_pos_borders[3] = {0};
+                        double zoid_lo[3] = {0};
+                        double zoid_hi[3] = {0};
+                        double zoid_borders_lo[3] = {0};
+                        double zoid_borders_hi[3] = {0};
 
                         for (int dim = 0; dim < domain->dimension; dim++) {
                             double pos = all_pos[idx * 3 + dim];
@@ -6784,9 +6790,28 @@ public:
                             }
                             borders_zoid = borders_zoid && pos >= lo_borders && pos < hi_borders;
                             new_pos_borders[dim] = pos;
+
+                            zoid_lo[dim] = lo;
+                            zoid_hi[dim] = hi;
+                            zoid_borders_lo[dim] = lo_borders;
+                            zoid_borders_hi[dim] = hi_borders;
                         }
 
                         if (in_zoid || borders_zoid) {
+                            /*
+                            if (idx == 255412 || idx == 254682) {
+                                std::cout << "FOUND TAG in CONSTRUCTION. tag: " << idx << " zoid: " << zoid.num
+                                << " time: " << t
+                                << " in zoid? " << in_zoid << " borders zoid? " << borders_zoid
+                                << " pos: " << new_pos[0] << " " << new_pos[1] << " " << new_pos[2]
+                                << " borders pos: " << new_pos_borders[0] << " " << new_pos_borders[1] << " " << new_pos_borders[2]
+                                << " zoid lo: " << zoid_lo[0] << " " << zoid_lo[1] << " " << zoid_lo[2]
+                                << " zoid hi: " << zoid_hi[0] << " " << zoid_hi[1] << " " << zoid_hi[2]
+                                << " zoid borders lo: " << zoid_borders_lo[0] << " " << zoid_borders_lo[1] << " " << zoid_borders_lo[2]
+                                << " zoid borders hi: " << zoid_borders_hi[0] << " " << zoid_borders_hi[1] << " " << zoid_borders_hi[2]
+                                << std::endl;
+                            }
+                            */
                             if (tags_in_zoid.find(idx) == tags_in_zoid.end()) {
                                 tags_in_zoid.insert(idx);
                                 if (in_zoid) {
@@ -7489,13 +7514,14 @@ public:
     template <bool curr_dt>
     void CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS_HELPER(queue_info& zoid) {
         int zoid_num = zoid.num;
-        auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num] : send_to_neighbors_many_cuts_next_dt[zoid_num];
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num]
+                : send_to_neighbors_many_cuts_next_dt[zoid_num];
 
         std::map<int, int> idx_to_zoid;
         std::set<int> all_force_neighbors;
 
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            zoid.send_force_idxs_double_buffering[t] = new std::vector<int>[send_to_neighbors.size()];
+            zoid.send_force_idxs_double_buffering[t] = new std::vector<int>[send_neighbors.size()];
 
             std::set<int> send_idxs;
             auto& local_idxs = zoid.local_idxs_per_timestep[t];
@@ -7509,7 +7535,7 @@ public:
                     continue;
                 }
 
-                auto& pos = zoid.x_stencil_md[0][i];
+                auto& pos = zoid.x_stencil_md[t % DOUBLE_BUFFERING][i];
                 double atom_pos[3] = {pos.x, pos.y, pos.z};
                 double zoid_lo[3] = {0};
                 double zoid_hi[3] = {0};
@@ -7523,7 +7549,7 @@ public:
                     double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi;
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
@@ -7540,14 +7566,26 @@ public:
                     }
                 }
 
+                /*
+                if (curr_dt && zoid.tag_stencil_md[0][i] == 254682 && zoid.num == 52) {
+                    std::cout << "FOUND TAG. curr_dt? " << curr_dt << " zoid: " << zoid.num << " timestep: " << t << " borders zoid: " << borders_zoid
+                    << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
+                    << " lo: " << zoid_lo[0] << " " << zoid_lo[1] << " " << zoid_lo[2]
+                    << " hi: " << zoid_hi[0] << " " << zoid_hi[1] << " " << zoid_hi[2]
+                    << " lo borders: " << zoid_lo[0] - ALLEGRO_SLOPE << " " << zoid_lo[1] - ALLEGRO_SLOPE << " " << zoid_lo[2] - ALLEGRO_SLOPE
+                    << " hi borders: " << zoid_hi[0] + ALLEGRO_SLOPE << " " << zoid_hi[1] + ALLEGRO_SLOPE << " " << zoid_hi[2] + ALLEGRO_SLOPE
+                    << std::endl;
+                }
+                */
+
                 // have to do this check as for later timesteps this might not be the case
                 if (!borders_zoid) {
                     continue;
                 }
 
                 // TODO: pick first neighbor that allows us to map a path to get the force where it eventually belongs
-                for (int j = 0; j < send_to_neighbors.size(); j++) {
-                    auto send_zoid_num = send_to_neighbors[j];
+                for (int j = 0; j < send_neighbors.size(); j++) {
+                    auto send_zoid_num = send_neighbors[j];
                     auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
                             : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
 
@@ -7566,7 +7604,14 @@ public:
                         in_neighbor_zoid = in_neighbor_zoid && p >= lo && p < hi;
                     }
 
+                    if (zoid.num == 52 && zoid.tag_stencil_md[0][i] == 254682) {
+                        std::cout << "neighbor: " << send_zoid_num << " in neighbor? " << in_neighbor_zoid << std::endl;
+                    }
+
                     if (in_neighbor_zoid) {
+                        if (zoid.tag_stencil_md[0][i] == 254682) {
+                            std::cout << "ZOID: " << zoid.num << " SENDING FORCE to: " << send_zoid_num << std::endl;
+                        }
                         zoid.send_force_idxs_double_buffering[t][j].push_back(i);
                         break;
                     }
@@ -7576,7 +7621,7 @@ public:
 
         int total_sent = 0;
         for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            for (int j = 0; j < send_to_neighbors.size(); j++) {
+            for (int j = 0; j < send_neighbors.size(); j++) {
                 total_sent += zoid.send_force_idxs_double_buffering[t][j].size();
             }
         }
@@ -8581,14 +8626,18 @@ public:
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         int total_recv_from_proc = 0;
-        for (int j = 0; j < queues[dep].size(); j++) {
-            auto& send_zoid = queues[dep][j];
+        int send_dep = dep - 1;
+
+        for (int j = 0; j < queues[send_dep].size(); j++) {
+            auto& send_zoid = queues[send_dep][j];
             int send_zoid_num = send_zoid.num;
             if (send_zoid.num % comm->nprocs != proc) {
                 continue;
             }
 
-            auto& neighbors = curr_dt ? send_to_neighbors_many_cuts[send_zoid_num] : send_to_neighbors_many_cuts_next_dt[send_zoid_num];
+            auto& neighbors = curr_dt ? send_to_neighbors_many_cuts[send_zoid_num]
+                    : send_to_neighbors_many_cuts_next_dt[send_zoid_num];
+
             for (int i = 0; i < neighbors.size(); i++) {
                 int my_zoid_num = neighbors[i];
                 if (my_zoid_num % comm->nprocs != comm->me) {
@@ -8602,7 +8651,14 @@ public:
                 auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), send_zoid_num);
                 assert(find_it != recv_neighbors.end());
                 int find_idx = std::distance(recv_neighbors.begin(), find_it);
-                total_recv_from_proc += curr_dt ? recv_proc_zoid_sizes[my_zoid.num][find_idx][0] : recv_proc_zoid_sizes_next_dt[my_zoid.num][find_idx][0];
+                if (curr_dt) {
+                    assert(recv_proc_zoid_sizes[my_zoid.num][find_idx].size() == 1);
+                } else {
+                    assert(recv_proc_zoid_sizes_next_dt[my_zoid.num][find_idx].size() == 1);
+                }
+
+                total_recv_from_proc += curr_dt ? recv_proc_zoid_sizes[my_zoid.num][find_idx][0]
+                        : recv_proc_zoid_sizes_next_dt[my_zoid.num][find_idx][0];
             }
         }
 
@@ -8712,9 +8768,9 @@ public:
                                       << " offset: " << offset
                                       << " sizes: " << s_sizes.str() << std::endl;
                         }
-                        zoid.x_stencil_md[0][idx].x = x_x + pbc_flag_[0] * domain->prd[0];
-                        zoid.x_stencil_md[0][idx].y = x_y + pbc_flag_[1] * domain->prd[1];
-                        zoid.x_stencil_md[0][idx].z = x_z + pbc_flag_[2] * domain->prd[2];
+                        zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].x = x_x + pbc_flag_[0] * domain->prd[0];
+                        zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].y = x_y + pbc_flag_[1] * domain->prd[1];
+                        zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].z = x_z + pbc_flag_[2] * domain->prd[2];
                     }
 
                     for (int k = 0; k < recv_vel_idxs.size(); k++) {
@@ -8866,6 +8922,12 @@ public:
                     int idx = send_force_idxs[k];
                     int tag = zoid.tag_stencil_md[0][idx];
 
+                    if (tag == 254682) {
+                        std::cout << "TARGET TAG. zoid: " << zoid.num << " to proc: " << proc
+                        << " force: " << zoid.f_stencil_md[0][idx].x << " " << zoid.f_stencil_md[0][idx].y << " " << zoid.f_stencil_md[0][idx].z
+                        << std::endl;
+                    }
+
                     buf[buf_idx++] = ubuf(tag).d;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].x;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].y;
@@ -8881,9 +8943,9 @@ public:
                     int tag = zoid.tag_stencil_md[0][idx];
 
                     buf[buf_idx++] = ubuf(tag).d;
-                    buf[buf_idx++] = zoid.x_stencil_md[0][idx].x;
-                    buf[buf_idx++] = zoid.x_stencil_md[0][idx].y;
-                    buf[buf_idx++] = zoid.x_stencil_md[0][idx].z;
+                    buf[buf_idx++] = zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].x;
+                    buf[buf_idx++] = zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].y;
+                    buf[buf_idx++] = zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].z;
                 }
 
                 for (int k = 0; k < send_vel_idxs.size(); k++) {
@@ -9014,8 +9076,10 @@ public:
     }
 
     template <bool curr_dt>
-    void SEND_DATA_MANY_CUTS(int dep, std::vector<MPI_Request>& r) {
+    int SEND_DATA_MANY_CUTS(int dep, std::vector<MPI_Request>& r) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+
+        int nprocs_send = 0;
 
         for (int proc = 0; proc < comm->nprocs; proc++) {
             int nsend = 0;
@@ -9033,8 +9097,11 @@ public:
                 r.emplace_back();
                 MPI_Isend(buf_send_many_cuts[proc], ndoubles_sent, MPI_DOUBLE,
                           proc, mpi_tag, world, &r[r.size() - 1]);
+                nprocs_send++;
             }
         }
+
+        return nprocs_send;
     }
 
     void FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int timestep) {
@@ -9123,6 +9190,16 @@ public:
                             int j = jlist[jj];
                             double factor_lj = special_lj[pair->sbmask(j)];
                             j &= NEIGHMASK;
+
+                            /*
+                            if (tags[i] == 254682 || tags[j] == 254682) {
+                                std::cout << "STENCIL MD PAIR. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]
+                                << " where: " << zoid.where[0] << " " << zoid.where[1] << " " << zoid.where[2]
+                                << " pos: " << x[i].x << " " << x[i].y << " " << x[i].z
+                                << " other pos: " << x[j].x << " " << x[j].y << " " << x[j].z
+                                << std::endl;
+                            }
+                            */
 
                             double delx = xtmp - x[j].x;
                             double dely = ytmp - x[j].y;

@@ -5551,6 +5551,7 @@ void Verlet::setup_stencil_md_many_zoids() {
     int recv_r_idxs[NUM_DEPS] = {0};
 
     std::map<std::pair<int, int>, bool> did_recv_map;
+    std::map<int, int> dep_to_nproc_send;
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int proc = 0; proc < comm->nprocs; proc++) {
@@ -5565,14 +5566,15 @@ void Verlet::setup_stencil_md_many_zoids() {
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep > 0) {
             if (recv_r_idxs[dep]) {
-                MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUS_IGNORE);
-            }
-            for (int proc = 0; proc < comm->nprocs; proc++) {
-                if (did_recv_map[{dep, proc}]) {
-                    stencilMD->UNPACK_DATA_MANY_CUTS<true>(dep, proc);
+                MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUSES_IGNORE);
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    if (did_recv_map[{dep, proc}]) {
+                        stencilMD->UNPACK_DATA_MANY_CUTS<true>(dep, proc);
+                    }
                 }
             }
         }
+
         for (int j = 0; j < stencilMD->queues_many_cuts[dep].size(); j++) {
             auto& zoid = stencilMD->queues_many_cuts[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
@@ -5584,8 +5586,13 @@ void Verlet::setup_stencil_md_many_zoids() {
 
         if (dep < NUM_DEPS - 1) {
             stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
-            stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_r[dep]);
+            int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_r[dep]);
+            dep_to_nproc_send[dep] = nproc_send;
         }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+        MPI_Waitall(dep_to_nproc_send[dep], send_r[dep].data(), MPI_STATUSES_IGNORE);
     }
 
     MPI_Barrier(world);
