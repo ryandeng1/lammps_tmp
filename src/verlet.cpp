@@ -5554,7 +5554,6 @@ void Verlet::setup_stencil_md_many_zoids() {
     std::map<int, int> dep_to_nproc_send;
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
-        std::cout << "me: " << comm->me << " unpacking for dep: " << dep << std::endl;
         for (int proc = 0; proc < comm->nprocs; proc++) {
             bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r_idxs[dep]]);
             if (did_recv) {
@@ -7743,7 +7742,8 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
 
     for (int t = start; t < end; t++) {
         if (TEST_AGAINST_LAMMPS) {
-            int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
+            int timestep_to_compare_against = curr_dt ? starting_timestep + t
+                    : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
 
             stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, test_f[timestep_to_compare_against],
                                                                   zoid, t);
@@ -7754,9 +7754,10 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
             stencilMD->TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, test_v[timestep_to_compare_against],
                                                                 zoid, t);
         }
+
         stencilMD->INITIAL_INTEGRATE_ZOID_MANY_CUTS(zoid, t);
-        stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, t);
-        stencilMD->FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, t);
+        stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, t + 1);
+        stencilMD->FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, t + 1);
     }
 }
 
@@ -7775,7 +7776,8 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
         }
     }
 
-    auto& queues = curr_dt ? stencilMD->queues_many_cuts : stencilMD->queues_many_cuts_next_dt;
+    auto& queues = curr_dt ? stencilMD->queues_many_cuts
+            : stencilMD->queues_many_cuts_next_dt;
 
     for (int j = 0; j < queues[dep].size(); j++) {
         auto& zoid = queues[dep][j];
@@ -7786,10 +7788,8 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
     }
 
     if (dep < NUM_DEPS - 1) {
-        if (dep < NUM_DEPS - 1) {
-            stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
-            int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_requests);
-        }
+        stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
+        int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_requests);
     }
 }
 

@@ -6130,7 +6130,7 @@ public:
                           << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
                           << " diff: "
                           << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
-                          << " overall timestep: " << timestep_to_compare_against
+                          << " overall timestep: " << timestep_to_compare_against << " t: " << t
                           << RESET_COLOR << std::endl;
 
                 std::cout << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z << std::endl;
@@ -7734,9 +7734,6 @@ public:
                     }
 
                     if (in_neighbor_zoid) {
-                        if (curr_dt && t == 0 && zoid.tag_stencil_md[0][i] == 660936) {
-                            std::cout << "SEND FORCE TAG FOUND. zoid: " << zoid.num  << " to: " << send_zoid_num << std::endl;
-                        }
                         zoid.send_force_idxs_double_buffering[t][j].push_back(i);
                         break;
                     }
