@@ -6292,10 +6292,10 @@ public:
     std::vector<int>* recv_proc_sizes_next_dt[NUM_DEPS];
     std::vector<int>* send_proc_sizes_next_dt[NUM_DEPS];
 
-    double** buf_recv_many_cuts;
-    double** buf_send_many_cuts;
-    int* nrecv_buf_many_cuts;
-    int* nsend_buf_many_cuts;
+    double** buf_recv_many_cuts[NUM_DEPS];
+    double** buf_send_many_cuts[NUM_DEPS];
+    int* nrecv_buf_many_cuts[NUM_DEPS];
+    int* nsend_buf_many_cuts[NUM_DEPS];
 
     void INIT_ZOIDS_MANY_CUTS() {
         // TODO: test out more than 1 cut in each dimension
@@ -6695,6 +6695,17 @@ public:
                 }
             }
         }
+
+        for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
+            if (i % comm->nprocs != comm->me) {
+                continue;
+            }
+            std::sort(send_to_neighbors_many_cuts[i].begin(), send_to_neighbors_many_cuts[i].end());
+            std::sort(recv_from_neighbors_many_cuts[i].begin(), recv_from_neighbors_many_cuts[i].end());
+            std::sort(send_to_neighbors_many_cuts_next_dt[i].begin(), send_to_neighbors_many_cuts_next_dt[i].end());
+            std::sort(recv_from_neighbors_many_cuts_next_dt[i].begin(), recv_from_neighbors_many_cuts_next_dt[i].end());
+        }
+
 
         /*
         if (comm->me == 0) {
@@ -8353,6 +8364,8 @@ public:
 
         for (int proc = 0; proc < comm->nprocs; proc++) {
             for (int send_dep = 0; send_dep < NUM_DEPS - 1; send_dep++) {
+                int dep = send_dep + 1;
+
                 int total_nrecv_from_proc = 0;
 
                 int offset = 0;
@@ -8403,54 +8416,56 @@ public:
                 }
 
                 int total_doubles_recv_from_proc = DEBUG_SEND_RECV_DATA ? total_nrecv_from_proc * (3 + 1) : total_nrecv_from_proc * 3;
-                if (total_doubles_recv_from_proc > nrecv_buf_many_cuts[proc]) {
-                    auto before = nrecv_buf_many_cuts[proc];
-                    GROW_RECV_MANY_CUTS(proc, total_doubles_recv_from_proc);
+                if (total_doubles_recv_from_proc > nrecv_buf_many_cuts[dep][proc]) {
+                    auto before = nrecv_buf_many_cuts[dep][proc];
+                    GROW_RECV_MANY_CUTS(dep, proc, total_doubles_recv_from_proc);
                 }
             }
         }
     }
 
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
-        nsend_buf_many_cuts = new int[comm->nprocs];
-        nrecv_buf_many_cuts = new int[comm->nprocs];
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            nsend_buf_many_cuts[dep] = new int[comm->nprocs];
+            nrecv_buf_many_cuts[dep] = new int[comm->nprocs];
 
-        buf_recv_many_cuts = new double*[comm->nprocs];
-        buf_send_many_cuts = new double*[comm->nprocs];
+            buf_recv_many_cuts[dep] = new double*[comm->nprocs];
+            buf_send_many_cuts[dep] = new double*[comm->nprocs];
 
-        constexpr int INITIAL_SIZE = 1024;
+            constexpr int INITIAL_SIZE = 1024;
 
-        for (int proc = 0; proc < comm->nprocs; proc++) {
-            buf_send_many_cuts[proc] = new double[INITIAL_SIZE];
-            buf_recv_many_cuts[proc] = new double[INITIAL_SIZE];
-            nsend_buf_many_cuts[proc] = INITIAL_SIZE;
-            nrecv_buf_many_cuts[proc] = INITIAL_SIZE;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                buf_send_many_cuts[dep][proc] = new double[INITIAL_SIZE];
+                buf_recv_many_cuts[dep][proc] = new double[INITIAL_SIZE];
+                nsend_buf_many_cuts[dep][proc] = INITIAL_SIZE;
+                nrecv_buf_many_cuts[dep][proc] = INITIAL_SIZE;
+            }
         }
     }
 
-    void GROW_SEND_MANY_CUTS(int proc, int size) {
+    void GROW_SEND_MANY_CUTS(int dep, int proc, int size) {
         constexpr double FACTOR = 1.5;
-        assert(size > nsend_buf_many_cuts[proc]);
+        assert(size > nsend_buf_many_cuts[dep][proc]);
 
-        delete[] buf_send_many_cuts[proc];
-        nsend_buf_many_cuts[proc] = 0;
+        delete[] buf_send_many_cuts[dep][proc];
+        nsend_buf_many_cuts[dep][proc] = 0;
 
         int new_size = static_cast<int>(size * FACTOR);
-        buf_send_many_cuts[proc] = new double[new_size];
-        nsend_buf_many_cuts[proc] = static_cast<int>(new_size);
+        buf_send_many_cuts[dep][proc] = new double[new_size];
+        nsend_buf_many_cuts[dep][proc] = static_cast<int>(new_size);
     }
 
-    void GROW_RECV_MANY_CUTS(int proc, int size) {
+    void GROW_RECV_MANY_CUTS(int dep, int proc, int size) {
         constexpr double FACTOR = 1.5;
-        assert(size > nrecv_buf_many_cuts[proc]);
+        assert(size > nrecv_buf_many_cuts[dep][proc]);
 
-        delete[] buf_recv_many_cuts[proc];
-        nrecv_buf_many_cuts[proc] = 0;
+        delete[] buf_recv_many_cuts[dep][proc];
+        nrecv_buf_many_cuts[dep][proc] = 0;
 
         int new_size = static_cast<int>(size * FACTOR);
 
-        buf_recv_many_cuts[proc] = new double[new_size];
-        nrecv_buf_many_cuts[proc] = static_cast<int>(new_size);
+        buf_recv_many_cuts[dep][proc] = new double[new_size];
+        nrecv_buf_many_cuts[dep][proc] = static_cast<int>(new_size);
     }
 
     template <bool curr_dt>
@@ -8532,8 +8547,8 @@ public:
                 }
 
                 int total_doubles_send_to_proc = DEBUG_SEND_RECV_DATA ? total_nsend_to_proc * (3 + 1) : total_nsend_to_proc * 3;
-                if (total_doubles_send_to_proc > nsend_buf_many_cuts[proc]) {
-                    GROW_SEND_MANY_CUTS(proc, total_doubles_send_to_proc);
+                if (total_doubles_send_to_proc > nsend_buf_many_cuts[send_dep][proc]) {
+                    GROW_SEND_MANY_CUTS(send_dep, proc, total_doubles_send_to_proc);
                 }
             }
         }
@@ -8642,19 +8657,20 @@ public:
         }
 
         int total_doubles_recv_from_proc = DEBUG_SEND_RECV_DATA ? total_recv_from_proc * (3 + 1) : total_recv_from_proc * 3;
-        if (total_doubles_recv_from_proc > nrecv_buf_many_cuts[proc]) {
+        if (total_doubles_recv_from_proc > nrecv_buf_many_cuts[dep][proc]) {
             assert(false);
-            GROW_RECV_MANY_CUTS(proc, total_doubles_recv_from_proc);
+            GROW_RECV_MANY_CUTS(dep, proc, total_doubles_recv_from_proc);
         }
 
         if (total_doubles_recv_from_proc > 0) {
-            int mpi_tag = get_mpi_tag(comm->me, proc, dep);
-            assert(total_doubles_recv_from_proc < nrecv_buf_many_cuts[proc]);
-            /*
-            MPI_Irecv(buf_recv_many_cuts[proc], total_doubles_recv_from_proc, MPI_DOUBLE, proc, mpi_tag, world,
+            int mpi_tag = get_mpi_tag(comm->me, proc, send_dep);
+            assert(total_doubles_recv_from_proc < nrecv_buf_many_cuts[dep][proc]);
+            MPI_Irecv(buf_recv_many_cuts[dep][proc], total_doubles_recv_from_proc, MPI_DOUBLE, proc, mpi_tag, world,
                       request);
+            /*
+            MPI_Recv(buf_recv_many_cuts[dep][proc], total_doubles_recv_from_proc, MPI_DOUBLE,
+                     proc, mpi_tag, world, MPI_STATUS_IGNORE);
             */
-            MPI_Recv(buf_recv_many_cuts[proc], total_doubles_recv_from_proc, MPI_DOUBLE, proc, mpi_tag, world, MPI_STATUS_IGNORE);
             return true;
         }
 
@@ -8765,7 +8781,7 @@ public:
                 offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
 
                 int buf_idx = 0;
-                auto* buf = &buf_recv_many_cuts[proc][offset];
+                auto* buf = &buf_recv_many_cuts[dep][proc][offset];
 
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     auto& recv_force_idxs = recv_zoid.recv_force_idxs_double_buffering[t][find_idx];
@@ -8786,6 +8802,7 @@ public:
                                       << " recv from zoid: " << send_zoid_num << " time: " << t
                                       << " recv from proc: " << proc << " tag I got: " << target_tag << " tag I want: " << recv_zoid.tag_stencil_md[0][idx]
                                       << " offset: " << offset << " buf value: " << tmp << " find idx: " << find_idx
+                                      << " buf: " << buf
                                       << std::endl;
                         }
 
@@ -8793,13 +8810,6 @@ public:
                         recv_zoid.f_stencil_md[0][idx].x += f_x;
                         recv_zoid.f_stencil_md[0][idx].y += f_y;
                         recv_zoid.f_stencil_md[0][idx].z += f_z;
-
-                        // if (t == 0 && target_tag == 660936) {
-                        if (t == 0 && recv_zoid.num == 69) {
-                            std::cout << "TARGET TAG UNPACKING FOUND. tag: " << target_tag
-                            << " From zoid: " << recv_neighbors[find_idx]
-                            << " force: " << recv_zoid.f_stencil_md[0][idx].x << " " << recv_zoid.f_stencil_md[0][idx].y << " " << recv_zoid.f_stencil_md[0][idx].z << std::endl;
-                        }
                     }
 
                     for (int k = 0; k < recv_pos_idxs.size(); k++) {
@@ -9064,15 +9074,6 @@ public:
                 continue;
             }
 
-            /*
-            if (comm->me == 6 && proc == 2) {
-                std::cout << "PACKING DATA. zoid: " << zoid.num << " send to proc: " << proc
-                          << " send to zoid: " << send_neighbors[i]
-                          << " offset: " << offset + buf_idx
-                          << std::endl;
-            }
-            */
-
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 auto& send_force_idxs = zoid.send_force_idxs_double_buffering[t][i];
                 auto& send_pos_idxs = zoid.send_pos_idxs_double_buffering[t][i];
@@ -9086,11 +9087,6 @@ public:
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].x;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].y;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].z;
-
-                    if (t == 0 && tag == 660936) {
-                        std::cout << "TARGET TAG PACKING FOUND. From zoid: " << zoid.num << " to zoid: " << send_neighbors[i] << " buf idx: " << buf_idx
-                                  << " force: " << zoid.f_stencil_md[0][idx].x << " " << zoid.f_stencil_md[0][idx].y << " " << zoid.f_stencil_md[0][idx].z << std::endl;
-                    }
 
                     zoid.f_stencil_md[0][idx].x = 0;
                     zoid.f_stencil_md[0][idx].y = 0;
@@ -9150,13 +9146,10 @@ public:
         }
 
         int total_doubles_send_to_proc = DEBUG_SEND_RECV_DATA ? (3 + 1) * total_send_to_proc : 3 * total_send_to_proc;
-        if (total_doubles_send_to_proc > nsend_buf_many_cuts[proc]) {
+        if (total_doubles_send_to_proc > nsend_buf_many_cuts[dep][proc]) {
             assert(false);
-            GROW_SEND_MANY_CUTS(proc, total_doubles_send_to_proc);
+            GROW_SEND_MANY_CUTS(dep, proc, total_doubles_send_to_proc);
         }
-
-        // int offset = 0;
-        int offset_idx = 0;
 
         for (int j = 0; j < queues[dep].size(); j++) {
             auto& zoid = queues[dep][j];
@@ -9174,60 +9167,11 @@ public:
 
             int offset = curr_dt ? send_proc_zoid_offsets[zoid.num][proc][0] : send_proc_zoid_offsets_next_dt[zoid.num][proc][0];
             offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
-
-            if (comm->me == 6 && proc == 2) {
-                std::cout << "PACKING DATA. zoid: " << zoid.num << " send to proc: " << proc
-                          << " offset: " << offset
-                          << std::endl;
-            }
-
-            int npack = PACK_DATA_TO_PROC_HELPER<curr_dt>(zoid, proc, &buf_send_many_cuts[proc][offset], offset);
-
+            int npack = PACK_DATA_TO_PROC_HELPER<curr_dt>(zoid, proc,
+                                                          &buf_send_many_cuts[dep][proc][offset], offset);
             int expected_nsend = curr_dt ? send_proc_zoid_sizes[zoid.num][proc][0] : send_proc_zoid_sizes_next_dt[zoid.num][proc][0];
             int expected_size = DEBUG_SEND_RECV_DATA ? expected_nsend * (3 + 1) : expected_nsend * 3;
-
-            if (npack != expected_size) {
-                std::cout << "curr_dt: " << curr_dt << " zoid: " << zoid.num
-                          << " dep: " << dep << " pack to proc: " << proc
-                          << " num packed: " << npack << " expected: " << expected_size
-                          << std::endl;
-            }
             assert(npack == expected_size);
-
-            // offset += expected_size;
-
-            /*
-            for (int i = 0; i < send_neighbors.size(); i++) {
-                if (send_neighbors[i] % comm->nprocs != proc) {
-                    continue;
-                }
-
-                int offset = offsets[buf_offset_idx];
-                int next_offset = offsets[buf_offset_idx + 1];
-
-                offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
-                next_offset = DEBUG_SEND_RECV_DATA ? next_offset * (3 + 1) : next_offset * 3;
-
-                int npack = PACK_DATA_TO_PROC_HELPER<curr_dt>(zoid, proc, &buf_send_many_cuts[proc][offset]);
-                int expected_size = next_offset - offset;
-
-                if (npack != expected_size) {
-                    std::stringstream s1;
-                    for (auto& o : offsets) {
-                        s1 << o << " ";
-                    }
-                    std::cout << "curr_dt: " << curr_dt << " zoid: " << zoid.num
-                              << " pack to neighbor: " << send_neighbors[i]
-                              << " dep: " << dep << " pack to proc: " << proc
-                              << " idx: " << i << " offset idx: " << buf_offset_idx
-                              << " num packed: " << npack << " expected: " << expected_size
-                              << " offsets: " << s1.str()
-                              << " offset: " << offset << " next offset: " << next_offset << << std::endl;
-                }
-                assert(npack == expected_size);
-                buf_offset_idx++;
-            }
-            */
         }
     }
 
@@ -9260,10 +9204,10 @@ public:
             int mpi_tag = get_mpi_tag(proc, comm->me, dep);
             if (ndoubles_sent) {
                 r.emplace_back();
-                MPI_Isend(buf_send_many_cuts[proc], ndoubles_sent, MPI_DOUBLE,
+                MPI_Isend(buf_send_many_cuts[dep][proc], ndoubles_sent, MPI_DOUBLE,
                           proc, mpi_tag, world, &r[r.size() - 1]);
                 nprocs_send++;
-                assert(ndoubles_sent < nsend_buf_many_cuts[proc]);
+                assert(ndoubles_sent < nsend_buf_many_cuts[dep][proc]);
             }
         }
 
