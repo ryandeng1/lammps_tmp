@@ -5553,7 +5553,9 @@ void Verlet::setup_stencil_md_many_zoids() {
     std::map<std::pair<int, int>, bool> did_recv_map;
     std::map<int, int> dep_to_nproc_send;
 
+    /*
     for (int dep = 1; dep < NUM_DEPS; dep++) {
+        std::cout << "me: " << comm->me << " unpacking for dep: " << dep << std::endl;
         for (int proc = 0; proc < comm->nprocs; proc++) {
             bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r_idxs[dep]]);
             if (did_recv) {
@@ -5562,9 +5564,17 @@ void Verlet::setup_stencil_md_many_zoids() {
             did_recv_map[{dep, proc}] = did_recv;
         }
     }
+    */
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep > 0) {
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r_idxs[dep]]);
+                if (did_recv) {
+                    recv_r_idxs[dep]++;
+                }
+                did_recv_map[{dep, proc}] = did_recv;
+            }
             if (recv_r_idxs[dep]) {
                 MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUSES_IGNORE);
                 for (int proc = 0; proc < comm->nprocs; proc++) {
