@@ -98,6 +98,21 @@ class Verlet : public Integrate {
 
   /* BEGIN DOUBLE BUFFERING */
   template <bool curr_dt>
+  void run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid,
+                                     double** test_f, double** test_x, double** test_v);
+  template <bool curr_dt>
+  void run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
+                                           int nproc_recv, MPI_Request* recv_requests,
+                                           std::map<std::pair<int, int>, bool> did_recv_map,
+                                           std::vector<MPI_Request>& send_requests,
+                                           double** test_f, double** test_x, double** test_v);
+
+  template <bool curr_dt>
+  void run_stencil_md_many_cuts_helper(int starting_timestep, double** test_f, double** test_x, double** test_v);
+
+  void run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v);
+
+  template <bool curr_dt>
   void run_stencil_md_zoid_double_buffering(int start_timestep, int start_eval, int end_eval, int zoid_num,
                                             double** test_f, double** test_x, double** test_v, bool warmup);
 

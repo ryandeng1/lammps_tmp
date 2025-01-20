@@ -6009,6 +6009,136 @@ public:
         }
     }
 
+    void TEST_AGAINST_LAMMPS_POS_DOUBLE_BUFFERING(bool curr_dt, int timestep_to_compare_against,
+                                                  double* test_x, queue_info& zoid, int t) {
+        auto& local_idxs = zoid.local_idxs_per_timestep[t];
+        auto& tags = zoid.tag_stencil_md[0];
+        auto& x = zoid.x_stencil_md[t % DOUBLE_BUFFERING];
+
+        for (int i = 0; i < local_idxs.size(); i++) {
+            int idx = local_idxs[i];
+            int tag = tags[idx];
+
+            double my_x = x[idx].x;
+            double my_y = x[idx].y;
+            double my_z = x[idx].z;
+
+            while (my_x < domain->boxlo[0]) {
+                my_x += domain->prd[0];
+            }
+            while (my_y < domain->boxlo[1]) {
+                my_y += domain->prd[1];
+            }
+            while (my_z < domain->boxlo[2]) {
+                my_z += domain->prd[2];
+            }
+
+            double lammps_x = test_x[tag * 3 + 0];
+            double lammps_y = test_x[tag * 3 + 1];
+            double lammps_z = test_x[tag * 3 + 2];
+
+            while (lammps_x < domain->boxlo[0]) {
+                lammps_x += domain->prd[0];
+            }
+            while (lammps_y < domain->boxlo[1]) {
+                lammps_y += domain->prd[1];
+            }
+            while (lammps_z < domain->boxlo[2]) {
+                lammps_z += domain->prd[2];
+            }
+
+            bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
+
+            if (!all_close) {
+                std::cout << RED << "ERROR ON POS. curr_dt: " << curr_dt << " zoid: " << zoid.num
+                          << " idx: " << idx << " tag: " << tag
+                          << " what I have: " << my_x << " " << my_y << " " << my_z
+                          << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
+                          << " diff: "
+                          << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
+                          << " overall timestep: " << timestep_to_compare_against
+                          << RESET_COLOR << std::endl;
+
+                std::cout << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z << std::endl;
+                assert(false);
+            }
+        }
+    }
+
+    void TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(bool curr_dt, int timestep_to_compare_against,
+                                                  double* test_v, queue_info& zoid, int t) {
+        auto& local_idxs = zoid.local_idxs_per_timestep[t];
+        auto& tags = zoid.tag_stencil_md[0];
+        auto& x = zoid.x_stencil_md[t % DOUBLE_BUFFERING];
+        auto& v = zoid.f_stencil_md[0];
+
+        for (int i = 0; i < local_idxs.size(); i++) {
+            int idx = local_idxs[i];
+            int tag = tags[idx];
+
+            double my_x = v[idx].x;
+            double my_y = v[idx].y;
+            double my_z = v[idx].z;
+
+            double lammps_x = test_v[tag * 3 + 0];
+            double lammps_y = test_v[tag * 3 + 1];
+            double lammps_z = test_v[tag * 3 + 2];
+
+            bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
+
+            if (!all_close) {
+                std::cout << RED << "ERROR ON VEL. curr_dt: " << curr_dt << " zoid: " << zoid.num
+                          << " idx: " << idx << " tag: " << tag
+                          << " what I have: " << my_x << " " << my_y << " " << my_z
+                          << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
+                          << " diff: "
+                          << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
+                          << " overall timestep: " << timestep_to_compare_against
+                          << RESET_COLOR << std::endl;
+
+                std::cout << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z << std::endl;
+                assert(false);
+            }
+        }
+    }
+
+    void TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(bool curr_dt, int timestep_to_compare_against,
+                                                    double* test_f, queue_info& zoid, int t) {
+        auto& local_idxs = zoid.local_idxs_per_timestep[t];
+        auto& tags = zoid.tag_stencil_md[0];
+        auto& x = zoid.x_stencil_md[t % DOUBLE_BUFFERING];
+        auto& f = zoid.f_stencil_md[0];
+
+        for (int i = 0; i < local_idxs.size(); i++) {
+            int idx = local_idxs[i];
+            int tag = tags[idx];
+
+            double my_x = f[idx].x;
+            double my_y = f[idx].y;
+            double my_z = f[idx].z;
+
+            double lammps_x = test_f[tag * 3 + 0];
+            double lammps_y = test_f[tag * 3 + 1];
+            double lammps_z = test_f[tag * 3 + 2];
+
+            bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
+
+            if (!all_close) {
+                std::cout << RED << "ERROR ON FORCE. curr_dt: " << curr_dt << " zoid: " << zoid.num
+                          << " idx: " << idx << " tag: " << tag
+                          << " what I have: " << my_x << " " << my_y << " " << my_z
+                          << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
+                          << " diff: "
+                          << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
+                          << " overall timestep: " << timestep_to_compare_against
+                          << RESET_COLOR << std::endl;
+
+                std::cout << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z << std::endl;
+                assert(false);
+            }
+        }
+    }
+
     void TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(double* test_f, queue_info& zoid, int timestep) {
         auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
         // auto& f = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING];
@@ -9212,6 +9342,95 @@ public:
         }
 
         return nprocs_send;
+    }
+
+    void INITIAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int timestep) {
+        auto * _noalias x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
+
+        auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
+        auto * _noalias f = zoid.f_stencil_md[timestep % 1].data();
+
+        auto * _noalias mask = zoid.mask_stencil_md[0].data();
+        auto * _noalias local_idxs = zoid.local_idxs_per_timestep[timestep].data();
+        auto * _noalias type = zoid.type_stencil_md[0].data();
+
+        int nlocal = zoid.local_idxs_per_timestep[timestep].size();
+
+        double dtv = update->dt;
+
+        const double * const mass = atom->mass;
+        double dtf = 0.5 * update->dt * force->ftm2v;
+
+        for (int idx = 0; idx < nlocal; idx++) {
+            int i = local_idxs[idx];
+
+            double v0 = v[i].x;
+            double v1 = v[i].y;
+            double v2 = v[i].z;
+
+            const double dtfm = dtf / mass[type[i]];
+            v[i].x += dtfm * f[i].x;
+            v[i].y += dtfm * f[i].y;
+            v[i].z += dtfm * f[i].z;
+
+            f[i].x = 0.0;
+            f[i].y = 0.0;
+            f[i].z = 0.0;
+
+            next_x[i].x = x[i].x + dtv * v[i].x;
+            next_x[i].y = x[i].y + dtv * v[i].y;
+            next_x[i].z = x[i].z + dtv * v[i].z;
+        }
+    }
+
+    void FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int timestep) {
+        auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
+        auto * _noalias f = zoid.f_stencil_md[timestep % 1].data();
+
+        auto * _noalias mask = zoid.mask_stencil_md[0].data();
+        auto * _noalias local_idxs = zoid.local_idxs_per_timestep[timestep].data();
+        auto * _noalias type = zoid.type_stencil_md[0].data();
+
+        int nlocal = zoid.local_idxs_per_timestep[timestep].size();
+
+        double dtv = update->dt;
+
+        const double * const mass = atom->mass;
+        double dtf = 0.5 * update->dt * force->ftm2v;
+
+        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
+
+        auto gfactor1 = fix_post_force->gfactor1;
+        auto gfactor2 = fix_post_force->gfactor2;
+        // fix_post_force->compute_target();
+        auto tsqrt = fix_post_force->tsqrt;
+
+        for (int idx = 0; idx < nlocal; idx++) {
+            int i = local_idxs[idx];
+            int atom_type = type[i];
+
+            const double dtfm = dtf / mass[atom_type];
+
+            double gamma1 = gfactor1[atom_type];
+            double gamma2 = gfactor2[atom_type] * tsqrt;
+
+            double rand_x = 0.6;
+            double rand_y = 0.6;
+            double rand_z = 0.6;
+
+            double v_x = v[i].x;
+            double v_y = v[i].y;
+            double v_z = v[i].z;
+
+            f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
+            f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
+            f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+
+            v[i].x += dtfm * f[i].x;
+            v[i].y += dtfm * f[i].y;
+            v[i].z += dtfm * f[i].z;
+        }
     }
 
     void FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int timestep) {

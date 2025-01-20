@@ -275,7 +275,7 @@ void Verlet::setup(int flag) {
 
     if (!ONLY_RUN_LAMMPS) {
         setup_stencil_md_many_zoids();
-        setup_stencil_md();
+        // setup_stencil_md();
     }
 
     if (LAMMPS_USE_BINS) {
@@ -5601,7 +5601,6 @@ void Verlet::setup_stencil_md_many_zoids() {
     delete[] recv_f;
 
     MPI_Barrier(world);
-    assert(false);
 }
 
 /* ----------------------------------------------------------------------
@@ -6328,12 +6327,15 @@ void Verlet::run(int n) {
     */
 
     auto begin = std::chrono::high_resolution_clock::now();
+    run_stencil_md_many_cuts(test_num_timesteps, test_f, test_x, test_v);
     cilk_scope {
+        /*
         if (USE_DOUBLE_BUFFERING) {
             run_stencil_md_pipelined_double_buffering(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, false);
         } else {
             run_stencil_md_pipelined(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, false);
         }
+        */
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
@@ -7730,6 +7732,109 @@ void Verlet::run_stencil_md_pipelined_double_buffering(int num_timesteps, std::v
         // curr dt
         run_stencil_md_pipelined_double_buffering_helper<true>(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, warmup);
         run_stencil_md_pipelined_double_buffering_helper<false>(t, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, warmup);
+    }
+}
+
+template <bool curr_dt>
+void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid,
+                                           double** test_f, double** test_x, double** test_v) {
+    int start = 0;
+    int end = NUM_TIMESTEPS_IN_PARALLEL;
+
+    for (int t = start; t < end; t++) {
+        if (TEST_AGAINST_LAMMPS) {
+            int timestep_to_compare_against = curr_dt ? starting_timestep + t : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
+
+            stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, test_f[timestep_to_compare_against],
+                                                                  zoid, t);
+
+            stencilMD->TEST_AGAINST_LAMMPS_POS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, test_x[timestep_to_compare_against],
+                                                                zoid, t);
+
+            stencilMD->TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, test_v[timestep_to_compare_against],
+                                                                zoid, t);
+        }
+        stencilMD->INITIAL_INTEGRATE_ZOID_MANY_CUTS(zoid, t);
+        stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, t);
+        stencilMD->FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, t);
+    }
+}
+
+template <bool curr_dt>
+void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
+                                                 int nproc_recv, MPI_Request* recv_requests,
+                                                 std::map<std::pair<int, int>, bool> did_recv,
+                                                 std::vector<MPI_Request>& send_requests,
+                                                 double** test_f, double** test_x, double** test_v) {
+    if (nproc_recv > 0) {
+        MPI_Waitall(nproc_recv, recv_requests, MPI_STATUSES_IGNORE);
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            if (did_recv[{dep, proc}]) {
+                stencilMD->UNPACK_DATA_MANY_CUTS<curr_dt>(dep, proc);
+            }
+        }
+    }
+
+    auto& queues = curr_dt ? stencilMD->queues_many_cuts : stencilMD->queues_many_cuts_next_dt;
+
+    for (int j = 0; j < queues[dep].size(); j++) {
+        auto& zoid = queues[dep][j];
+        if (zoid.num % comm->nprocs != comm->me) {
+            continue;
+        }
+        run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, test_f, test_x, test_v);
+    }
+
+    if (dep < NUM_DEPS - 1) {
+        if (dep < NUM_DEPS - 1) {
+            stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
+            int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_requests);
+        }
+    }
+}
+
+template <bool curr_dt>
+void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **test_f, double **test_x, double **test_v) {
+    std::vector<MPI_Request> send_r[NUM_DEPS];
+    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+        send_r[dep].reserve(comm->nprocs);
+    }
+
+    std::vector<MPI_Request> recv_r[NUM_DEPS];
+    for (int dep = 1; dep < NUM_DEPS; dep++) {
+        recv_r[dep].resize(comm->nprocs);
+    }
+
+    int recv_r_idxs[NUM_DEPS] = {0};
+
+    std::map<std::pair<int, int>, bool> did_recv_map;
+    std::map<int, int> dep_to_nproc_send;
+
+    for (int dep = 1; dep < NUM_DEPS; dep++) {
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r_idxs[dep]]);
+            if (did_recv) {
+                recv_r_idxs[dep]++;
+            }
+            did_recv_map[{dep, proc}] = did_recv;
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, dep, recv_r_idxs[dep], recv_r[dep].data(),
+                                                     did_recv_map, send_r[dep], test_f, test_x, test_v);
+    }
+
+    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+        MPI_Waitall(send_r[dep].size(), send_r[dep].data(), MPI_STATUSES_IGNORE);
+    }
+
+}
+
+void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v) {
+    for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
+        run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
+        run_stencil_md_many_cuts_helper<false>(t, test_f, test_x, test_v);
     }
 }
 
