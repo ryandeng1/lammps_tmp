@@ -7566,18 +7566,6 @@ public:
                     }
                 }
 
-                /*
-                if (curr_dt && zoid.tag_stencil_md[0][i] == 254682 && zoid.num == 52) {
-                    std::cout << "FOUND TAG. curr_dt? " << curr_dt << " zoid: " << zoid.num << " timestep: " << t << " borders zoid: " << borders_zoid
-                    << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
-                    << " lo: " << zoid_lo[0] << " " << zoid_lo[1] << " " << zoid_lo[2]
-                    << " hi: " << zoid_hi[0] << " " << zoid_hi[1] << " " << zoid_hi[2]
-                    << " lo borders: " << zoid_lo[0] - ALLEGRO_SLOPE << " " << zoid_lo[1] - ALLEGRO_SLOPE << " " << zoid_lo[2] - ALLEGRO_SLOPE
-                    << " hi borders: " << zoid_hi[0] + ALLEGRO_SLOPE << " " << zoid_hi[1] + ALLEGRO_SLOPE << " " << zoid_hi[2] + ALLEGRO_SLOPE
-                    << std::endl;
-                }
-                */
-
                 // have to do this check as for later timesteps this might not be the case
                 if (!borders_zoid) {
                     continue;
@@ -7604,13 +7592,9 @@ public:
                         in_neighbor_zoid = in_neighbor_zoid && p >= lo && p < hi;
                     }
 
-                    if (zoid.num == 52 && zoid.tag_stencil_md[0][i] == 254682) {
-                        std::cout << "neighbor: " << send_zoid_num << " in neighbor? " << in_neighbor_zoid << std::endl;
-                    }
-
                     if (in_neighbor_zoid) {
-                        if (zoid.tag_stencil_md[0][i] == 254682) {
-                            std::cout << "ZOID: " << zoid.num << " SENDING FORCE to: " << send_zoid_num << std::endl;
+                        if (curr_dt && t == 0 && zoid.tag_stencil_md[0][i] == 660936) {
+                            std::cout << "SEND FORCE TAG FOUND. zoid: " << zoid.num  << " to: " << send_zoid_num << std::endl;
                         }
                         zoid.send_force_idxs_double_buffering[t][j].push_back(i);
                         break;
@@ -8666,8 +8650,11 @@ public:
         if (total_doubles_recv_from_proc > 0) {
             int mpi_tag = get_mpi_tag(comm->me, proc, dep);
             assert(total_doubles_recv_from_proc < nrecv_buf_many_cuts[proc]);
+            /*
             MPI_Irecv(buf_recv_many_cuts[proc], total_doubles_recv_from_proc, MPI_DOUBLE, proc, mpi_tag, world,
                       request);
+            */
+            MPI_Recv(buf_recv_many_cuts[proc], total_doubles_recv_from_proc, MPI_DOUBLE, proc, mpi_tag, world, MPI_STATUS_IGNORE);
             return true;
         }
 
@@ -8806,6 +8793,13 @@ public:
                         recv_zoid.f_stencil_md[0][idx].x += f_x;
                         recv_zoid.f_stencil_md[0][idx].y += f_y;
                         recv_zoid.f_stencil_md[0][idx].z += f_z;
+
+                        // if (t == 0 && target_tag == 660936) {
+                        if (t == 0 && recv_zoid.num == 69) {
+                            std::cout << "TARGET TAG UNPACKING FOUND. tag: " << target_tag
+                            << " From zoid: " << recv_neighbors[find_idx]
+                            << " force: " << recv_zoid.f_stencil_md[0][idx].x << " " << recv_zoid.f_stencil_md[0][idx].y << " " << recv_zoid.f_stencil_md[0][idx].z << std::endl;
+                        }
                     }
 
                     for (int k = 0; k < recv_pos_idxs.size(); k++) {
@@ -9059,7 +9053,7 @@ public:
     }
 
     template <bool curr_dt>
-    int PACK_DATA_TO_PROC_HELPER(queue_info& zoid, int proc, double* buf) {
+    int PACK_DATA_TO_PROC_HELPER(queue_info& zoid, int proc, double* buf, int offset) {
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                 : send_to_neighbors_many_cuts_next_dt[zoid.num];
 
@@ -9070,6 +9064,15 @@ public:
                 continue;
             }
 
+            /*
+            if (comm->me == 6 && proc == 2) {
+                std::cout << "PACKING DATA. zoid: " << zoid.num << " send to proc: " << proc
+                          << " send to zoid: " << send_neighbors[i]
+                          << " offset: " << offset + buf_idx
+                          << std::endl;
+            }
+            */
+
             for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                 auto& send_force_idxs = zoid.send_force_idxs_double_buffering[t][i];
                 auto& send_pos_idxs = zoid.send_pos_idxs_double_buffering[t][i];
@@ -9079,18 +9082,15 @@ public:
                     int idx = send_force_idxs[k];
                     int tag = zoid.tag_stencil_md[0][idx];
 
-                    if (zoid.num == 0 && send_neighbors[i] % comm->nprocs == 1) {
-                        std::cout << "ACTUALLY PACKING DATA. zoid: " << zoid.num << " send to proc: " << proc
-                                  << " send to: " << send_neighbors[i]
-                                  << " buf_idx: " << buf_idx
-                                  << " tag: " << tag
-                                  << std::endl;
-                    }
-
                     buf[buf_idx++] = ubuf(tag).d;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].x;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].y;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].z;
+
+                    if (t == 0 && tag == 660936) {
+                        std::cout << "TARGET TAG PACKING FOUND. From zoid: " << zoid.num << " to zoid: " << send_neighbors[i] << " buf idx: " << buf_idx
+                                  << " force: " << zoid.f_stencil_md[0][idx].x << " " << zoid.f_stencil_md[0][idx].y << " " << zoid.f_stencil_md[0][idx].z << std::endl;
+                    }
 
                     zoid.f_stencil_md[0][idx].x = 0;
                     zoid.f_stencil_md[0][idx].y = 0;
@@ -9175,12 +9175,13 @@ public:
             int offset = curr_dt ? send_proc_zoid_offsets[zoid.num][proc][0] : send_proc_zoid_offsets_next_dt[zoid.num][proc][0];
             offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
 
-            if (comm->me == 0 && proc == 1) {
+            if (comm->me == 6 && proc == 2) {
                 std::cout << "PACKING DATA. zoid: " << zoid.num << " send to proc: " << proc
                           << " offset: " << offset
                           << std::endl;
             }
-            int npack = PACK_DATA_TO_PROC_HELPER<curr_dt>(zoid, proc, &buf_send_many_cuts[proc][offset]);
+
+            int npack = PACK_DATA_TO_PROC_HELPER<curr_dt>(zoid, proc, &buf_send_many_cuts[proc][offset], offset);
 
             int expected_nsend = curr_dt ? send_proc_zoid_sizes[zoid.num][proc][0] : send_proc_zoid_sizes_next_dt[zoid.num][proc][0];
             int expected_size = DEBUG_SEND_RECV_DATA ? expected_nsend * (3 + 1) : expected_nsend * 3;
@@ -9356,15 +9357,13 @@ public:
                             double factor_lj = special_lj[pair->sbmask(j)];
                             j &= NEIGHMASK;
 
-                            /*
-                            if (tags[i] == 254682 || tags[j] == 254682) {
+                            if (tags[i] == 660936 || tags[j] == 660936) {
                                 std::cout << "STENCIL MD PAIR. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]
                                 << " where: " << zoid.where[0] << " " << zoid.where[1] << " " << zoid.where[2]
                                 << " pos: " << x[i].x << " " << x[i].y << " " << x[i].z
                                 << " other pos: " << x[j].x << " " << x[j].y << " " << x[j].z
                                 << std::endl;
                             }
-                            */
 
                             double delx = xtmp - x[j].x;
                             double dely = ytmp - x[j].y;

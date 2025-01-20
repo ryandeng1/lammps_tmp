@@ -5576,7 +5576,7 @@ void Verlet::setup_stencil_md_many_zoids() {
                 did_recv_map[{dep, proc}] = did_recv;
             }
             if (recv_r_idxs[dep]) {
-                MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUSES_IGNORE);
+                // MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUSES_IGNORE);
                 for (int proc = 0; proc < comm->nprocs; proc++) {
                     if (did_recv_map[{dep, proc}]) {
                         stencilMD->UNPACK_DATA_MANY_CUTS<true>(dep, proc);
