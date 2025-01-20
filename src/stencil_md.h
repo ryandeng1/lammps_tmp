@@ -9189,7 +9189,7 @@ public:
         */
     }
 
-    template <bool curr_dt>
+    template <bool curr_dt, bool is_initial>
     int PACK_DATA_TO_PROC_HELPER(queue_info& zoid, int proc, double* buf, int offset) {
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                 : send_to_neighbors_many_cuts_next_dt[zoid.num];
@@ -9215,9 +9215,11 @@ public:
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].y;
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].z;
 
-                    zoid.f_stencil_md[0][idx].x = 0;
-                    zoid.f_stencil_md[0][idx].y = 0;
-                    zoid.f_stencil_md[0][idx].z = 0;
+                    if (!is_initial) {
+                        zoid.f_stencil_md[0][idx].x = 0;
+                        zoid.f_stencil_md[0][idx].y = 0;
+                        zoid.f_stencil_md[0][idx].z = 0;
+                    }
                 }
 
                 for (int k = 0; k < send_pos_idxs.size(); k++) {
@@ -9245,7 +9247,7 @@ public:
         return buf_idx;
     }
 
-    template <bool curr_dt>
+    template <bool curr_dt, bool is_initial>
     void PACK_DATA_MANY_CUTS_HELPER(int dep, int proc) {
         int total_send_to_proc = 0;
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
@@ -9294,20 +9296,20 @@ public:
 
             int offset = curr_dt ? send_proc_zoid_offsets[zoid.num][proc][0] : send_proc_zoid_offsets_next_dt[zoid.num][proc][0];
             offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
-            int npack = PACK_DATA_TO_PROC_HELPER<curr_dt>(zoid, proc,
-                                                          &buf_send_many_cuts[dep][proc][offset], offset);
+            int npack = PACK_DATA_TO_PROC_HELPER<curr_dt, is_initial>(zoid, proc,
+                                                                      &buf_send_many_cuts[dep][proc][offset], offset);
             int expected_nsend = curr_dt ? send_proc_zoid_sizes[zoid.num][proc][0] : send_proc_zoid_sizes_next_dt[zoid.num][proc][0];
             int expected_size = DEBUG_SEND_RECV_DATA ? expected_nsend * (3 + 1) : expected_nsend * 3;
             assert(npack == expected_size);
         }
     }
 
-    template <bool curr_dt>
+    template <bool curr_dt, bool is_initial>
     void PACK_DATA_MANY_CUTS(int dep) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         for (int proc = 0; proc < comm->nprocs; proc++) {
-            PACK_DATA_MANY_CUTS_HELPER<curr_dt>(dep, proc);
+            PACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(dep, proc);
         }
     }
 

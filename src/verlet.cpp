@@ -5584,7 +5584,7 @@ void Verlet::setup_stencil_md_many_zoids() {
         }
 
         if (dep < NUM_DEPS - 1) {
-            stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
+            stencilMD->PACK_DATA_MANY_CUTS<true, true>(dep);
             int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_r[dep]);
             dep_to_nproc_send[dep] = nproc_send;
         }
@@ -7788,7 +7788,7 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
     }
 
     if (dep < NUM_DEPS - 1) {
-        stencilMD->PACK_DATA_MANY_CUTS<true>(dep);
+        stencilMD->PACK_DATA_MANY_CUTS<curr_dt, false>(dep);
         int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_requests);
     }
 }
@@ -7812,7 +7812,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int proc = 0; proc < comm->nprocs; proc++) {
-            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r_idxs[dep]]);
+            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<curr_dt>(dep, proc, &recv_r[dep][recv_r_idxs[dep]]);
             if (did_recv) {
                 recv_r_idxs[dep]++;
             }
