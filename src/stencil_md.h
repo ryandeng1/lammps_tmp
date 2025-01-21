@@ -6070,7 +6070,7 @@ public:
         auto& local_idxs = zoid.local_idxs_per_timestep[t];
         auto& tags = zoid.tag_stencil_md[0];
         auto& x = zoid.x_stencil_md[t % DOUBLE_BUFFERING];
-        auto& v = zoid.f_stencil_md[0];
+        auto& v = zoid.v_stencil_md[0];
 
         for (int i = 0; i < local_idxs.size(); i++) {
             int idx = local_idxs[i];
@@ -6087,16 +6087,19 @@ public:
             bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
 
             if (!all_close) {
-                std::cout << RED << "ERROR ON VEL. curr_dt: " << curr_dt << " zoid: " << zoid.num
-                          << " idx: " << idx << " tag: " << tag
-                          << " what I have: " << my_x << " " << my_y << " " << my_z
-                          << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
-                          << " diff: "
-                          << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
-                          << " overall timestep: " << timestep_to_compare_against
-                          << RESET_COLOR << std::endl;
+                std::stringstream o;
+                o << RED << "ERROR ON VEL. curr_dt: " << curr_dt << " zoid: " << zoid.num
+                  << " idx: " << idx << " tag: " << tag
+                  << " what I have: " << my_x << " " << my_y << " " << my_z
+                  << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
+                  << " diff: "
+                  << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
+                  << " overall timestep: " << timestep_to_compare_against
+                  << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z
+                  << RESET_COLOR << std::endl;
 
-                std::cout << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z << std::endl;
+                std::cout << o.str();
+
                 assert(false);
             }
         }
@@ -8743,7 +8746,7 @@ public:
     }
 
     template <bool curr_dt>
-    bool RECEIVE_DATA_MANY_CUTS(int dep, int proc, MPI_Request* request) {
+    bool RECEIVE_DATA_MANY_CUTS(int dep, int proc, MPI_Request* request, int start_t, int end_t) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         int total_recv_from_proc = 0;
@@ -8792,12 +8795,8 @@ public:
         if (total_doubles_recv_from_proc > 0) {
             int mpi_tag = get_mpi_tag(comm->me, proc, send_dep);
             assert(total_doubles_recv_from_proc < nrecv_buf_many_cuts[dep][proc]);
-            MPI_Irecv(buf_recv_many_cuts[dep][proc], total_doubles_recv_from_proc, MPI_DOUBLE, proc, mpi_tag, world,
-                      request);
-            /*
-            MPI_Recv(buf_recv_many_cuts[dep][proc], total_doubles_recv_from_proc, MPI_DOUBLE,
-                     proc, mpi_tag, world, MPI_STATUS_IGNORE);
-            */
+            MPI_Irecv(buf_recv_many_cuts[dep][proc], total_doubles_recv_from_proc, MPI_DOUBLE,
+                      proc, mpi_tag, world, request);
             return true;
         }
 
@@ -8805,69 +8804,7 @@ public:
     }
 
     template <bool curr_dt>
-    void UNPACK_DATA_MANY_CUTS_HELPER(queue_info& zoid, int recv_idx, int proc, int* pbc_flag_, double* buf) {
-        int buf_idx = 0;
-
-        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering[t][recv_idx];
-            auto& recv_pos_idxs = zoid.recv_pos_idxs_double_buffering[t][recv_idx];
-            auto& recv_vel_idxs = zoid.recv_vel_idxs_double_buffering[t][recv_idx];
-
-            assert(DEBUG_SEND_RECV_DATA);
-
-            for (int k = 0; k < recv_force_idxs.size(); k++) {
-                int idx = recv_force_idxs[k];
-                double tmp = buf[buf_idx];
-                auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
-                double f_x = buf[buf_idx++];
-                double f_y = buf[buf_idx++];
-                double f_z = buf[buf_idx++];
-                if (target_tag != zoid.tag_stencil_md[0][idx]) {
-                    std::cout << "FORCE TAG WRONG me: " << comm->me << " my zoid: " << zoid.num << " recv from zoid: UNKNOWN " << " time: " << t
-                              << " recv from proc: " << proc << " tag I got: " << target_tag << " tag I want: " << zoid.tag_stencil_md[0][idx]
-                              << " offset: " << " UNKNOWN " << " buf value: " << tmp
-                              << std::endl;
-                }
-
-                assert(target_tag == zoid.tag_stencil_md[0][idx]);
-                zoid.f_stencil_md[0][idx].x += f_x;
-                zoid.f_stencil_md[0][idx].y += f_y;
-                zoid.f_stencil_md[0][idx].z += f_z;
-            }
-
-            for (int k = 0; k < recv_pos_idxs.size(); k++) {
-                int idx = recv_pos_idxs[k];
-                auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
-                double x_x = buf[buf_idx++];
-                double x_y = buf[buf_idx++];
-                double x_z = buf[buf_idx++];
-                assert(target_tag == zoid.tag_stencil_md[0][idx]);
-                if (target_tag != zoid.tag_stencil_md[0][idx]) {
-                    std::cout << "POS me: " << comm->me << " my zoid: " << zoid.num << " recv from: " << " UNKNOWN " << " time: " << t
-                              << " recv proc: " << proc << " tag I got: " << target_tag << " tag I want: " << zoid.tag_stencil_md[0][idx]
-                              << std::endl;
-                }
-                zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].x = x_x + pbc_flag_[0] * domain->prd[0];
-                zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].y = x_y + pbc_flag_[1] * domain->prd[1];
-                zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].z = x_z + pbc_flag_[2] * domain->prd[2];
-            }
-
-            for (int k = 0; k < recv_vel_idxs.size(); k++) {
-                int idx = recv_vel_idxs[k];
-                auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
-                double v_x = buf[buf_idx++];
-                double v_y = buf[buf_idx++];
-                double v_z = buf[buf_idx++];
-                assert(target_tag == zoid.tag_stencil_md[0][idx]);
-                zoid.v_stencil_md[0][idx].x = v_x;
-                zoid.v_stencil_md[0][idx].y = v_y;
-                zoid.v_stencil_md[0][idx].z = v_z;
-            }
-        }
-    }
-
-    template <bool curr_dt>
-    void UNPACK_DATA_MANY_CUTS(int dep, int proc) {
+    void UNPACK_DATA_MANY_CUTS(int dep, int proc, int start_t, int end_t) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         int send_dep = dep - 1;
@@ -8910,7 +8847,7 @@ public:
                 int buf_idx = 0;
                 auto* buf = &buf_recv_many_cuts[dep][proc][offset];
 
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                for (int t = start_t; t < end_t; t++) {
                     auto& recv_force_idxs = recv_zoid.recv_force_idxs_double_buffering[t][find_idx];
                     auto& recv_pos_idxs = recv_zoid.recv_pos_idxs_double_buffering[t][find_idx];
                     auto& recv_vel_idxs = recv_zoid.recv_vel_idxs_double_buffering[t][find_idx];
@@ -8969,6 +8906,11 @@ public:
                         double v_y = buf[buf_idx++];
                         double v_z = buf[buf_idx++];
                         assert(target_tag == recv_zoid.tag_stencil_md[0][idx]);
+                        if (target_tag == 14603) {
+                            std::cout << "RECEIVING TARGET VEL: " << v_x << " " << v_y << " " << v_z
+                            << " curr: " << recv_zoid.v_stencil_md[0][idx].x << " " << recv_zoid.v_stencil_md[0][idx].y << " " << recv_zoid.v_stencil_md[0][idx].z << std::endl;
+                        }
+
                         recv_zoid.v_stencil_md[0][idx].x = v_x;
                         recv_zoid.v_stencil_md[0][idx].y = v_y;
                         recv_zoid.v_stencil_md[0][idx].z = v_z;
@@ -9190,7 +9132,7 @@ public:
     }
 
     template <bool curr_dt, bool is_initial>
-    int PACK_DATA_TO_PROC_HELPER(queue_info& zoid, int proc, double* buf, int offset) {
+    int PACK_DATA_TO_PROC_HELPER(queue_info& zoid, int proc, double* buf, int offset, int start_t, int end_t) {
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                 : send_to_neighbors_many_cuts_next_dt[zoid.num];
 
@@ -9201,7 +9143,7 @@ public:
                 continue;
             }
 
-            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            for (int t = start_t; t < end_t; t++) {
                 auto& send_force_idxs = zoid.send_force_idxs_double_buffering[t][i];
                 auto& send_pos_idxs = zoid.send_pos_idxs_double_buffering[t][i];
                 auto& send_vel_idxs = zoid.send_vel_idxs_double_buffering[t][i];
@@ -9248,7 +9190,7 @@ public:
     }
 
     template <bool curr_dt, bool is_initial>
-    void PACK_DATA_MANY_CUTS_HELPER(int dep, int proc) {
+    void PACK_DATA_MANY_CUTS_HELPER(int dep, int proc, int start_t, int end_t) {
         int total_send_to_proc = 0;
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
@@ -9297,7 +9239,8 @@ public:
             int offset = curr_dt ? send_proc_zoid_offsets[zoid.num][proc][0] : send_proc_zoid_offsets_next_dt[zoid.num][proc][0];
             offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
             int npack = PACK_DATA_TO_PROC_HELPER<curr_dt, is_initial>(zoid, proc,
-                                                                      &buf_send_many_cuts[dep][proc][offset], offset);
+                                                                      &buf_send_many_cuts[dep][proc][offset], offset,
+                                                                      start_t, end_t);
             int expected_nsend = curr_dt ? send_proc_zoid_sizes[zoid.num][proc][0] : send_proc_zoid_sizes_next_dt[zoid.num][proc][0];
             int expected_size = DEBUG_SEND_RECV_DATA ? expected_nsend * (3 + 1) : expected_nsend * 3;
             assert(npack == expected_size);
@@ -9305,11 +9248,11 @@ public:
     }
 
     template <bool curr_dt, bool is_initial>
-    void PACK_DATA_MANY_CUTS(int dep) {
+    void PACK_DATA_MANY_CUTS(int dep, int start_t, int end_t) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         for (int proc = 0; proc < comm->nprocs; proc++) {
-            PACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(dep, proc);
+            PACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(dep, proc, start_t, end_t);
         }
     }
 

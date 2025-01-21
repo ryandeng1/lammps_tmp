@@ -5553,9 +5553,13 @@ void Verlet::setup_stencil_md_many_zoids() {
     std::map<std::pair<int, int>, bool> did_recv_map;
     std::map<int, int> dep_to_nproc_send;
 
+    int setup_start_t = 0;
+    int setup_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
+
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int proc = 0; proc < comm->nprocs; proc++) {
-            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r_idxs[dep]]);
+            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r_idxs[dep]],
+                                                                    setup_start_t, setup_end_t);
             if (did_recv) {
                 recv_r_idxs[dep]++;
             }
@@ -5568,7 +5572,7 @@ void Verlet::setup_stencil_md_many_zoids() {
             MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUSES_IGNORE);
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 if (did_recv_map[{dep, proc}]) {
-                    stencilMD->UNPACK_DATA_MANY_CUTS<true>(dep, proc);
+                    stencilMD->UNPACK_DATA_MANY_CUTS<true>(dep, proc, setup_start_t, setup_end_t);
                 }
             }
         }
@@ -5584,7 +5588,7 @@ void Verlet::setup_stencil_md_many_zoids() {
         }
 
         if (dep < NUM_DEPS - 1) {
-            stencilMD->PACK_DATA_MANY_CUTS<true, true>(dep);
+            stencilMD->PACK_DATA_MANY_CUTS<true, true>(dep, setup_start_t, setup_end_t);
             int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_r[dep]);
             dep_to_nproc_send[dep] = nproc_send;
         }
@@ -7735,23 +7739,23 @@ void Verlet::run_stencil_md_pipelined_double_buffering(int num_timesteps, std::v
 }
 
 template <bool curr_dt>
-void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid,
+void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
                                            double** test_f, double** test_x, double** test_v) {
-    int start = 0;
-    int end = NUM_TIMESTEPS_IN_PARALLEL;
-
-    for (int t = start; t < end; t++) {
+    for (int t = start_t; t < end_t; t++) {
         if (TEST_AGAINST_LAMMPS) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t
                     : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
 
-            stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, test_f[timestep_to_compare_against],
+            stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
+                                                                  test_f[timestep_to_compare_against],
                                                                   zoid, t);
 
-            stencilMD->TEST_AGAINST_LAMMPS_POS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, test_x[timestep_to_compare_against],
+            stencilMD->TEST_AGAINST_LAMMPS_POS_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
+                                                                test_x[timestep_to_compare_against],
                                                                 zoid, t);
 
-            stencilMD->TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against, test_v[timestep_to_compare_against],
+            stencilMD->TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
+                                                                test_v[timestep_to_compare_against],
                                                                 zoid, t);
         }
 
@@ -7764,14 +7768,17 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
 template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
                                                  int nproc_recv, MPI_Request* recv_requests,
-                                                 std::map<std::pair<int, int>, bool> did_recv,
+                                                 std::map<std::pair<int, int>, bool> did_recv_map,
                                                  std::vector<MPI_Request>& send_requests,
                                                  double** test_f, double** test_x, double** test_v) {
+    int tmp_start_t = 1;
+    int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
+
     if (nproc_recv > 0) {
         MPI_Waitall(nproc_recv, recv_requests, MPI_STATUSES_IGNORE);
         for (int proc = 0; proc < comm->nprocs; proc++) {
-            if (did_recv[{dep, proc}]) {
-                stencilMD->UNPACK_DATA_MANY_CUTS<curr_dt>(dep, proc);
+            if (did_recv_map[{dep, proc}]) {
+                stencilMD->UNPACK_DATA_MANY_CUTS<curr_dt>(dep, proc, tmp_start_t, tmp_end_t);
             }
         }
     }
@@ -7784,11 +7791,13 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
         if (zoid.num % comm->nprocs != comm->me) {
             continue;
         }
-        run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, test_f, test_x, test_v);
+        run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
+                                               tmp_start_t - 1, tmp_end_t - 1,
+                                               test_f, test_x, test_v);
     }
 
     if (dep < NUM_DEPS - 1) {
-        stencilMD->PACK_DATA_MANY_CUTS<curr_dt, false>(dep);
+        stencilMD->PACK_DATA_MANY_CUTS<curr_dt, false>(dep, tmp_start_t, tmp_end_t);
         int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_requests);
     }
 }
@@ -7812,7 +7821,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int proc = 0; proc < comm->nprocs; proc++) {
-            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<curr_dt>(dep, proc, &recv_r[dep][recv_r_idxs[dep]]);
+            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<curr_dt>(dep, proc, &recv_r[dep][recv_r_idxs[dep]], 0, NUM_TIMESTEPS_IN_PARALLEL + 1);
             if (did_recv) {
                 recv_r_idxs[dep]++;
             }
