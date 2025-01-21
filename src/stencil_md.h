@@ -6023,6 +6023,7 @@ public:
             double my_y = x[idx].y;
             double my_z = x[idx].z;
 
+            /*
             while (my_x < domain->boxlo[0]) {
                 my_x += domain->prd[0];
             }
@@ -6032,11 +6033,31 @@ public:
             while (my_z < domain->boxlo[2]) {
                 my_z += domain->prd[2];
             }
+            */
+            while (my_x < domain->boxlo[0]) {
+                my_x += domain->prd[0];
+            }
+            while (my_x >= domain->boxhi[0]) {
+                my_x -= domain->prd[0];
+            }
+            while (my_y < domain->boxlo[1]) {
+                my_y += domain->prd[1];
+            }
+            while (my_y >= domain->boxhi[1]) {
+                my_y -= domain->prd[1];
+            }
+            while (my_z < domain->boxlo[2]) {
+                my_z += domain->prd[2];
+            }
+            while (my_z >= domain->boxhi[2]) {
+                my_z -= domain->prd[2];
+            }
 
             double lammps_x = test_x[tag * 3 + 0];
             double lammps_y = test_x[tag * 3 + 1];
             double lammps_z = test_x[tag * 3 + 2];
 
+            /*
             while (lammps_x < domain->boxlo[0]) {
                 lammps_x += domain->prd[0];
             }
@@ -6045,6 +6066,26 @@ public:
             }
             while (lammps_z < domain->boxlo[2]) {
                 lammps_z += domain->prd[2];
+            }
+            */
+
+            while (lammps_x < domain->boxlo[0]) {
+                lammps_x += domain->prd[0];
+            }
+            while (lammps_x >= domain->boxhi[0]) {
+                lammps_x -= domain->prd[0];
+            }
+            while (lammps_y < domain->boxlo[1]) {
+                lammps_y += domain->prd[1];
+            }
+            while (lammps_y >= domain->boxhi[1]) {
+                lammps_y -= domain->prd[1];
+            }
+            while (lammps_z < domain->boxlo[2]) {
+                lammps_z += domain->prd[2];
+            }
+            while (lammps_z >= domain->boxhi[2]) {
+                lammps_z -= domain->prd[2];
             }
 
             bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
@@ -6769,6 +6810,26 @@ public:
         return true;
     }
 
+    bool zoid_many_cuts_is_neighbor_all_deps_next_dt(int* where_a, int* where_b) {
+        for (int dim = 0; dim < domain->dimension; dim++) {
+            if (where_a[dim] != where_b[dim]) {
+                int diff = where_a[dim] - where_b[dim];
+                // expanding zoid in this dimension based on numbering
+                if (where_a[dim] % 2 == 0) {
+                    if (diff != -1 && diff != 1) {
+                        if (!(where_a[dim] == 0 && where_b[dim] == NUM_ZOIDS_PER_DIMENSION - 1)) {
+                            return false;
+                        }
+                    }
+                } else {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     void INIT_ZOID_MANY_CUTS_NEIGHBORS() {
         // for neighbors
         send_to_neighbors_many_cuts = new std::vector<int>[NUM_ZOIDS_MANY_CUTS];
@@ -6824,7 +6885,7 @@ public:
                 }
                 */
                 if (zoid_to_dep_next_dt[zoid.num] < zoid_to_dep_next_dt[other_zoid.num]) {
-                    if (zoid_many_cuts_is_neighbor_all_deps(zoid.where, other_zoid.where)) {
+                    if (zoid_many_cuts_is_neighbor_all_deps_next_dt(zoid.where, other_zoid.where)) {
                         send_to_neighbors_many_cuts_next_dt[i].push_back(j);
                         recv_from_neighbors_many_cuts_next_dt[j].push_back(i);
                     }
@@ -7762,14 +7823,15 @@ public:
     template <bool curr_dt>
     void CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS_HELPER(queue_info& zoid) {
         int zoid_num = zoid.num;
-        auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num] : send_to_neighbors_many_cuts_next_dt[zoid_num];
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num]
+                : send_to_neighbors_many_cuts_next_dt[zoid_num];
 
         std::map<int, int> idx_to_zoid;
 
-        zoid.send_vel_idxs_double_buffering[0] = new std::vector<int>[send_to_neighbors.size()];
+        zoid.send_vel_idxs_double_buffering[0] = new std::vector<int>[send_neighbors.size()];
 
         for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            zoid.send_vel_idxs_double_buffering[t] = new std::vector<int>[send_to_neighbors.size()];
+            zoid.send_vel_idxs_double_buffering[t] = new std::vector<int>[send_neighbors.size()];
 
             auto& local_idxs = zoid.local_idxs_per_timestep[t];
             std::set<int> local_idxs_set;
@@ -7784,12 +7846,6 @@ public:
                 bool is_local = (local_idxs_set.find(i) != local_idxs_set.end());
                 bool is_local_prev = (local_idxs_prev_set.find(i) != local_idxs_prev_set.end());
 
-                /*
-                if (!(!is_local && is_local_prev)) {
-                    continue;
-                }
-                */
-
                 // want ghost atoms that were local previously to send to other zoids
                 if (is_local || !is_local_prev) {
                     continue;
@@ -7799,9 +7855,6 @@ public:
                 double atom_pos[3] = {pos.x, pos.y, pos.z};
                 double zoid_lo[3] = {0};
                 double zoid_hi[3] = {0};
-
-                bool dim_out_of_bounds[3] = {0};
-                int out_of_bounds[3] = {0};
 
                 bool borders_zoid = true;
                 for (int dim = 0; dim < domain->dimension; dim++) {
@@ -7821,9 +7874,10 @@ public:
                 }
 
                 // TODO: pick first neighbor that allows us to map a path to get the force where it eventually belongs
-                for (int j = 0; j < send_to_neighbors.size(); j++) {
-                    auto send_zoid_num = send_to_neighbors[j];
-                    auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num] : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+                for (int j = 0; j < send_neighbors.size(); j++) {
+                    auto send_zoid_num = send_neighbors[j];
+                    auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
+                            : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
 
                     bool in_neighbor_zoid = true;
                     for (int dim = 0; dim < domain->dimension; dim++) {
@@ -7850,7 +7904,7 @@ public:
 
         int total_sent = 0;
         for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            for (int j = 0; j < send_to_neighbors.size(); j++) {
+            for (int j = 0; j < send_neighbors.size(); j++) {
                 total_sent += zoid.send_vel_idxs_double_buffering[t][j].size();
             }
         }
@@ -7943,13 +7997,13 @@ public:
                     auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num] :
                             zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
 
-                    bool borders_neighbor_zoid = false;
+                    bool borders_neighbor_zoid = true;
 
                     for (int dim = 0; dim < domain->dimension; dim++) {
                         double lo = send_zoid.zoid.cuts[dim].lower + t * send_zoid.zoid.cuts[dim].slope_lower;
                         double hi = send_zoid.zoid.cuts[dim].upper + t * send_zoid.zoid.cuts[dim].slope_upper;
                         double lo_borders = lo - ALLEGRO_SLOPE;
-                        double hi_borders = lo - ALLEGRO_SLOPE;
+                        double hi_borders = hi + ALLEGRO_SLOPE;
 
                         double p = atom_pos[dim];
                         while (p < lo_borders) {
@@ -8783,9 +8837,18 @@ public:
 
                 int pbc_flag_[3] = {0};
                 for (int dim = 0; dim < 3; dim++) {
+                    /*
                     if (send_zoid.where[dim] == RIGHT && recv_zoid.where[dim] == PBC) { pbc_flag_[dim] = -1; }
 
                     if (send_zoid.where[dim] == PBC && recv_zoid.where[dim] == RIGHT) { pbc_flag_[dim] = 1; }
+                    */
+                    if (send_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && recv_zoid.where[dim] == 0) {
+                        pbc_flag_[dim] = -1;
+                    }
+
+                    if (send_zoid.where[dim] == 0 && recv_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1) {
+                        pbc_flag_[dim] = 1;
+                    }
                 }
 
                 auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[recv_zoid_num]

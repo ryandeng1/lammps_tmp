@@ -7822,7 +7822,9 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int proc = 0; proc < comm->nprocs; proc++) {
-            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<curr_dt>(dep, proc, &recv_r[dep][recv_r_idxs[dep]], 0, NUM_TIMESTEPS_IN_PARALLEL + 1);
+            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<curr_dt>(dep, proc,
+                                                                       &recv_r[dep][recv_r_idxs[dep]],
+                                                                       0, NUM_TIMESTEPS_IN_PARALLEL + 1);
             if (did_recv) {
                 recv_r_idxs[dep]++;
             }
@@ -7831,7 +7833,8 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
     }
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
-        run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, dep, recv_r_idxs[dep], recv_r[dep].data(),
+        run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, dep,
+                                                     recv_r_idxs[dep], recv_r[dep].data(),
                                                      did_recv_map, send_r[dep], test_f, test_x, test_v);
     }
 
