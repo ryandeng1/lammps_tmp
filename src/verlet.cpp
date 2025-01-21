@@ -7741,10 +7741,14 @@ void Verlet::run_stencil_md_pipelined_double_buffering(int num_timesteps, std::v
 template <bool curr_dt>
 void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
                                            double** test_f, double** test_x, double** test_v) {
-    for (int t = start_t; t < end_t; t++) {
+    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
         if (TEST_AGAINST_LAMMPS) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t
                     : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
+
+            stencilMD->TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
+                                                                test_v[timestep_to_compare_against],
+                                                                zoid, t);
 
             stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
                                                                   test_f[timestep_to_compare_against],
@@ -7754,9 +7758,6 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
                                                                 test_x[timestep_to_compare_against],
                                                                 zoid, t);
 
-            stencilMD->TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
-                                                                test_v[timestep_to_compare_against],
-                                                                zoid, t);
         }
 
         stencilMD->INITIAL_INTEGRATE_ZOID_MANY_CUTS(zoid, t);
@@ -7798,7 +7799,7 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
 
     if (dep < NUM_DEPS - 1) {
         stencilMD->PACK_DATA_MANY_CUTS<curr_dt, false>(dep, tmp_start_t, tmp_end_t);
-        int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_requests);
+        int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<curr_dt>(dep, send_requests);
     }
 }
 

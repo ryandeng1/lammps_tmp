@@ -6108,9 +6108,9 @@ public:
     void TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(bool curr_dt, int timestep_to_compare_against,
                                                     double* test_f, queue_info& zoid, int t) {
         auto& local_idxs = zoid.local_idxs_per_timestep[t];
-        auto& tags = zoid.tag_stencil_md[0];
+        auto& tags = zoid.tag_stencil_md[t % 1];
         auto& x = zoid.x_stencil_md[t % DOUBLE_BUFFERING];
-        auto& f = zoid.f_stencil_md[0];
+        auto& f = zoid.f_stencil_md[t % 1];
 
         for (int i = 0; i < local_idxs.size(); i++) {
             int idx = local_idxs[i];
@@ -6127,16 +6127,19 @@ public:
             bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
 
             if (!all_close) {
-                std::cout << RED << "ERROR ON FORCE. curr_dt: " << curr_dt << " zoid: " << zoid.num
-                          << " idx: " << idx << " tag: " << tag
-                          << " what I have: " << my_x << " " << my_y << " " << my_z
-                          << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
-                          << " diff: "
-                          << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
-                          << " overall timestep: " << timestep_to_compare_against << " t: " << t
-                          << RESET_COLOR << std::endl;
+                std::stringstream o;
+                o << RED << "ERROR ON FORCE. curr_dt: " << curr_dt << " zoid: " << zoid.num
+                  << " idx: " << idx << " tag: " << tag
+                  << " what I have: " << my_x << " " << my_y << " " << my_z
+                  << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
+                  << " diff: "
+                  << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
+                  << " overall timestep: " << timestep_to_compare_against << " t: " << t
+                  << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z
+                  << RESET_COLOR << std::endl;
 
-                std::cout << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z << std::endl;
+                std::cout << o.str();
+
                 assert(false);
             }
         }
@@ -7684,9 +7687,6 @@ public:
                 double zoid_lo[3] = {0};
                 double zoid_hi[3] = {0};
 
-                bool dim_out_of_bounds[3] = {0};
-                int out_of_bounds[3] = {0};
-
                 bool borders_zoid = true;
                 for (int dim = 0; dim < domain->dimension; dim++) {
                     double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
@@ -7697,17 +7697,6 @@ public:
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
-
-                    if (atom_pos[dim] <= lo || atom_pos[dim] > hi) {
-                        dim_out_of_bounds[dim] = true;
-                        if (atom_pos[dim] <= lo) {
-                            out_of_bounds[dim] = -1;
-                        } else if (atom_pos[dim] > hi) {
-                            out_of_bounds[dim] = 1;
-                        } else {
-                            assert(false);
-                        }
-                    }
                 }
 
                 // have to do this check as for later timesteps this might not be the case
@@ -7820,21 +7809,10 @@ public:
                     double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi;
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
-
-                    if (atom_pos[dim] <= lo || atom_pos[dim] > hi) {
-                        dim_out_of_bounds[dim] = true;
-                        if (atom_pos[dim] <= lo) {
-                            out_of_bounds[dim] = -1;
-                        } else if (atom_pos[dim] > hi) {
-                            out_of_bounds[dim] = 1;
-                        } else {
-                            assert(false);
-                        }
-                    }
                 }
 
                 // have to do this check as for later timesteps this might not be the case
@@ -7938,7 +7916,7 @@ public:
                     double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi;
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
@@ -7981,38 +7959,13 @@ public:
                             p -= domain->prd[dim];
                         }
 
-                        borders_neighbor_zoid = borders_neighbor_zoid && p >= lo && p < hi;
+                        borders_neighbor_zoid = borders_neighbor_zoid && p >= lo_borders && p < hi_borders;
                     }
 
                     if (borders_neighbor_zoid) {
                         zoid.send_pos_idxs_double_buffering[t][j].push_back(i);
                         // break;
                     }
-
-                    /*
-                    bool found_zoid = false;
-
-                    for (int dim = 0; dim < domain->dimension; dim++) {
-                        if (!dim_out_of_bounds[dim]) {
-                            continue;
-                        }
-
-                        int out_of_bounds_factor = out_of_bounds[dim];
-                        int where_diff = zoid.where[dim] - send_zoid.where[dim];
-
-                        if (out_of_bounds_factor == -1 && (where_diff == 1 || where_diff == - (NUM_ZOIDS_PER_DIMENSION - 1))) {
-                            idx_to_zoid[i] = send_zoid_num;
-                            found_zoid = true;
-                        } else if (out_of_bounds_factor == 1 && (where_diff == -1 || where_diff == NUM_ZOIDS_PER_DIMENSION - 1)) {
-                            idx_to_zoid[i] = send_zoid_num;
-                            found_zoid = true;
-                        }
-                    }
-                    if (found_zoid) {
-                        zoid.send_pos_idxs_double_buffering[t][j].push_back(i);
-                        break;
-                    }
-                    */
                 }
             }
         }
@@ -8873,6 +8826,9 @@ public:
                         if (!is_initial && t == 0) {
                             continue;
                         }
+                        if (is_initial && t > 0) {
+                            continue;
+                        }
                         recv_zoid.f_stencil_md[0][idx].x += f_x;
                         recv_zoid.f_stencil_md[0][idx].y += f_y;
                         recv_zoid.f_stencil_md[0][idx].z += f_z;
@@ -8896,6 +8852,12 @@ public:
                                       << " offset: " << offset
                                       << " sizes: " << s_sizes.str() << std::endl;
                         }
+                        if (!is_initial && t == 0) {
+                            continue;
+                        }
+                        if (is_initial && t > 0) {
+                            continue;
+                        }
                         recv_zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].x = x_x + pbc_flag_[0] * domain->prd[0];
                         recv_zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].y = x_y + pbc_flag_[1] * domain->prd[1];
                         recv_zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].z = x_z + pbc_flag_[2] * domain->prd[2];
@@ -8908,9 +8870,11 @@ public:
                         double v_y = buf[buf_idx++];
                         double v_z = buf[buf_idx++];
                         assert(target_tag == recv_zoid.tag_stencil_md[0][idx]);
-                        if (target_tag == 14603) {
-                            std::cout << "RECEIVING TARGET VEL: " << v_x << " " << v_y << " " << v_z
-                            << " curr: " << recv_zoid.v_stencil_md[0][idx].x << " " << recv_zoid.v_stencil_md[0][idx].y << " " << recv_zoid.v_stencil_md[0][idx].z << std::endl;
+                        if (!is_initial && t == 0) {
+                            continue;
+                        }
+                        if (is_initial && t > 0) {
+                            continue;
                         }
                         recv_zoid.v_stencil_md[0][idx].x = v_x;
                         recv_zoid.v_stencil_md[0][idx].y = v_y;
@@ -9300,19 +9264,22 @@ public:
 
         int nlocal = zoid.local_idxs_per_timestep[timestep].size();
 
-        double dtv = update->dt;
-
-        const double * const mass = atom->mass;
-        double dtf = 0.5 * update->dt * force->ftm2v;
+        auto dtv = update->dt;
+        auto* mass = atom->mass;
+        auto dtf = 0.5 * update->dt * force->ftm2v;
 
         for (int idx = 0; idx < nlocal; idx++) {
             int i = local_idxs[idx];
 
+            const double dtfm = dtf / mass[type[i]];
+
             double v0 = v[i].x;
             double v1 = v[i].y;
             double v2 = v[i].z;
+            double f0 = f[i].x;
+            double f1 = f[i].y;
+            double f2 = f[i].z;
 
-            const double dtfm = dtf / mass[type[i]];
             v[i].x += dtfm * f[i].x;
             v[i].y += dtfm * f[i].y;
             v[i].z += dtfm * f[i].z;
@@ -9324,6 +9291,15 @@ public:
             next_x[i].x = x[i].x + dtv * v[i].x;
             next_x[i].y = x[i].y + dtv * v[i].y;
             next_x[i].z = x[i].z + dtv * v[i].z;
+
+            if (zoid.tag_stencil_md[0][i] == 1684936) {
+                std::cout << "zoid: " << zoid.num << " STENCILMD INITIAL INTEGRATE. initial pos: " << x[i].x << " " << x[i].y << " " << x[i].z
+                          << " new pos: " << next_x[i].x << " " << next_x[i].y << " " << next_x[i].z
+                          << " initial vel: " << v0 << " " << v1 << " " << v2
+                          << " new vel: " << v[i].x << " " << v[i].y << " " << v[i].z
+                          << " force: " << f0 << " " << f1 << " " << f2
+                          << std::endl;
+            }
         }
     }
 
@@ -9365,14 +9341,26 @@ public:
             double v_x = v[i].x;
             double v_y = v[i].y;
             double v_z = v[i].z;
+            double f0 = f[i].x;
+            double f1 = f[i].y;
+            double f2 = f[i].z;
 
             f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
-            f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
-            f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+            f[i].y += gamma1 * v_y + gamma2 * (rand_y - 0.5);
+            f[i].z += gamma1 * v_z + gamma2 * (rand_z - 0.5);
 
             v[i].x += dtfm * f[i].x;
             v[i].y += dtfm * f[i].y;
             v[i].z += dtfm * f[i].z;
+
+            if (zoid.tag_stencil_md[0][i] == 1684936) {
+                std::cout << "zoid: " << zoid.num << " STENCILMD FINAL INTEGRATE. "
+                          << " initial vel: " << v_x << " " << v_y << " " << v_z
+                          << " new vel: " << v[i].x << " " << v[i].y << " " << v[i].z
+                          << " prev force: " << f0 << " " << f1 << " " << f2
+                          << " force: " << f[i].x << " " << f[i].y << " " << f[i].z
+                          << std::endl;
+            }
         }
     }
 
@@ -9463,8 +9451,8 @@ public:
                             double factor_lj = special_lj[pair->sbmask(j)];
                             j &= NEIGHMASK;
 
-                            if (tags[i] == 660936 || tags[j] == 660936) {
-                                std::cout << "STENCIL MD PAIR. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]
+                            if (tags[i] == 1684936 || tags[j] == 1684936) {
+                                std::cout << "STENCILMD PAIR. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]
                                 << " where: " << zoid.where[0] << " " << zoid.where[1] << " " << zoid.where[2]
                                 << " pos: " << x[i].x << " " << x[i].y << " " << x[i].z
                                 << " other pos: " << x[j].x << " " << x[j].y << " " << x[j].z
