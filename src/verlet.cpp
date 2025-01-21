@@ -5572,7 +5572,7 @@ void Verlet::setup_stencil_md_many_zoids() {
             MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUSES_IGNORE);
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 if (did_recv_map[{dep, proc}]) {
-                    stencilMD->UNPACK_DATA_MANY_CUTS<true>(dep, proc, setup_start_t, setup_end_t);
+                    stencilMD->UNPACK_DATA_MANY_CUTS<true, true>(dep, proc, setup_start_t, setup_end_t);
                 }
             }
         }
@@ -7771,14 +7771,14 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
                                                  std::map<std::pair<int, int>, bool> did_recv_map,
                                                  std::vector<MPI_Request>& send_requests,
                                                  double** test_f, double** test_x, double** test_v) {
-    int tmp_start_t = 1;
+    int tmp_start_t = 0;
     int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
     if (nproc_recv > 0) {
         MPI_Waitall(nproc_recv, recv_requests, MPI_STATUSES_IGNORE);
         for (int proc = 0; proc < comm->nprocs; proc++) {
             if (did_recv_map[{dep, proc}]) {
-                stencilMD->UNPACK_DATA_MANY_CUTS<curr_dt>(dep, proc, tmp_start_t, tmp_end_t);
+                stencilMD->UNPACK_DATA_MANY_CUTS<curr_dt, false>(dep, proc, tmp_start_t, tmp_end_t);
             }
         }
     }
@@ -7792,7 +7792,7 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
             continue;
         }
         run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
-                                               tmp_start_t - 1, tmp_end_t - 1,
+                                               tmp_start_t, tmp_end_t,
                                                test_f, test_x, test_v);
     }
 

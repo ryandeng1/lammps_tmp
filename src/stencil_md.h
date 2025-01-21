@@ -8803,7 +8803,7 @@ public:
         return false;
     }
 
-    template <bool curr_dt>
+    template <bool curr_dt, bool is_initial>
     void UNPACK_DATA_MANY_CUTS(int dep, int proc, int start_t, int end_t) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
@@ -8869,8 +8869,10 @@ public:
                                       << " buf: " << buf
                                       << std::endl;
                         }
-
                         assert(target_tag == recv_zoid.tag_stencil_md[0][idx]);
+                        if (!is_initial && t == 0) {
+                            continue;
+                        }
                         recv_zoid.f_stencil_md[0][idx].x += f_x;
                         recv_zoid.f_stencil_md[0][idx].y += f_y;
                         recv_zoid.f_stencil_md[0][idx].z += f_z;
@@ -8910,7 +8912,6 @@ public:
                             std::cout << "RECEIVING TARGET VEL: " << v_x << " " << v_y << " " << v_z
                             << " curr: " << recv_zoid.v_stencil_md[0][idx].x << " " << recv_zoid.v_stencil_md[0][idx].y << " " << recv_zoid.v_stencil_md[0][idx].z << std::endl;
                         }
-
                         recv_zoid.v_stencil_md[0][idx].x = v_x;
                         recv_zoid.v_stencil_md[0][idx].y = v_y;
                         recv_zoid.v_stencil_md[0][idx].z = v_z;
