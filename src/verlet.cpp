@@ -5538,6 +5538,13 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
 
+    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINING<true>();
+    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINING<false>();
+    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINING<true>();
+    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINING<false>();
+    stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<true>();
+    stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<false>();
+
     std::vector<MPI_Request> send_r[NUM_DEPS];
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
         send_r[dep].reserve(comm->nprocs);
@@ -5585,10 +5592,11 @@ void Verlet::setup_stencil_md_many_zoids() {
             stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, 0);
             stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
             stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
+            stencilMD->PACK_DATA_MANY_CUTS_ZOID<true, true>(zoid, dep, setup_start_t, setup_end_t);
         }
 
         if (dep < NUM_DEPS - 1) {
-            stencilMD->PACK_DATA_MANY_CUTS<true, true>(dep, setup_start_t, setup_end_t);
+            // stencilMD->PACK_DATA_MANY_CUTS<true, true>(dep, setup_start_t, setup_end_t);
             int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_r[dep]);
             dep_to_nproc_send[dep] = nproc_send;
         }
