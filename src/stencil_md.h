@@ -6710,7 +6710,7 @@ public:
                 queue_info& zoid = queues_many_cuts_next_dt[dep][j];
                 if (zoid.num % comm->nprocs == comm->me) {
                     /* start stuff for 2 timesteps */
-                    
+
                     // Copy the main data from the curr_dt zoid
                     auto coord = zoid_num_to_coord[zoid.num];
 
@@ -9142,15 +9142,6 @@ public:
             next_x[i].x = x[i].x + dtv * v[i].x;
             next_x[i].y = x[i].y + dtv * v[i].y;
             next_x[i].z = x[i].z + dtv * v[i].z;
-
-            if (zoid.tag_stencil_md[0][i] == 1684936) {
-                std::cout << "zoid: " << zoid.num << " STENCILMD INITIAL INTEGRATE. initial pos: " << x[i].x << " " << x[i].y << " " << x[i].z
-                          << " new pos: " << next_x[i].x << " " << next_x[i].y << " " << next_x[i].z
-                          << " initial vel: " << v0 << " " << v1 << " " << v2
-                          << " new vel: " << v[i].x << " " << v[i].y << " " << v[i].z
-                          << " force: " << f0 << " " << f1 << " " << f2
-                          << std::endl;
-            }
         }
     }
 
