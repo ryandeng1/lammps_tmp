@@ -1097,6 +1097,9 @@ void LAMMPS::destroy()
                           //   since they delete fixes
   modify = nullptr;
 
+  delete stencilMD;
+  stencilMD = nullptr;
+
   delete comm;            // comm must come after modify
                           //   since fix destructors may access comm
   comm = nullptr;
@@ -1155,7 +1158,6 @@ void LAMMPS::destroy()
     }
   }
 
-  delete stencilMD;
 }
 
 

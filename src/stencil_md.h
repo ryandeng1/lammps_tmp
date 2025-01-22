@@ -6674,15 +6674,7 @@ public:
                 queue_info& zoid = queues_many_cuts[dep][j];
                 if (zoid.num % comm->nprocs == comm->me) {
                     /* start stuff for 2 timesteps */
-                    zoid.per_worker_force_updates = new std::pair<int, dbl3_t_stencil_md>*[__cilkrts_get_nworkers()];
-                    for (int i = 0; i < __cilkrts_get_nworkers(); i++) {
-                        zoid.per_worker_force_updates[i] = new std::pair<int, dbl3_t_stencil_md>[MODIFY_GRAINSIZE * MAX_NEIGHBORS_PER_ATOM];
-                    }
-
                     zoid.x_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
-                    // zoid.v_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
-                    // zoid.f_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
-                    // zoid.eval_f_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
                     zoid.v_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
                     zoid.f_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
                     zoid.eval_f_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
@@ -6705,8 +6697,6 @@ public:
 
                     zoid.send_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.recv_pos_local_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.recv_pos_ghost_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -8493,19 +8483,23 @@ public:
 
             if (curr_dt) {
                 int num_recv_neighbors = recv_from_neighbors_many_cuts[zoid_num].size();
-                recv_proc_zoid_offsets[zoid_num] = new std::vector<int>[num_recv_neighbors];
-                recv_proc_zoid_sizes[zoid_num] = new std::vector<int>[num_recv_neighbors];
-                for (int i = 0; i < num_recv_neighbors; i++) {
-                    recv_proc_zoid_offsets[zoid_num][i].reserve(25);
-                    recv_proc_zoid_sizes[zoid_num][i].reserve(25);
+                if (num_recv_neighbors > 0) {
+                    recv_proc_zoid_offsets[zoid_num] = new std::vector<int>[num_recv_neighbors];
+                    recv_proc_zoid_sizes[zoid_num] = new std::vector<int>[num_recv_neighbors];
+                    for (int i = 0; i < num_recv_neighbors; i++) {
+                        recv_proc_zoid_offsets[zoid_num][i].reserve(25);
+                        recv_proc_zoid_sizes[zoid_num][i].reserve(25);
+                    }
                 }
             } else {
                 int num_recv_neighbors = recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
-                recv_proc_zoid_offsets_next_dt[zoid_num] = new std::vector<int>[num_recv_neighbors];
-                recv_proc_zoid_sizes_next_dt[zoid_num] = new std::vector<int>[num_recv_neighbors];
-                for (int i = 0; i < num_recv_neighbors; i++) {
-                    recv_proc_zoid_offsets_next_dt[zoid_num][i].reserve(25);
-                    recv_proc_zoid_sizes_next_dt[zoid_num][i].reserve(25);
+                if (num_recv_neighbors > 0) {
+                    recv_proc_zoid_offsets_next_dt[zoid_num] = new std::vector<int>[num_recv_neighbors];
+                    recv_proc_zoid_sizes_next_dt[zoid_num] = new std::vector<int>[num_recv_neighbors];
+                    for (int i = 0; i < num_recv_neighbors; i++) {
+                        recv_proc_zoid_offsets_next_dt[zoid_num][i].reserve(25);
+                        recv_proc_zoid_sizes_next_dt[zoid_num][i].reserve(25);
+                    }
                 }
             }
         }
@@ -9468,20 +9462,94 @@ public:
     }
     /* End code for many zoids per dimension */
 
-    ~StencilMD() {
-        delete[] zoid_num_to_zoid_many_cuts;
-        delete[] zoid_num_to_zoid_many_cuts_next_dt;
-        delete[] send_to_neighbors_many_cuts;
-        delete[] send_to_neighbors_many_cuts_next_dt;
-        delete[] recv_from_neighbors_many_cuts;
-        delete[] recv_from_neighbors_many_cuts_next_dt;
+    void DELETE_ZOID_DATA_MANY_CUTS() {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+                queue_info &zoid = queues_many_cuts[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+                delete[] zoid.x_stencil_md;
+                delete[] zoid.v_stencil_md;
+                delete[] zoid.f_stencil_md;
+                delete[] zoid.eval_f_stencil_md;
+                delete[] zoid.tag_stencil_md;
+                delete[] zoid.type_stencil_md;
+                delete[] zoid.mask_stencil_md;
+                delete[] zoid.image_stencil_md;
 
+                delete[] zoid.spinlocks_stencil_md[0];
+                delete[] zoid.spinlocks_stencil_md;
+                delete[] zoid.claimed_flags_stencil_md[0];
+                delete[] zoid.claimed_flags_stencil_md;
+
+                delete[] zoid.local_idxs_per_timestep;
+                delete[] zoid.neighbor_list;
+                delete[] zoid.bond_list;
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    delete[] zoid.send_force_idxs_double_buffering[t];
+                    delete[] zoid.recv_force_idxs_double_buffering[t];
+                    delete[] zoid.send_pos_idxs_double_buffering[t];
+                    delete[] zoid.recv_pos_idxs_double_buffering[t];
+                    delete[] zoid.send_vel_idxs_double_buffering[t];
+                    delete[] zoid.recv_vel_idxs_double_buffering[t];
+                }
+
+                delete[] zoid.send_force_idxs_double_buffering;
+                delete[] zoid.recv_force_idxs_double_buffering;
+                delete[] zoid.send_pos_idxs_double_buffering;
+                delete[] zoid.recv_pos_idxs_double_buffering;
+                delete[] zoid.send_vel_idxs_double_buffering;
+                delete[] zoid.recv_vel_idxs_double_buffering;
+            }
+        }
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
+                queue_info &zoid = queues_many_cuts_next_dt[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                delete[] zoid.local_idxs_per_timestep;
+                delete[] zoid.neighbor_list;
+                delete[] zoid.bond_list;
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    delete[] zoid.send_force_idxs_double_buffering[t];
+                    delete[] zoid.recv_force_idxs_double_buffering[t];
+                    delete[] zoid.send_pos_idxs_double_buffering[t];
+                    delete[] zoid.recv_pos_idxs_double_buffering[t];
+                    delete[] zoid.send_vel_idxs_double_buffering[t];
+                    delete[] zoid.recv_vel_idxs_double_buffering[t];
+                }
+
+                delete[] zoid.send_force_idxs_double_buffering;
+                delete[] zoid.recv_force_idxs_double_buffering;
+                delete[] zoid.send_pos_idxs_double_buffering;
+                delete[] zoid.recv_pos_idxs_double_buffering;
+                delete[] zoid.send_vel_idxs_double_buffering;
+                delete[] zoid.recv_vel_idxs_double_buffering;
+            }
+        }
+    }
+
+    ~StencilMD() {
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             if (i % comm->nprocs == comm->me) {
-                delete[] recv_proc_zoid_offsets[i];
-                delete[] recv_proc_zoid_sizes[i];
-                delete[] recv_proc_zoid_offsets_next_dt[i];
-                delete[] recv_proc_zoid_sizes_next_dt[i];
+                int num_recv_neighbors = recv_from_neighbors_many_cuts[i].size();
+                if (num_recv_neighbors > 0) {
+                    delete[] recv_proc_zoid_offsets[i];
+                    delete[] recv_proc_zoid_sizes[i];
+                }
+
+                int num_recv_neighbors_next_dt = recv_from_neighbors_many_cuts_next_dt[i].size();
+                if (num_recv_neighbors_next_dt > 0) {
+                    delete[] recv_proc_zoid_offsets_next_dt[i];
+                    delete[] recv_proc_zoid_sizes_next_dt[i];
+                }
+
                 delete[] send_proc_zoid_offsets[i];
                 delete[] send_proc_zoid_sizes[i];
                 delete[] send_proc_zoid_offsets_next_dt[i];
@@ -9500,6 +9568,16 @@ public:
             delete[] nsend_buf_many_cuts[dep];
             delete[] nrecv_buf_many_cuts[dep];
         }
+
+        delete[] zoid_num_to_zoid_many_cuts;
+        delete[] zoid_num_to_zoid_many_cuts_next_dt;
+        delete[] send_to_neighbors_many_cuts;
+        delete[] send_to_neighbors_many_cuts_next_dt;
+        delete[] recv_from_neighbors_many_cuts;
+        delete[] recv_from_neighbors_many_cuts_next_dt;
+
+
+        DELETE_ZOID_DATA_MANY_CUTS();
     }
 };
 
