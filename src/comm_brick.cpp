@@ -136,6 +136,15 @@ CommBrick::~CommBrick()
     memory->sfree(second_sendlist_stencil_md_next_dt[i]);
     memory->destroy(max_second_sendlist_stencil_md_next_dt[i]);
   }
+
+  memory->destroy(maxsend_stencil_md);
+  memory->destroy(maxrecv_stencil_md);
+  memory->destroy(buf_send_stencil_md);
+  memory->destroy(buf_recv_stencil_md);
+  memory->destroy(maxsend_sendlist_stencil_md);
+  memory->destroy(maxrecv_sendlist_stencil_md);
+  memory->destroy(buf_sendlist_stencil_md);
+  memory->destroy(buf_recv_sendlist_stencil_md);
 }
 
 /* ---------------------------------------------------------------------- */

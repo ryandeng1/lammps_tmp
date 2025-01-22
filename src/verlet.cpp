@@ -6330,7 +6330,7 @@ void Verlet::run(int n) {
     */
 
     auto begin = std::chrono::high_resolution_clock::now();
-    run_stencil_md_many_cuts(test_num_timesteps, test_f, test_x, test_v);
+    run_stencil_md_many_cuts(n, test_f, test_x, test_v);
     cilk_scope {
         /*
         if (USE_DOUBLE_BUFFERING) {

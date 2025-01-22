@@ -863,9 +863,8 @@ void LAMMPS::create()
   plugin_auto_load(this);
 #endif
 
-  stencilMD->CREATE();
-  stencilMD->CREATE_NEXT_DT();
-
+  // stencilMD->CREATE();
+  // stencilMD->CREATE_NEXT_DT();
   // read_model();
 }
 
@@ -1155,6 +1154,8 @@ void LAMMPS::destroy()
         delete force_stencil_md[i][j];
     }
   }
+
+  delete stencilMD;
 }
 
 
