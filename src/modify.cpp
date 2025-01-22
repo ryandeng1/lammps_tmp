@@ -206,6 +206,9 @@ Modify::~Modify()
 
   delete compute_map;
   delete fix_map;
+
+  delete compute_map_stencil_md;
+  delete fix_map_stencil_md;
 }
 
 /* ----------------------------------------------------------------------

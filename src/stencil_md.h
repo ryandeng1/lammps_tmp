@@ -6738,8 +6738,6 @@ public:
 
                     zoid.send_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.recv_pos_local_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.recv_pos_ghost_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -9209,15 +9207,6 @@ public:
             v[i].x += dtfm * f[i].x;
             v[i].y += dtfm * f[i].y;
             v[i].z += dtfm * f[i].z;
-
-            if (zoid.tag_stencil_md[0][i] == 1684936) {
-                std::cout << "zoid: " << zoid.num << " STENCILMD FINAL INTEGRATE. "
-                          << " initial vel: " << v_x << " " << v_y << " " << v_z
-                          << " new vel: " << v[i].x << " " << v[i].y << " " << v[i].z
-                          << " prev force: " << f0 << " " << f1 << " " << f2
-                          << " force: " << f[i].x << " " << f[i].y << " " << f[i].z
-                          << std::endl;
-            }
         }
     }
 
@@ -9307,14 +9296,6 @@ public:
                             int j = jlist[jj];
                             double factor_lj = special_lj[pair->sbmask(j)];
                             j &= NEIGHMASK;
-
-                            if (tags[i] == 1684936 || tags[j] == 1684936) {
-                                std::cout << "STENCILMD PAIR. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]
-                                << " where: " << zoid.where[0] << " " << zoid.where[1] << " " << zoid.where[2]
-                                << " pos: " << x[i].x << " " << x[i].y << " " << x[i].z
-                                << " other pos: " << x[j].x << " " << x[j].y << " " << x[j].z
-                                << std::endl;
-                            }
 
                             double delx = xtmp - x[j].x;
                             double dely = ytmp - x[j].y;
