@@ -9540,8 +9540,8 @@ public:
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int proc = 0; proc < comm->nprocs; proc++) {
-                delete[] buf_send_many_cuts[dep];
-                delete[] buf_recv_many_cuts[dep];
+                delete[] buf_send_many_cuts[dep][proc];
+                delete[] buf_recv_many_cuts[dep][proc];
             }
 
             delete[] buf_send_many_cuts[dep];
