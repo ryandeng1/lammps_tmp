@@ -6710,11 +6710,7 @@ public:
                 queue_info& zoid = queues_many_cuts_next_dt[dep][j];
                 if (zoid.num % comm->nprocs == comm->me) {
                     /* start stuff for 2 timesteps */
-                    zoid.per_worker_force_updates = new std::pair<int, dbl3_t_stencil_md>*[__cilkrts_get_nworkers()];
-                    for (int i = 0; i < __cilkrts_get_nworkers(); i++) {
-                        zoid.per_worker_force_updates[i] = new std::pair<int, dbl3_t_stencil_md>[MODIFY_GRAINSIZE * MAX_NEIGHBORS_PER_ATOM];
-                    }
-                    zoid.space_cut_idxs = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    
                     // Copy the main data from the curr_dt zoid
                     auto coord = zoid_num_to_coord[zoid.num];
 
