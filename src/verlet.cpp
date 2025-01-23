@@ -5479,8 +5479,8 @@ void Verlet::setup_stencil_md_many_zoids() {
     MPI_Barrier(world);
 
     stencilMD->INIT_ZOIDS_MANY_CUTS();
-    stencilMD->INIT_ZOID_DATA_MANY_CUTS();
     stencilMD->INIT_ZOID_MANY_CUTS_NEIGHBORS();
+    stencilMD->INIT_ZOID_DATA_MANY_CUTS();
     auto begin = std::chrono::high_resolution_clock::now();
     stencilMD->GET_ATOMS_ZOID_MANY_CUTS();
     auto end = std::chrono::high_resolution_clock::now();

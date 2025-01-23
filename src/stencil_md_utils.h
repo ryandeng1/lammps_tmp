@@ -98,7 +98,8 @@ constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 8;
 // constexpr double ADDITIONAL_CUTOFF = 0.4001;
-constexpr double ADDITIONAL_CUTOFF = 0.4;
+// constexpr double ADDITIONAL_CUTOFF = 0.4;
+constexpr double ADDITIONAL_CUTOFF = 0.40000000001;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 
@@ -564,6 +565,10 @@ struct queue_info {
   std::vector<std::vector<std::pair<int, int>>>* bond_list;
 
   // TODO:
+  std::vector<int>** send_force_idxs_double_buffering_flattened;
+  std::vector<int>** send_pos_idxs_double_buffering_flattened;
+  std::vector<int>** send_vel_idxs_double_buffering_flattened;
+
   std::vector<int>** send_force_idxs_double_buffering;
   std::vector<int>** recv_force_idxs_double_buffering;
 

@@ -6713,6 +6713,10 @@ public:
 
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                    zoid.send_force_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
+                    zoid.send_pos_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
+                    zoid.send_vel_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
                     /* end stuff for 2 timesteps */
                 }
             }
@@ -6750,6 +6754,10 @@ public:
 
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                    zoid.send_force_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
+                    zoid.send_pos_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
+                    zoid.send_vel_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
                     /* end stuff for 2 timesteps */
                 }
             }
@@ -7889,6 +7897,28 @@ public:
                     }
                 }
             }
+        }
+
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            std::set<int> all_force_idxs;
+            for (int i = 0; i < send_neighbors.size(); i++) {
+                if (send_neighbors[i] % comm->nprocs != proc) {
+                    continue;
+                }
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    auto& send_force_idxs = zoid.send_force_idxs_double_buffering[t][i];
+                    for (int k = 0; k < send_force_idxs.size(); k++) {
+                        all_force_idxs.insert(send_force_idxs[k]);
+                    }
+                }
+            }
+
+            std::vector<int> all_send_force_idxs_vec(all_force_idxs.begin(), all_force_idxs.end());
+            std::vector<int> tmp_segment_idxs;
+            std::vector<int> tmp_segment_sizes;
+            int num_segments = get_segments(all_send_force_idxs_vec, tmp_segment_idxs, tmp_segment_sizes);
+            std::cout << "zoid: " << zoid.num << " send force to proc: " << proc << " num segments: " << num_segments << std::endl;
         }
 
         int total_sent = 0;
@@ -9035,7 +9065,8 @@ public:
         auto& zoids_affected = curr_dt ? dep_proc_to_recv_zoids[dep][proc]
                 : dep_proc_to_recv_zoids_next_dt[dep][proc];
 
-        for (int i = 0; i < zoids_affected.size(); i++) {
+        #pragma cilk grainsize 1
+        cilk_for (int i = 0; i < zoids_affected.size(); i++) {
             int recv_zoid_num = zoids_affected[i];
             assert(recv_zoid_num % comm->nprocs == comm->me);
 
