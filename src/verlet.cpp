@@ -5580,9 +5580,22 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep > 0) {
+            /*
+            cilk_scope {
+                int recv_request_idx = 0;
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    if (did_recv_map[{dep, proc}]) {
+                        MPI_Wait(&recv_r[dep][recv_request_idx++], MPI_STATUS_IGNORE);
+                        cilk_spawn stencilMD->UNPACK_DATA_MANY_CUTS<true, true>(dep, proc, setup_start_t, setup_end_t);
+                    } else if (proc == comm->me) {
+                        cilk_spawn stencilMD->UNPACK_DATA_MANY_CUTS<true, true>(dep, proc, setup_start_t, setup_end_t);
+                    }
+                }
+            }
+            */
             MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUSES_IGNORE);
             for (int proc = 0; proc < comm->nprocs; proc++) {
-                if (did_recv_map[{dep, proc}]) {
+                if (did_recv_map[{dep, proc}] || proc == comm->me) {
                     stencilMD->UNPACK_DATA_MANY_CUTS<true, true>(dep, proc, setup_start_t, setup_end_t);
                 }
             }
@@ -7787,9 +7800,22 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
     int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
     if (nproc_recv > 0) {
+        /*
+        cilk_scope {
+            int recv_request_idx = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                if (did_recv_map[{dep, proc}]) {
+                    MPI_Wait(&recv_requests[recv_request_idx++], MPI_STATUS_IGNORE);
+                    cilk_spawn stencilMD->UNPACK_DATA_MANY_CUTS<true, true>(dep, proc, tmp_start_t, tmp_end_t);
+                } else if (proc == comm->me) {
+                    cilk_spawn stencilMD->UNPACK_DATA_MANY_CUTS<true, true>(dep, proc, tmp_start_t, tmp_end_t);
+                }
+            }
+        }
+        */
         MPI_Waitall(nproc_recv, recv_requests, MPI_STATUSES_IGNORE);
         for (int proc = 0; proc < comm->nprocs; proc++) {
-            if (did_recv_map[{dep, proc}]) {
+            if (did_recv_map[{dep, proc}] || proc == comm->me) {
                 stencilMD->UNPACK_DATA_MANY_CUTS<curr_dt, false>(dep, proc, tmp_start_t, tmp_end_t);
             }
         }

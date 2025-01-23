@@ -8987,6 +8987,10 @@ public:
 
     template <bool curr_dt>
     bool RECEIVE_DATA_MANY_CUTS(int dep, int proc, MPI_Request* request, int start_t, int end_t) {
+        if (proc == comm->me) {
+            return false;
+        }
+
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         int total_recv_from_proc = 0;
@@ -9080,7 +9084,13 @@ public:
                 offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
 
                 int buf_idx = 0;
-                auto* buf = &buf_recv_many_cuts[dep][proc][offset];
+                double* buf;
+                if (proc != comm->me) {
+                    // auto* buf = &buf_recv_many_cuts[dep][proc][offset];
+                    buf = &buf_recv_many_cuts[dep][proc][offset];
+                } else {
+                    buf = &buf_send_many_cuts[dep - 1][proc][offset];
+                }
 
                 for (int t = start_t; t < end_t; t++) {
                     auto& recv_force_idxs = recv_zoid.recv_force_idxs_double_buffering[t][find_idx];
@@ -9551,7 +9561,7 @@ public:
 
             int ndoubles_sent = DEBUG_SEND_RECV_DATA ? (3 + 1) * nsend : 3 * nsend;
             int mpi_tag = get_mpi_tag(proc, comm->me, dep);
-            if (ndoubles_sent) {
+            if (ndoubles_sent && proc != comm->me) {
                 r.emplace_back();
                 MPI_Isend(buf_send_many_cuts[dep][proc], ndoubles_sent, MPI_DOUBLE,
                           proc, mpi_tag, world, &r[r.size() - 1]);
