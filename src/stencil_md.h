@@ -7564,7 +7564,9 @@ public:
             memset(displacements, 0, comm->nprocs * sizeof(int));
 
             counts[comm->me] = neighbor_lst[tag].size();
-            MPI_Allreduce(MPI_IN_PLACE, counts, comm->nprocs, MPI_INT, MPI_SUM, world);
+            int send_num = neighbor_lst[tag].size();
+            // MPI_Allreduce(MPI_IN_PLACE, counts, comm->nprocs, MPI_INT, MPI_SUM, world);
+            MPI_Allgather(&send_num, 1, MPI_INT, counts, 1, MPI_INT, world);
             int total_size = 0;
             for (int i = 0; i < comm->nprocs; i++) {
                 total_size += counts[i];
@@ -7733,7 +7735,10 @@ public:
             memset(displacements, 0, comm->nprocs * sizeof(int));
 
             counts[comm->me] = bond_lst[tag].size();
-            MPI_Allreduce(MPI_IN_PLACE, counts, comm->nprocs, MPI_INT, MPI_SUM, world);
+            int send_num = bond_lst[tag].size();
+            // MPI_Allreduce(MPI_IN_PLACE, counts, comm->nprocs, MPI_INT, MPI_SUM, world);
+            MPI_Allgather(&send_num, 1, MPI_INT, counts, 1, MPI_INT, world);
+            // MPI_Allreduce(MPI_IN_PLACE, counts, comm->nprocs, MPI_INT, MPI_SUM, world);
             int total_size = 0;
             for (int i = 0; i < comm->nprocs; i++) {
                 total_size += counts[i];
