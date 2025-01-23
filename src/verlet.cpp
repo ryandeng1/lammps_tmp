@@ -5538,11 +5538,14 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
 
+    /*
     stencilMD->INIT_PIPELINED_DATA();
     stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED<true>();
     stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED<false>();
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINED<true>();
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINED<false>();
+    */
+
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<true>();
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<false>();
 
@@ -7807,6 +7810,7 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
     }
 
     if (dep < NUM_DEPS - 1) {
+        // stencilMD->PACK_DATA_MANY_CUTS<curr_dt, false>(dep, tmp_start_t, tmp_end_t);
         int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<curr_dt>(dep, send_requests);
     }
 }
