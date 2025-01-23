@@ -5432,47 +5432,51 @@ void Verlet::setup_stencil_md() {
 
 void Verlet::setup_stencil_md_many_zoids() {
     /* LAMMPS TESTING CODE */
-    double *send_f = new double[(atom->natoms + 1) * 3];
-    for (int i = 0; i < (atom->natoms + 1) * 3; i++) {
-        send_f[i] = 0.0;
-    }
-
-    for (int i = 0; i < atom->nlocal; i++) {
-        int tag = atom->tag[i];
-        if (!(tag >= 0 && tag <= atom->natoms)) {
-            std::cout << "ERROR. "
-                      << " idx: " << i << " out of nlocal: " << atom->nlocal
-                      << " tag: " << atom->tag[i] << std::endl;
+    double* send_f;
+    double* recv_f;
+    if (TEST_AGAINST_LAMMPS) {
+        send_f = new double[(atom->natoms + 1) * 3];
+        for (int i = 0; i < (atom->natoms + 1) * 3; i++) {
+            send_f[i] = 0.0;
         }
-        assert(tag >= 0 && tag <= atom->natoms);
-        send_f[tag * 3 + 0] = atom->f[i][0];
-        send_f[tag * 3 + 1] = atom->f[i][1];
-        send_f[tag * 3 + 2] = atom->f[i][2];
-    }
 
-    double *recv_f = new double[(atom->natoms + 1) * 3];
-
-    for (int i = 0; i < (atom->natoms + 1) * 3; i++) {
-        recv_f[i] = 0.0;
-    }
-
-    MPI_Allreduce(send_f, recv_f, (atom->natoms + 1) * 3, MPI_DOUBLE, MPI_SUM,
-                  world);
-
-    for (int i = 0; i < atom->nlocal; i++) {
-        int tag = atom->tag[i];
-
-        for (int dim = 0; dim < 3; dim++) {
-            if (fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) > 5e-5) {
-                std::cout << "error in recv tag: " << tag << " idx: " << i
-                          << " dim: " << dim
-                          << " what I have: " << atom->f[i][dim]
-                          << " what I got: " << recv_f[tag * 3 + dim]
-                          << " diff: "
-                          << fabs(recv_f[tag * 3 + dim] - atom->f[i][dim])
-                          << std::endl;
+        for (int i = 0; i < atom->nlocal; i++) {
+            int tag = atom->tag[i];
+            if (!(tag >= 0 && tag <= atom->natoms)) {
+                std::cout << "ERROR. "
+                          << " idx: " << i << " out of nlocal: " << atom->nlocal
+                          << " tag: " << atom->tag[i] << std::endl;
             }
-            assert(fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) <= 5e-5);
+            assert(tag >= 0 && tag <= atom->natoms);
+            send_f[tag * 3 + 0] = atom->f[i][0];
+            send_f[tag * 3 + 1] = atom->f[i][1];
+            send_f[tag * 3 + 2] = atom->f[i][2];
+        }
+
+        recv_f = new double[(atom->natoms + 1) * 3];
+
+        for (int i = 0; i < (atom->natoms + 1) * 3; i++) {
+            recv_f[i] = 0.0;
+        }
+
+        MPI_Allreduce(send_f, recv_f, (atom->natoms + 1) * 3, MPI_DOUBLE, MPI_SUM,
+                      world);
+
+        for (int i = 0; i < atom->nlocal; i++) {
+            int tag = atom->tag[i];
+
+            for (int dim = 0; dim < 3; dim++) {
+                if (fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) > 5e-5) {
+                    std::cout << "error in recv tag: " << tag << " idx: " << i
+                              << " dim: " << dim
+                              << " what I have: " << atom->f[i][dim]
+                              << " what I got: " << recv_f[tag * 3 + dim]
+                              << " diff: "
+                              << fabs(recv_f[tag * 3 + dim] - atom->f[i][dim])
+                              << std::endl;
+                }
+                assert(fabs(recv_f[tag * 3 + dim] - atom->f[i][dim]) <= 5e-5);
+            }
         }
     }
 
@@ -5608,7 +5612,9 @@ void Verlet::setup_stencil_md_many_zoids() {
             }
             stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
-            stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
+            if (TEST_AGAINST_LAMMPS) {
+                stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
+            }
             stencilMD->PACK_DATA_MANY_CUTS_ZOID<true, true>(zoid, dep, setup_start_t, setup_end_t);
         }
 
@@ -5624,8 +5630,10 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     std::cout << BOLDGREEN << "Initial Force computation passed" << RESET_COLOR << std::endl;
 
-    delete[] send_f;
-    delete[] recv_f;
+    if (TEST_AGAINST_LAMMPS) {
+        delete[] send_f;
+        delete[] recv_f;
+    }
 
     MPI_Barrier(world);
 }
