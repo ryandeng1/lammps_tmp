@@ -7538,6 +7538,86 @@ public:
 
     // Complete hack
     void CREATE_NEIGHBOR_LIST() {
+        std::vector<int> my_neigh_pairs_src;
+        std::vector<int> my_neigh_pairs_dst;
+        my_neigh_pairs_src.reserve(atom->natoms);
+        my_neigh_pairs_dst.reserve(atom->natoms);
+
+        auto* list = force->pair->list;
+        for (int ii = 0; ii < list->inum; ii++) {
+            int i = list->ilist[ii];
+            assert(i == ii);
+            int numneigh = list->numneigh[i];
+            for (int j = 0; j < numneigh; j++) {
+                int neigh = list->firstneigh[i][j];
+                // my_neigh_pairs.push_back({atom->tag[i], atom->tag[neigh]});
+                my_neigh_pairs_src.push_back(atom->tag[i]);
+                my_neigh_pairs_dst.push_back(atom->tag[neigh]);
+            }
+        }
+
+        std::vector<int> counts(comm->nprocs, 0);
+        std::vector<int> displacements(comm->nprocs, 0);
+
+        int my_count = my_neigh_pairs_src.size();
+        MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, world);
+
+        int total_size = 0;
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            total_size += counts[proc];
+        }
+
+        displacements[0] = 0;
+        for (int proc = 1; proc < comm->nprocs; proc++) {
+            displacements[proc] = displacements[proc - 1] + counts[proc - 1];
+        }
+
+        std::vector<int> all_neigh_pairs_src;
+        std::vector<int> all_neigh_pairs_dst;
+        all_neigh_pairs_src.resize(total_size);
+        all_neigh_pairs_dst.resize(total_size);
+
+        MPI_Allgatherv(my_neigh_pairs_src.data(), counts[comm->me], MPI_INT, all_neigh_pairs_src.data(),
+                       counts.data(), displacements.data(), MPI_INT, world);
+
+        MPI_Allgatherv(my_neigh_pairs_dst.data(), counts[comm->me], MPI_INT, all_neigh_pairs_dst.data(),
+                       counts.data(), displacements.data(), MPI_INT, world);
+
+        auto* neighbor_lst = new std::vector<int>[atom->natoms + 1];
+        for (int i = 0; i < atom->natoms + 1; i++) {
+            neighbor_lst[i].reserve(25);
+        }
+
+        for (int i = 0; i < all_neigh_pairs_src.size(); i++) {
+            int src_tag = all_neigh_pairs_src[i];
+            int dst_tag = all_neigh_pairs_dst[i];
+            neighbor_lst[src_tag].push_back(dst_tag);
+            neighbor_lst[dst_tag].push_back(src_tag);
+        }
+
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+                auto& zoid = queues_many_cuts[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+                CREATE_NEIGHBOR_LIST_HELPER(zoid, neighbor_lst);
+            }
+        }
+
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
+                auto& zoid = queues_many_cuts_next_dt[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+                CREATE_NEIGHBOR_LIST_HELPER(zoid, neighbor_lst);
+            }
+        }
+
+        delete[] neighbor_lst;
+
+        /*
         auto* neighbor_lst = new std::vector<int>[atom->natoms + 1];
         for (int i = 0; i < atom->natoms + 1; i++) {
             neighbor_lst[i].reserve(25);
@@ -7575,10 +7655,6 @@ public:
                 total_size += counts[i];
             }
 
-            /*
-            int* my_send = new int[counts[comm->me]];
-            int* all_recv = new int[total_size];
-            */
             my_send.resize(counts[comm->me]);
             all_recv.resize(total_size);
 
@@ -7597,11 +7673,6 @@ public:
                 int neigh_tag = all_recv[i];
                 neighbor_lst[tag].push_back(neigh_tag);
             }
-
-            /*
-            delete[] my_send;
-            delete[] all_recv;
-            */
         }
 
         delete[] counts;
@@ -7628,6 +7699,7 @@ public:
         }
 
         delete[] neighbor_lst;
+        */
     }
 
     void CREATE_BOND_LIST_HELPER(queue_info& zoid, std::vector<std::pair<int, int>>* bond_lst) {
@@ -7722,6 +7794,91 @@ public:
 
     // Complete hack
     void CREATE_BOND_LIST() {
+        std::vector<int> my_bond_pairs_src;
+        std::vector<int> my_bond_pairs_dst;
+        std::vector<int> my_bond_pairs_type;
+        my_bond_pairs_src.reserve(atom->natoms);
+        my_bond_pairs_dst.reserve(atom->natoms);
+        my_bond_pairs_type.reserve(atom->natoms);
+
+        for (int i = 0; i < neighbor->nbondlist; i++) {
+            int i1 = neighbor->bondlist[i][0];
+            int i2 = neighbor->bondlist[i][1];
+            int type = neighbor->bondlist[i][2];
+            my_bond_pairs_src.push_back(atom->tag[i1]);
+            my_bond_pairs_dst.push_back(atom->tag[i2]);
+            my_bond_pairs_type.push_back(type);
+        }
+
+        std::vector<int> counts(comm->nprocs, 0);
+        std::vector<int> displacements(comm->nprocs, 0);
+
+        int my_count = my_bond_pairs_src.size();
+        MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, world);
+
+        int total_size = 0;
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            total_size += counts[proc];
+        }
+
+        displacements[0] = 0;
+        for (int proc = 1; proc < comm->nprocs; proc++) {
+            displacements[proc] = displacements[proc - 1] + counts[proc - 1];
+        }
+
+        std::vector<int> all_bond_pairs_src;
+        std::vector<int> all_bond_pairs_dst;
+        std::vector<int> all_bond_pairs_type;
+        all_bond_pairs_src.resize(total_size);
+        all_bond_pairs_dst.resize(total_size);
+        all_bond_pairs_type.resize(total_size);
+
+        MPI_Allgatherv(my_bond_pairs_src.data(), counts[comm->me], MPI_INT, all_bond_pairs_src.data(),
+                       counts.data(), displacements.data(), MPI_INT, world);
+        MPI_Allgatherv(my_bond_pairs_dst.data(), counts[comm->me], MPI_INT, all_bond_pairs_dst.data(),
+                       counts.data(), displacements.data(), MPI_INT, world);
+        MPI_Allgatherv(my_bond_pairs_type.data(), counts[comm->me], MPI_INT, all_bond_pairs_type.data(),
+                       counts.data(), displacements.data(), MPI_INT, world);
+
+        auto* bond_lst = new std::vector<std::pair<int, int>>[atom->natoms + 1];
+        for (int i = 0; i < atom->natoms + 1; i++) {
+            bond_lst[i].reserve(25);
+        }
+
+        for (int i = 0; i < all_bond_pairs_src.size(); i++) {
+            int src_tag = all_bond_pairs_src[i];
+            int dst_tag = all_bond_pairs_dst[i];
+            int type = all_bond_pairs_type[i];
+
+            bond_lst[src_tag].push_back({dst_tag, type});
+            bond_lst[dst_tag].push_back({src_tag, type});
+        }
+
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+                auto& zoid = queues_many_cuts[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                CREATE_BOND_LIST_HELPER(zoid, bond_lst);
+            }
+        }
+
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
+                auto& zoid = queues_many_cuts_next_dt[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                CREATE_BOND_LIST_HELPER(zoid, bond_lst);
+            }
+        }
+
+        delete[] bond_lst;
+
+        /*
         auto* bond_lst = new std::vector<std::pair<int, int>>[atom->natoms + 1];
         for (int i = 0; i < atom->natoms + 1; i++) {
             bond_lst[i].reserve(25);
@@ -7758,14 +7915,6 @@ public:
                 total_size += counts[i];
             }
 
-            /*
-            int* my_send = new int[counts[comm->me]];
-            int* my_send_type = new int[counts[comm->me]];
-
-            int* all_recv = new int[total_size];
-            int* all_recv_type = new int[total_size];
-            */
-
             my_send.resize(counts[comm->me]);
             my_send_type.resize(counts[comm->me]);
             all_recv.resize(total_size);
@@ -7781,12 +7930,6 @@ public:
                 displacements[i] = displacements[i - 1] + counts[i - 1];
             }
 
-            /*
-            MPI_Allgatherv(my_send, counts[comm->me], MPI_INT, all_recv,
-                           counts, displacements, MPI_INT, world);
-            MPI_Allgatherv(my_send_type, counts[comm->me], MPI_INT, all_recv_type,
-                           counts, displacements, MPI_INT, world);
-            */
             MPI_Allgatherv(my_send.data(), counts[comm->me], MPI_INT, all_recv.data(),
                            counts, displacements, MPI_INT, world);
             MPI_Allgatherv(my_send_type.data(), counts[comm->me], MPI_INT, all_recv_type.data(),
@@ -7797,14 +7940,6 @@ public:
                 int neigh_type = all_recv_type[i];
                 bond_lst[tag].push_back({neigh_tag, neigh_type});
             }
-
-            /*
-            delete[] my_send;
-            delete[] all_recv;
-
-            delete[] my_send_type;
-            delete[] all_recv_type;
-            */
         }
 
         delete[] counts;
@@ -7833,6 +7968,7 @@ public:
         }
 
         delete[] bond_lst;
+        */
     }
 
     void INIT_AFFINITY_AND_LOCKS() {
