@@ -5479,8 +5479,8 @@ void Verlet::setup_stencil_md_many_zoids() {
     MPI_Barrier(world);
 
     stencilMD->INIT_ZOIDS_MANY_CUTS();
-    stencilMD->INIT_ZOID_MANY_CUTS_NEIGHBORS();
     stencilMD->INIT_ZOID_DATA_MANY_CUTS();
+    stencilMD->INIT_ZOID_MANY_CUTS_NEIGHBORS();
     auto begin = std::chrono::high_resolution_clock::now();
     stencilMD->GET_ATOMS_ZOID_MANY_CUTS();
     auto end = std::chrono::high_resolution_clock::now();
@@ -5593,7 +5593,7 @@ void Verlet::setup_stencil_md_many_zoids() {
             if (zoid.num % comm->nprocs != comm->me) {
                 continue;
             }
-            stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, 0);
+            stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
             stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
             stencilMD->PACK_DATA_MANY_CUTS_ZOID<true, true>(zoid, dep, setup_start_t, setup_end_t);
@@ -7771,9 +7771,9 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
 
         }
 
-        stencilMD->INITIAL_INTEGRATE_ZOID_MANY_CUTS(zoid, t);
-        stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, t + 1);
-        stencilMD->FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, t + 1);
+        stencilMD->INITIAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t);
+        stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+        stencilMD->FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
     }
 }
 
@@ -7798,7 +7798,7 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
     auto& queues = curr_dt ? stencilMD->queues_many_cuts
             : stencilMD->queues_many_cuts_next_dt;
 
-    for (int j = 0; j < queues[dep].size(); j++) {
+    cilk_for (int j = 0; j < queues[dep].size(); j++) {
         auto& zoid = queues[dep][j];
         if (zoid.num % comm->nprocs != comm->me) {
             continue;
