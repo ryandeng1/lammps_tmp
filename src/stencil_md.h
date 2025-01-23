@@ -9032,7 +9032,6 @@ public:
     template <bool curr_dt, bool is_initial>
     void UNPACK_DATA_MANY_CUTS(int dep, int proc, int start_t, int end_t) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
-        /*
         auto& zoids_affected = curr_dt ? dep_proc_to_recv_zoids[dep][proc]
                 : dep_proc_to_recv_zoids_next_dt[dep][proc];
 
@@ -9155,7 +9154,6 @@ public:
         }
 
         return;
-        */
 
         int send_dep = dep - 1;
 
@@ -9384,14 +9382,16 @@ public:
                 continue;
             }
 
-            int offset = curr_dt ? send_proc_zoid_offsets[zoid.num][proc] : send_proc_zoid_offsets_next_dt[zoid.num][proc];
-            offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
-            int npack = PACK_DATA_TO_PROC_HELPER<curr_dt, is_initial>(zoid, proc,
-                                                                      &buf_send_many_cuts[dep][proc][offset], offset,
-                                                                      start_t, end_t);
             int expected_nsend = curr_dt ? send_proc_zoid_sizes[zoid.num][proc] : send_proc_zoid_sizes_next_dt[zoid.num][proc];
-            int expected_size = DEBUG_SEND_RECV_DATA ? expected_nsend * (3 + 1) : expected_nsend * 3;
-            assert(npack == expected_size);
+            if (expected_nsend > 0) {
+                int offset = curr_dt ? send_proc_zoid_offsets[zoid.num][proc] : send_proc_zoid_offsets_next_dt[zoid.num][proc];
+                offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
+                int npack = PACK_DATA_TO_PROC_HELPER<curr_dt, is_initial>(zoid, proc,
+                                                                          &buf_send_many_cuts[dep][proc][offset], offset,
+                                                                          start_t, end_t);
+                int expected_size = DEBUG_SEND_RECV_DATA ? expected_nsend * (3 + 1) : expected_nsend * 3;
+                assert(npack == expected_size);
+            }
         }
     }
 
