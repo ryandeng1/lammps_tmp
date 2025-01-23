@@ -6470,15 +6470,33 @@ public:
     int* nrecv_buf_many_cuts[NUM_DEPS];
     int* nsend_buf_many_cuts[NUM_DEPS];
 
-    std::vector<int>* send_proc_zoid_offsets_pipelining[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
-    std::vector<int>* send_proc_zoid_sizes_pipelining[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
-    std::vector<int>* send_proc_zoid_offsets_pipelining_next_dt[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
-    std::vector<int>* send_proc_zoid_sizes_pipelining_next_dt[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
+    double** buf_recv_many_cuts_pipelined[NUM_PIPELINE_STAGES][NUM_DEPS];
+    double** buf_send_many_cuts_pipelined[NUM_PIPELINE_STAGES][NUM_DEPS];
+    int* nrecv_buf_many_cuts_pipelined[NUM_PIPELINE_STAGES][NUM_DEPS];
+    int* nsend_buf_many_cuts_pipelined[NUM_PIPELINE_STAGES][NUM_DEPS];
 
-    std::vector<int>* recv_proc_zoid_offsets_pipelining[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
-    std::vector<int>* recv_proc_zoid_sizes_pipelining[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
-    std::vector<int>* recv_proc_zoid_offsets_pipelining_next_dt[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
-    std::vector<int>* recv_proc_zoid_sizes_pipelining_next_dt[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
+    /*
+    std::vector<int> send_proc_zoid_offsets_pipelined[NUM_PIPELINE_STAGES][NUM_ZOIDS_MANY_CUTS];
+    std::vector<int> send_proc_zoid_sizes_pipelined[NUM_PIPELINE_STAGES][NUM_ZOIDS_MANY_CUTS];
+    std::vector<int> send_proc_zoid_offsets_pipelined_next_dt[NUM_PIPELINE_STAGES][NUM_ZOIDS_MANY_CUTS];
+    std::vector<int> send_proc_zoid_sizes_pipelined_next_dt[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
+
+    std::vector<int> recv_proc_zoid_offsets_pipelined[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
+    std::vector<int> recv_proc_zoid_sizes_pipelined[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
+    std::vector<int> recv_proc_zoid_offsets_pipelined_next_dt[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
+    std::vector<int> recv_proc_zoid_sizes_pipelined_next_dt[NUM_ZOIDS_MANY_CUTS][NUM_PIPELINE_STAGES];
+    */
+
+
+    std::vector<std::vector<std::vector<int>>> send_proc_zoid_offsets_pipelined;
+    std::vector<std::vector<std::vector<int>>> send_proc_zoid_sizes_pipelined;
+    std::vector<std::vector<std::vector<int>>> send_proc_zoid_offsets_pipelined_next_dt;
+    std::vector<std::vector<std::vector<int>>> send_proc_zoid_sizes_pipelined_next_dt;
+
+    std::vector<std::vector<std::vector<int>>> recv_proc_zoid_offsets_pipelined;
+    std::vector<std::vector<std::vector<int>>> recv_proc_zoid_sizes_pipelined;
+    std::vector<std::vector<std::vector<int>>> recv_proc_zoid_offsets_pipelined_next_dt;
+    std::vector<std::vector<std::vector<int>>> recv_proc_zoid_sizes_pipelined_next_dt;
 
     std::vector<int>* dep_proc_to_recv_zoids[NUM_DEPS];
     std::vector<int>* dep_proc_to_recv_zoids_next_dt[NUM_DEPS];
@@ -6763,6 +6781,52 @@ public:
             for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
                 int zoid_num = queues_many_cuts_next_dt[dep][j].num;
                 zoid_num_to_zoid_many_cuts_next_dt[zoid_num] = queues_many_cuts_next_dt[dep][j];
+            }
+        }
+    }
+
+    void INIT_PIPELINED_DATA() {
+        send_proc_zoid_offsets_pipelined.resize(NUM_PIPELINE_STAGES);
+        send_proc_zoid_sizes_pipelined.resize(NUM_PIPELINE_STAGES);
+        send_proc_zoid_offsets_pipelined_next_dt.resize(NUM_PIPELINE_STAGES);
+        send_proc_zoid_sizes_pipelined_next_dt.resize(NUM_PIPELINE_STAGES);
+
+        recv_proc_zoid_offsets_pipelined.resize(NUM_PIPELINE_STAGES);
+        recv_proc_zoid_sizes_pipelined.resize(NUM_PIPELINE_STAGES);
+        recv_proc_zoid_offsets_pipelined_next_dt.resize(NUM_PIPELINE_STAGES);
+        recv_proc_zoid_sizes_pipelined_next_dt.resize(NUM_PIPELINE_STAGES);
+
+        for (int p = 0; p < NUM_PIPELINE_STAGES; p++) {
+            send_proc_zoid_offsets_pipelined[p].resize(NUM_ZOIDS_MANY_CUTS);
+            send_proc_zoid_sizes_pipelined[p].resize(NUM_ZOIDS_MANY_CUTS);
+            send_proc_zoid_offsets_pipelined_next_dt[p].resize(NUM_ZOIDS_MANY_CUTS);
+            send_proc_zoid_sizes_pipelined_next_dt[p].resize(NUM_ZOIDS_MANY_CUTS);
+
+            recv_proc_zoid_offsets_pipelined[p].resize(NUM_ZOIDS_MANY_CUTS);
+            recv_proc_zoid_sizes_pipelined[p].resize(NUM_ZOIDS_MANY_CUTS);
+            recv_proc_zoid_offsets_pipelined_next_dt[p].resize(NUM_ZOIDS_MANY_CUTS);
+            recv_proc_zoid_sizes_pipelined_next_dt[p].resize(NUM_ZOIDS_MANY_CUTS);
+
+            for (int zoid_num = 0; zoid_num < NUM_ZOIDS_MANY_CUTS; zoid_num++) {
+                if (zoid_num % comm->nprocs == comm->me) {
+                    send_proc_zoid_offsets_pipelined[p][zoid_num].resize(comm->nprocs);
+                    send_proc_zoid_sizes_pipelined[p][zoid_num].resize(comm->nprocs);
+                    send_proc_zoid_offsets_pipelined_next_dt[p][zoid_num].resize(comm->nprocs);
+                    send_proc_zoid_sizes_pipelined_next_dt[p][zoid_num].resize(comm->nprocs);
+
+                    int num_recv_neighbors = recv_from_neighbors_many_cuts[zoid_num].size();
+                    int num_recv_neighbors_next_dt = recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
+
+                    if (num_recv_neighbors > 0) {
+                        recv_proc_zoid_offsets_pipelined[p][zoid_num].resize(num_recv_neighbors);
+                        recv_proc_zoid_sizes_pipelined[p][zoid_num].resize(num_recv_neighbors);
+                    }
+
+                    if (num_recv_neighbors_next_dt > 0) {
+                        recv_proc_zoid_offsets_pipelined_next_dt[p][zoid_num].resize(num_recv_neighbors);
+                        recv_proc_zoid_sizes_pipelined_next_dt[p][zoid_num].resize(num_recv_neighbors);
+                    }
+                }
             }
         }
     }
@@ -8602,7 +8666,7 @@ public:
     }
 
     template <bool curr_dt>
-    void CONSTRUCT_RECV_PROC_OFFSETS_PIPELINING() {
+    void CONSTRUCT_RECV_PROC_OFFSETS_PIPELINED() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         constexpr int start_t = 1;
@@ -8612,26 +8676,6 @@ public:
         int pipeline_end_t[NUM_PIPELINE_STAGES] = {mid_t, end_t};
 
         for (int p = 0; p < NUM_PIPELINE_STAGES; p++) {
-            for (int zoid_num = 0; zoid_num < NUM_ZOIDS_MANY_CUTS; zoid_num++) {
-                if (zoid_num % comm->nprocs != comm->me) {
-                    continue;
-                }
-
-                if (curr_dt) {
-                    int num_recv_neighbors = recv_from_neighbors_many_cuts[zoid_num].size();
-                    if (num_recv_neighbors > 0) {
-                        recv_proc_zoid_offsets_pipelining[zoid_num][p] = new std::vector<int>[num_recv_neighbors];
-                        recv_proc_zoid_sizes_pipelining[zoid_num][p] = new std::vector<int>[num_recv_neighbors];
-                    }
-                } else {
-                    int num_recv_neighbors = recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
-                    if (num_recv_neighbors > 0) {
-                        recv_proc_zoid_offsets_pipelining_next_dt[zoid_num][p] = new std::vector<int>[num_recv_neighbors];
-                        recv_proc_zoid_sizes_pipelining_next_dt[zoid_num][p] = new std::vector<int>[num_recv_neighbors];
-                    }
-                }
-            }
-
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 for (int send_dep = 0; send_dep < NUM_DEPS - 1; send_dep++) {
                     int dep = send_dep + 1;
@@ -8673,11 +8717,11 @@ public:
 
                             int nrecv_from_send_zoid = nrecv_force + nrecv_pos + nrecv_vel;
                             if (curr_dt) {
-                                recv_proc_zoid_offsets_pipelining[my_zoid.num][p][find_idx].push_back(offset);
-                                recv_proc_zoid_sizes_pipelining[my_zoid.num][p][find_idx].push_back(nrecv_from_send_zoid);
+                                recv_proc_zoid_offsets_pipelined[my_zoid.num][p][find_idx] = offset;
+                                recv_proc_zoid_sizes_pipelined[my_zoid.num][p][find_idx] = nrecv_from_send_zoid;
                             } else {
-                                recv_proc_zoid_offsets_pipelining_next_dt[my_zoid.num][p][find_idx].push_back(offset);
-                                recv_proc_zoid_sizes_pipelining_next_dt[my_zoid.num][p][find_idx].push_back(nrecv_from_send_zoid);
+                                recv_proc_zoid_offsets_pipelined_next_dt[my_zoid.num][p][find_idx] = offset;
+                                recv_proc_zoid_sizes_pipelined_next_dt[my_zoid.num][p][find_idx] = nrecv_from_send_zoid;
                             }
 
                             offset += nrecv_from_send_zoid;
@@ -8689,7 +8733,7 @@ public:
                                                        total_nrecv_from_proc * 3;
                     if (total_doubles_recv_from_proc > nrecv_buf_many_cuts[dep][proc]) {
                         auto before = nrecv_buf_many_cuts[dep][proc];
-                        GROW_RECV_MANY_CUTS(dep, proc, total_doubles_recv_from_proc);
+                        GROW_RECV_MANY_CUTS_PIPELINED(p, dep, proc, total_doubles_recv_from_proc);
                     }
                 }
             }
@@ -8738,6 +8782,31 @@ public:
 
         buf_recv_many_cuts[dep][proc] = new double[new_size];
         nrecv_buf_many_cuts[dep][proc] = static_cast<int>(new_size);
+    }
+
+    void GROW_SEND_MANY_CUTS_PIPELINED(int pipeline_stage, int dep, int proc, int size) {
+        constexpr double FACTOR = 1.5;
+        assert(size > nsend_buf_many_cuts_pipelined[pipeline_stage][dep][proc]);
+
+        delete[] buf_send_many_cuts_pipelined[pipeline_stage][dep][proc];
+        nsend_buf_many_cuts_pipelined[pipeline_stage][dep][proc] = 0;
+
+        int new_size = static_cast<int>(size * FACTOR);
+        buf_send_many_cuts_pipelined[pipeline_stage][dep][proc] = new double[new_size];
+        nsend_buf_many_cuts_pipelined[pipeline_stage][dep][proc] = static_cast<int>(new_size);
+    }
+
+    void GROW_RECV_MANY_CUTS_PIPELINED(int pipeline_stage, int dep, int proc, int size) {
+        constexpr double FACTOR = 1.5;
+        assert(size > nrecv_buf_many_cuts_pipelined[pipeline_stage][dep][proc]);
+
+        delete[] buf_recv_many_cuts_pipelined[pipeline_stage][dep][proc];
+        nrecv_buf_many_cuts_pipelined[pipeline_stage][dep][proc] = 0;
+
+        int new_size = static_cast<int>(size * FACTOR);
+
+        buf_recv_many_cuts_pipelined[pipeline_stage][dep][proc] = new double[new_size];
+        nrecv_buf_many_cuts_pipelined[pipeline_stage][dep][proc] = static_cast<int>(new_size);
     }
 
     template <bool curr_dt>
@@ -8827,26 +8896,8 @@ public:
     }
 
     template <bool curr_dt>
-    void CONSTRUCT_SEND_PROC_OFFSETS_PIPELINING() {
+    void CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
-
-        for (int zoid_num = 0; zoid_num < NUM_ZOIDS_MANY_CUTS; zoid_num++) {
-            if (zoid_num % comm->nprocs != comm->me) {
-                continue;
-            }
-
-            if (curr_dt) {
-                for (int i = 0; i < NUM_PIPELINE_STAGES; i++) {
-                    send_proc_zoid_offsets_pipelining[zoid_num][i] = new std::vector<int>[comm->nprocs];
-                    send_proc_zoid_sizes_pipelining[zoid_num][i] = new std::vector<int>[comm->nprocs];
-                }
-            } else {
-                for (int i = 0; i < NUM_PIPELINE_STAGES; i++) {
-                    send_proc_zoid_offsets_pipelining_next_dt[zoid_num][i] = new std::vector<int>[comm->nprocs];
-                    send_proc_zoid_sizes_pipelining_next_dt[zoid_num][i] = new std::vector<int>[comm->nprocs];
-                }
-            }
-        }
 
         constexpr int start_t = 1;
         constexpr int mid_t = NUM_TIMESTEPS_IN_PARALLEL / 2 + 1;
@@ -8901,18 +8952,18 @@ public:
 
                         assert(buf_offset - before == zoid_nsend_to_proc);
                         if (curr_dt) {
-                            send_proc_zoid_offsets_pipelining[send_zoid.num][p][proc].push_back(buf_offset - zoid_nsend_to_proc);
-                            send_proc_zoid_sizes_pipelining[send_zoid.num][p][proc].push_back(zoid_nsend_to_proc);
+                            send_proc_zoid_offsets_pipelined[send_zoid.num][p][proc] = buf_offset - zoid_nsend_to_proc;
+                            send_proc_zoid_sizes_pipelined[send_zoid.num][p][proc] = zoid_nsend_to_proc;
                         } else {
-                            send_proc_zoid_offsets_pipelining_next_dt[send_zoid.num][p][proc].push_back(buf_offset - zoid_nsend_to_proc);
-                            send_proc_zoid_sizes_pipelining_next_dt[send_zoid.num][p][proc].push_back(zoid_nsend_to_proc);
+                            send_proc_zoid_offsets_pipelined_next_dt[send_zoid.num][p][proc] = buf_offset - zoid_nsend_to_proc;
+                            send_proc_zoid_sizes_pipelined_next_dt[send_zoid.num][p][proc] = zoid_nsend_to_proc;
                         }
                     }
 
                     int total_doubles_send_to_proc = DEBUG_SEND_RECV_DATA ? total_nsend_to_proc * (3 + 1) :
                                                      total_nsend_to_proc * 3;
                     if (total_doubles_send_to_proc > nsend_buf_many_cuts[send_dep][proc]) {
-                        GROW_SEND_MANY_CUTS(send_dep, proc, total_doubles_send_to_proc);
+                        GROW_SEND_MANY_CUTS_PIPELINED(p, send_dep, proc, total_doubles_send_to_proc);
                     }
                 }
             }
@@ -8980,6 +9031,128 @@ public:
     template <bool curr_dt, bool is_initial>
     void UNPACK_DATA_MANY_CUTS(int dep, int proc, int start_t, int end_t) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+
+        auto& zoids_affected = curr_dt ? dep_proc_to_recv_zoids[dep][proc] : dep_proc_to_recv_zoids_next_dt[dep][proc];
+
+        for (int i = 0; i < zoids_affected.size(); i++) {
+            int recv_zoid_num = zoids_affected[i];
+            assert(recv_zoid_num % comm->nprocs == comm->me);
+
+            auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
+                                      : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
+
+            auto& find_idxs_per_zoid = curr_dt ? recv_zoid_to_find_idxs[dep][recv_zoid_num]
+                    : recv_zoid_to_find_idxs_next_dt[dep][recv_zoid_num];
+
+            auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[recv_zoid_num]
+                    : recv_from_neighbors_many_cuts_next_dt[recv_zoid_num];
+
+            for (int j = 0; j < find_idxs_per_zoid.size(); j++) {
+                int find_idx = find_idxs_per_zoid[j];
+                int send_zoid_num = recv_neighbors[find_idx];
+
+                auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
+                        : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+
+                int pbc_flag_[3] = {0};
+                for (int dim = 0; dim < 3; dim++) {
+                    if (send_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && recv_zoid.where[dim] == 0) {
+                        pbc_flag_[dim] = -1;
+                    }
+
+                    if (send_zoid.where[dim] == 0 && recv_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1) {
+                        pbc_flag_[dim] = 1;
+                    }
+                }
+
+                int offset = curr_dt ? recv_proc_zoid_offsets[recv_zoid_num][find_idx][0]
+                                     : recv_proc_zoid_offsets_next_dt[recv_zoid_num][find_idx][0];
+                offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
+
+                int buf_idx = 0;
+                auto* buf = &buf_recv_many_cuts[dep][proc][offset];
+
+                for (int t = start_t; t < end_t; t++) {
+                    auto& recv_force_idxs = recv_zoid.recv_force_idxs_double_buffering[t][find_idx];
+                    auto& recv_pos_idxs = recv_zoid.recv_pos_idxs_double_buffering[t][find_idx];
+                    auto& recv_vel_idxs = recv_zoid.recv_vel_idxs_double_buffering[t][find_idx];
+
+                    assert(DEBUG_SEND_RECV_DATA);
+
+                    for (int k = 0; k < recv_force_idxs.size(); k++) {
+                        int idx = recv_force_idxs[k];
+                        double tmp = buf[buf_idx];
+                        auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
+                        double f_x = buf[buf_idx++];
+                        double f_y = buf[buf_idx++];
+                        double f_z = buf[buf_idx++];
+                        if (target_tag != recv_zoid.tag_stencil_md[0][idx]) {
+                            std::cout << "FORCE TAG WRONG me: " << comm->me << " my zoid: " << recv_zoid.num << " dep: " << dep
+                                      << " recv from zoid: " << send_zoid_num << " time: " << t
+                                      << " recv from proc: " << proc << " tag I got: " << target_tag << " tag I want: " << recv_zoid.tag_stencil_md[0][idx]
+                                      << " offset: " << offset << " buf value: " << tmp << " find idx: " << find_idx
+                                      << " buf: " << buf
+                                      << std::endl;
+                        }
+                        assert(target_tag == recv_zoid.tag_stencil_md[0][idx]);
+                        if (!is_initial && t == 0) {
+                            continue;
+                        }
+                        if (is_initial && t > 0) {
+                            continue;
+                        }
+                        recv_zoid.f_stencil_md[0][idx].x += f_x;
+                        recv_zoid.f_stencil_md[0][idx].y += f_y;
+                        recv_zoid.f_stencil_md[0][idx].z += f_z;
+                    }
+
+                    for (int k = 0; k < recv_pos_idxs.size(); k++) {
+                        int idx = recv_pos_idxs[k];
+                        auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
+                        double x_x = buf[buf_idx++];
+                        double x_y = buf[buf_idx++];
+                        double x_z = buf[buf_idx++];
+                        assert(target_tag == recv_zoid.tag_stencil_md[0][idx]);
+                        if (target_tag != recv_zoid.tag_stencil_md[0][idx]) {
+                            std::cout << "POS me: " << comm->me << " my zoid: " << recv_zoid.num
+                                      << " recv from: " << send_zoid_num << " time: " << t
+                                      << " recv proc: " << proc << " tag I got: " << target_tag << " tag I want: " << recv_zoid.tag_stencil_md[0][idx]
+                                      << " offset: " << offset
+                                      << std::endl;
+                        }
+                        if (!is_initial && t == 0) {
+                            continue;
+                        }
+                        if (is_initial && t > 0) {
+                            continue;
+                        }
+                        recv_zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].x = x_x + pbc_flag_[0] * domain->prd[0];
+                        recv_zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].y = x_y + pbc_flag_[1] * domain->prd[1];
+                        recv_zoid.x_stencil_md[t % DOUBLE_BUFFERING][idx].z = x_z + pbc_flag_[2] * domain->prd[2];
+                    }
+
+                    for (int k = 0; k < recv_vel_idxs.size(); k++) {
+                        int idx = recv_vel_idxs[k];
+                        auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
+                        double v_x = buf[buf_idx++];
+                        double v_y = buf[buf_idx++];
+                        double v_z = buf[buf_idx++];
+                        assert(target_tag == recv_zoid.tag_stencil_md[0][idx]);
+                        if (!is_initial && t == 0) {
+                            continue;
+                        }
+                        if (is_initial && t > 0) {
+                            continue;
+                        }
+                        recv_zoid.v_stencil_md[0][idx].x = v_x;
+                        recv_zoid.v_stencil_md[0][idx].y = v_y;
+                        recv_zoid.v_stencil_md[0][idx].z = v_z;
+                    }
+                }
+            }
+        }
+
+        return;
 
         int send_dep = dep - 1;
 
@@ -9224,6 +9397,32 @@ public:
             int expected_nsend = curr_dt ? send_proc_zoid_sizes[zoid.num][proc][0] : send_proc_zoid_sizes_next_dt[zoid.num][proc][0];
             int expected_size = DEBUG_SEND_RECV_DATA ? expected_nsend * (3 + 1) : expected_nsend * 3;
             assert(npack == expected_size);
+        }
+    }
+
+    template <bool curr_dt, bool is_initial>
+    void PACK_DATA_MANY_CUTS_ZOID_PIPELINED(queue_info& zoid, int dep, int start_t, int end_t, int pipeline_stage=0) {
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                                       : send_to_neighbors_many_cuts_next_dt[zoid.num];
+
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            for (int i = 0; i < send_neighbors.size(); i++) {
+                if (send_neighbors[i] % comm->nprocs != proc) {
+                    continue;
+                }
+
+                int offset = curr_dt ? send_proc_zoid_offsets_pipelined[pipeline_stage][zoid.num][proc]
+                        : send_proc_zoid_offsets_pipelined_next_dt[pipeline_stage][zoid.num][proc];
+
+                offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
+                int npack = PACK_DATA_TO_PROC_HELPER<curr_dt, is_initial>(zoid, proc,
+                                                                          &buf_send_many_cuts_pipelined[pipeline_stage][dep][proc][offset],
+                                                                          offset, start_t, end_t);
+                int expected_nsend = curr_dt ? send_proc_zoid_sizes_pipelined[pipeline_stage][zoid.num][proc]
+                        : send_proc_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid.num][proc];
+                int expected_size = DEBUG_SEND_RECV_DATA ? expected_nsend * (3 + 1) : expected_nsend * 3;
+                assert(npack == expected_size);
+            }
         }
     }
 
@@ -9696,35 +9895,18 @@ public:
                 if (num_recv_neighbors > 0) {
                     delete[] recv_proc_zoid_offsets[i];
                     delete[] recv_proc_zoid_sizes[i];
-
-                    for (int p = 0; p < NUM_PIPELINE_STAGES; p++) {
-                        delete[] recv_proc_zoid_offsets_pipelining[i][p];
-                        delete[] recv_proc_zoid_sizes_pipelining[i][p];
-                    }
                 }
 
                 int num_recv_neighbors_next_dt = recv_from_neighbors_many_cuts_next_dt[i].size();
                 if (num_recv_neighbors_next_dt > 0) {
                     delete[] recv_proc_zoid_offsets_next_dt[i];
                     delete[] recv_proc_zoid_sizes_next_dt[i];
-
-                    for (int p = 0; p < NUM_PIPELINE_STAGES; p++) {
-                        delete[] recv_proc_zoid_offsets_pipelining_next_dt[i][p];
-                        delete[] recv_proc_zoid_sizes_pipelining_next_dt[i][p];
-                    }
                 }
 
                 delete[] send_proc_zoid_offsets[i];
                 delete[] send_proc_zoid_sizes[i];
                 delete[] send_proc_zoid_offsets_next_dt[i];
                 delete[] send_proc_zoid_sizes_next_dt[i];
-
-                for (int p = 0; p < NUM_PIPELINE_STAGES; p++) {
-                    delete[] send_proc_zoid_offsets_pipelining[i][p];
-                    delete[] send_proc_zoid_sizes_pipelining[i][p];
-                    delete[] send_proc_zoid_offsets_pipelining_next_dt[i][p];
-                    delete[] send_proc_zoid_sizes_pipelining_next_dt[i][p];
-                }
             }
         }
 
@@ -9738,6 +9920,9 @@ public:
             delete[] buf_recv_many_cuts[dep];
             delete[] nsend_buf_many_cuts[dep];
             delete[] nrecv_buf_many_cuts[dep];
+
+            delete[] dep_proc_to_recv_zoids[dep];
+            delete[] dep_proc_to_recv_zoids_next_dt[dep];
         }
 
         delete[] zoid_num_to_zoid_many_cuts;

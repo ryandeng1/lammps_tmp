@@ -5538,10 +5538,11 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
 
-    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINING<true>();
-    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINING<false>();
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINING<true>();
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINING<false>();
+    stencilMD->INIT_PIPELINED_DATA();
+    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED<true>();
+    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED<false>();
+    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINED<true>();
+    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINED<false>();
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<true>();
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<false>();
 
@@ -5596,7 +5597,6 @@ void Verlet::setup_stencil_md_many_zoids() {
         }
 
         if (dep < NUM_DEPS - 1) {
-            // stencilMD->PACK_DATA_MANY_CUTS<true, true>(dep, setup_start_t, setup_end_t);
             int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<true>(dep, send_r[dep]);
             dep_to_nproc_send[dep] = nproc_send;
         }
@@ -7803,10 +7803,10 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
         run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
                                                tmp_start_t, tmp_end_t,
                                                test_f, test_x, test_v);
+        stencilMD->PACK_DATA_MANY_CUTS_ZOID<curr_dt, false>(zoid, dep, tmp_start_t, tmp_end_t);
     }
 
     if (dep < NUM_DEPS - 1) {
-        stencilMD->PACK_DATA_MANY_CUTS<curr_dt, false>(dep, tmp_start_t, tmp_end_t);
         int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<curr_dt>(dep, send_requests);
     }
 }
