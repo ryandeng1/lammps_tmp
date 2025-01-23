@@ -7559,6 +7559,9 @@ public:
         auto* counts = new int[comm->nprocs];
         int* displacements = new int[comm->nprocs];
 
+        std::vector<int> my_send;
+        std::vector<int> all_recv;
+
         for (int tag = 1; tag < atom->natoms + 1; tag++) {
             memset(counts, 0, comm->nprocs * sizeof(int));
             memset(displacements, 0, comm->nprocs * sizeof(int));
@@ -7572,8 +7575,12 @@ public:
                 total_size += counts[i];
             }
 
+            /*
             int* my_send = new int[counts[comm->me]];
             int* all_recv = new int[total_size];
+            */
+            my_send.resize(counts[comm->me]);
+            all_recv.resize(total_size);
 
             for (int i = 0; i < counts[comm->me]; i++) {
                 my_send[i] = neighbor_lst[tag][i];
@@ -7583,7 +7590,7 @@ public:
                 displacements[i] = displacements[i - 1] + counts[i - 1];
             }
 
-            MPI_Allgatherv(my_send, counts[comm->me], MPI_INT, all_recv,
+            MPI_Allgatherv(my_send.data(), counts[comm->me], MPI_INT, all_recv.data(),
                            counts, displacements, MPI_INT, world);
 
             for (int i = 0; i < total_size; i++) {
@@ -7591,8 +7598,10 @@ public:
                 neighbor_lst[tag].push_back(neigh_tag);
             }
 
+            /*
             delete[] my_send;
             delete[] all_recv;
+            */
         }
 
         delete[] counts;
@@ -7730,6 +7739,11 @@ public:
         auto* counts = new int[comm->nprocs];
         int* displacements = new int[comm->nprocs];
 
+        std::vector<int> my_send;
+        std::vector<int> my_send_type;
+        std::vector<int> all_recv;
+        std::vector<int> all_recv_type;
+
         for (int tag = 1; tag < atom->natoms + 1; tag++) {
             memset(counts, 0, comm->nprocs * sizeof(int));
             memset(displacements, 0, comm->nprocs * sizeof(int));
@@ -7744,11 +7758,18 @@ public:
                 total_size += counts[i];
             }
 
+            /*
             int* my_send = new int[counts[comm->me]];
             int* my_send_type = new int[counts[comm->me]];
 
             int* all_recv = new int[total_size];
             int* all_recv_type = new int[total_size];
+            */
+
+            my_send.resize(counts[comm->me]);
+            my_send_type.resize(counts[comm->me]);
+            all_recv.resize(total_size);
+            all_recv_type.resize(total_size);
 
             for (int i = 0; i < counts[comm->me]; i++) {
                 my_send[i] = bond_lst[tag][i].first;
@@ -7760,9 +7781,15 @@ public:
                 displacements[i] = displacements[i - 1] + counts[i - 1];
             }
 
+            /*
             MPI_Allgatherv(my_send, counts[comm->me], MPI_INT, all_recv,
                            counts, displacements, MPI_INT, world);
             MPI_Allgatherv(my_send_type, counts[comm->me], MPI_INT, all_recv_type,
+                           counts, displacements, MPI_INT, world);
+            */
+            MPI_Allgatherv(my_send.data(), counts[comm->me], MPI_INT, all_recv.data(),
+                           counts, displacements, MPI_INT, world);
+            MPI_Allgatherv(my_send_type.data(), counts[comm->me], MPI_INT, all_recv_type.data(),
                            counts, displacements, MPI_INT, world);
 
             for (int i = 0; i < total_size; i++) {
@@ -7771,11 +7798,13 @@ public:
                 bond_lst[tag].push_back({neigh_tag, neigh_type});
             }
 
+            /*
             delete[] my_send;
             delete[] all_recv;
 
             delete[] my_send_type;
             delete[] all_recv_type;
+            */
         }
 
         delete[] counts;
