@@ -5522,11 +5522,10 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS<false>();
 
-    stencilMD->CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS<true>();
-    stencilMD->CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS<false>();
-
     stencilMD->CONSTRUCT_RECV_POS_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_RECV_POS_IDXS_ZOID_MANY_CUTS<false>();
+    stencilMD->CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS<true>();
+    stencilMD->CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS<false>();
 
     stencilMD->CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS<false>();
