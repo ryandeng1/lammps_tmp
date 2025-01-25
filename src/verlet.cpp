@@ -5608,15 +5608,12 @@ void Verlet::setup_stencil_md_many_zoids() {
             int zoid_num = zoid.num;
             assert(zoid_num % comm->nprocs == comm->me);
             stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<true, true>(zoid, all_recv_requests[zoid_num]);
-            MPI_Barrier(world);
-
             stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
             if (TEST_AGAINST_LAMMPS) {
                 stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
             }
             stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<true, true>(zoid, dep, setup_start_t, setup_end_t, all_send_requests[zoid_num]);
-            MPI_Barrier(world);
         }
     }
 

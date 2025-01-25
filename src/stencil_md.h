@@ -11326,6 +11326,7 @@ public:
                         }
                     }
                     delete[] buf_recv_zoid_to_zoid[i];
+                    delete[] nrecv_buf_recv_zoid_to_zoid[i];
                 }
 
                 int num_recv_neighbors_next_dt = recv_from_neighbors_many_cuts_next_dt[i].size();
@@ -11339,6 +11340,7 @@ public:
                         }
                     }
                     delete[] buf_recv_zoid_to_zoid_next_dt[i];
+                    delete[] nrecv_buf_recv_zoid_to_zoid_next_dt[i];
                 }
 
                 int num_send_neighbors = send_to_neighbors_many_cuts[i].size();
@@ -11364,9 +11366,6 @@ public:
                 }
             }
         }
-
-        delete[] buf_recv_zoid_to_zoid;
-        delete[] buf_recv_zoid_to_zoid_next_dt;
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int proc = 0; proc < comm->nprocs; proc++) {
