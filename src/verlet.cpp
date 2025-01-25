@@ -7953,7 +7953,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
     int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
-        for (int j = 0; j < my_queues[dep].size(); j++) {
+        cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
             auto& zoid = my_queues[dep][j];
             int zoid_num = zoid.num;
             stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt, false>(zoid, recv_r[zoid_num]);
