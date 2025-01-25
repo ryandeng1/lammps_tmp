@@ -139,12 +139,14 @@ CommBrick::~CommBrick()
 
   memory->destroy(maxsend_stencil_md);
   memory->destroy(maxrecv_stencil_md);
-  memory->destroy(buf_send_stencil_md);
-  memory->destroy(buf_recv_stencil_md);
   memory->destroy(maxsend_sendlist_stencil_md);
   memory->destroy(maxrecv_sendlist_stencil_md);
-  memory->destroy(buf_sendlist_stencil_md);
-  memory->destroy(buf_recv_sendlist_stencil_md);
+  for (int i = 0; i < maxswap; i++) {
+      memory->destroy(buf_send_stencil_md[i]);
+      memory->destroy(buf_recv_stencil_md[i]);
+  }
+  memory->sfree(buf_send_stencil_md);
+  memory->sfree(buf_recv_stencil_md);
 }
 
 /* ---------------------------------------------------------------------- */
