@@ -5603,7 +5603,7 @@ void Verlet::setup_stencil_md_many_zoids() {
     }
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
-        for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
+        cilk_for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
             auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
             int zoid_num = zoid.num;
             assert(zoid_num % comm->nprocs == comm->me);
