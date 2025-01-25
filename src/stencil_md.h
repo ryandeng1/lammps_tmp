@@ -9284,7 +9284,13 @@ public:
         }
     }
 
+    MPI_Comm all_comms[NUM_ZOIDS_MANY_CUTS];
+
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
+        for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
+            MPI_Comm_dup(world, &all_comms[i]);
+        }
+
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             nsend_buf_many_cuts[dep] = new int[comm->nprocs];
             nrecv_buf_many_cuts[dep] = new int[comm->nprocs];
@@ -9783,9 +9789,15 @@ public:
             if (buf_idx > 0 && (send_zoid_num % comm->nprocs != comm->me)) {
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 r.emplace_back();
+                int worker_number = __cilkrts_get_worker_number();
+                /*
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
                           world, &r[r.size() - 1]);
+                */
+                MPI_Isend(buf, buf_idx, MPI_DOUBLE,
+                          send_zoid_num % comm->nprocs, mpi_tag,
+                          all_comms[zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -9825,8 +9837,13 @@ public:
             if (total_doubles_recv_from_zoid > 0) {
                 r.emplace_back();
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
+                /*
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                */
+                MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
+                          recv_zoid_num % comm->nprocs, mpi_tag,
+                          all_comms[recv_zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -11313,6 +11330,10 @@ public:
     }
 
     ~StencilMD() {
+        for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
+            MPI_Comm_free(&all_comms[i]);
+        }
+
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             if (i % comm->nprocs == comm->me) {
                 int num_recv_neighbors = recv_from_neighbors_many_cuts[i].size();
