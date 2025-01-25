@@ -5431,6 +5431,17 @@ void Verlet::setup_stencil_md() {
 }
 
 void Verlet::setup_stencil_md_many_zoids() {
+    // setup MPI stuff?
+    bool enable_striping = true;
+    bool enable_hashing = true;
+    MPI_Info comm_info;
+    MPI_Info_create(&comm_info);
+    MPI_Info_set(comm_info, "mpi_assert_no_any_source", "true");
+    MPI_Info_set(comm_info, "mpi_assert_no_any_tag", "true");
+    MPI_Info_set(comm_info, "enable_multi_nic_striping", enable_striping ? "true" : "false");
+    MPI_Info_set(comm_info, "enable_multi_nic_hashing", enable_hashing ? "true" : "false");
+    MPI_Comm_set_info(world, comm_info);
+
     /* LAMMPS TESTING CODE */
     double* send_f;
     double* recv_f;
@@ -5484,6 +5495,7 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     stencilMD->INIT_ZOIDS_MANY_CUTS();
     stencilMD->INIT_ZOID_DATA_MANY_CUTS();
+    stencilMD->INIT_MY_ZOIDS();
     stencilMD->INIT_ZOID_MANY_CUTS_NEIGHBORS();
     auto begin = std::chrono::high_resolution_clock::now();
     stencilMD->GET_ATOMS_ZOID_MANY_CUTS();
@@ -5541,6 +5553,11 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
     stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
 
+    stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES<true>();
+    stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES<false>();
+    stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<true>();
+    stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<false>();
+
     /*
     stencilMD->INIT_PIPELINED_DATA();
     stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED<true>();
@@ -5570,6 +5587,45 @@ void Verlet::setup_stencil_md_many_zoids() {
     int setup_start_t = 0;
     int setup_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
+    std::vector<MPI_Request> all_recv_requests[stencilMD->NUM_ZOIDS_MANY_CUTS];
+    std::vector<MPI_Request> all_send_requests[stencilMD->NUM_ZOIDS_MANY_CUTS];
+
+    for (int dep = 1; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
+            auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
+            int zoid_num = zoid.num;
+            assert(zoid_num % comm->nprocs == comm->me);
+
+            all_recv_requests[zoid_num].reserve(20);
+            stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<true>(zoid.num, all_recv_requests[zoid_num]);
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
+            auto& zoid = stencilMD->queues_many_cuts[dep][j];
+            int zoid_num = zoid.num;
+
+            assert(zoid_num % comm->nprocs == comm->me);
+
+            stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+            stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
+            if (TEST_AGAINST_LAMMPS) {
+                stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
+            }
+            stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<true, true>(zoid, dep, setup_start_t, setup_end_t, all_send_requests[zoid_num]);
+        }
+    }
+
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
+            auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
+            int zoid_num = zoid.num;
+            MPI_Waitall(all_send_requests[zoid_num].size(), all_send_requests[zoid_num].data(), MPI_STATUSES_IGNORE);
+        }
+    }
+
+    /*
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int proc = 0; proc < comm->nprocs; proc++) {
             bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<true>(dep, proc, &recv_r[dep][recv_r_idxs[dep]],
@@ -5583,19 +5639,6 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep > 0) {
-            /*
-            cilk_scope {
-                int recv_request_idx = 0;
-                for (int proc = 0; proc < comm->nprocs; proc++) {
-                    if (did_recv_map[{dep, proc}]) {
-                        MPI_Wait(&recv_r[dep][recv_request_idx++], MPI_STATUS_IGNORE);
-                        cilk_spawn stencilMD->UNPACK_DATA_MANY_CUTS<true, true>(dep, proc, setup_start_t, setup_end_t);
-                    } else if (proc == comm->me) {
-                        cilk_spawn stencilMD->UNPACK_DATA_MANY_CUTS<true, true>(dep, proc, setup_start_t, setup_end_t);
-                    }
-                }
-            }
-            */
             MPI_Waitall(recv_r_idxs[dep], recv_r[dep].data(), MPI_STATUSES_IGNORE);
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 if (did_recv_map[{dep, proc}] || proc == comm->me) {
@@ -5626,6 +5669,7 @@ void Verlet::setup_stencil_md_many_zoids() {
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
         MPI_Waitall(dep_to_nproc_send[dep], send_r[dep].data(), MPI_STATUSES_IGNORE);
     }
+    */
 
     std::cout << BOLDGREEN << "Initial Force computation passed" << RESET_COLOR << std::endl;
 
