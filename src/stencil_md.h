@@ -9300,6 +9300,12 @@ public:
 
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             MPI_Comm_dup(world, &all_comms[i]);
+            MPI_Info comm_info;
+            MPI_Info_create(&comm_info);
+            MPI_Info_set(comm_info, "mpi_assert_no_any_source", "true");
+            MPI_Info_set(comm_info, "mpi_assert_no_any_tag", "true");
+            MPI_Comm_set_info(all_comms[i], comm_info);
+            MPI_Info_free(&comm_info);
         }
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
