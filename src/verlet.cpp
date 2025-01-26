@@ -7934,17 +7934,10 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
 
     std::vector<MPI_Request> recv_r[stencilMD->NUM_ZOIDS_MANY_CUTS];
     for (int dep = 1; dep < NUM_DEPS; dep++) {
-        for (int j = 0; j < my_queues[dep].size(); j++) {
+        cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
             assert(zoid_num % comm->nprocs == comm->me);
             recv_r[zoid_num].reserve(25);
-        }
-    }
-
-    for (int dep = 1; dep < NUM_DEPS; dep++) {
-        for (int j = 0; j < my_queues[dep].size(); j++) {
-            auto& zoid = my_queues[dep][j];
-            int zoid_num = zoid.num;
             stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
         }
     }
