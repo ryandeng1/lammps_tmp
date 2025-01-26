@@ -9807,7 +9807,7 @@ public:
                 */
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[zoid_num], &r[r.size() - 1]);
+                          all_comms[send_zoid_num], &r[r.size() - 1]);
                 /*
                 MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
                                   send_zoid_num % comm->nprocs, mpi_tag,
@@ -9860,7 +9860,7 @@ public:
                 */
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[recv_zoid_num], &r[r.size() - 1]);
+                          all_comms[zoid_num], &r[r.size() - 1]);
                 /*
                 MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                                   recv_zoid_num % comm->nprocs, mpi_tag,
