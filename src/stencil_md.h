@@ -9284,9 +9284,20 @@ public:
         }
     }
 
+    static constexpr int NUM_STREAMS = 4;
     MPI_Comm all_comms[NUM_ZOIDS_MANY_CUTS];
+    // MPIX_Stream all_streams[NUM_STREAMS];
+    // MPI_Comm stream_comm;
 
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
+        /*
+        for (int i = 0; i < NUM_STREAMS; i++) {
+            MPIX_Stream_create(MPI_INFO_NULL, &all_streams[i]);
+        }
+
+        MPIX_Stream_comm_create_multiplex(world, NUM_STREAMS, all_streams, &stream_comm);
+        */
+
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             MPI_Comm_dup(world, &all_comms[i]);
         }
@@ -9789,7 +9800,6 @@ public:
             if (buf_idx > 0 && (send_zoid_num % comm->nprocs != comm->me)) {
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 r.emplace_back();
-                int worker_number = __cilkrts_get_worker_number();
                 /*
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
@@ -9798,6 +9808,13 @@ public:
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
                           all_comms[zoid_num], &r[r.size() - 1]);
+                /*
+                MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
+                                  send_zoid_num % comm->nprocs, mpi_tag,
+                                  stream_comm, zoid_num % NUM_STREAMS,
+                                  send_zoid_num % NUM_STREAMS,
+                                  &r[r.size() - 1]);
+                */
             }
         }
     }
@@ -9844,6 +9861,13 @@ public:
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
                           all_comms[recv_zoid_num], &r[r.size() - 1]);
+                /*
+                MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
+                                  recv_zoid_num % comm->nprocs, mpi_tag,
+                                  stream_comm, recv_zoid_num % NUM_STREAMS,
+                                  zoid_num % NUM_STREAMS,
+                                  &r[r.size() - 1]);
+                */
             }
         }
     }
@@ -11330,6 +11354,13 @@ public:
     }
 
     ~StencilMD() {
+        /*
+        for (int i = 0; i < NUM_STREAMS; i++) {
+            MPIX_Stream_free(&all_streams[i]);
+        }
+        MPI_Comm_free(&stream_comm);
+        */
+
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             MPI_Comm_free(&all_comms[i]);
         }
