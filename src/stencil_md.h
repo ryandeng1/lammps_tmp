@@ -10033,9 +10033,20 @@ public:
             }
 
             if (recv_zoid_num % comm->nprocs != comm->me) {
+                buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][i]
+                              : buf_recv_zoid_to_zoid_next_dt[zoid_num][i];
+                int recv_size = curr_dt ? recv_zoid_to_zoid_sizes[zoid_num][i]
+                                        : recv_zoid_to_zoid_sizes_next_dt[zoid_num][i];
+                int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? recv_size * (3 + 1) : recv_size * 3;
+                int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
+                MPI_Recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
+                         recv_zoid_num % comm->nprocs, mpi_tag,
+                         all_comms[zoid_num], MPI_STATUS_IGNORE);
+                /*
                 MPI_Wait(&r[wait_idx++], MPI_STATUS_IGNORE);
                 buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][i]
                         : buf_recv_zoid_to_zoid_next_dt[zoid_num][i];
+                */
             } else {
                 auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[recv_zoid_num]
                                                : send_to_neighbors_many_cuts_next_dt[recv_zoid_num];

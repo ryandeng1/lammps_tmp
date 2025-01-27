@@ -5591,6 +5591,7 @@ void Verlet::setup_stencil_md_many_zoids() {
     std::vector<MPI_Request> all_recv_requests[stencilMD->NUM_ZOIDS_MANY_CUTS];
     std::vector<MPI_Request> all_send_requests[stencilMD->NUM_ZOIDS_MANY_CUTS];
 
+    /*
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
             auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
@@ -5601,6 +5602,7 @@ void Verlet::setup_stencil_md_many_zoids() {
             stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<true>(zoid.num, all_recv_requests[zoid_num]);
         }
     }
+    */
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
@@ -7933,6 +7935,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
     }
 
     std::vector<MPI_Request> recv_r[stencilMD->NUM_ZOIDS_MANY_CUTS];
+    /*
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
@@ -7941,6 +7944,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
             stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
         }
     }
+    */
 
     int tmp_start_t = 0;
     int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
