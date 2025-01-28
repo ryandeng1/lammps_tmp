@@ -6569,12 +6569,155 @@ public:
             }
         }
 
-        int zoid_num = 0;
+        // zoid_num to dep0 map?
+        // TODO: renumber zoids
+        std::vector<int> proc_to_zoid_count(comm->nprocs, 0);
+        std::map<int, std::vector<std::array<int, 3>>> proc_to_zoids;
+        std::map<std::array<int, 3>, int> zoid_to_proc;
+
+        int num_dep0_zoids = queues_many_cuts[0].size();
+        int num_dep1_zoids = queues_many_cuts[1].size();
+        int num_dep2_zoids = queues_many_cuts[2].size();
+        int num_dep3_zoids = queues_many_cuts[3].size();
+
+        int curr_proc = 0;
+        for (int i = 1; i < NUM_ZOIDS_PER_DIMENSION; i += 2) {
+            for (int j = 1; j < NUM_ZOIDS_PER_DIMENSION; j += 2) {
+                for (int k = 1; k < NUM_ZOIDS_PER_DIMENSION; k += 2) {
+                    if (proc_to_zoid_count[curr_proc] >= num_dep0_zoids / comm->nprocs) {
+                        curr_proc++;
+                    }
+                    proc_to_zoid_count[curr_proc]++;
+                    proc_to_zoids[curr_proc].push_back({i, j, k});
+                    zoid_to_proc[{i, j, k}] = curr_proc;
+                }
+            }
+        }
+
+        bool claimed[NUM_ZOIDS_PER_DIMENSION][NUM_ZOIDS_PER_DIMENSION][NUM_ZOIDS_PER_DIMENSION] = {0};
+
+        std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_send_neighbors;
+        std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_recv_neighbors;
+
+        for (int i = 0; i < NUM_ZOIDS_PER_DIMENSION; i++) {
+            for (int j = 0; j < NUM_ZOIDS_PER_DIMENSION; j++) {
+                for (int k = 0; k < NUM_ZOIDS_PER_DIMENSION; k++) {
+                    std::array<int, 3> my_pos = {i, j, k};
+                    if (i % 2 == 1) {
+                        tmp_send_neighbors[my_pos].insert({i - 1, j, k});
+                        tmp_send_neighbors[my_pos].insert({(i + 1) % NUM_ZOIDS_PER_DIMENSION, j, k});
+                    }
+                    if (j % 2 == 1) {
+                        tmp_send_neighbors[my_pos].insert({i, j - 1, k});
+                        tmp_send_neighbors[my_pos].insert({i, (j + 1) % NUM_ZOIDS_PER_DIMENSION, k});
+                    }
+                    if (k % 2 == 1) {
+                        tmp_send_neighbors[my_pos].insert({i, j, k - 1});
+                        tmp_send_neighbors[my_pos].insert({i, j, (k + 1) % NUM_ZOIDS_PER_DIMENSION});
+                    }
+                }
+            }
+        }
+
+        for (auto& [zoid, send_zoids] : tmp_send_neighbors) {
+            for (auto& z : send_zoids) {
+                tmp_recv_neighbors[z].insert(zoid);
+            }
+        }
+
+        int num_zoids_per_dep[NUM_DEPS] = {num_dep0_zoids, num_dep0_zoids + num_dep1_zoids,
+                                           num_dep0_zoids + num_dep1_zoids + num_dep2_zoids, NUM_ZOIDS_MANY_CUTS};
+
+        int dep_to_val[NUM_DEPS] = {0, 2, 4, 6};
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                auto& zoids = proc_to_zoids[proc];
+                std::set<std::array<int, 3>> all_neighbors;
+                std::map<std::array<int, 3>, int> neighbor_to_count;
+                for (auto& z : zoids) {
+                    int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
+                    if (zoid_dep == dep - 1) {
+                        auto& neighbors = tmp_send_neighbors[z];
+                        for (auto& n : neighbors) {
+                            all_neighbors.insert(n);
+                            neighbor_to_count[n]++;
+                        }
+                    }
+                }
+
+                // pick out the zoids that have most of their neighbors
+                for (auto& [k, v] : neighbor_to_count) {
+                    if (v == dep_to_val[dep]) {
+                        proc_to_zoids[proc].push_back(k);
+                        proc_to_zoid_count[proc]++;
+                        claimed[k[0]][k[1]][k[2]] = true;
+                    } else if (v > dep_to_val[dep] / 2) {
+                        if (!claimed[k[0]][k[1]][k[2]] && proc_to_zoid_count[proc] < (num_zoids_per_dep[dep]) / comm->nprocs) {
+                            proc_to_zoids[proc].push_back(k);
+                            proc_to_zoid_count[proc]++;
+                            claimed[k[0]][k[1]][k[2]] = true;
+                        }
+                    }
+                }
+            }
+
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                auto& zoids = proc_to_zoids[proc];
+                std::set<std::array<int, 3>> all_neighbors;
+                std::map<std::array<int, 3>, int> neighbor_to_count;
+                for (auto& z : zoids) {
+                    int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
+                    if (zoid_dep == dep - 1) {
+                        auto& neighbors = tmp_send_neighbors[z];
+                        for (auto& n : neighbors) {
+                            all_neighbors.insert(n);
+                            neighbor_to_count[n]++;
+                        }
+                    }
+                }
+
+                // pick out the zoids that have half of their neighbors, tiebreak I guess based on earlier process
+                for (auto& [k, v] : neighbor_to_count) {
+                    if (v >= dep_to_val[dep] / 2) {
+                        if (!claimed[k[0]][k[1]][k[2]] && proc_to_zoid_count[proc] < (num_zoids_per_dep[dep]) / comm->nprocs) {
+                            proc_to_zoids[proc].push_back(k);
+                            proc_to_zoid_count[proc]++;
+                            claimed[k[0]][k[1]][k[2]] = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        std::set<std::array<int, 3>> test_zoids;
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            for (auto& zoid : proc_to_zoids[proc]) {
+                test_zoids.insert(zoid);
+            }
+        }
+
+        std::cout << "test zoids size: " << test_zoids.size() << std::endl;
+        assert(test_zoids.size() == NUM_ZOIDS_MANY_CUTS);
+
+        std::map<std::array<int, 3>, int> zoid_to_proc_final;
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            for (auto& zoid : proc_to_zoids[proc]) {
+                zoid_to_proc_final[zoid] = proc;
+            }
+        }
+
+        std::vector<int> proc_zoid_counts(comm->nprocs, 0);
+
+        // int zoid_num = 0;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 auto& zoid = queues_many_cuts[dep][j];
-                zoid.num = zoid_num;
-                zoid_num++;
+                auto proc_assigned_to_zoid = zoid_to_proc_final.at({zoid.where[0], zoid.where[1], zoid.where[2]});
+                zoid.num = proc_zoid_counts[proc_assigned_to_zoid] * comm->nprocs + proc_assigned_to_zoid;
+                proc_zoid_counts[proc_assigned_to_zoid]++;
+                // zoid.num = zoid_num;
+                // zoid_num++;
                 int new_dep = NUM_DEPS - 1 - dep;
                 queue_info new_zoid;
                 for (int dim = 0; dim < 3; dim++) {
@@ -6600,6 +6743,18 @@ public:
                 queues_many_cuts_next_dt[new_dep].push_back(new_zoid);
             }
         }
+
+        std::set<int> all_zoid_nums;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
+                auto &zoid = queues_many_cuts[dep][j];
+                int zoid_num = zoid.num;
+                assert(zoid_num >= 0 && zoid_num < NUM_ZOIDS_MANY_CUTS);
+                all_zoid_nums.insert(zoid_num);
+            }
+        }
+
+        assert(all_zoid_nums.size() == NUM_ZOIDS_MANY_CUTS);
 
         if (comm->me == 0) {
             std::cout << BOLDCYAN << "Lo: " << domain->boxlo[0] << " hi: " << domain->boxhi[0] << RESET_COLOR << std::endl;
@@ -6978,21 +7133,6 @@ public:
             std::sort(recv_from_neighbors_many_cuts_next_dt[i].begin(), recv_from_neighbors_many_cuts_next_dt[i].end());
         }
 
-
-        /*
-        if (comm->me == 0) {
-            for (int dep = 0; dep < NUM_DEPS; dep++) {
-                for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
-                    auto& zoid = queues_many_cuts[dep][j];
-                    std::cout << BOLDCYAN << "dep: " << dep << " j: " << j << " zoid: " << zoid.num
-                              << " num send neighbors: " << send_to_neighbors_many_cuts[zoid.num].size()
-                              << " num recv neighbors: " << recv_from_neighbors_many_cuts[zoid.num].size()
-                              << RESET_COLOR << std::endl;
-
-                }
-            }
-        }
-        */
     }
 
     template <bool curr_dt>
@@ -8110,15 +8250,6 @@ public:
                 }
             }
         }
-
-        int total_sent = 0;
-        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            for (int j = 0; j < send_neighbors.size(); j++) {
-                total_sent += zoid.send_force_idxs_double_buffering[t][j].size();
-            }
-        }
-
-        std::cout << "curr_dt: " << curr_dt << " zoid: " << zoid.num << " total num force: " << total_sent << std::endl;
     }
 
     template <bool curr_dt>
@@ -8218,15 +8349,6 @@ public:
                 }
             }
         }
-
-        int total_sent = 0;
-        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-            for (int j = 0; j < send_neighbors.size(); j++) {
-                total_sent += zoid.send_vel_idxs_double_buffering[t][j].size();
-            }
-        }
-
-        std::cout << "curr_dt: " << curr_dt << " zoid: " << zoid.num << " total num vel: " << total_sent << std::endl;
     }
 
     template <bool curr_dt>
@@ -8514,26 +8636,6 @@ public:
                 delete[] zoid_recv_data[zoid.num];
                 delete[] zoid_recv_data_sizes[zoid.num];
             }
-        }
-
-
-        for (int zoid_num = 0; zoid_num < NUM_ZOIDS_MANY_CUTS; zoid_num++) {
-            if (zoid_num % comm->nprocs != comm->me) {
-                continue;
-            }
-            auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num]
-                                           : send_to_neighbors_many_cuts_next_dt[zoid_num];
-            auto& zoid = curr_dt ? zoid_num_to_zoid_many_cuts[zoid_num]
-                    : zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
-
-            int total_sent = 0;
-            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                for (int j = 0; j < send_neighbors.size(); j++) {
-                    total_sent += zoid.send_pos_idxs_double_buffering[t][j].size();
-                }
-            }
-
-            std::cout << "curr_dt: " << curr_dt << " zoid: " << zoid.num << " total num pos: " << total_sent << std::endl;
         }
     }
 
@@ -9113,6 +9215,40 @@ public:
                 }
             }
         }
+    }
+
+    template <bool curr_dt>
+    void GET_SEND_STATISTICS() {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+        int total_send_force = 0;
+        int total_send_pos = 0;
+        int total_send_vel = 0;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto& zoid = queues[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs != comm->me) {
+                    continue;
+                }
+                int my_zoid_dep = (zoid.where[0] % 2 == 0) + (zoid.where[1] % 2 == 0) + (zoid.where[2] % 2 == 0);
+                auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num] : send_to_neighbors_many_cuts_next_dt[zoid_num];
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    for (int i = 0; i < send_neighbors.size(); i++) {
+                        int send_zoid_num = send_neighbors[i];
+                        auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
+                                : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+                        int send_zoid_dep = (send_zoid.where[0] % 2 == 0) + (send_zoid.where[1] % 2 == 0) + (send_zoid.where[2] % 2 == 0);
+                        if (send_zoid_num % comm->nprocs != comm->me && send_zoid_dep == my_zoid_dep + 1) {
+                            total_send_force += zoid.send_force_idxs_double_buffering[t][i].size();
+                            total_send_pos += zoid.send_pos_idxs_double_buffering[t][i].size();
+                            total_send_vel += zoid.send_vel_idxs_double_buffering[t][i].size();
+                        }
+                    }
+                }
+            }
+        }
+
+        std::cout << "curr_dt: " << curr_dt << " proc: " << comm->me << " total send force: " << total_send_force << " total send pos: " << total_send_pos << " total send vel: " << total_send_vel << std::endl;
     }
 
     template <bool curr_dt>

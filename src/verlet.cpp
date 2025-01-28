@@ -5559,6 +5559,8 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<true>();
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<false>();
 
+    stencilMD->GET_SEND_STATISTICS<true>();
+
     /*
     stencilMD->INIT_PIPELINED_DATA();
     stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED<true>();
