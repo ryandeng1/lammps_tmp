@@ -6441,6 +6441,7 @@ public:
     /* Start code for many zoids per dimension */
     std::vector<queue_info> queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> queues_many_cuts_next_dt[NUM_DEPS];
+
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
@@ -6507,7 +6508,7 @@ public:
     std::vector<std::vector<int>> recv_zoid_to_zoid_sizes;
     std::vector<std::vector<int>> recv_zoid_to_zoid_sizes_next_dt;
 
-    void INIT_ZOIDS_MANY_CUTS() {
+    void INIT_ZOID_MANY_CUTS() {
         // TODO: test out more than 1 cut in each dimension
         double width = domain->boxhi[0] - domain->boxlo[0];
         double narrow_base_width = ((width / NUM_CUTS_PER_DIMENSION) - 2 * NUM_TIMESTEPS_IN_PARALLEL * ALLEGRO_SLOPE) / 2;
@@ -6975,6 +6976,73 @@ public:
                 my_queues_many_cuts_next_dt[dep].push_back(zoid);
             }
         }
+
+    }
+
+    template <bool curr_dt>
+    void SORT_MY_ZOIDS() {
+        auto get_dep_curr_dt = [](const queue_info& zoid) {
+            return (zoid.where[0] % 2 == 1) + (zoid.where[1] % 2 == 1) + (zoid.where[2] % 2 == 1);
+        };
+
+        auto get_dep_next_dt = [](const queue_info& zoid) {
+            return (zoid.where[0] % 2 == 1) + (zoid.where[1] % 2 == 1) + (zoid.where[2] % 2 == 1);
+        };
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            auto& my_queues_at_dep = curr_dt ? my_queues_many_cuts[dep] : my_queues_many_cuts_next_dt[dep];
+            if (dep == 0) {
+                std::sort(my_queues_at_dep.begin(), my_queues_at_dep.end(), [&](const auto& zoid_a, const auto& zoid_b) {
+                    auto& send_neighbors_a = curr_dt ? send_to_neighbors_many_cuts[zoid_a.num]
+                            : send_to_neighbors_many_cuts_next_dt[zoid_a.num];
+                    auto& send_neighbors_b = curr_dt ? send_to_neighbors_many_cuts[zoid_b.num]
+                            : send_to_neighbors_many_cuts_next_dt[zoid_b.num];
+
+                    // put zoids where they are sending to different zoids
+                    int num_neighbors_a = 0;
+                    for (int i = 0; i < send_neighbors_a.size(); i++) {
+                        int send_zoid_num = send_neighbors_a[i];
+                        if (send_zoid_num % comm->nprocs != comm->me) {
+                            num_neighbors_a++;
+                        }
+                    }
+
+                    int num_neighbors_b = 0;
+                    for (int i = 0; i < send_neighbors_b.size(); i++) {
+                        int send_zoid_num = send_neighbors_b[i];
+                        if (send_zoid_num % comm->nprocs != comm->me) {
+                            num_neighbors_b++;
+                        }
+                    }
+
+                    return num_neighbors_a > num_neighbors_b;
+                });
+            } else {
+                std::sort(my_queues_at_dep.begin(), my_queues_at_dep.end(), [&](const auto& zoid_a, const auto& zoid_b) {
+                    auto& recv_neighbors_a = recv_from_neighbors_many_cuts[zoid_a.num];
+                    auto& recv_neighbors_b = recv_from_neighbors_many_cuts[zoid_b.num];
+
+                    // put zoids where they are sending to different zoids
+                    int num_neighbors_a = 0;
+                    for (int i = 0; i < recv_neighbors_a.size(); i++) {
+                        int recv_zoid_num = recv_neighbors_a[i];
+                        if (recv_zoid_num % comm->nprocs != comm->me) {
+                            num_neighbors_a++;
+                        }
+                    }
+
+                    int num_neighbors_b = 0;
+                    for (int i = 0; i < recv_neighbors_b.size(); i++) {
+                        int recv_zoid_num = recv_neighbors_b[i];
+                        if (recv_zoid_num % comm->nprocs != comm->me) {
+                            num_neighbors_b++;
+                        }
+                    }
+
+                    return num_neighbors_a < num_neighbors_b;
+                });
+            }
+        }
     }
 
     void INIT_PIPELINED_DATA() {
@@ -7126,13 +7194,20 @@ public:
             }
         }
 
+        auto get_dep_curr_dt = [](queue_info& zoid) {
+            return (zoid.where[0] % 2 == 0) + (zoid.where[1] % 2 == 0) + (zoid.where[2] % 2 == 0);
+        };
+
+        auto get_dep_next_dt = [](queue_info& zoid) {
+            return (zoid.where[0] % 2 == 0) + (zoid.where[1] % 2 == 0) + (zoid.where[2] % 2 == 0);
+        };
+
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             std::sort(send_to_neighbors_many_cuts[i].begin(), send_to_neighbors_many_cuts[i].end());
             std::sort(recv_from_neighbors_many_cuts[i].begin(), recv_from_neighbors_many_cuts[i].end());
             std::sort(send_to_neighbors_many_cuts_next_dt[i].begin(), send_to_neighbors_many_cuts_next_dt[i].end());
             std::sort(recv_from_neighbors_many_cuts_next_dt[i].begin(), recv_from_neighbors_many_cuts_next_dt[i].end());
         }
-
     }
 
     template <bool curr_dt>
@@ -10175,14 +10250,9 @@ public:
                                         : recv_zoid_to_zoid_sizes_next_dt[zoid_num][i];
                 int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? recv_size * (3 + 1) : recv_size * 3;
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
-                MPI_Recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                         recv_zoid_num % comm->nprocs, mpi_tag,
-                         all_comms[zoid_num], MPI_STATUS_IGNORE);
-                /*
                 MPI_Wait(&r[wait_idx++], MPI_STATUS_IGNORE);
                 buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][i]
                         : buf_recv_zoid_to_zoid_next_dt[zoid_num][i];
-                */
             } else {
                 auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[recv_zoid_num]
                                                : send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
