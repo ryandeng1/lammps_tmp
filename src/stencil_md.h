@@ -10402,88 +10402,91 @@ public:
 
     template <bool curr_dt, bool is_initial>
     void UNPACK_DATA_MANY_CUTS_ZOID(queue_info& zoid, std::vector<MPI_Request>& r) {
-        int zoid_num = zoid.num;
-        auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
+        cilk_scope {
+                int zoid_num = zoid.num;
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                 : recv_from_neighbors_many_cuts_next_dt[zoid_num];
 
-        int start_t = 0;
-        int end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
+                int start_t = 0;
+                int end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
-        auto& not_my_proc_idxs = curr_dt ? recv_from_neighbors_not_my_proc_idxs[zoid.num]
+                auto& not_my_proc_idxs = curr_dt ? recv_from_neighbors_not_my_proc_idxs[zoid.num]
                 : recv_from_neighbors_not_my_proc_idxs_next_dt[zoid.num];
 
-        int num_wait = 0;
-        while (num_wait < not_my_proc_idxs.size()) {
-            int idx;
-            MPI_Waitany(r.size(), r.data(), &idx, MPI_STATUS_IGNORE);
+                int num_wait = 0;
+                while (num_wait < not_my_proc_idxs.size()) {
+                    int idx;
+                    MPI_Waitany(r.size(), r.data(), &idx, MPI_STATUS_IGNORE);
 
-            int recv_neighbor_idx = not_my_proc_idxs[idx];
+                    int recv_neighbor_idx = not_my_proc_idxs[idx];
 
-            auto buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][recv_neighbor_idx]
-                          : buf_recv_zoid_to_zoid_next_dt[zoid_num][recv_neighbor_idx];
+                    auto buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][recv_neighbor_idx]
+                                       : buf_recv_zoid_to_zoid_next_dt[zoid_num][recv_neighbor_idx];
 
-            int recv_zoid_num = recv_neighbors[recv_neighbor_idx];
-            UNPACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(zoid, buf, recv_neighbor_idx, recv_zoid_num, start_t, end_t);
-            num_wait++;
+                    int recv_zoid_num = recv_neighbors[recv_neighbor_idx];
+                    cilk_spawn UNPACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(zoid, buf, recv_neighbor_idx,
+                                                                                 recv_zoid_num, start_t, end_t);
+                    num_wait++;
+                }
+
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    if (recv_zoid_num % comm->nprocs != comm->me) {
+                        continue;
+                    }
+
+                    auto &send_neighbors = curr_dt ? send_to_neighbors_many_cuts[recv_zoid_num]
+                                                   : send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
+                    auto find_it = std::find(send_neighbors.begin(), send_neighbors.end(), zoid_num);
+                    assert(find_it != send_neighbors.end());
+                    int find_idx = std::distance(send_neighbors.begin(), find_it);
+                    assert(send_neighbors[find_idx] == zoid_num);
+                    auto *buf = curr_dt ? buf_send_zoid_to_zoid[recv_zoid_num][find_idx]
+                                        : buf_send_zoid_to_zoid_next_dt[recv_zoid_num][find_idx];
+
+                    UNPACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(zoid, buf, i, recv_zoid_num, start_t, end_t);
+                }
+
+                /*
+                int wait_idx = 0;
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    double* buf;
+
+                    int num_recv_from_zoid = curr_dt ? recv_zoid_to_zoid_sizes[zoid_num][i]
+                            : recv_zoid_to_zoid_sizes_next_dt[zoid_num][i];
+
+                    assert(num_recv_from_zoid >= 0);
+
+                    if (num_recv_from_zoid == 0) {
+                        continue;
+                    }
+
+                    if (recv_zoid_num % comm->nprocs != comm->me) {
+                        buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][i]
+                                      : buf_recv_zoid_to_zoid_next_dt[zoid_num][i];
+                        int recv_size = curr_dt ? recv_zoid_to_zoid_sizes[zoid_num][i]
+                                                : recv_zoid_to_zoid_sizes_next_dt[zoid_num][i];
+                        int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? recv_size * (3 + 1) : recv_size * 3;
+                        int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
+                        MPI_Wait(&r[wait_idx++], MPI_STATUS_IGNORE);
+                        buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][i]
+                                : buf_recv_zoid_to_zoid_next_dt[zoid_num][i];
+                    } else {
+                        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[recv_zoid_num]
+                                                       : send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
+                        auto find_it = std::find(send_neighbors.begin(), send_neighbors.end(), zoid_num);
+                        assert(find_it != send_neighbors.end());
+                        int find_idx = std::distance(send_neighbors.begin(), find_it);
+                        assert(send_neighbors[find_idx] == zoid_num);
+                        buf = curr_dt ? buf_send_zoid_to_zoid[recv_zoid_num][find_idx]
+                                : buf_send_zoid_to_zoid_next_dt[recv_zoid_num][find_idx];
+                    }
+
+                    UNPACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(zoid, buf, i, recv_zoid_num, start_t, end_t);
+                }
+                */
         }
-
-        for (int i = 0; i < recv_neighbors.size(); i++) {
-            int recv_zoid_num = recv_neighbors[i];
-            if (recv_zoid_num % comm->nprocs != comm->me) {
-                continue;
-            }
-
-            auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[recv_zoid_num]
-                                           : send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
-            auto find_it = std::find(send_neighbors.begin(), send_neighbors.end(), zoid_num);
-            assert(find_it != send_neighbors.end());
-            int find_idx = std::distance(send_neighbors.begin(), find_it);
-            assert(send_neighbors[find_idx] == zoid_num);
-            auto* buf = curr_dt ? buf_send_zoid_to_zoid[recv_zoid_num][find_idx]
-                    : buf_send_zoid_to_zoid_next_dt[recv_zoid_num][find_idx];
-
-            UNPACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(zoid, buf, i, recv_zoid_num, start_t, end_t);
-        }
-
-        /*
-        int wait_idx = 0;
-        for (int i = 0; i < recv_neighbors.size(); i++) {
-            int recv_zoid_num = recv_neighbors[i];
-            double* buf;
-
-            int num_recv_from_zoid = curr_dt ? recv_zoid_to_zoid_sizes[zoid_num][i]
-                    : recv_zoid_to_zoid_sizes_next_dt[zoid_num][i];
-
-            assert(num_recv_from_zoid >= 0);
-
-            if (num_recv_from_zoid == 0) {
-                continue;
-            }
-
-            if (recv_zoid_num % comm->nprocs != comm->me) {
-                buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][i]
-                              : buf_recv_zoid_to_zoid_next_dt[zoid_num][i];
-                int recv_size = curr_dt ? recv_zoid_to_zoid_sizes[zoid_num][i]
-                                        : recv_zoid_to_zoid_sizes_next_dt[zoid_num][i];
-                int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? recv_size * (3 + 1) : recv_size * 3;
-                int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
-                MPI_Wait(&r[wait_idx++], MPI_STATUS_IGNORE);
-                buf = curr_dt ? buf_recv_zoid_to_zoid[zoid_num][i]
-                        : buf_recv_zoid_to_zoid_next_dt[zoid_num][i];
-            } else {
-                auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[recv_zoid_num]
-                                               : send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
-                auto find_it = std::find(send_neighbors.begin(), send_neighbors.end(), zoid_num);
-                assert(find_it != send_neighbors.end());
-                int find_idx = std::distance(send_neighbors.begin(), find_it);
-                assert(send_neighbors[find_idx] == zoid_num);
-                buf = curr_dt ? buf_send_zoid_to_zoid[recv_zoid_num][find_idx]
-                        : buf_send_zoid_to_zoid_next_dt[recv_zoid_num][find_idx];
-            }
-
-            UNPACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(zoid, buf, i, recv_zoid_num, start_t, end_t);
-        }
-        */
     }
 
     template <bool curr_dt, bool is_initial>
