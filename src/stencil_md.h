@@ -10402,7 +10402,7 @@ public:
 
     template <bool curr_dt, bool is_initial>
     void UNPACK_DATA_MANY_CUTS_ZOID(queue_info& zoid, std::vector<MPI_Request>& r) {
-        cilk_scope {
+        // cilk_scope {
                 int zoid_num = zoid.num;
                 auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                 : recv_from_neighbors_many_cuts_next_dt[zoid_num];
@@ -10486,7 +10486,7 @@ public:
                     UNPACK_DATA_MANY_CUTS_HELPER<curr_dt, is_initial>(zoid, buf, i, recv_zoid_num, start_t, end_t);
                 }
                 */
-        }
+        // }
     }
 
     template <bool curr_dt, bool is_initial>
