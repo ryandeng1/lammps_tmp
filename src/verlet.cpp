@@ -7883,7 +7883,7 @@ void Verlet::run_stencil_md_zoid_many_cuts_everything(int starting_timestep, int
 
 template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **test_f, double **test_x, double **test_v) {
-    constexpr bool PIPELINE = true;
+    constexpr bool PIPELINE = false;
 
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
                               : stencilMD->my_queues_many_cuts_next_dt;
@@ -7997,10 +7997,10 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
                 int zoid_num = zoid.num;
                 stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt, false>(zoid, recv_r[zoid_num]);
                 run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
-                                                       tmp_start_t, tmp_end_t,
+                                                       0, NUM_TIMESTEPS_IN_PARALLEL,
                                                        test_f, test_x, test_v);
                 stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt, false>(zoid, dep,
-                                                                           tmp_start_t, tmp_end_t, send_r[zoid_num]);
+                                                                           0, NUM_TIMESTEPS_IN_PARALLEL + 1, send_r[zoid_num]);
             }
         }
 
