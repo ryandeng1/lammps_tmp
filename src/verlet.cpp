@@ -7881,7 +7881,7 @@ void Verlet::run_stencil_md_zoid_many_cuts_everything(int starting_timestep, int
 
 template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **test_f, double **test_x, double **test_v) {
-    constexpr bool PIPELINE = true;
+    constexpr bool PIPELINE = false;
 
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
                               : stencilMD->my_queues_many_cuts_next_dt;
