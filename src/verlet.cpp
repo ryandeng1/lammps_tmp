@@ -7853,7 +7853,7 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
     auto& queues = curr_dt ? stencilMD->my_queues_many_cuts
             : stencilMD->my_queues_many_cuts_next_dt;
 
-    for (int j = 0; j < queues[dep].size(); j++) {
+    cilk_for (int j = 0; j < queues[dep].size(); j++) {
         auto& zoid = queues[dep][j];
         int zoid_num = zoid.num;
         stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_PIPELINED<curr_dt, false>(zoid, recv_requests[zoid_num],
