@@ -10305,7 +10305,7 @@ public:
                 int end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
                 auto& not_my_proc_idxs = curr_dt ? recv_from_neighbors_not_my_proc_idxs[zoid.num]
-                : recv_from_neighbors_not_my_proc_idxs_next_dt[zoid.num];
+                        : recv_from_neighbors_not_my_proc_idxs_next_dt[zoid.num];
 
                 int num_wait = 0;
                 while (num_wait < not_my_proc_idxs.size()) {

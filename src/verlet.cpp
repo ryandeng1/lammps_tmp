@@ -7915,7 +7915,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
                 recv_r[zoid_num].reserve(25);
                 stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid_num, recv_r[zoid_num],
                                                                         start_t, mid_t, 0);
-                stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid_num, recv_r[zoid_num],
+                stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid_num, recv_r2[zoid_num],
                                                                         mid_t, end_t, 1);
             }
         }
@@ -7926,29 +7926,29 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
                 cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 0, recv_r2, send_r2,
                                                                         mid_t, end_t, 1, test_f, test_x, test_v);
 
-                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 1, recv_r, send_r,
-                                                                        start_t, mid_t, 0, test_f, test_x, test_v);
+                run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 1, recv_r, send_r,
+                                                             start_t, mid_t, 0, test_f, test_x, test_v);
         }
 
         cilk_scope {
                 cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 1, recv_r2, send_r2,
                                                                         mid_t, end_t, 1, test_f, test_x, test_v);
 
-                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 2, recv_r, send_r,
-                                                                        start_t, mid_t, 0, test_f, test_x, test_v);
+                run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 2, recv_r, send_r,
+                                                             start_t, mid_t, 0, test_f, test_x, test_v);
         }
 
         cilk_scope {
                 cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 2, recv_r2, send_r2,
                                                                         mid_t, end_t, 1, test_f, test_x, test_v);
 
-                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 3, recv_r, send_r,
-                                                                        start_t, mid_t, 0, test_f, test_x, test_v);
+                run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 3, recv_r, send_r,
+                                                             start_t, mid_t, 0, test_f, test_x, test_v);
         }
 
-        run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 3, recv_r, send_r,
-                                                     start_t, mid_t, 0, test_f, test_x, test_v);
-        
+        run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 3, recv_r2, send_r2,
+                                                     mid_t, end_t, 1, test_f, test_x, test_v);
+
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 int zoid_num = my_queues[dep][j].num;
