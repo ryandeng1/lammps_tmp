@@ -11077,6 +11077,25 @@ public:
             int chunks_per_worker = num_chunks / num_workers;
             int chunk_size = MODIFY_GRAINSIZE;
 
+            #pragma cilk grainsize MODIFY_GRAINSIZE
+            cilk_for (int idx = 0; idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                const double dtfm = dtf / mass[type[i]];
+                v[i].x += dtfm * f[i].x;
+                v[i].y += dtfm * f[i].y;
+                v[i].z += dtfm * f[i].z;
+
+                f[i].x = 0.0;
+                f[i].y = 0.0;
+                f[i].z = 0.0;
+
+                next_x[i].x = x[i].x + dtv * v[i].x;
+                next_x[i].y = x[i].y + dtv * v[i].y;
+                next_x[i].z = x[i].z + dtv * v[i].z;
+            }
+
+            /*
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
                 int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
@@ -11115,6 +11134,7 @@ public:
             for (int i = 0; i < num_chunks; i++) {
                 claimed[i].clear(std::memory_order_relaxed);
             }
+            */
         } else {
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -11166,6 +11186,35 @@ public:
             int chunk_size = MODIFY_GRAINSIZE;
             auto* claimed = zoid.claimed_flags_stencil_md[0];
 
+            #pragma cilk grainsize MODIFY_GRAINSIZE
+            cilk_for (int idx = 0; idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                int atom_type = type[i];
+
+                const double dtfm = dtf / mass[atom_type];
+
+                double gamma1 = gfactor1[atom_type];
+                double gamma2 = gfactor2[atom_type] * tsqrt;
+
+                double rand_x = 0.6;
+                double rand_y = 0.6;
+                double rand_z = 0.6;
+
+                double v_x = v[i].x;
+                double v_y = v[i].y;
+                double v_z = v[i].z;
+
+                f[i].x += gamma1 * v_x + gamma2 * (rand_x - 0.5);
+                f[i].y += gamma1 * v_y + gamma2 * (rand_x - 0.5);
+                f[i].z += gamma1 * v_z + gamma2 * (rand_x - 0.5);
+
+                v[i].x += dtfm * f[i].x;
+                v[i].y += dtfm * f[i].y;
+                v[i].z += dtfm * f[i].z;
+            }
+
+            /*
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
                 int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
@@ -11213,6 +11262,7 @@ public:
             for (int i = 0; i < num_chunks; i++) {
                 claimed[i].clear(std::memory_order_relaxed);
             }
+            */
         } else {
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
