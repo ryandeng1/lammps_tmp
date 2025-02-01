@@ -6422,9 +6422,11 @@ void Verlet::run(int n) {
     int64_t total_duration_stencil_md = 0;
     MPI_Allreduce(&duration, &total_duration_stencil_md, 1, MPI_INT64_T, MPI_SUM, world);
 
-    std::cout << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << " total duration: " << total_duration_stencil_md << std::endl;
-
     MPI_Barrier(world);
+
+    std::stringstream output_stream;
+    output_stream << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << " total duration: " << total_duration_stencil_md << std::endl;
+    std::cout << output_stream.str();
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
@@ -7881,7 +7883,7 @@ void Verlet::run_stencil_md_zoid_many_cuts_everything(int starting_timestep, int
 
 template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **test_f, double **test_x, double **test_v) {
-    constexpr bool PIPELINE = false;
+    constexpr bool PIPELINE = true;
 
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
                               : stencilMD->my_queues_many_cuts_next_dt;
@@ -7897,14 +7899,15 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
     constexpr int mid_t = NUM_TIMESTEPS_IN_PARALLEL / 2 + 1;
     constexpr int end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
+    constexpr int MAX_NEIGHBORS = 26;
 
     if (PIPELINE) {
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 int zoid_num = my_queues[dep][j].num;
                 assert(zoid_num % comm->nprocs == comm->me);
-                send_r[zoid_num].reserve(26);
-                send_r2[zoid_num].reserve(26);
+                send_r[zoid_num].reserve(MAX_NEIGHBORS);
+                send_r2[zoid_num].reserve(MAX_NEIGHBORS);
             }
         }
 
@@ -7961,7 +7964,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 int zoid_num = my_queues[dep][j].num;
                 assert(zoid_num % comm->nprocs == comm->me);
-                send_r[zoid_num].reserve(26);
+                send_r[zoid_num].reserve(MAX_NEIGHBORS);
             }
         }
 
@@ -7969,7 +7972,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 int zoid_num = my_queues[dep][j].num;
                 assert(zoid_num % comm->nprocs == comm->me);
-                recv_r[zoid_num].reserve(25);
+                recv_r[zoid_num].reserve(MAX_NEIGHBORS);
                 stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
             }
         }
