@@ -5561,15 +5561,12 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<true>();
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<false>();
 
-    stencilMD->GET_SEND_STATISTICS<true>();
+    stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES_PIPELINED<true>();
+    stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES_PIPELINED<false>();
+    stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES_PIPELINED<true>();
+    stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES_PIPELINED<false>();
 
-    /*
-    stencilMD->INIT_PIPELINED_DATA();
-    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED<true>();
-    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS_PIPELINED<false>();
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINED<true>();
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS_PIPELINED<false>();
-    */
+    stencilMD->GET_SEND_STATISTICS<true>();
 
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<true>();
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<false>();
@@ -7820,7 +7817,7 @@ void Verlet::run_stencil_md_pipelined_double_buffering(int num_timesteps, std::v
 template <bool curr_dt>
 void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
                                            double** test_f, double** test_x, double** test_v) {
-    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
+    for (int t = start_t; t < end_t; t++) {
         if (TEST_AGAINST_LAMMPS) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t
                     : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
@@ -7847,39 +7844,24 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
 
 template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
-                                                 int nproc_recv, MPI_Request* recv_requests,
-                                                 std::map<std::pair<int, int>, bool> did_recv_map,
-                                                 std::vector<MPI_Request>& send_requests,
+                                                 std::vector<MPI_Request>* recv_requests,
+                                                 std::vector<MPI_Request>* send_requests,
+                                                 int start_t, int end_t, int pipeline_stage,
                                                  double** test_f, double** test_x, double** test_v) {
-    int tmp_start_t = 0;
-    int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
+    auto& queues = curr_dt ? stencilMD->my_queues_many_cuts
+            : stencilMD->my_queues_many_cuts_next_dt;
 
-    if (nproc_recv > 0) {
-        MPI_Waitall(nproc_recv, recv_requests, MPI_STATUSES_IGNORE);
-        for (int proc = 0; proc < comm->nprocs; proc++) {
-            if (did_recv_map[{dep, proc}] || proc == comm->me) {
-                stencilMD->UNPACK_DATA_MANY_CUTS<curr_dt, false>(dep, proc, tmp_start_t, tmp_end_t);
-            }
-        }
-    }
-
-    auto& queues = curr_dt ? stencilMD->queues_many_cuts
-            : stencilMD->queues_many_cuts_next_dt;
-
-    cilk_for (int j = 0; j < queues[dep].size(); j++) {
+    for (int j = 0; j < queues[dep].size(); j++) {
         auto& zoid = queues[dep][j];
-        if (zoid.num % comm->nprocs != comm->me) {
-            continue;
-        }
+        int zoid_num = zoid.num;
+        stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_PIPELINED<curr_dt, false>(zoid, recv_requests[zoid_num],
+                                                                        start_t, end_t, pipeline_stage);
         run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
-                                               tmp_start_t, tmp_end_t,
+                                               start_t - 1, end_t - 1,
                                                test_f, test_x, test_v);
-        stencilMD->PACK_DATA_MANY_CUTS_ZOID<curr_dt, false>(zoid, dep, tmp_start_t, tmp_end_t);
-    }
-
-    if (dep < NUM_DEPS - 1) {
-        // stencilMD->PACK_DATA_MANY_CUTS<curr_dt, false>(dep, tmp_start_t, tmp_end_t);
-        int nproc_send = stencilMD->SEND_DATA_MANY_CUTS<curr_dt>(dep, send_requests);
+        stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt, false>(zoid, dep,
+                                                                             start_t, end_t, pipeline_stage,
+                                                                             send_requests[zoid_num]);
     }
 }
 
@@ -7899,97 +7881,131 @@ void Verlet::run_stencil_md_zoid_many_cuts_everything(int starting_timestep, int
 
 template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **test_f, double **test_x, double **test_v) {
-    /*
-    std::vector<MPI_Request> send_r[NUM_ZOIDS_MAN];
-    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-        send_r[dep].reserve(comm->nprocs);
-    }
-
-    std::vector<MPI_Request> recv_r[NUM_DEPS];
-    for (int dep = 1; dep < NUM_DEPS; dep++) {
-        recv_r[dep].resize(comm->nprocs);
-    }
-
-    int recv_r_idxs[NUM_DEPS] = {0};
-
-    std::map<std::pair<int, int>, bool> did_recv_map;
-    std::map<int, int> dep_to_nproc_send;
-
-    for (int dep = 1; dep < NUM_DEPS; dep++) {
-        for (int proc = 0; proc < comm->nprocs; proc++) {
-            bool did_recv = stencilMD->RECEIVE_DATA_MANY_CUTS<curr_dt>(dep, proc,
-                                                                       &recv_r[dep][recv_r_idxs[dep]],
-                                                                       0, NUM_TIMESTEPS_IN_PARALLEL + 1);
-            if (did_recv) {
-                recv_r_idxs[dep]++;
-            }
-            did_recv_map[{dep, proc}] = did_recv;
-        }
-    }
-
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, dep,
-                                                     recv_r_idxs[dep], recv_r[dep].data(),
-                                                     did_recv_map, send_r[dep], test_f, test_x, test_v);
-    }
-
-    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-        MPI_Waitall(send_r[dep].size(), send_r[dep].data(), MPI_STATUSES_IGNORE);
-    }
-    */
+    constexpr bool PIPELINE = true;
 
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
-            : stencilMD->my_queues_many_cuts_next_dt;
+                              : stencilMD->my_queues_many_cuts_next_dt;
+
 
     std::vector<MPI_Request> send_r[stencilMD->NUM_ZOIDS_MANY_CUTS];
-    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-        for (int j = 0; j < my_queues[dep].size(); j++) {
-            int zoid_num = my_queues[dep][j].num;
-            assert(zoid_num % comm->nprocs == comm->me);
-            send_r[my_queues[dep][j].num].reserve(25);
-        }
-    }
+    std::vector<MPI_Request> send_r2[stencilMD->NUM_ZOIDS_MANY_CUTS];
 
     std::vector<MPI_Request> recv_r[stencilMD->NUM_ZOIDS_MANY_CUTS];
-    for (int dep = 1; dep < NUM_DEPS; dep++) {
-        cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
-            int zoid_num = my_queues[dep][j].num;
-            assert(zoid_num % comm->nprocs == comm->me);
-            recv_r[zoid_num].reserve(25);
-            stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
-        }
-    }
+    std::vector<MPI_Request> recv_r2[stencilMD->NUM_ZOIDS_MANY_CUTS];
 
-    int tmp_start_t = 0;
-    int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
+    constexpr int start_t = 1;
+    constexpr int mid_t = NUM_TIMESTEPS_IN_PARALLEL / 2 + 1;
+    constexpr int end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        cilk_scope {
+
+    if (PIPELINE) {
+        for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
             for (int j = 0; j < my_queues[dep].size(); j++) {
-                auto& zoid = my_queues[dep][j];
-                int zoid_num = zoid.num;
-                cilk_spawn run_stencil_md_zoid_many_cuts_everything<curr_dt>(starting_timestep, dep, zoid, tmp_start_t, tmp_end_t,
-                                                                             send_r, recv_r,
-                                                                             test_f, test_x, test_v);
+                int zoid_num = my_queues[dep][j].num;
+                assert(zoid_num % comm->nprocs == comm->me);
+                send_r[zoid_num].reserve(26);
+                send_r2[zoid_num].reserve(26);
             }
         }
 
-        /*
-        cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
-            stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt, false>(zoid, recv_r[zoid_num]);
-            run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
-                                                   tmp_start_t, tmp_end_t,
-                                                   test_f, test_x, test_v);
-            stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt, false>(zoid, dep,
-                                                                       tmp_start_t, tmp_end_t, send_r[zoid_num]);
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                int zoid_num = my_queues[dep][j].num;
+                assert(zoid_num % comm->nprocs == comm->me);
+                recv_r[zoid_num].reserve(25);
+                stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid_num, recv_r[zoid_num],
+                                                                        start_t, mid_t, 0);
+                stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid_num, recv_r[zoid_num],
+                                                                        mid_t, end_t, 1);
+            }
         }
-        */
-    }
 
-    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-        for (int j = 0; j < my_queues[dep].size(); j++) {
-            int zoid_num = my_queues[dep][j].num;
-            MPI_Waitall(send_r[zoid_num].size(), send_r[zoid_num].data(), MPI_STATUSES_IGNORE);
+        run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 0, recv_r, send_r,
+                                                     start_t, mid_t, 0, test_f, test_x, test_v);
+        cilk_scope {
+                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 0, recv_r2, send_r2,
+                                                                        mid_t, end_t, 1, test_f, test_x, test_v);
+
+                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 1, recv_r, send_r,
+                                                                        start_t, mid_t, 0, test_f, test_x, test_v);
+        }
+
+        cilk_scope {
+                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 1, recv_r2, send_r2,
+                                                                        mid_t, end_t, 1, test_f, test_x, test_v);
+
+                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 2, recv_r, send_r,
+                                                                        start_t, mid_t, 0, test_f, test_x, test_v);
+        }
+
+        cilk_scope {
+                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 2, recv_r2, send_r2,
+                                                                        mid_t, end_t, 1, test_f, test_x, test_v);
+
+                cilk_spawn run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 3, recv_r, send_r,
+                                                                        start_t, mid_t, 0, test_f, test_x, test_v);
+        }
+
+        run_stencil_md_many_cuts_helper_dep<curr_dt>(starting_timestep, 3, recv_r, send_r,
+                                                     start_t, mid_t, 0, test_f, test_x, test_v);
+        
+        for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                int zoid_num = my_queues[dep][j].num;
+                MPI_Waitall(send_r[zoid_num].size(), send_r[zoid_num].data(), MPI_STATUSES_IGNORE);
+                MPI_Waitall(send_r2[zoid_num].size(), send_r2[zoid_num].data(), MPI_STATUSES_IGNORE);
+            }
+        }
+    } else {
+        for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                int zoid_num = my_queues[dep][j].num;
+                assert(zoid_num % comm->nprocs == comm->me);
+                send_r[zoid_num].reserve(26);
+            }
+        }
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                int zoid_num = my_queues[dep][j].num;
+                assert(zoid_num % comm->nprocs == comm->me);
+                recv_r[zoid_num].reserve(25);
+                stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
+            }
+        }
+
+        int tmp_start_t = 0;
+        int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            /*
+            cilk_scope {
+                for (int j = 0; j < my_queues[dep].size(); j++) {
+                    auto& zoid = my_queues[dep][j];
+                    int zoid_num = zoid.num;
+                    cilk_spawn run_stencil_md_zoid_many_cuts_everything<curr_dt>(starting_timestep, dep, zoid, tmp_start_t, tmp_end_t,
+                                                                                 send_r, recv_r,
+                                                                                 test_f, test_x, test_v);
+                }
+            }
+            */
+            cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                int zoid_num = zoid.num;
+                stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt, false>(zoid, recv_r[zoid_num]);
+                run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
+                                                       tmp_start_t, tmp_end_t,
+                                                       test_f, test_x, test_v);
+                stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt, false>(zoid, dep,
+                                                                           tmp_start_t, tmp_end_t, send_r[zoid_num]);
+            }
+        }
+
+        for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                int zoid_num = my_queues[dep][j].num;
+                MPI_Waitall(send_r[zoid_num].size(), send_r[zoid_num].data(), MPI_STATUSES_IGNORE);
+            }
         }
     }
 }
