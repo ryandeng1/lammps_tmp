@@ -9928,7 +9928,7 @@ public:
 
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[zoid_num], &r[r.size() - 1]);
+                          all_comms[send_zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -9967,7 +9967,7 @@ public:
                 */
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[zoid_num], &r[r.size() - 1]);
+                          all_comms[send_zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -10013,7 +10013,7 @@ public:
                 int find_idx = std::distance(recv_neighbors.begin(), find_it);
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[zoid_num], &r[r.size() - 1]);
+                          all_comms[send_zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -10046,7 +10046,7 @@ public:
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[recv_zoid_num], &r[r.size() - 1]);
+                          all_comms[zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -10086,7 +10086,7 @@ public:
                 */
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[recv_zoid_num], &r[r.size() - 1]);
+                          all_comms[zoid_num], &r[r.size() - 1]);
                 /*
                 std::stringstream s1;
                 s1 << "me: " << comm->me << " zoid: " << zoid_num << " recv from: " << recv_zoid_num
@@ -10140,7 +10140,7 @@ public:
                 */
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[recv_zoid_num], &r[r.size() - 1]);
+                          all_comms[zoid_num], &r[r.size() - 1]);
             }
         }
     }
