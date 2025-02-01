@@ -9410,7 +9410,7 @@ public:
     }
 
     static constexpr int NUM_STREAMS = 24;
-    static constexpr int NUM_COMMS = 2000;
+    static constexpr int NUM_COMMS = NUM_ZOIDS_MANY_CUTS;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
     MPI_Comm stream_comm;
@@ -9928,7 +9928,7 @@ public:
 
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[mpi_tag % NUM_COMMS], &r[r.size() - 1]);
+                          all_comms[zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -9967,7 +9967,7 @@ public:
                 */
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[mpi_tag % NUM_COMMS], &r[r.size() - 1]);
+                          all_comms[zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -10013,21 +10013,7 @@ public:
                 int find_idx = std::distance(recv_neighbors.begin(), find_it);
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[mpi_tag % NUM_COMMS], &r[r.size() - 1]);
-                /*
-                std::stringstream s1;
-                s1 << "me: " << comm->me << " zoid: " << zoid_num
-                << " send to: " << send_zoid_num
-                << " src: " << zoid_num % NUM_STREAMS
-                << " dst: " << send_zoid_num % NUM_STREAMS << std::endl;
-                std::cout << s1.str();
-                auto res = MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
-                                  send_zoid_num % comm->nprocs, mpi_tag,
-                                  stream_comm, zoid_num % NUM_STREAMS,
-                                  send_zoid_num % NUM_STREAMS,
-                                  &r[r.size() - 1]);
-                assert(res == MPI_SUCCESS);
-                */
+                          all_comms[zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -10060,7 +10046,7 @@ public:
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[mpi_tag % NUM_COMMS], &r[r.size() - 1]);
+                          all_comms[recv_zoid_num], &r[r.size() - 1]);
             }
         }
     }
@@ -10100,7 +10086,7 @@ public:
                 */
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[mpi_tag % NUM_COMMS], &r[r.size() - 1]);
+                          all_comms[recv_zoid_num], &r[r.size() - 1]);
                 /*
                 std::stringstream s1;
                 s1 << "me: " << comm->me << " zoid: " << zoid_num << " recv from: " << recv_zoid_num
@@ -10154,7 +10140,7 @@ public:
                 */
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[mpi_tag % NUM_COMMS], &r[r.size() - 1]);
+                          all_comms[recv_zoid_num], &r[r.size() - 1]);
             }
         }
     }
