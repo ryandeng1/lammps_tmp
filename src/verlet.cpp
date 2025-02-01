@@ -5586,9 +5586,6 @@ void Verlet::setup_stencil_md_many_zoids() {
     std::map<std::pair<int, int>, bool> did_recv_map;
     std::map<int, int> dep_to_nproc_send;
 
-    int setup_start_t = 0;
-    int setup_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
-
     std::vector<MPI_Request> all_recv_requests[stencilMD->NUM_ZOIDS_MANY_CUTS];
     std::vector<MPI_Request> all_send_requests[stencilMD->NUM_ZOIDS_MANY_CUTS];
 
@@ -5599,7 +5596,8 @@ void Verlet::setup_stencil_md_many_zoids() {
             assert(zoid_num % comm->nprocs == comm->me);
 
             all_recv_requests[zoid_num].reserve(20);
-            stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<true>(zoid.num, all_recv_requests[zoid_num]);
+            // stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<true>(zoid.num, all_recv_requests[zoid_num]);
+            stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_SETUP(zoid.num, all_recv_requests[zoid_num]);
         }
     }
 
@@ -5608,13 +5606,14 @@ void Verlet::setup_stencil_md_many_zoids() {
             auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
             int zoid_num = zoid.num;
             assert(zoid_num % comm->nprocs == comm->me);
-            stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<true, true>(zoid, all_recv_requests[zoid_num]);
+            // stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<true, true>(zoid, all_recv_requests[zoid_num]);
+            stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SETUP(zoid, all_recv_requests[zoid_num]);
             stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
             if (TEST_AGAINST_LAMMPS) {
                 stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
             }
-            stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<true, true>(zoid, dep, setup_start_t, setup_end_t, all_send_requests[zoid_num]);
+            stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_SETUP(zoid, dep, all_send_requests[zoid_num]);
         }
     }
 
@@ -7977,7 +7976,7 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
             }
         }
 
-        int tmp_start_t = 0;
+        int tmp_start_t = 1;
         int tmp_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -7995,12 +7994,12 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
             cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
                 auto& zoid = my_queues[dep][j];
                 int zoid_num = zoid.num;
-                stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt, false>(zoid, recv_r[zoid_num]);
+                stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt>(zoid, recv_r[zoid_num], tmp_start_t, tmp_end_t);
                 run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
-                                                       0, NUM_TIMESTEPS_IN_PARALLEL,
+                                                       tmp_start_t - 1, tmp_end_t - 1,
                                                        test_f, test_x, test_v);
-                stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt, false>(zoid, dep,
-                                                                           0, NUM_TIMESTEPS_IN_PARALLEL + 1, send_r[zoid_num]);
+                stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep,
+                                                                    tmp_start_t, tmp_end_t, send_r[zoid_num]);
             }
         }
 
