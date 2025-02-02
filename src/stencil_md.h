@@ -6880,9 +6880,19 @@ public:
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
-                    zoid.send_force_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
-                    zoid.send_pos_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
-                    zoid.send_vel_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
+                    constexpr int MAX_NEIGHBORS = 26;
+                    zoid.send_force_idxs_double_buffering_flattened = new std::vector<int>[MAX_NEIGHBORS];
+                    zoid.send_pos_idxs_double_buffering_flattened = new std::vector<int>*[DOUBLE_BUFFERING];
+                    zoid.send_vel_idxs_double_buffering_flattened = new std::vector<int>[MAX_NEIGHBORS];
+
+                    zoid.recv_force_idxs_double_buffering_flattened = new std::vector<int>[MAX_NEIGHBORS];
+                    zoid.recv_vel_idxs_double_buffering_flattened = new std::vector<int>[MAX_NEIGHBORS];
+                    zoid.recv_pos_idxs_double_buffering_flattened = new std::vector<int>*[DOUBLE_BUFFERING];
+
+                    for (int k = 0; k < DOUBLE_BUFFERING; k++) {
+                        zoid.send_pos_idxs_double_buffering_flattened[k] = new std::vector<int>[MAX_NEIGHBORS];
+                        zoid.recv_pos_idxs_double_buffering_flattened[k] = new std::vector<int>[MAX_NEIGHBORS];
+                    }
                     /* end stuff for 2 timesteps */
                 }
             }
@@ -6921,9 +6931,19 @@ public:
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
-                    zoid.send_force_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
-                    zoid.send_pos_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
-                    zoid.send_vel_idxs_double_buffering_flattened = new std::vector<int>*[NUM_PIPELINE_STAGES];
+                    constexpr int MAX_NEIGHBORS = 26;
+                    zoid.send_force_idxs_double_buffering_flattened = new std::vector<int>[MAX_NEIGHBORS];
+                    zoid.send_pos_idxs_double_buffering_flattened = new std::vector<int>*[DOUBLE_BUFFERING];
+                    zoid.send_vel_idxs_double_buffering_flattened = new std::vector<int>[MAX_NEIGHBORS];
+
+                    zoid.recv_force_idxs_double_buffering_flattened = new std::vector<int>[MAX_NEIGHBORS];
+                    zoid.recv_vel_idxs_double_buffering_flattened = new std::vector<int>[MAX_NEIGHBORS];
+                    zoid.recv_pos_idxs_double_buffering_flattened = new std::vector<int>*[DOUBLE_BUFFERING];
+
+                    for (int k = 0; k < DOUBLE_BUFFERING; k++) {
+                        zoid.send_pos_idxs_double_buffering_flattened[k] = new std::vector<int>[MAX_NEIGHBORS];
+                        zoid.recv_pos_idxs_double_buffering_flattened[k] = new std::vector<int>[MAX_NEIGHBORS];
+                    }
                     /* end stuff for 2 timesteps */
                 }
             }
@@ -7258,8 +7278,6 @@ public:
 
         MPI_Allgatherv(my_zoids_comm_idx.data(), counts[comm->me], MPI_INT, all_comm_idx.data(),
                        counts.data(), displacements.data(), MPI_INT, world);
-
-        std::cout << "here" << std::endl;
 
         for (int i = 0; i < all_src.size(); i++) {
             int src = all_src[i];
@@ -9822,6 +9840,20 @@ public:
                         nsend_vel += send_zoid.send_vel_idxs_double_buffering[t][i].size();
                     }
 
+                    for (int t = start_t; t < end_t; t++) {
+                        for (auto& idx : send_zoid.send_force_idxs_double_buffering[t][i]) {
+                            send_zoid.send_force_idxs_double_buffering_flattened[i].push_back(idx);
+                        }
+
+                        for (auto& idx : send_zoid.send_vel_idxs_double_buffering[t][i]) {
+                            send_zoid.send_vel_idxs_double_buffering_flattened[i].push_back(idx);
+                        }
+
+                        for (auto& idx : send_zoid.send_pos_idxs_double_buffering[t][i]) {
+                            send_zoid.send_pos_idxs_double_buffering_flattened[t % DOUBLE_BUFFERING][i].push_back(idx);
+                        }
+                    }
+
                     int nsend_total = nsend_force + nsend_pos + nsend_vel;
 
                     if (curr_dt) {
@@ -9965,6 +9997,20 @@ public:
                     nrecv_from_zoid += zoid.recv_vel_idxs_double_buffering[t][i].size();
                 }
 
+                for (int t = start_t; t < end_t; t++) {
+                    for (auto& idx : zoid.recv_force_idxs_double_buffering[t][i]) {
+                        zoid.recv_force_idxs_double_buffering_flattened[i].push_back(idx);
+                    }
+
+                    for (auto& idx : zoid.recv_vel_idxs_double_buffering[t][i]) {
+                        zoid.recv_vel_idxs_double_buffering_flattened[i].push_back(idx);
+                    }
+
+                    for (auto& idx : zoid.recv_pos_idxs_double_buffering[t][i]) {
+                        zoid.recv_pos_idxs_double_buffering_flattened[t % DOUBLE_BUFFERING][i].push_back(idx);
+                    }
+                }
+
                 if (curr_dt) {
                     recv_zoid_to_zoid_sizes[zoid_num][i] = nrecv_from_zoid;
 
@@ -10065,8 +10111,6 @@ public:
                 r.emplace_back();
 
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num});
-                std::cout << "zoid: " << zoid.num << " send to: " << send_zoid_num << " comm idx: " << comm_idx << std::endl;
-
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
                           all_comms[comm_idx], &r[r.size() - 1]);
@@ -11902,9 +11946,17 @@ public:
                 delete[] zoid.send_vel_idxs_double_buffering;
                 delete[] zoid.recv_vel_idxs_double_buffering;
 
+                for (int k = 0; k < DOUBLE_BUFFERING; k++) {
+                    delete[] zoid.send_pos_idxs_double_buffering_flattened[k];
+                    delete[] zoid.recv_pos_idxs_double_buffering_flattened[k];
+                }
+
                 delete[] zoid.send_force_idxs_double_buffering_flattened;
                 delete[] zoid.send_pos_idxs_double_buffering_flattened;
                 delete[] zoid.send_vel_idxs_double_buffering_flattened;
+                delete[] zoid.recv_force_idxs_double_buffering_flattened;
+                delete[] zoid.recv_pos_idxs_double_buffering_flattened;
+                delete[] zoid.recv_vel_idxs_double_buffering_flattened;
             }
         }
 

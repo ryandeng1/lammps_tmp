@@ -565,9 +565,13 @@ struct queue_info {
   std::vector<std::vector<std::pair<int, int>>>* bond_list;
 
   // TODO:
-  std::vector<int>** send_force_idxs_double_buffering_flattened;
+  std::vector<int>* send_force_idxs_double_buffering_flattened;
   std::vector<int>** send_pos_idxs_double_buffering_flattened;
-  std::vector<int>** send_vel_idxs_double_buffering_flattened;
+  std::vector<int>* send_vel_idxs_double_buffering_flattened;
+
+  std::vector<int>* recv_force_idxs_double_buffering_flattened;
+  std::vector<int>** recv_pos_idxs_double_buffering_flattened;
+  std::vector<int>* recv_vel_idxs_double_buffering_flattened;
 
   std::vector<int>** send_force_idxs_double_buffering;
   std::vector<int>** recv_force_idxs_double_buffering;
