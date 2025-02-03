@@ -10682,7 +10682,7 @@ public:
         assert(send_pos_idxs2.size() == recv_pos_idxs2.size());
         assert(send_vel_idxs.size() == recv_vel_idxs.size());
 
-        for (int i = 0; i < recv_force_idxs.size(); i++) {
+        cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
             int recv_force_idx = recv_force_idxs[i];
             int send_force_idx = send_force_idxs[i];
 
@@ -10699,7 +10699,7 @@ public:
             send_f.z = 0;
         }
 
-        for (int i = 0; i < recv_pos_idxs.size(); i++) {
+        cilk_for (int i = 0; i < recv_pos_idxs.size(); i++) {
             int recv_pos_idx = recv_pos_idxs[i];
             int send_pos_idx = send_pos_idxs[i];
 
@@ -10712,7 +10712,7 @@ public:
             recv_pos.z = send_pos.z + pbc_flag_[2] * domain->prd[2];
         }
 
-        for (int i = 0; i < recv_pos_idxs2.size(); i++) {
+        cilk_for (int i = 0; i < recv_pos_idxs2.size(); i++) {
             int recv_pos_idx = recv_pos_idxs2[i];
             int send_pos_idx = send_pos_idxs2[i];
 
@@ -10725,7 +10725,7 @@ public:
             recv_pos.z = send_pos.z + pbc_flag_[2] * domain->prd[2];
         }
 
-        for (int i = 0; i < recv_vel_idxs.size(); i++) {
+        cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
             int recv_vel_idx = recv_vel_idxs[i];
             int send_vel_idx = send_vel_idxs[i];
 
