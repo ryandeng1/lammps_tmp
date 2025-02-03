@@ -7963,7 +7963,11 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 int zoid_num = my_queues[dep][j].num;
                 assert(zoid_num % comm->nprocs == comm->me);
-                send_r[zoid_num].reserve(MAX_NEIGHBORS);
+                if (curr_dt) {
+                    send_r[zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc[zoid_num]);
+                } else {
+                    send_r[zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc_next_dt[zoid_num]);
+                }
             }
         }
 
