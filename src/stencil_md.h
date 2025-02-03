@@ -11342,7 +11342,8 @@ public:
 
             return (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * (3 + 1);
         } else {
-            for (int i = 0; i < send_force_idxs.size(); i++) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < send_force_idxs.size(); i++) {
                 int idx = send_force_idxs[i];
                 int buf_idx = i * 3;
 
@@ -11356,7 +11357,8 @@ public:
             }
 
             int pos_starting_idx = num_send_force * 3;
-            for (int i = 0; i < send_pos_idxs.size(); i++) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < send_pos_idxs.size(); i++) {
                 int idx = send_pos_idxs[i];
                 int buf_idx = pos_starting_idx + i * 3;
 
@@ -11366,7 +11368,8 @@ public:
             }
 
             int pos_starting_idx2 = (num_send_force + num_send_pos) * 3;
-            for (int i = 0; i < send_pos_idxs2.size(); i++) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < send_pos_idxs2.size(); i++) {
                 int idx = send_pos_idxs2[i];
                 int buf_idx = pos_starting_idx2 + i * 3;
 
@@ -11377,7 +11380,8 @@ public:
 
             int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * 3;
 
-            for (int i = 0; i < send_vel_idxs.size(); i++) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < send_vel_idxs.size(); i++) {
                 int idx = send_vel_idxs[i];
                 int buf_idx = vel_starting_idx + i * 3;
 
