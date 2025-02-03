@@ -10182,6 +10182,10 @@ public:
             int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
             int send_request_idx = send_request_idxs[i];
 
+            if (send_zoid_num % comm->nprocs == comm->me) {
+                continue;
+            }
+
             if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid.num][i]) {
                 assert(false);
                 GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, DEFAULT_PIPELINE_STAGE);
@@ -10644,6 +10648,97 @@ public:
         */
     }
 
+    template <bool curr_dt>
+    void UNPACK_DATA_MANY_CUTS_HELPER_SELF(queue_info& zoid, int recv_idx, int recv_zoid_num,
+                                           int send_idx, int start_t, int end_t) {
+        assert(recv_zoid_num % comm->nprocs == comm->me);
+
+        auto &recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
+                                  : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
+
+        int pbc_flag_[3] = {0};
+        for (int dim = 0; dim < 3; dim++) {
+            if (recv_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && zoid.where[dim] == 0) {
+                pbc_flag_[dim] = -1;
+            }
+
+            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1) {
+                pbc_flag_[dim] = 1;
+            }
+        }
+
+        auto &send_force_idxs = recv_zoid.send_force_idxs_double_buffering_flattened[send_idx];
+        auto &send_pos_idxs = recv_zoid.send_pos_idxs_double_buffering_flattened[0][send_idx];
+        auto &send_pos_idxs2 = recv_zoid.send_pos_idxs_double_buffering_flattened[1][send_idx];
+        auto &send_vel_idxs = recv_zoid.send_vel_idxs_double_buffering_flattened[send_idx];
+
+        auto &recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened[recv_idx];
+        auto &recv_pos_idxs = zoid.recv_pos_idxs_double_buffering_flattened[0][recv_idx];
+        auto &recv_pos_idxs2 = zoid.recv_pos_idxs_double_buffering_flattened[1][recv_idx];
+        auto &recv_vel_idxs = zoid.recv_vel_idxs_double_buffering_flattened[recv_idx];
+
+        assert(send_force_idxs.size() == recv_force_idxs.size());
+        assert(send_pos_idxs.size() == recv_pos_idxs.size());
+        assert(send_pos_idxs2.size() == recv_pos_idxs2.size());
+        assert(send_vel_idxs.size() == recv_vel_idxs.size());
+
+        for (int i = 0; i < recv_force_idxs.size(); i++) {
+            int recv_force_idx = recv_force_idxs[i];
+            int send_force_idx = send_force_idxs[i];
+
+            auto& recv_f = zoid.f_stencil_md[0][recv_force_idx];
+            auto& send_f = recv_zoid.f_stencil_md[0][send_force_idx];
+
+            assert(recv_zoid.tag_stencil_md[0][send_force_idx] == zoid.tag_stencil_md[0][recv_force_idx]);
+            recv_f.x += send_f.x;
+            recv_f.y += send_f.y;
+            recv_f.z += send_f.z;
+
+            send_f.x = 0;
+            send_f.y = 0;
+            send_f.z = 0;
+        }
+
+        for (int i = 0; i < recv_pos_idxs.size(); i++) {
+            int recv_pos_idx = recv_pos_idxs[i];
+            int send_pos_idx = send_pos_idxs[i];
+
+            auto& recv_pos = zoid.x_stencil_md[0][recv_pos_idx];
+            auto& send_pos = recv_zoid.x_stencil_md[0][send_pos_idx];
+
+            assert(recv_zoid.tag_stencil_md[0][send_pos_idx] == zoid.tag_stencil_md[0][recv_pos_idx]);
+            recv_pos.x = send_pos.x + pbc_flag_[0] * domain->prd[0];
+            recv_pos.y = send_pos.y + pbc_flag_[1] * domain->prd[1];
+            recv_pos.z = send_pos.z + pbc_flag_[2] * domain->prd[2];
+        }
+
+        for (int i = 0; i < recv_pos_idxs2.size(); i++) {
+            int recv_pos_idx = recv_pos_idxs2[i];
+            int send_pos_idx = send_pos_idxs2[i];
+
+            auto& recv_pos = zoid.x_stencil_md[1][recv_pos_idx];
+            auto& send_pos = recv_zoid.x_stencil_md[1][send_pos_idx];
+
+            assert(recv_zoid.tag_stencil_md[0][send_pos_idx] == zoid.tag_stencil_md[0][recv_pos_idx]);
+            recv_pos.x = send_pos.x + pbc_flag_[0] * domain->prd[0];
+            recv_pos.y = send_pos.y + pbc_flag_[1] * domain->prd[1];
+            recv_pos.z = send_pos.z + pbc_flag_[2] * domain->prd[2];
+        }
+
+        for (int i = 0; i < recv_vel_idxs.size(); i++) {
+            int recv_vel_idx = recv_vel_idxs[i];
+            int send_vel_idx = send_vel_idxs[i];
+
+            auto& recv_vel = zoid.v_stencil_md[0][recv_vel_idx];
+            auto& send_vel = recv_zoid.v_stencil_md[0][send_vel_idx];
+
+            assert(recv_zoid.tag_stencil_md[0][send_vel_idx] == zoid.tag_stencil_md[0][recv_vel_idx]);
+            recv_vel.x = send_vel.x;
+            recv_vel.y = send_vel.y;
+            recv_vel.z = send_vel.z;
+        }
+    }
+
     void UNPACK_DATA_MANY_CUTS_HELPER_SETUP(queue_info& zoid, double* buf, int recv_idx, int recv_zoid_num) {
         constexpr int start_t = 0;
         constexpr int end_t = 1;
@@ -10761,7 +10856,8 @@ public:
             int find_idx = std::distance(send_neighbors.begin(), find_it);
             assert(send_neighbors[find_idx] == zoid_num);
             auto *buf = buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][recv_zoid_num][find_idx];
-            UNPACK_DATA_MANY_CUTS_HELPER<curr_dt>(zoid, buf, i, recv_zoid_num, start_t, end_t);
+            // UNPACK_DATA_MANY_CUTS_HELPER<curr_dt>(zoid, buf, i, recv_zoid_num, start_t, end_t);
+            UNPACK_DATA_MANY_CUTS_HELPER_SELF<curr_dt>(zoid, i, recv_zoid_num, find_idx, start_t, end_t);
         }
 
         auto& not_my_proc_idxs = curr_dt ? recv_from_neighbors_not_my_proc_idxs[zoid.num]
@@ -10770,16 +10866,7 @@ public:
         int num_wait = 0;
         while (num_wait < not_my_proc_idxs.size()) {
             int idx;
-            std::stringstream s1;
-            s1 << "me: " << comm->me << " zoid.num : " << zoid.num
-            << " num wait: " << num_wait << " out of: " << not_my_proc_idxs.size()
-            << " req addr: " << &r[0]
-            << std::endl;
-            // std::cout << s1.str();
             MPI_Waitany(r.size(), r.data(), &idx, MPI_STATUS_IGNORE);
-            std::stringstream s2;
-            s2 << "me: " << comm->me << " zoid.num : " << zoid.num << " num wait: " << num_wait << " out of: " << not_my_proc_idxs.size() << " DONE. " << std::endl;
-            // std::cout << s2.str();
 
             int recv_neighbor_idx = not_my_proc_idxs[idx];
 
