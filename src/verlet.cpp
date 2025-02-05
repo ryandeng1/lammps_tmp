@@ -7866,12 +7866,13 @@ void Verlet::run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
     }
 }
 
+// Assume no comm needed
 template <bool curr_dt>
 void Verlet::run_stencil_md_zoid_many_cuts_everything(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
-                                                      std::vector<MPI_Request>* send_r, std::vector<MPI_Request>* recv_r,
+                                                      std::vector<MPI_Request>* send_r, std::vector<MPI_Request>& recv_r,
                                                       double** test_f, double** test_x, double** test_v) {
     int zoid_num = zoid.num;
-    stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt>(zoid, recv_r[zoid_num]);
+    stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt>(zoid, recv_r, start_t, end_t);
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
                                            start_t - 1, end_t - 1,
                                            test_f, test_x, test_v);
@@ -8141,8 +8142,10 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
 
 void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v) {
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
-        run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
-        run_stencil_md_many_cuts_helper<false>(t, test_f, test_x, test_v);
+        // run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
+        // run_stencil_md_many_cuts_helper<false>(t, test_f, test_x, test_v);
+        run_stencil_md_many_cuts_waitany<true>(t, test_f, test_x, test_v);
+        run_stencil_md_many_cuts_waitany<false>(t, test_f, test_x, test_v);
     }
 }
 
