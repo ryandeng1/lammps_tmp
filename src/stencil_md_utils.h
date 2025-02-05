@@ -544,6 +544,8 @@ constexpr int NUM_DIMENSIONS = 3;
 // struct that holds information for queue
 struct queue_info {
   /* Start stuff for 2 timesteps */
+  bool no_comm_needed;
+
   std::pair<int, dbl3_t_stencil_md>** per_worker_force_updates;
   std::vector<int>** space_cut_idxs;
 
