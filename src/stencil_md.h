@@ -6095,16 +6095,17 @@ public:
             bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
 
             if (!all_close) {
-                std::cout << RED << "ERROR ON POS. curr_dt: " << curr_dt << " zoid: " << zoid.num
-                          << " idx: " << idx << " tag: " << tag
-                          << " what I have: " << my_x << " " << my_y << " " << my_z
-                          << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
-                          << " diff: "
-                          << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
-                          << " overall timestep: " << timestep_to_compare_against
-                          << RESET_COLOR << std::endl;
-
-                std::cout << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z << std::endl;
+                std::stringstream o;
+                o << RED << "ERROR ON POS. curr_dt: " << curr_dt << " zoid: " << zoid.num
+                << " idx: " << idx << " tag: " << tag
+                << " what I have: " << my_x << " " << my_y << " " << my_z
+                << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
+                << " diff: "
+                << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
+                << " overall timestep: " << timestep_to_compare_against
+                << " actual pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z
+                << RESET_COLOR << std::endl;
+                std::cout << o.str();
                 assert(false);
             }
         }
@@ -7389,7 +7390,7 @@ public:
         }
 
         // determine if comm or no comm needed
-        for (int dep = 1; dep < NUM_DEPS; dep++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
                 auto& zoid = my_queues_many_cuts[dep][j];
                 int zoid_num = zoid.num;
@@ -7406,7 +7407,7 @@ public:
             }
         }
 
-        for (int dep = 1; dep < NUM_DEPS; dep++) {
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
                 auto& zoid = my_queues_many_cuts_next_dt[dep][j];
                 auto& recv_neighbors = recv_from_neighbors_many_cuts_next_dt[zoid.num];
@@ -10942,15 +10943,15 @@ public:
             }
         }
 
-        auto &send_force_idxs = recv_zoid.send_force_idxs_double_buffering_flattened[send_idx];
-        auto &send_pos_idxs = recv_zoid.send_pos_idxs_double_buffering_flattened[0][send_idx];
-        auto &send_pos_idxs2 = recv_zoid.send_pos_idxs_double_buffering_flattened[1][send_idx];
-        auto &send_vel_idxs = recv_zoid.send_vel_idxs_double_buffering_flattened[send_idx];
+        auto& send_force_idxs = recv_zoid.send_force_idxs_double_buffering_flattened[send_idx];
+        auto& send_pos_idxs = recv_zoid.send_pos_idxs_double_buffering_flattened[0][send_idx];
+        auto& send_pos_idxs2 = recv_zoid.send_pos_idxs_double_buffering_flattened[1][send_idx];
+        auto& send_vel_idxs = recv_zoid.send_vel_idxs_double_buffering_flattened[send_idx];
 
-        auto &recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened[recv_idx];
-        auto &recv_pos_idxs = zoid.recv_pos_idxs_double_buffering_flattened[0][recv_idx];
-        auto &recv_pos_idxs2 = zoid.recv_pos_idxs_double_buffering_flattened[1][recv_idx];
-        auto &recv_vel_idxs = zoid.recv_vel_idxs_double_buffering_flattened[recv_idx];
+        auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened[recv_idx];
+        auto& recv_pos_idxs = zoid.recv_pos_idxs_double_buffering_flattened[0][recv_idx];
+        auto& recv_pos_idxs2 = zoid.recv_pos_idxs_double_buffering_flattened[1][recv_idx];
+        auto& recv_vel_idxs = zoid.recv_vel_idxs_double_buffering_flattened[recv_idx];
 
         assert(send_force_idxs.size() == recv_force_idxs.size());
         assert(send_pos_idxs.size() == recv_pos_idxs.size());
@@ -11111,11 +11112,13 @@ public:
     }
 
     template <bool curr_dt>
-    void UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY(queue_info& zoid, int start_t, int end_t) {
+    int UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY(queue_info& zoid, int start_t, int end_t) {
         constexpr int DEFAULT_PIPELINE_STAGE = 0;
         int zoid_num = zoid.num;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                                        : recv_from_neighbors_many_cuts_next_dt[zoid_num];
+
+        int num_neighbors_recv = 0;
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -11131,7 +11134,11 @@ public:
             assert(send_neighbors[find_idx] == zoid_num);
             auto *buf = buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][recv_zoid_num][find_idx];
             UNPACK_DATA_MANY_CUTS_HELPER_SELF<curr_dt>(zoid, i, recv_zoid_num, find_idx, start_t, end_t);
+
+            num_neighbors_recv++;
         }
+
+        return num_neighbors_recv;
     }
 
     template <bool curr_dt>
