@@ -8144,10 +8144,10 @@ void Verlet::run_stencil_md_many_cuts_helper(int starting_timestep, double **tes
 
 void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v) {
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
-        // run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
-        // run_stencil_md_many_cuts_helper<false>(t, test_f, test_x, test_v);
-        run_stencil_md_many_cuts_waitany<true>(t, test_f, test_x, test_v);
-        run_stencil_md_many_cuts_waitany<false>(t, test_f, test_x, test_v);
+        run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
+        run_stencil_md_many_cuts_helper<false>(t, test_f, test_x, test_v);
+        // run_stencil_md_many_cuts_waitany<true>(t, test_f, test_x, test_v);
+        // run_stencil_md_many_cuts_waitany<false>(t, test_f, test_x, test_v);
     }
 }
 
