@@ -30,8 +30,79 @@
 #include <numeric>
 #include <sstream>
 #include <iomanip>
+#include <queue>
 
 constexpr bool USE_BREAK = false;
+
+// MinCostFlow class implementing a simple min-cost max-flow using SPFA.
+struct MinCostFlow {
+    // Edge structure for the flow graph.
+    const int INF = std::numeric_limits<int>::max();
+
+    struct Edge {
+        int to, rev, cap, cost;
+    };
+
+    int n;
+    std::vector<std::vector<Edge>> graph;
+
+    MinCostFlow(int n): n(n), graph(n) { }
+
+    // Add an edge from s to t with given capacity and cost.
+    void addEdge(int s, int t, int cap, int cost) {
+        graph[s].push_back({t, (int)graph[t].size(), cap, cost});
+        graph[t].push_back({s, (int)graph[s].size() - 1, 0, -cost});
+    }
+
+    // Returns total flow achieved and sets flowCost to the total cost.
+    int minCostFlow(int s, int t, int f, int &flowCost) {
+        int flow = 0;
+        flowCost = 0;
+        std::vector<int> dist(n), prev_v(n), prev_e(n);
+        while (flow < f) {
+            fill(dist.begin(), dist.end(), INF);
+            dist[s] = 0;
+            std::vector<bool> inQueue(n, false);
+            std::queue<int> que;
+            que.push(s);
+            inQueue[s] = true;
+
+            // SPFA to find shortest path in residual graph.
+            while (!que.empty()) {
+                int v = que.front();
+                que.pop();
+                inQueue[v] = false;
+                for (int i = 0; i < graph[v].size(); i++) {
+                    Edge &e = graph[v][i];
+                    if (e.cap > 0 && dist[e.to] > dist[v] + e.cost) {
+                        dist[e.to] = dist[v] + e.cost;
+                        prev_v[e.to] = v;
+                        prev_e[e.to] = i;
+                        if (!inQueue[e.to]) {
+                            que.push(e.to);
+                            inQueue[e.to] = true;
+                        }
+                    }
+                }
+            }
+            if (dist[t] == INF)
+                break;  // No more augmenting paths.
+
+            int d = f - flow;
+            for (int v = t; v != s; v = prev_v[v])
+                d = std::min(d, graph[prev_v[v]][prev_e[v]].cap);
+            flow += d;
+            flowCost += d * dist[t];
+            for (int v = t; v != s; v = prev_v[v]) {
+                Edge &e = graph[prev_v[v]][prev_e[v]];
+                e.cap -= d;
+                graph[v][e.rev].cap += d;
+            }
+        }
+        return flow;
+    }
+};
+
 
 // Helper functions for sort local atoms double buffering
 template <typename T, typename Compare>
@@ -6440,6 +6511,8 @@ public:
     /* End double buffering code */
 
     /* Start code for many zoids per dimension */
+    std::map<std::array<int, 3>, int> zoid_where_to_num;
+
     std::vector<queue_info> queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> queues_many_cuts_next_dt[NUM_DEPS];
 
@@ -6448,7 +6521,15 @@ public:
 
     static constexpr int NUM_CUTS_PER_DIMENSION = 4;
     static constexpr int NUM_ZOIDS_PER_DIMENSION = NUM_CUTS_PER_DIMENSION * 2;
-    static constexpr int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_PER_DIMENSION * NUM_ZOIDS_PER_DIMENSION * NUM_ZOIDS_PER_DIMENSION;
+
+    static constexpr int NUM_ZOIDS_X = 8;
+    static constexpr int NUM_ZOIDS_Y = 8;
+    static constexpr int NUM_ZOIDS_Z = 8;
+    static constexpr int NUM_SPLIT_X = 2;
+    static constexpr int NUM_SPLIT_Y = 2;
+    static constexpr int NUM_SPLIT_Z = 2;
+
+    static constexpr int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
 
     queue_info* zoid_num_to_zoid_many_cuts;
     queue_info* zoid_num_to_zoid_many_cuts_next_dt;
@@ -6575,6 +6656,7 @@ public:
             }
         }
 
+        /*
         // zoid_num to dep0 map?
         // TODO: renumber zoids
         std::vector<int> proc_to_zoid_count(comm->nprocs, 0);
@@ -6714,16 +6796,13 @@ public:
         }
 
         std::vector<int> proc_zoid_counts(comm->nprocs, 0);
+        */
 
-        // int zoid_num = 0;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 auto& zoid = queues_many_cuts[dep][j];
-                auto proc_assigned_to_zoid = zoid_to_proc_final.at({zoid.where[0], zoid.where[1], zoid.where[2]});
-                zoid.num = proc_zoid_counts[proc_assigned_to_zoid] * comm->nprocs + proc_assigned_to_zoid;
-                proc_zoid_counts[proc_assigned_to_zoid]++;
-                // zoid.num = zoid_num;
-                // zoid_num++;
+                zoid.num = zoid_where_to_num.at({zoid.where[0], zoid.where[1], zoid.where[2]});
+                assert(zoid.num >= 0 && zoid.num < NUM_ZOIDS_MANY_CUTS);
                 int new_dep = NUM_DEPS - 1 - dep;
                 queue_info new_zoid;
                 for (int dim = 0; dim < 3; dim++) {
@@ -6741,26 +6820,14 @@ public:
                             -1 * zoid.zoid.cuts[dim].slope_upper;
                 }
 
-                new_zoid.num = zoid.num;
-
                 for (int dim = 0; dim < domain->dimension; dim++) {
                     new_zoid.where[dim] = zoid.where[dim];
                 }
+                new_zoid.num = zoid.num;
+
                 queues_many_cuts_next_dt[new_dep].push_back(new_zoid);
             }
         }
-
-        std::set<int> all_zoid_nums;
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
-                auto &zoid = queues_many_cuts[dep][j];
-                int zoid_num = zoid.num;
-                assert(zoid_num >= 0 && zoid_num < NUM_ZOIDS_MANY_CUTS);
-                all_zoid_nums.insert(zoid_num);
-            }
-        }
-
-        assert(all_zoid_nums.size() == NUM_ZOIDS_MANY_CUTS);
 
         if (comm->me == 0) {
             std::cout << BOLDCYAN << "Lo: " << domain->boxlo[0] << " hi: " << domain->boxhi[0] << RESET_COLOR << std::endl;
@@ -6771,81 +6838,485 @@ public:
 
             std::cout << BOLDCYAN << "bounds: " << s1.str() << RESET_COLOR << std::endl;
         }
+    }
 
-        for (int idx = 0; idx < 2; idx++) {
-            // skip for now
-            continue;
-            auto* queues = (idx == 0) ? queues_many_cuts : queues_many_cuts_next_dt;
-            for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                int total_num_atoms_in_bounds = 0;
+    // Helper function to "split" the bits of a 32-bit integer by inserting two zeros between each bit.
+    // Only the lower 21 bits of 'a' are used.
+    uint64_t splitBy2(uint32_t a) {
+        uint64_t x = a & 0x1fffff; // mask to 21 bits
+        x = (x | x << 32) & 0x1f00000000ffffULL;
+        x = (x | x << 16) & 0x1f0000ff0000ffULL;
+        x = (x | x << 8)  & 0x100f00f00f00f00fULL;
+        x = (x | x << 4)  & 0x10c30c30c30c30c3ULL;
+        x = (x | x << 2)  & 0x1249249249249249ULL;
+        return x;
+    }
 
-                std::set<int> atoms_in;
-                std::map<int, std::pair<int, int>> tag_to_zoid;
+    // Compute the Morton code for 3D coordinates (x, y, z)
+    // by interleaving the bits of x, y, and z.
+    uint64_t morton3D(uint32_t x, uint32_t y, uint32_t z) {
+        return (splitBy2(z) << 2) | (splitBy2(y) << 1) | splitBy2(x);
+    }
 
-                for (int dep = 0; dep < NUM_DEPS; dep++) {
-                    for (int j = 0; j < queues[dep].size(); j++) {
-                        auto &zoid = queues[dep][j];
-                        int num_atoms_in_bounds = 0;
-                        int num_atoms_in_bounds_all = 0;
-                        for (int i = 0; i < atom->nlocal; i++) {
-                            bool in = true;
-                            for (int dim = 0; dim < domain->dimension; dim++) {
-                                double pos = atom->x[i][dim];
-                                double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                                double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
-                                if (hi <= lo) {
-                                    std::cout << "dep: " << dep << " j: " << j << " lo: " << lo << " hi: " << hi
-                                              << " time: " << t
-                                              << " lower: " << zoid.zoid.cuts[dim].lower << " upper: "
-                                              << zoid.zoid.cuts[dim].upper
-                                              << " slope lower: " << zoid.zoid.cuts[dim].slope_lower << " slope upper: "
-                                              << zoid.zoid.cuts[dim].slope_upper << std::endl;
-                                }
-                                assert(hi > lo);
-                                while (pos < lo) {
-                                    pos += domain->prd[dim];
-                                }
-                                while (pos >= hi) {
-                                    pos -= domain->prd[dim];
-                                }
-                                in = in && pos >= lo && pos < hi;
-                            }
-                            if (in) {
-                                if (atoms_in.find(atom->tag[i]) != atoms_in.end()) {
-                                    std::cout << "duplicate atom. Found in dep: " << dep << " time: " << t
-                                              << " pos: " << atom->x[i][0] << " " << atom->x[i][1] << " "
-                                              << atom->x[i][2] << std::endl;
-                                    for (int dim = 0; dim < domain->dimension; dim++) {
-                                        double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                                        double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
-                                        std::cout << "dim: " << dim << " lo: " << lo << " hi: " << hi << std::endl;
-                                    }
+    void INIT_ZOIDS_NUMBERING() {
+        constexpr bool USE_MORTON_NAIVE = false;
+        if (USE_MORTON_NAIVE) {
+            std::map<int, std::array<int, 3>> morton_to_zoid;
+            for (int i = 0; i < NUM_ZOIDS_X; i++) {
+                for (int j = 0; j < NUM_ZOIDS_Y; j++) {
+                    for (int k = 0; k < NUM_ZOIDS_Z; k++) {
+                        int code = morton3D(i, j, k);
+                        morton_to_zoid[code] = {i, j, k};
+                        assert(code >= 0 && code < NUM_ZOIDS_MANY_CUTS);
+                    }
+                }
+            }
 
-                                    auto &p = tag_to_zoid.at(atom->tag[i]);
-                                    std::cout << "prev: " << p.first << " " << p.second << std::endl;
-                                    auto &other_zoid = queues_many_cuts[p.first][p.second];
-                                    for (int dim = 0; dim < domain->dimension; dim++) {
-                                        double lo = other_zoid.zoid.cuts[dim].lower +
-                                                    t * other_zoid.zoid.cuts[dim].slope_lower;
-                                        double hi = other_zoid.zoid.cuts[dim].upper +
-                                                    t * other_zoid.zoid.cuts[dim].slope_upper;
-                                        std::cout << "OTHER ZOID dim: " << dim << " lo: " << lo << " hi: " << hi
-                                                  << std::endl;
-                                    }
+            std::vector<int> count_per_proc(comm->nprocs, 0);
+            int num_per_proc = NUM_ZOIDS_MANY_CUTS / comm->nprocs;
+            for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
+                auto& zoid = morton_to_zoid.at(i);
+                int proc = i / num_per_proc;
+                stencilMD->zoid_where_to_num[zoid] = count_per_proc[proc] * comm->nprocs + proc;
+                count_per_proc[proc]++;
+            }
 
-                                    assert(false);
-                                }
-                                atoms_in.insert(atom->tag[i]);
-                                tag_to_zoid[atom->tag[i]] = {dep, j};
-                                num_atoms_in_bounds++;
+            return;
+        }
+
+        constexpr bool TRY_ORIGINAL = false;
+        if (TRY_ORIGINAL) {
+            // zoid_num to dep0 map?
+            // TODO: renumber zoids
+            std::vector<int> proc_to_zoid_count(comm->nprocs, 0);
+            std::map<int, std::vector<std::array<int, 3>>> proc_to_zoids;
+            std::map<std::array<int, 3>, int> zoid_to_proc;
+
+            int num_dep0_zoids = NUM_ZOIDS_X  * NUM_ZOIDS_Y * NUM_ZOIDS_Z / (2 * 2 * 2);
+            int num_dep1_zoids = (NUM_ZOIDS_MANY_CUTS - 2 * num_dep0_zoids) / 2;
+            int num_dep2_zoids = num_dep1_zoids;
+            int num_dep3_zoids = num_dep0_zoids;
+
+            int curr_proc = 0;
+            for (int i = 1; i < NUM_ZOIDS_PER_DIMENSION; i += 2) {
+                for (int j = 1; j < NUM_ZOIDS_PER_DIMENSION; j += 2) {
+                    for (int k = 1; k < NUM_ZOIDS_PER_DIMENSION; k += 2) {
+                        if (proc_to_zoid_count[curr_proc] >= num_dep0_zoids / comm->nprocs) {
+                            curr_proc++;
+                        }
+                        proc_to_zoid_count[curr_proc]++;
+                        proc_to_zoids[curr_proc].push_back({i, j, k});
+                        zoid_to_proc[{i, j, k}] = curr_proc;
+                    }
+                }
+            }
+
+            bool claimed[NUM_ZOIDS_PER_DIMENSION][NUM_ZOIDS_PER_DIMENSION][NUM_ZOIDS_PER_DIMENSION] = {0};
+
+            std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_send_neighbors;
+            std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_recv_neighbors;
+
+            for (int i = 0; i < NUM_ZOIDS_PER_DIMENSION; i++) {
+                for (int j = 0; j < NUM_ZOIDS_PER_DIMENSION; j++) {
+                    for (int k = 0; k < NUM_ZOIDS_PER_DIMENSION; k++) {
+                        std::array<int, 3> my_pos = {i, j, k};
+                        if (i % 2 == 1) {
+                            tmp_send_neighbors[my_pos].insert({i - 1, j, k});
+                            tmp_send_neighbors[my_pos].insert({(i + 1) % NUM_ZOIDS_PER_DIMENSION, j, k});
+                        }
+                        if (j % 2 == 1) {
+                            tmp_send_neighbors[my_pos].insert({i, j - 1, k});
+                            tmp_send_neighbors[my_pos].insert({i, (j + 1) % NUM_ZOIDS_PER_DIMENSION, k});
+                        }
+                        if (k % 2 == 1) {
+                            tmp_send_neighbors[my_pos].insert({i, j, k - 1});
+                            tmp_send_neighbors[my_pos].insert({i, j, (k + 1) % NUM_ZOIDS_PER_DIMENSION});
+                        }
+                    }
+                }
+            }
+
+            for (auto& [zoid, send_zoids] : tmp_send_neighbors) {
+                for (auto& z : send_zoids) {
+                    tmp_recv_neighbors[z].insert(zoid);
+                }
+            }
+
+            int num_zoids_per_dep[NUM_DEPS] = {num_dep0_zoids, num_dep0_zoids + num_dep1_zoids,
+                                               num_dep0_zoids + num_dep1_zoids + num_dep2_zoids, NUM_ZOIDS_MANY_CUTS};
+
+            int dep_to_val[NUM_DEPS] = {0, 2, 4, 6};
+
+            for (int dep = 1; dep < NUM_DEPS; dep++) {
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    auto& zoids = proc_to_zoids[proc];
+                    std::set<std::array<int, 3>> all_neighbors;
+                    std::map<std::array<int, 3>, int> neighbor_to_count;
+                    for (auto& z : zoids) {
+                        int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
+                        if (zoid_dep == dep - 1) {
+                            auto& neighbors = tmp_send_neighbors[z];
+                            for (auto& n : neighbors) {
+                                all_neighbors.insert(n);
+                                neighbor_to_count[n]++;
                             }
                         }
-                        MPI_Allreduce(&num_atoms_in_bounds, &num_atoms_in_bounds_all, 1, MPI_INT, MPI_SUM, world);
-                        total_num_atoms_in_bounds += num_atoms_in_bounds_all;
+                    }
+
+                    // pick out the zoids that have most of their neighbors
+                    for (auto& [k, v] : neighbor_to_count) {
+                        if (v == dep_to_val[dep]) {
+                            proc_to_zoids[proc].push_back(k);
+                            proc_to_zoid_count[proc]++;
+                            claimed[k[0]][k[1]][k[2]] = true;
+                        } else if (v > dep_to_val[dep] / 2) {
+                            if (!claimed[k[0]][k[1]][k[2]] && proc_to_zoid_count[proc] < (num_zoids_per_dep[dep]) / comm->nprocs) {
+                                proc_to_zoids[proc].push_back(k);
+                                proc_to_zoid_count[proc]++;
+                                claimed[k[0]][k[1]][k[2]] = true;
+                            }
+                        }
                     }
                 }
 
-                assert(total_num_atoms_in_bounds == atom->natoms);
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    auto& zoids = proc_to_zoids[proc];
+                    std::set<std::array<int, 3>> all_neighbors;
+                    std::map<std::array<int, 3>, int> neighbor_to_count;
+                    for (auto& z : zoids) {
+                        int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
+                        if (zoid_dep == dep - 1) {
+                            auto& neighbors = tmp_send_neighbors[z];
+                            for (auto& n : neighbors) {
+                                all_neighbors.insert(n);
+                                neighbor_to_count[n]++;
+                            }
+                        }
+                    }
+
+                    // pick out the zoids that have half of their neighbors, tiebreak I guess based on earlier process
+                    for (auto& [k, v] : neighbor_to_count) {
+                        if (v >= dep_to_val[dep] / 2) {
+                            if (!claimed[k[0]][k[1]][k[2]] && proc_to_zoid_count[proc] < (num_zoids_per_dep[dep]) / comm->nprocs) {
+                                proc_to_zoids[proc].push_back(k);
+                                proc_to_zoid_count[proc]++;
+                                claimed[k[0]][k[1]][k[2]] = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            std::set<std::array<int, 3>> test_zoids;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                for (auto& zoid : proc_to_zoids[proc]) {
+                    test_zoids.insert(zoid);
+                }
+            }
+
+            std::cout << "test zoids size: " << test_zoids.size() << std::endl;
+            assert(test_zoids.size() == NUM_ZOIDS_MANY_CUTS);
+
+            std::map<std::array<int, 3>, int> zoid_to_proc_final;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                for (auto& zoid : proc_to_zoids[proc]) {
+                    zoid_to_proc_final[zoid] = proc;
+                }
+            }
+
+            std::vector<std::array<int, 3>> zoids_vec;
+            for (auto& [k, v] : zoid_to_proc_final) {
+                zoids_vec.push_back(k);
+            }
+
+            std::sort(zoids_vec.begin(), zoids_vec.end(), [](const auto& zoid_a, const auto& zoid_b) {
+                int dep_a = (zoid_a[0] % 2 == 0) + (zoid_a[1] % 2 == 0) + (zoid_a[2] % 2 == 0);
+                int dep_b = (zoid_b[0] % 2 == 0) + (zoid_b[1] % 2 == 0) + (zoid_b[2] % 2 == 0);
+                return dep_a < dep_b;
+            });
+
+            std::vector<int> proc_zoid_counts(comm->nprocs, 0);
+            for (int i = 0; i < zoids_vec.size(); i++) {
+                auto& zoid = zoids_vec[i];
+                auto proc = zoid_to_proc_final.at(zoid);
+                zoid_where_to_num[zoid] = proc_zoid_counts[proc] * comm->nprocs + proc;
+                proc_zoid_counts[proc]++;
+            }
+
+            return;
+        }
+
+        // Do a systematic thing for the *FIRST* dependency level. After the first dependency level, do
+        // region to number mapping
+        int region_idx = 0;
+        std::map<std::array<int, 3>, int> region_to_idx;
+        for (int i = 0; i < NUM_SPLIT_X; i++) {
+            for (int j = 0; j < NUM_SPLIT_Y; j++) {
+                for (int k = 0; k < NUM_SPLIT_Z; k++) {
+                    region_to_idx[{i, j, k}] = morton3D(i, j, k);
+                }
+            }
+        }
+
+        assert(NUM_ZOIDS_X % NUM_SPLIT_X == 0);
+        assert(NUM_ZOIDS_Y % NUM_SPLIT_Y == 0);
+        assert(NUM_ZOIDS_Z % NUM_SPLIT_Z == 0);
+
+        std::map<std::array<int, 3>, std::vector<std::array<int, 3>>> region_to_zoids;
+        for (int i = 0; i < NUM_ZOIDS_X; i++) {
+            int x_coord = i / (NUM_ZOIDS_X / NUM_SPLIT_X);
+            for (int j = 0; j < NUM_ZOIDS_Y; j++) {
+                int y_coord = j / (NUM_ZOIDS_Y / NUM_SPLIT_Y);
+                for (int k = 0; k < NUM_ZOIDS_Z; k++) {
+                    int z_coord = k / (NUM_ZOIDS_Z / NUM_SPLIT_Z);
+                    region_to_zoids[{x_coord, y_coord, z_coord}].push_back({i, j, k});
+                }
+            }
+        }
+
+        assert(NUM_SPLIT_X * NUM_SPLIT_Y * NUM_SPLIT_Z == comm->nprocs);
+
+        std::map<std::array<int, 3>, int> region_to_proc;
+        std::map<int, std::array<int, 3>> proc_to_region;
+
+        int proc_idx = 0;
+        for (int i = 0; i < NUM_SPLIT_X; i++) {
+            for (int j = 0; j < NUM_SPLIT_Y; j++) {
+                for (int k = 0; k < NUM_SPLIT_Z; k++) {
+                    proc_to_region[proc_idx] = {i, j, k};
+                    region_to_proc[{i, j, k}] = proc_idx;
+                    proc_idx++;
+                }
+            }
+        }
+
+        std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_send_neighbors;
+        std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_recv_neighbors;
+
+        for (int i = 0; i < NUM_ZOIDS_X; i++) {
+            for (int j = 0; j < NUM_ZOIDS_Y; j++) {
+                for (int k = 0; k < NUM_ZOIDS_Z; k++) {
+                    std::array<int, 3> my_pos = {i, j, k};
+                    if (i % 2 == 1) {
+                        tmp_send_neighbors[my_pos].insert({i - 1, j, k});
+                        tmp_send_neighbors[my_pos].insert({(i + 1) % NUM_ZOIDS_PER_DIMENSION, j, k});
+                    }
+                    if (j % 2 == 1) {
+                        tmp_send_neighbors[my_pos].insert({i, j - 1, k});
+                        tmp_send_neighbors[my_pos].insert({i, (j + 1) % NUM_ZOIDS_PER_DIMENSION, k});
+                    }
+                    if (k % 2 == 1) {
+                        tmp_send_neighbors[my_pos].insert({i, j, k - 1});
+                        tmp_send_neighbors[my_pos].insert({i, j, (k + 1) % NUM_ZOIDS_PER_DIMENSION});
+                    }
+                }
+            }
+        }
+
+        for (auto& [zoid, send_zoids] : tmp_send_neighbors) {
+            for (auto& z : send_zoids) {
+                tmp_recv_neighbors[z].insert(zoid);
+            }
+        }
+
+        std::map<int, std::vector<std::array<int, 3>>> proc_to_zoids;
+        std::vector<int> proc_to_zoid_count(comm->nprocs, 0);
+        std::map<std::array<int, 3>, int> zoid_to_proc;
+
+        bool claimed[NUM_ZOIDS_X][NUM_ZOIDS_Y][NUM_ZOIDS_Y] = {0};
+
+        std::vector<std::array<int, 3>> dep0_zoids;
+        for (int x = 0; x < NUM_ZOIDS_X; x++) {
+            for (int y = 0; y < NUM_ZOIDS_Y; y++) {
+                for (int z = 0; z < NUM_ZOIDS_Z; z++) {
+                    if (x % 2 == 1 && y % 2 == 1 && z % 2 == 1) {
+                        dep0_zoids.push_back({x, y, z});
+                    }
+                }
+            }
+        }
+
+        std::sort(dep0_zoids.begin(), dep0_zoids.end(), [&](const auto& zoid_a, const auto& zoid_b) {
+            uint64_t code_a = morton3D(zoid_a[0], zoid_a[1], zoid_a[2]);
+            uint64_t code_b = morton3D(zoid_b[0], zoid_b[1], zoid_b[2]);
+
+            return code_a < code_b;
+        });
+
+
+        // this is fixed as it's the number of incoming neighbors
+        int dep_to_val[NUM_DEPS] = {0, 2, 4, 6};
+        int num_zoids_dep0 = NUM_ZOIDS_X  * NUM_ZOIDS_Y * NUM_ZOIDS_Z / (2 * 2 * 2);
+        int num_zoids_dep1 = (NUM_ZOIDS_MANY_CUTS - 2 * num_zoids_dep0) / 2;
+        int num_zoids_per_dep[NUM_DEPS] = {num_zoids_dep0, num_zoids_dep1, num_zoids_dep1, num_zoids_dep0};
+
+        for (int i = 0; i < dep0_zoids.size(); i++) {
+            int proc = i / 8;
+            proc_to_zoids[proc].push_back(dep0_zoids[i]);
+        }
+
+        if (comm->me == 0) {
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                std::cout << "proc: " << proc << " num dep0 zoids: " << proc_to_zoids[proc].size() << std::endl;
+            }
+        }
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                auto& zoids = proc_to_zoids[proc];
+                std::set<std::array<int, 3>> all_neighbors;
+                std::map<std::array<int, 3>, int> neighbor_to_count;
+                for (auto& z : zoids) {
+                    int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
+                    if (zoid_dep == dep - 1) {
+                        auto& neighbors = tmp_send_neighbors[z];
+                        for (auto& n : neighbors) {
+                            all_neighbors.insert(n);
+                            neighbor_to_count[n]++;
+                        }
+                    }
+                }
+
+                // pick out the zoids that have most of their neighbors
+                for (auto& [k, v] : neighbor_to_count) {
+                    if (v == dep_to_val[dep]) {
+                        proc_to_zoids[proc].push_back(k);
+                        proc_to_zoid_count[proc]++;
+                        claimed[k[0]][k[1]][k[2]] = true;
+                    } else if (v > dep_to_val[dep] / 2) {
+                        if (!claimed[k[0]][k[1]][k[2]] && proc_to_zoid_count[proc] < (num_zoids_per_dep[dep]) / comm->nprocs) {
+                            proc_to_zoids[proc].push_back(k);
+                            proc_to_zoid_count[proc]++;
+                            claimed[k[0]][k[1]][k[2]] = true;
+                        }
+                    }
+                }
+            }
+
+            std::map<std::array<int, 3>, std::vector<int>> unclaimed_zoid_to_procs;
+            std::vector<int> proc_to_num_assigned_zoids(comm->nprocs, 0);
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                auto& zoids = proc_to_zoids[proc];
+                std::set<std::array<int, 3>> all_neighbors;
+                for (auto& z : zoids) {
+                    int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
+                    if (zoid_dep == dep - 1) {
+                        auto& neighbors = tmp_send_neighbors[z];
+                        for (auto& n : neighbors) {
+                            all_neighbors.insert(n);
+                        }
+                    }
+                }
+
+                for (auto& neighbor : all_neighbors) {
+                    if (!claimed[neighbor[0]][neighbor[1]][neighbor[2]]) {
+                        unclaimed_zoid_to_procs[neighbor].push_back(proc);
+                    }
+                }
+            }
+
+            std::vector<std::array<int, 3>> unclaimed_zoids_vec;
+            for (auto& [zoid, _] : unclaimed_zoid_to_procs) {
+                unclaimed_zoids_vec.push_back(zoid);
+            }
+
+            // TODO: DO MIN-Cost Max Flow HERE
+            // L is num balls per bin.
+            int M = unclaimed_zoids_vec.size(); // Number of balls.
+            int N = comm->nprocs; // Number of bins.
+            int L = M / N;
+            int source = M + N;
+            int sink = M + N + 1;
+            int totalNodes = M + N + 2;
+            MinCostFlow mcf(totalNodes);
+
+            // Source to ball nodes: capacity = 1, cost = 0.
+            for (int i = 0; i < M; i++) {
+                mcf.addEdge(source, i, 1, 0);
+            }
+
+            // Ball nodes to bin nodes:
+            // For each ball, add an edge to each allowed bin with capacity 1 and cost 0.
+            for (int i = 0; i < M; i++) {
+                auto& unclaimed_zoid = unclaimed_zoids_vec[i];
+                for (int bin: unclaimed_zoid_to_procs.at(unclaimed_zoid)) {
+                    // Bin node index = M + bin.
+                    mcf.addEdge(i, M + bin, 1, 0);
+                }
+            }
+
+            // Bin nodes to sink:
+            // Base edge: capacity = L, cost = 0.
+            // Extra edge: capacity = 1, cost = 1 (penalty for extra ball).
+            for (int b = 0; b < N; b++) {
+                mcf.addEdge(M + b, sink, L, 0);
+                mcf.addEdge(M + b, sink, 1, 1);
+            }
+
+            // Run min-cost flow to assign all M balls.
+            int flowCost = 0;
+            int flowAchieved = mcf.minCostFlow(source, sink, M, flowCost);
+            if (flowAchieved < M) {
+                std::cout << "Error: Not all balls could be assigned!" << std::endl;
+                assert(false);
+            }
+
+            // Determine the assignment by inspecting the flow on edges from ball nodes to bin nodes.
+            std::vector<int> assignment(M, -1);
+            for (int i = 0; i < M; i++) {
+                for (auto &edge : mcf.graph[i]) {
+                    // Edge from ball node i to a bin node: bin nodes are in [M, M+N-1].
+                    if (edge.to >= M && edge.to < M + N) {
+                        // If the edge was used (original capacity was 1, so if cap==0 it was used).
+                        if (edge.cap == 0) {
+                            int bin = edge.to - M;
+                            assignment[i] = bin;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < M; i++) {
+                auto& unclaimed_zoid = unclaimed_zoids_vec[i];
+                auto proc = assignment[i];
+                assert(proc >= 0 && proc < comm->nprocs);
+                proc_to_zoids[proc].push_back(unclaimed_zoid);
+                proc_to_zoid_count[proc]++;
+                claimed[unclaimed_zoid[0]][unclaimed_zoid[1]][unclaimed_zoid[2]] = true;
+            }
+
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                if (comm->me == 0) {
+                    std::cout << "dep: " << dep << " proc: " << proc << " has num zoids: " << proc_to_zoids[proc].size() << std::endl;
+                }
+            }
+        }
+
+        std::set<std::array<int, 3>> test_zoids;
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            for (auto& zoid : proc_to_zoids[proc]) {
+                test_zoids.insert(zoid);
+            }
+        }
+
+        if (comm->me == 0) {
+            std::cout << "test zoids size: " << test_zoids.size() << std::endl;
+        }
+        assert(test_zoids.size() == NUM_ZOIDS_MANY_CUTS);
+
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            auto& zoids = proc_to_zoids.at(proc);
+            std::sort(zoids.begin(), zoids.end(), [](const auto& zoid_a, const auto& zoid_b) {
+                int dep_a = (zoid_a[0] % 2 == 0) + (zoid_a[1] % 2 == 0) + (zoid_a[2] % 2 == 0);
+                int dep_b = (zoid_b[0] % 2 == 0) + (zoid_b[1] % 2 == 0) + (zoid_b[2] % 2 == 0);
+                return dep_a < dep_b;
+            });
+
+            for (int i = 0; i < zoids.size(); i++) {
+                int zoid_num = i * comm->nprocs + proc;
+                assert(zoid_num >= 0 && zoid_num < NUM_ZOIDS_MANY_CUTS);
+                zoid_where_to_num[zoids[i]] = i * comm->nprocs + proc;
             }
         }
     }
@@ -7450,6 +7921,27 @@ public:
                         recv_request_idx++;
                     }
                 }
+            }
+        }
+
+        if (comm->me == 0) {
+            for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
+                auto& zoid = zoid_num_to_zoid_many_cuts[i];
+                int dep = (zoid.where[0] % 2 == 0) + (zoid.where[1] % 2 == 0) + (zoid.where[2] % 2 == 0);
+                auto& recv_neighbors = recv_from_neighbors_many_cuts[zoid.num];
+
+                int num_diff_proc = 0;
+                for (int j = 0; j < recv_neighbors.size(); j++) {
+                    if (recv_neighbors[j] % comm->nprocs != zoid.num % comm->nprocs) {
+                        auto& recv_zoid = zoid_num_to_zoid_many_cuts[recv_neighbors[j]];
+                        int recv_zoid_dep = (recv_zoid.where[0] % 2 == 0) + (recv_zoid.where[1] % 2 == 0) + (recv_zoid.where[2] % 2 == 0);
+                        if (recv_zoid_dep == dep - 1) {
+                            num_diff_proc++;
+                        }
+                    }
+                }
+
+                std::cout << "zoid: " << zoid.num << " dep: " << dep << " nrecv: " << num_diff_proc << std::endl;
             }
         }
     }
@@ -9565,6 +10057,10 @@ public:
                 int my_zoid_dep = (zoid.where[0] % 2 == 0) + (zoid.where[1] % 2 == 0) + (zoid.where[2] % 2 == 0);
                 auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num] : send_to_neighbors_many_cuts_next_dt[zoid_num];
 
+                int all_neigh_send_f = 0;
+                int all_neigh_send_x = 0;
+                int all_neigh_send_v = 0;
+
                 for (int i = 0; i < send_neighbors.size(); i++) {
                     int send_zoid_num = send_neighbors[i];
                     auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
@@ -9574,13 +10070,52 @@ public:
                         int total_send_force = zoid.send_force_idxs_double_buffering_flattened[i].size();
                         int total_send_pos = zoid.send_pos_idxs_double_buffering_flattened[0][i].size() + zoid.send_pos_idxs_double_buffering_flattened[1][i].size();
                         int total_send_vel = zoid.send_vel_idxs_double_buffering_flattened[i].size();
-                        std::stringstream s1;
-                        s1 << "zoid: " << zoid.num << " send to: " << send_zoid_num << " dep: " << dep << " send to: " << send_zoid_num
-                        << " total send force: " << total_send_force * 3 << " total send pos: " << total_send_pos << " total send vel: " << total_send_vel
-                        << " all in all total: " << (total_send_force + total_send_pos + total_send_vel) * 3
-                        << std::endl;
-                        std::cout << s1.str();
+
+                        if (send_zoid_dep == my_zoid_dep + 1) {
+                            all_neigh_send_f += total_send_force;
+                            all_neigh_send_x += total_send_pos;
+                            all_neigh_send_v += total_send_vel;
+                        }
                     }
+                }
+
+                int total_send_ndoubles = (all_neigh_send_f + all_neigh_send_x + all_neigh_send_v) * 3;
+
+                if (total_send_ndoubles > 30000) {
+                    std::stringstream o;
+                    o << "zoid: " << zoid.num << " dep: " << dep << " where: " << zoid.where[0] << " " << zoid.where[1] << " " << zoid.where[2]
+                      << " total send force: " << all_neigh_send_f * 3
+                      << " total send pos: " << all_neigh_send_x * 3
+                      << " total send vel: " << all_neigh_send_v * 3
+                      << " all in all total: " << total_send_ndoubles
+                      << std::endl;
+                    std::cout << o.str();
+
+                    /*
+                    for (int i = 0; i < send_neighbors.size(); i++) {
+                        int send_zoid_num = send_neighbors[i];
+                        auto &send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
+                                                  : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+                        int send_zoid_dep = (send_zoid.where[0] % 2 == 0) + (send_zoid.where[1] % 2 == 0) +
+                                            (send_zoid.where[2] % 2 == 0);
+                        if (send_zoid_dep == my_zoid_dep + 1 && send_zoid_num % comm->nprocs != comm->me) {
+                            int total_send_force = zoid.send_force_idxs_double_buffering_flattened[i].size();
+                            int total_send_pos = zoid.send_pos_idxs_double_buffering_flattened[0][i].size() +
+                                                 zoid.send_pos_idxs_double_buffering_flattened[1][i].size();
+                            int total_send_vel = zoid.send_vel_idxs_double_buffering_flattened[i].size();
+
+                            std::stringstream s2;
+                            s2 << "zoid: " << zoid.num << " where: " << zoid.where[0] << " " << zoid.where[1] << " "
+                               << zoid.where[2]
+                               << " send to: " << send_zoid_num << " where: " << send_zoid.where[0] << " "
+                               << send_zoid.where[1] << " " << send_zoid.where[2]
+                               << " num send force: " << total_send_force * 3 << " num send pos: " << total_send_pos * 3
+                               << " num send vel: " << total_send_vel * 3
+                               << std::endl;
+                            std::cout << s2.str();
+                        }
+                    }
+                    */
                 }
             }
         }
