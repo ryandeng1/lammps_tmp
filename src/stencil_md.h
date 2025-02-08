@@ -6522,6 +6522,10 @@ public:
     static constexpr int NUM_CUTS_PER_DIMENSION = 4;
     static constexpr int NUM_ZOIDS_PER_DIMENSION = NUM_CUTS_PER_DIMENSION * 2;
 
+    static constexpr int NUM_CUTS_X = 4;
+    static constexpr int NUM_CUTS_Y = 4;
+    static constexpr int NUM_CUTS_Z = 4;
+
     static constexpr int NUM_ZOIDS_X = 8;
     static constexpr int NUM_ZOIDS_Y = 8;
     static constexpr int NUM_ZOIDS_Z = 8;
@@ -6596,44 +6600,72 @@ public:
 
     void INIT_ZOID_MANY_CUTS() {
         // TODO: test out more than 1 cut in each dimension
-        double width = domain->boxhi[0] - domain->boxlo[0];
-        double narrow_base_width = ((width / NUM_CUTS_PER_DIMENSION) - 2 * NUM_TIMESTEPS_IN_PARALLEL * ALLEGRO_SLOPE) / 2;
-        double wide_base_width = (width - NUM_CUTS_PER_DIMENSION * narrow_base_width) / NUM_CUTS_PER_DIMENSION;
+        assert(domain->dimension == 3);
 
-        std::cout << "narrow base width: " << narrow_base_width << " wide base width: " << wide_base_width << " total: " << NUM_CUTS_PER_DIMENSION * (narrow_base_width + wide_base_width) << " width: " << width << std::endl;
+        std::vector<double> bounds_x;
+        std::vector<double> bounds_y;
+        std::vector<double> bounds_z;
 
-        double first_lo = domain->boxlo[0] - narrow_base_width / 2.0;
-        double first_hi = domain->boxlo[0] + narrow_base_width / 2.0;
+        for (int dim = 0; dim < domain->dimension; dim++) {
+            double width = domain->boxhi[dim] - domain->boxlo[dim];
+            int num_cuts_in_dimension;
+            if (dim == 0) {
+                num_cuts_in_dimension = NUM_CUTS_X;
+            } else if (dim == 1) {
+                num_cuts_in_dimension = NUM_CUTS_Y;
+            } else if (dim == 2) {
+                num_cuts_in_dimension = NUM_CUTS_Z;
+            } else {
+                assert(false);
+            }
 
-        double second_lo = first_hi;
-        double second_hi = second_lo + wide_base_width;
+            double narrow_base_width = ((width / num_cuts_in_dimension) - 2 * NUM_TIMESTEPS_IN_PARALLEL * ALLEGRO_SLOPE) / 2;
+            double wide_base_width = (width - num_cuts_in_dimension * narrow_base_width) / num_cuts_in_dimension;
 
-        std::vector<double> bounds;
-        bounds.push_back(first_lo);
-        bounds.push_back(second_lo);
-        bounds.push_back(second_hi);
+            std::cout << "dim: " << dim << " narrow base width: " << narrow_base_width << " wide base width: " << wide_base_width << " total: " << NUM_CUTS_PER_DIMENSION * (narrow_base_width + wide_base_width) << " width: " << width << std::endl;
+            double first_lo = domain->boxlo[dim] - narrow_base_width / 2.0;
+            double first_hi = domain->boxlo[dim] + narrow_base_width / 2.0;
 
-        double one_set_width = narrow_base_width + wide_base_width;
+            double second_lo = first_hi;
+            double second_hi = second_lo + wide_base_width;
 
-        for (int i = 0; i < NUM_CUTS_PER_DIMENSION - 1; i++) {
-            double lo = bounds[bounds.size() - 1];
-            double hi = lo + narrow_base_width;
-            double next_hi = std::min(domain->boxhi[0] - narrow_base_width / 2, hi + wide_base_width);
-            bounds.push_back(hi);
-            bounds.push_back(next_hi);
+            std::vector<double> bounds;
+            bounds.push_back(first_lo);
+            bounds.push_back(second_lo);
+            bounds.push_back(second_hi);
+
+            double one_set_width = narrow_base_width + wide_base_width;
+
+            for (int i = 0; i < NUM_CUTS_PER_DIMENSION - 1; i++) {
+                double lo = bounds[bounds.size() - 1];
+                double hi = lo + narrow_base_width;
+                double next_hi = std::min(domain->boxhi[0] - narrow_base_width / 2, hi + wide_base_width);
+                bounds.push_back(hi);
+                bounds.push_back(next_hi);
+            }
+
+            if (dim == 0) {
+                bounds_x = bounds;
+            } else if (dim == 1) {
+                bounds_y = bounds;
+            } else if (dim == 2) {
+                bounds_z = bounds;
+            } else {
+                assert(false);
+            }
         }
 
-        for (int i = 0; i < bounds.size() - 1; i++) {
-            for (int j = 0; j < bounds.size() - 1; j++) {
-                for (int k = 0; k < bounds.size() - 1; k++) {
+        for (int i = 0; i < bounds_x.size() - 1; i++) {
+            for (int j = 0; j < bounds_y.size() - 1; j++) {
+                for (int k = 0; k < bounds_z.size() - 1; k++) {
                     int num_expanding = (i % 2 == 0) + (j % 2 == 0) + (k % 2 == 0);
                     queue_info zoid;
-                    zoid.zoid.cuts[0].lower = bounds[i];
-                    zoid.zoid.cuts[1].lower = bounds[j];
-                    zoid.zoid.cuts[2].lower = bounds[k];
-                    zoid.zoid.cuts[0].upper = bounds[i + 1];
-                    zoid.zoid.cuts[1].upper = bounds[j + 1];
-                    zoid.zoid.cuts[2].upper = bounds[k + 1];
+                    zoid.zoid.cuts[0].lower = bounds_x[i];
+                    zoid.zoid.cuts[1].lower = bounds_y[j];
+                    zoid.zoid.cuts[2].lower = bounds_z[k];
+                    zoid.zoid.cuts[0].upper = bounds_x[i + 1];
+                    zoid.zoid.cuts[1].upper = bounds_y[j + 1];
+                    zoid.zoid.cuts[2].upper = bounds_z[k + 1];
                     // expanding
                     int factor_i = (i % 2 == 0) ? -1 : 1;
                     int factor_j = (j % 2 == 0) ? -1 : 1;
@@ -6830,13 +6862,26 @@ public:
         }
 
         if (comm->me == 0) {
-            std::cout << BOLDCYAN << "Lo: " << domain->boxlo[0] << " hi: " << domain->boxhi[0] << RESET_COLOR << std::endl;
-            std::stringstream s1;
-            for (auto& b : bounds) {
-                s1 << b << " ";
-            }
+            for (int dim = 0; dim < domain->dimension; dim++) {
+                std::cout << BOLDCYAN << "dim: " << dim << " Lo: " << domain->boxlo[dim] << " hi: " << domain->boxhi[dim] << RESET_COLOR << std::endl;
+                std::vector<double> bounds;
+                if (dim == 0) {
+                    bounds = bounds_x;
+                } else if (dim == 1) {
+                    bounds = bounds_y;
+                } else if (dim == 2) {
+                    bounds = bounds_z;
+                } else {
+                    assert(false);
+                }
 
-            std::cout << BOLDCYAN << "bounds: " << s1.str() << RESET_COLOR << std::endl;
+                std::stringstream s1;
+                for (auto& b : bounds) {
+                    s1 << b << " ";
+                }
+
+                std::cout << BOLDCYAN << "dim: " << dim << " bounds: " << s1.str() << RESET_COLOR << std::endl;
+            }
         }
     }
 
@@ -7150,8 +7195,10 @@ public:
         int num_zoids_dep1 = (NUM_ZOIDS_MANY_CUTS - 2 * num_zoids_dep0) / 2;
         int num_zoids_per_dep[NUM_DEPS] = {num_zoids_dep0, num_zoids_dep1, num_zoids_dep1, num_zoids_dep0};
 
+        assert(dep0_zoids.size() % comm->nprocs == 0);
+
         for (int i = 0; i < dep0_zoids.size(); i++) {
-            int proc = i / 8;
+            int proc = i / (dep0_zoids.size() / comm->nprocs);
             proc_to_zoids[proc].push_back(dep0_zoids[i]);
         }
 
@@ -7161,6 +7208,143 @@ public:
             }
         }
 
+        constexpr bool TRY_ONLY_MAX_FLOW = true;
+
+        if (TRY_ONLY_MAX_FLOW) {
+            for (int dep = 1; dep < NUM_DEPS; dep++) {
+                std::vector<std::map<std::array<int, 3>, int>> neighbor_to_count_per_proc(comm->nprocs);
+                std::map<std::array<int, 3>, std::vector<int>> unclaimed_zoid_to_procs;
+
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    auto& zoids = proc_to_zoids[proc];
+                    std::set<std::array<int, 3>> all_neighbors;
+                    std::map<std::array<int, 3>, int> neighbor_to_count;
+                    for (auto& z : zoids) {
+                        int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
+                        if (zoid_dep == dep - 1) {
+                            auto& neighbors = tmp_send_neighbors[z];
+                            for (auto& n : neighbors) {
+                                all_neighbors.insert(n);
+                                neighbor_to_count[n]++;
+                                neighbor_to_count_per_proc[proc][n]++;
+
+                                unclaimed_zoid_to_procs[n].push_back(proc);
+                            }
+                        }
+                    }
+                }
+
+                std::vector<std::array<int, 3>> unclaimed_zoids_vec;
+                for (auto& [zoid, _] : unclaimed_zoid_to_procs) {
+                    unclaimed_zoids_vec.push_back(zoid);
+                }
+
+                // TODO: DO MIN-Cost Max Flow HERE
+                // L is num balls per bin.
+                int M = unclaimed_zoids_vec.size(); // Number of balls.
+                int N = comm->nprocs; // Number of bins.
+                int L = M / N;
+                int source = M + N;
+                int sink = M + N + 1;
+                int totalNodes = M + N + 2;
+                MinCostFlow mcf(totalNodes);
+
+                // Source to ball nodes: capacity = 1, cost = 0.
+                for (int i = 0; i < M; i++) {
+                    mcf.addEdge(source, i, 1, 0);
+                }
+
+                // Ball nodes to bin nodes:
+                // For each ball, add an edge to each allowed bin with capacity 1 and cost 0.
+                for (int i = 0; i < M; i++) {
+                    auto& unclaimed_zoid = unclaimed_zoids_vec[i];
+                    for (int bin: unclaimed_zoid_to_procs.at(unclaimed_zoid)) {
+                        // Bin node index = M + bin.
+                        mcf.addEdge(i, M + bin, 1, -neighbor_to_count_per_proc[bin].at(unclaimed_zoid));
+                    }
+                }
+
+                // Bin nodes to sink:
+                // Base edge: capacity = L, cost = 0.
+                // Extra edge: capacity = 1, cost = 1 (penalty for extra ball).
+                for (int b = 0; b < N; b++) {
+                    mcf.addEdge(M + b, sink, L, 0);
+                    mcf.addEdge(M + b, sink, 1, 10);
+                }
+
+                // Run min-cost flow to assign all M balls.
+                int flowCost = 0;
+                int flowAchieved = mcf.minCostFlow(source, sink, M, flowCost);
+                if (flowAchieved < M) {
+                    std::cout << "Error: Not all balls could be assigned!" << std::endl;
+                    assert(false);
+                }
+
+                // Determine the assignment by inspecting the flow on edges from ball nodes to bin nodes.
+                std::vector<int> assignment(M, -1);
+                for (int i = 0; i < M; i++) {
+                    for (auto &edge : mcf.graph[i]) {
+                        // Edge from ball node i to a bin node: bin nodes are in [M, M+N-1].
+                        if (edge.to >= M && edge.to < M + N) {
+                            // If the edge was used (original capacity was 1, so if cap==0 it was used).
+                            if (edge.cap == 0) {
+                                int bin = edge.to - M;
+                                assignment[i] = bin;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                for (int i = 0; i < M; i++) {
+                    auto& unclaimed_zoid = unclaimed_zoids_vec[i];
+                    auto proc = assignment[i];
+                    assert(proc >= 0 && proc < comm->nprocs);
+                    proc_to_zoids[proc].push_back(unclaimed_zoid);
+                    proc_to_zoid_count[proc]++;
+                    claimed[unclaimed_zoid[0]][unclaimed_zoid[1]][unclaimed_zoid[2]] = true;
+                }
+
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    if (comm->me == 0) {
+                        std::cout << "dep: " << dep << " proc: " << proc << " has num zoids: " << proc_to_zoids[proc].size() << std::endl;
+                    }
+                }
+
+                MPI_Barrier(world);
+            }
+
+            std::set<std::array<int, 3>> test_zoids;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                for (auto& zoid : proc_to_zoids[proc]) {
+                    test_zoids.insert(zoid);
+                }
+            }
+
+            if (comm->me == 0) {
+                std::cout << "test zoids size: " << test_zoids.size() << std::endl;
+            }
+            assert(test_zoids.size() == NUM_ZOIDS_MANY_CUTS);
+
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                auto& zoids = proc_to_zoids.at(proc);
+                std::sort(zoids.begin(), zoids.end(), [](const auto& zoid_a, const auto& zoid_b) {
+                    int dep_a = (zoid_a[0] % 2 == 0) + (zoid_a[1] % 2 == 0) + (zoid_a[2] % 2 == 0);
+                    int dep_b = (zoid_b[0] % 2 == 0) + (zoid_b[1] % 2 == 0) + (zoid_b[2] % 2 == 0);
+                    return dep_a < dep_b;
+                });
+
+                for (int i = 0; i < zoids.size(); i++) {
+                    int zoid_num = i * comm->nprocs + proc;
+                    assert(zoid_num >= 0 && zoid_num < NUM_ZOIDS_MANY_CUTS);
+                    zoid_where_to_num[zoids[i]] = i * comm->nprocs + proc;
+                }
+            }
+
+            return;
+        }
+
+        // This shit is so dumb what am I doing
         for (int dep = 1; dep < NUM_DEPS; dep++) {
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 auto& zoids = proc_to_zoids[proc];
@@ -7179,17 +7363,38 @@ public:
 
                 // pick out the zoids that have most of their neighbors
                 for (auto& [k, v] : neighbor_to_count) {
+                    bool use = false;
+                    if (v > 1 && v > dep_to_val[dep] / 2 && !claimed[k[0]][k[1]][k[2]]) {
+                        proc_to_zoids[proc].push_back(k);
+                        proc_to_zoid_count[proc]++;
+                        claimed[k[0]][k[1]][k[2]] = true;
+                        int zoid_dep = (k[0] % 2 == 0 + k[1] % 2 == 0 + k[2] % 2 == 0);
+                        if (comm->me == 0) {
+                            std::cout << "proc: " << proc << " zoid: " << k[0] << " " << k[1] << " " << k[2]
+                                      << " val: " << v << std::endl;
+                        }
+                        assert(zoid_dep == dep);
+                    }
+
+                    /*
                     if (v == dep_to_val[dep]) {
                         proc_to_zoids[proc].push_back(k);
                         proc_to_zoid_count[proc]++;
                         claimed[k[0]][k[1]][k[2]] = true;
                     } else if (v > dep_to_val[dep] / 2) {
-                        if (!claimed[k[0]][k[1]][k[2]] && proc_to_zoid_count[proc] < (num_zoids_per_dep[dep]) / comm->nprocs) {
+                        if (!claimed[k[0]][k[1]][k[2]]) {
+                            proc_to_zoids[proc].push_back(k);
+                            proc_to_zoid_count[proc]++;
+                            claimed[k[0]][k[1]][k[2]] = true;
+                        }
+                    } else if (v >= dep_to_val[dep] / 2 && v > 1) {
+                        if (!claimed[k[0]][k[1]][k[2]]) {
                             proc_to_zoids[proc].push_back(k);
                             proc_to_zoid_count[proc]++;
                             claimed[k[0]][k[1]][k[2]] = true;
                         }
                     }
+                    */
                 }
             }
 
@@ -7198,19 +7403,29 @@ public:
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 auto& zoids = proc_to_zoids[proc];
                 std::set<std::array<int, 3>> all_neighbors;
+                std::map<std::array<int, 3>, int> neighbor_to_count;
+
                 for (auto& z : zoids) {
                     int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
                     if (zoid_dep == dep - 1) {
                         auto& neighbors = tmp_send_neighbors[z];
                         for (auto& n : neighbors) {
                             all_neighbors.insert(n);
+                            neighbor_to_count[n]++;
                         }
                     }
                 }
 
                 for (auto& neighbor : all_neighbors) {
-                    if (!claimed[neighbor[0]][neighbor[1]][neighbor[2]]) {
+                    int neighbor_dep = (neighbor[0] % 2 == 0) + (neighbor[1] % 2 == 0) + (neighbor[2] % 2 == 0);
+                    if (!claimed[neighbor[0]][neighbor[1]][neighbor[2]] && neighbor_dep == dep) {
                         unclaimed_zoid_to_procs[neighbor].push_back(proc);
+                        if (comm->me == 0) {
+                            std::cout << "AFTER. proc: " << proc << " dep: " << dep
+                            << " unclaimed zoid: " << neighbor[0] << " " << neighbor[1] << " " << neighbor[2]
+                            << " unclaimed zoid val: " << neighbor_to_count[neighbor]
+                            << " dep_to_val: " << dep_to_val[dep] << std::endl;
+                        }
                     }
                 }
             }
@@ -7291,6 +7506,8 @@ public:
                     std::cout << "dep: " << dep << " proc: " << proc << " has num zoids: " << proc_to_zoids[proc].size() << std::endl;
                 }
             }
+
+            MPI_Barrier(world);
         }
 
         std::set<std::array<int, 3>> test_zoids;
@@ -7543,12 +7760,21 @@ public:
 
     bool zoid_many_cuts_is_neighbor_all_deps(int* where_a, int* where_b) {
         for (int dim = 0; dim < domain->dimension; dim++) {
+            int num_zoids_in_dimension;
+            if (dim == 0) {
+                num_zoids_in_dimension = NUM_ZOIDS_X;
+            } else if (dim == 1) {
+                num_zoids_in_dimension = NUM_ZOIDS_Y;
+            } else {
+                num_zoids_in_dimension = NUM_ZOIDS_Z;
+            }
+
             if (where_a[dim] != where_b[dim]) {
                 int diff = where_a[dim] - where_b[dim];
                 // expanding zoid in this dimension based on numbering
                 if (where_a[dim] % 2 == 1) {
                     if (diff != -1 && diff != 1) {
-                        if (!(where_a[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && where_b[dim] == 0)) {
+                        if (!(where_a[dim] == num_zoids_in_dimension - 1 && where_b[dim] == 0)) {
                             return false;
                         }
                     }
@@ -7563,12 +7789,21 @@ public:
 
     bool zoid_many_cuts_is_neighbor_all_deps_next_dt(int* where_a, int* where_b) {
         for (int dim = 0; dim < domain->dimension; dim++) {
+            int num_zoids_in_dimension;
+            if (dim == 0) {
+                num_zoids_in_dimension = NUM_ZOIDS_X;
+            } else if (dim == 1) {
+                num_zoids_in_dimension = NUM_ZOIDS_Y;
+            } else {
+                num_zoids_in_dimension = NUM_ZOIDS_Z;
+            }
+
             if (where_a[dim] != where_b[dim]) {
                 int diff = where_a[dim] - where_b[dim];
                 // expanding zoid in this dimension based on numbering
                 if (where_a[dim] % 2 == 0) {
                     if (diff != -1 && diff != 1) {
-                        if (!(where_a[dim] == 0 && where_b[dim] == NUM_ZOIDS_PER_DIMENSION - 1)) {
+                        if (!(where_a[dim] == 0 && where_b[dim] == num_zoids_in_dimension - 1)) {
                             return false;
                         }
                     }
@@ -7659,6 +7894,7 @@ public:
             std::sort(recv_from_neighbors_many_cuts_next_dt[i].begin(), recv_from_neighbors_many_cuts_next_dt[i].end());
         }
 
+        /*
         recv_from_neighbors_not_my_proc_idxs.resize(NUM_ZOIDS_MANY_CUTS);
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             if (i % comm->nprocs != comm->me) {
@@ -7728,6 +7964,7 @@ public:
 
             send_to_neighbors_num_not_in_proc_next_dt[i] = idx;
         }
+        */
 
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
             int comm_idx = 0;
@@ -8347,6 +8584,14 @@ public:
                         int idx = local_idxs[i];
                         int tag = zoid.tag_stencil_md[0][idx];
                         all_tags[tag]++;
+                        if (tag == 147) {
+                            std::stringstream s1;
+                            s1 << "THIS TAG CAUSES ISSUES. pos: " << zoid.x_stencil_md[0][idx].x << " " << zoid.x_stencil_md[0][idx].y << " " << zoid.x_stencil_md[0][idx].z
+                            << " lo: " << zoid.zoid.cuts[0].lower + t * zoid.zoid.cuts[0].slope_lower << " " << zoid.zoid.cuts[1].lower + t * zoid.zoid.cuts[1].slope_lower << " " << zoid.zoid.cuts[2].lower + t * zoid.zoid.cuts[2].slope_lower
+                            << " hi: " << zoid.zoid.cuts[0].lower + t * zoid.zoid.cuts[0].slope_lower << " " << zoid.zoid.cuts[1].lower + t * zoid.zoid.cuts[1].slope_lower << " " << zoid.zoid.cuts[2].lower + t * zoid.zoid.cuts[2].slope_lower
+                            << std::endl;
+                            std::cout << s1.str();
+                        }
                     }
                 }
             }
@@ -10119,6 +10364,35 @@ public:
                 }
             }
         }
+
+
+        for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+            for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
+                auto& zoid = my_queues_many_cuts[dep][j];
+                std::vector<int> procs;
+                auto& send_neighbors = send_to_neighbors_many_cuts[zoid.num];
+                for (int i = 0; i < send_neighbors.size(); i++) {
+                    if (send_neighbors[i] % comm->nprocs != comm->me) {
+                        auto& send_zoid = zoid_num_to_zoid_many_cuts[send_neighbors[i]];
+                        int send_zoid_dep = (send_zoid.where[0] % 2 == 0) + (send_zoid.where[1] % 2 == 0) + (send_zoid.where[2] % 2 == 0);
+                        if (send_zoid_dep == dep + 1) {
+                            procs.push_back(send_neighbors[i] % comm->nprocs);
+                        }
+                    }
+                }
+
+                std::stringstream s1;
+                for (auto& p : procs) {
+                    s1 << p << " ";
+                }
+
+                std::stringstream o;
+                o << "me: " << comm->me << " dep: " << dep << " talk to procs: " << s1.str() << std::endl;
+                std::cout << o.str();
+            }
+
+            MPI_Barrier(world);
+        }
     }
 
     template <bool curr_dt>
@@ -10443,8 +10717,14 @@ public:
             send_zoid_to_zoid_sizes.resize(NUM_ZOIDS_MANY_CUTS);
 
             send_zoid_to_zoid_sizes_setup.resize(NUM_ZOIDS_MANY_CUTS);
+
+            send_to_neighbors_not_my_proc_idxs.resize(NUM_ZOIDS_MANY_CUTS);
+            send_to_neighbors_num_not_in_proc.resize(NUM_ZOIDS_MANY_CUTS);
         } else {
             send_zoid_to_zoid_sizes_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
+
+            send_to_neighbors_not_my_proc_idxs_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
+            send_to_neighbors_num_not_in_proc_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
         }
 
         for (int zoid_num = 0; zoid_num < NUM_ZOIDS_MANY_CUTS; zoid_num++) {
@@ -10479,6 +10759,8 @@ public:
 
                 auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[send_zoid_num]
                         : send_to_neighbors_many_cuts_next_dt[send_zoid_num];
+
+                int send_neighbor_not_in_proc_idx = 0;
 
                 for (int i = 0; i < send_neighbors.size(); i++) {
                     int neigh = send_neighbors[i];
@@ -10521,6 +10803,26 @@ public:
                     if (total_doubles_send_to_zoid > nsend_buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][send_zoid_num][i]) {
                         GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(send_zoid.num, i, total_doubles_send_to_zoid, DEFAULT_PIPELINE_STAGE);
                     }
+
+                    if (curr_dt) {
+                        if (neigh % comm->nprocs != comm->me && total_doubles_send_to_zoid > 0) {
+                            send_to_neighbors_not_my_proc_idxs[send_zoid.num].push_back(send_neighbor_not_in_proc_idx++);
+                        } else {
+                            send_to_neighbors_not_my_proc_idxs[send_zoid.num].push_back(-1);
+                        }
+                    } else {
+                        if (neigh % comm->nprocs != comm->me && total_doubles_send_to_zoid > 0) {
+                            send_to_neighbors_not_my_proc_idxs_next_dt[send_zoid.num].push_back(send_neighbor_not_in_proc_idx++);
+                        } else {
+                            send_to_neighbors_not_my_proc_idxs_next_dt[send_zoid.num].push_back(-1);
+                        }
+                    }
+                }
+
+                if (curr_dt) {
+                    send_to_neighbors_num_not_in_proc[send_zoid.num] = send_neighbor_not_in_proc_idx;
+                } else {
+                    send_to_neighbors_num_not_in_proc_next_dt[send_zoid.num] = send_neighbor_not_in_proc_idx;
                 }
             }
         }
@@ -10617,8 +10919,12 @@ public:
             recv_zoid_to_zoid_sizes.resize(NUM_ZOIDS_MANY_CUTS);
 
             recv_zoid_to_zoid_sizes_setup.resize(NUM_ZOIDS_MANY_CUTS);
+
+            recv_from_neighbors_not_my_proc_idxs.resize(NUM_ZOIDS_MANY_CUTS);
         } else {
             recv_zoid_to_zoid_sizes_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
+
+            recv_from_neighbors_not_my_proc_idxs_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
         }
 
         for (int zoid_num = 0; zoid_num < NUM_ZOIDS_MANY_CUTS; zoid_num++) {
@@ -10675,6 +10981,14 @@ public:
                 int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? nrecv_from_zoid * (3 + 1) : nrecv_from_zoid * 3;
                 if (total_doubles_recv_from_zoid > nrecv_buf_recv_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i]) {
                     GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, i, total_doubles_recv_from_zoid, DEFAULT_PIPELINE_STAGE);
+                }
+
+                if (total_doubles_recv_from_zoid > 0) {
+                    if (curr_dt) {
+                        recv_from_neighbors_not_my_proc_idxs[zoid.num].push_back(i);
+                    } else {
+                        recv_from_neighbors_not_my_proc_idxs_next_dt[zoid.num].push_back(i);
+                    }
                 }
             }
         }
@@ -10758,7 +11072,9 @@ public:
 
             assert(buf_idx == zoid_ndoubles_send);
 
-            if (buf_idx > 0 && (send_zoid_num % comm->nprocs != comm->me)) {
+            // if (buf_idx > 0 && (send_zoid_num % comm->nprocs != comm->me)) {
+            // TODO: Setup always send data even if 0.
+            if ((send_zoid_num % comm->nprocs != comm->me)) {
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 r.emplace_back();
 
@@ -10891,7 +11207,8 @@ public:
                 GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, i, total_doubles_recv_from_zoid, DEFAULT_PIPELINE_STAGE);
             }
 
-            if (total_doubles_recv_from_zoid > 0) {
+            // if (total_doubles_recv_from_zoid > 0) {
+            if (true) {
                 r.emplace_back();
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num});
@@ -11098,11 +11415,20 @@ public:
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
-            if (recv_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && zoid.where[dim] == 0) {
+            int num_zoids_in_dimension;
+            if (dim == 0) {
+                num_zoids_in_dimension = NUM_ZOIDS_X;
+            } else if (dim == 1) {
+                num_zoids_in_dimension = NUM_ZOIDS_Y;
+            } else {
+                num_zoids_in_dimension = NUM_ZOIDS_Z;
+            }
+
+            if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
                 pbc_flag_[dim] = -1;
             }
 
-            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1) {
+            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == num_zoids_in_dimension - 1) {
                 pbc_flag_[dim] = 1;
             }
         }
@@ -11217,11 +11543,20 @@ public:
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
-            if (recv_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && zoid.where[dim] == 0) {
+            int num_zoids_in_dimension;
+            if (dim == 0) {
+                num_zoids_in_dimension = NUM_ZOIDS_X;
+            } else if (dim == 1) {
+                num_zoids_in_dimension = NUM_ZOIDS_Y;
+            } else {
+                num_zoids_in_dimension = NUM_ZOIDS_Z;
+            }
+
+            if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
                 pbc_flag_[dim] = -1;
             }
 
-            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1) {
+            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == num_zoids_in_dimension - 1) {
                 pbc_flag_[dim] = 1;
             }
         }
@@ -11469,11 +11804,20 @@ public:
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
-            if (recv_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && zoid.where[dim] == 0) {
+            int num_zoids_in_dimension;
+            if (dim == 0) {
+                num_zoids_in_dimension = NUM_ZOIDS_X;
+            } else if (dim == 1) {
+                num_zoids_in_dimension = NUM_ZOIDS_Y;
+            } else {
+                num_zoids_in_dimension = NUM_ZOIDS_Z;
+            }
+
+            if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
                 pbc_flag_[dim] = -1;
             }
 
-            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1) {
+            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == num_zoids_in_dimension - 1) {
                 pbc_flag_[dim] = 1;
             }
         }
@@ -11558,11 +11902,20 @@ public:
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
-            if (recv_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && zoid.where[dim] == 0) {
+            int num_zoids_in_dimension;
+            if (dim == 0) {
+                num_zoids_in_dimension = NUM_ZOIDS_X;
+            } else if (dim == 1) {
+                num_zoids_in_dimension = NUM_ZOIDS_Y;
+            } else {
+                num_zoids_in_dimension = NUM_ZOIDS_Z;
+            }
+
+            if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
                 pbc_flag_[dim] = -1;
             }
 
-            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1) {
+            if (recv_zoid.where[dim] == 0 && zoid.where[dim] == num_zoids_in_dimension - 1) {
                 pbc_flag_[dim] = 1;
             }
         }
@@ -11616,6 +11969,7 @@ public:
         auto& recv_neighbors = recv_from_neighbors_many_cuts[zoid_num];
 
         auto& not_my_proc_idxs = recv_from_neighbors_not_my_proc_idxs[zoid.num];
+        assert(r.size() == not_my_proc_idxs.size());
 
         int num_wait = 0;
         while (num_wait < not_my_proc_idxs.size()) {
@@ -11868,11 +12222,20 @@ public:
 
                 int pbc_flag_[3] = {0};
                 for (int dim = 0; dim < 3; dim++) {
-                    if (send_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1 && recv_zoid.where[dim] == 0) {
+                    int num_zoids_in_dimension;
+                    if (dim == 0) {
+                        num_zoids_in_dimension = NUM_ZOIDS_X;
+                    } else if (dim == 1) {
+                        num_zoids_in_dimension = NUM_ZOIDS_Y;
+                    } else {
+                        num_zoids_in_dimension = NUM_ZOIDS_Z;
+                    }
+
+                    if (send_zoid.where[dim] == num_zoids_in_dimension - 1 && recv_zoid.where[dim] == 0) {
                         pbc_flag_[dim] = -1;
                     }
 
-                    if (send_zoid.where[dim] == 0 && recv_zoid.where[dim] == NUM_ZOIDS_PER_DIMENSION - 1) {
+                    if (send_zoid.where[dim] == 0 && recv_zoid.where[dim] == num_zoids_in_dimension - 1) {
                         pbc_flag_[dim] = 1;
                     }
                 }
