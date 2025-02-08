@@ -7550,19 +7550,21 @@ public:
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 queue_info& zoid = queues_many_cuts[dep][j];
+
+                zoid.lo = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.hi = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    for (int dim = 0; dim < domain->dimension; dim++) {
+                        zoid.lo[t][dim] = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                        zoid.hi[t][dim] = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    }
+                }
+
                 if (zoid.num % comm->nprocs == comm->me) {
                     /* start stuff for 2 timesteps */
-                    zoid.lo = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.hi = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                     assert(domain->dimension == 3);
-
-                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                        for (int dim = 0; dim < domain->dimension; dim++) {
-                            zoid.lo[t][dim] = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                            zoid.hi[t][dim] = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
-                        }
-                    }
 
                     zoid.x_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
                     zoid.v_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
@@ -7612,20 +7614,19 @@ public:
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
                 queue_info& zoid = queues_many_cuts_next_dt[dep][j];
+
+                zoid.lo = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.hi = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    for (int dim = 0; dim < domain->dimension; dim++) {
+                        zoid.lo[t][dim] = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                        zoid.hi[t][dim] = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    }
+                }
+
                 if (zoid.num % comm->nprocs == comm->me) {
                     /* start stuff for 2 timesteps */
-                    zoid.lo = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.hi = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                    assert(domain->dimension == 3);
-
-                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                        for (int dim = 0; dim < domain->dimension; dim++) {
-                            zoid.lo[t][dim] = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                            zoid.hi[t][dim] = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
-                        }
-                    }
-
                     // Copy the main data from the curr_dt zoid
                     auto coord = zoid_num_to_coord[zoid.num];
 
@@ -13581,12 +13582,13 @@ public:
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 queue_info &zoid = queues_many_cuts[dep][j];
-                if (zoid.num % comm->nprocs != comm->me) {
-                    continue;
-                }
 
                 delete[] zoid.lo;
                 delete[] zoid.hi;
+
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
 
                 delete[] zoid.x_stencil_md;
                 delete[] zoid.v_stencil_md;
@@ -13639,6 +13641,10 @@ public:
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
                 queue_info &zoid = queues_many_cuts_next_dt[dep][j];
+
+                delete[] zoid.lo;
+                delete[] zoid.hi;
+
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
                 }
