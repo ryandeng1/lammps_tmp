@@ -7552,6 +7552,18 @@ public:
                 queue_info& zoid = queues_many_cuts[dep][j];
                 if (zoid.num % comm->nprocs == comm->me) {
                     /* start stuff for 2 timesteps */
+                    zoid.lo = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.hi = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                    assert(domain->dimension == 3);
+
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        for (int dim = 0; dim < domain->dimension; dim++) {
+                            zoid.lo[t][dim] = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                            zoid.hi[t][dim] = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                        }
+                    }
+
                     zoid.x_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
                     zoid.v_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
                     zoid.f_stencil_md = new std::vector<dbl3_t_stencil_md>[1];
@@ -7602,6 +7614,17 @@ public:
                 queue_info& zoid = queues_many_cuts_next_dt[dep][j];
                 if (zoid.num % comm->nprocs == comm->me) {
                     /* start stuff for 2 timesteps */
+                    zoid.lo = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.hi = new std::array<double, 3>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                    assert(domain->dimension == 3);
+
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        for (int dim = 0; dim < domain->dimension; dim++) {
+                            zoid.lo[t][dim] = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                            zoid.hi[t][dim] = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                        }
+                    }
 
                     // Copy the main data from the curr_dt zoid
                     auto coord = zoid_num_to_coord[zoid.num];
@@ -7890,8 +7913,10 @@ public:
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             std::sort(send_to_neighbors_many_cuts[i].begin(), send_to_neighbors_many_cuts[i].end());
             std::sort(recv_from_neighbors_many_cuts[i].begin(), recv_from_neighbors_many_cuts[i].end());
-            std::sort(send_to_neighbors_many_cuts_next_dt[i].begin(), send_to_neighbors_many_cuts_next_dt[i].end());
-            std::sort(recv_from_neighbors_many_cuts_next_dt[i].begin(), recv_from_neighbors_many_cuts_next_dt[i].end());
+            std::sort(send_to_neighbors_many_cuts_next_dt[i].begin(),
+                      send_to_neighbors_many_cuts_next_dt[i].end(), std::greater<int>());
+            std::sort(recv_from_neighbors_many_cuts_next_dt[i].begin(),
+                      recv_from_neighbors_many_cuts_next_dt[i].end(), std::greater<int>());
         }
 
         /*
@@ -8308,8 +8333,11 @@ public:
 
                         for (int dim = 0; dim < domain->dimension; dim++) {
                             double pos = all_pos[idx * 3 + dim];
-                            double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                            double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                            // double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                            // double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                            double lo = zoid.lo[t][dim];
+                            double hi = zoid.hi[t][dim];
+
                             while (pos < lo) {
                                 pos += domain->prd[dim];
                             }
@@ -9731,8 +9759,10 @@ public:
 
                 bool borders_zoid = true;
                 for (int dim = 0; dim < domain->dimension; dim++) {
-                    double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                    double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    // double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                    // double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    double lo = zoid.lo[t][dim];
+                    double hi = zoid.lo[t][dim];
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
                     borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
@@ -9782,8 +9812,10 @@ public:
                     bool in_neighbor_zoid = true;
 
                     for (int dim = 0; dim < domain->dimension; dim++) {
-                        double lo = recv_zoid.zoid.cuts[dim].lower + (t - 1) * recv_zoid.zoid.cuts[dim].slope_lower;
-                        double hi = recv_zoid.zoid.cuts[dim].upper + (t - 1) * recv_zoid.zoid.cuts[dim].slope_upper;
+                        // double lo = recv_zoid.zoid.cuts[dim].lower + (t - 1) * recv_zoid.zoid.cuts[dim].slope_lower;
+                        // double hi = recv_zoid.zoid.cuts[dim].upper + (t - 1) * recv_zoid.zoid.cuts[dim].slope_upper;
+                        double lo = recv_zoid.lo[t - 1][dim];
+                        double hi = recv_zoid.lo[t - 1][dim];
 
                         double p = atom_pos[dim];
                         while (p < lo) {
@@ -10983,11 +11015,11 @@ public:
                     GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, i, total_doubles_recv_from_zoid, DEFAULT_PIPELINE_STAGE);
                 }
 
-                if (total_doubles_recv_from_zoid > 0) {
+                if (total_doubles_recv_from_zoid > 0 && recv_zoid_num % comm->nprocs != comm->me) {
                     if (curr_dt) {
-                        recv_from_neighbors_not_my_proc_idxs[zoid.num].push_back(i);
+                        recv_from_neighbors_not_my_proc_idxs[zoid_num].push_back(i);
                     } else {
-                        recv_from_neighbors_not_my_proc_idxs_next_dt[zoid.num].push_back(i);
+                        recv_from_neighbors_not_my_proc_idxs_next_dt[zoid_num].push_back(i);
                     }
                 }
             }
@@ -11208,6 +11240,7 @@ public:
             }
 
             // if (total_doubles_recv_from_zoid > 0) {
+            // Setup just take anything, it won't matter too much.
             if (true) {
                 r.emplace_back();
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
@@ -13551,6 +13584,10 @@ public:
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
                 }
+
+                delete[] zoid.lo;
+                delete[] zoid.hi;
+
                 delete[] zoid.x_stencil_md;
                 delete[] zoid.v_stencil_md;
                 delete[] zoid.f_stencil_md;
@@ -13605,6 +13642,9 @@ public:
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
                 }
+
+                delete[] zoid.lo;
+                delete[] zoid.hi;
 
                 delete[] zoid.local_idxs_per_timestep;
                 delete[] zoid.neighbor_list;

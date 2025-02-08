@@ -98,8 +98,7 @@ constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 8;
 // constexpr double ADDITIONAL_CUTOFF = 0.4001;
-// constexpr double ADDITIONAL_CUTOFF = 0.4;
-constexpr double ADDITIONAL_CUTOFF = 0.40000000001;
+constexpr double ADDITIONAL_CUTOFF = 0.4;
 
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 
@@ -544,6 +543,9 @@ constexpr int NUM_DIMENSIONS = 3;
 // struct that holds information for queue
 struct queue_info {
   /* Start stuff for 2 timesteps */
+  std::array<double, 3>* lo;
+  std::array<double, 3>* hi;
+
   bool no_comm_needed;
 
   std::pair<int, dbl3_t_stencil_md>** per_worker_force_updates;
