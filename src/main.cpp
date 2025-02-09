@@ -19,6 +19,10 @@
 #include "pthread.h"
 #include <cilk/cilk_api.h>
 
+#ifdef __linux__
+#include <cilk/cilk_set_affinity.h>
+#endif
+
 #if defined(LAMMPS_EXCEPTIONS)
 #include "exceptions.h"
 #endif
