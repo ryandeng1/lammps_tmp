@@ -17,6 +17,7 @@
 #include "input.h"
 #include "lmppython.h"
 #include "pthread.h"
+#include <cilk/cilk_api.h>
 
 #if defined(LAMMPS_EXCEPTIONS)
 #include "exceptions.h"
