@@ -16,6 +16,7 @@
 #include "accelerator_kokkos.h"
 #include "input.h"
 #include "lmppython.h"
+#include "pthread.h"
 
 #if defined(LAMMPS_EXCEPTIONS)
 #include "exceptions.h"
@@ -53,7 +54,41 @@ int main(int argc, char **argv)
     std::cout << "COULD NOT PROVIDE MPI_THREAD_MULTIPLE" << std::endl;
     return 0;
   }
-  // std::cout << "MPI Thread provided: " << provided << std::endl;
+
+#ifdef __linux__
+    auto calling_thread = pthread_self();
+
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    cilk_for (int i = 0; i < 1e6; i++) {
+        if (rand() == 0) {
+            std::cout << "i: " << i << std::endl;
+        }
+    }
+
+    int nworkers = __cilkrts_get_nworkers();
+
+    auto* cpusets = new cpu_set_t[nworkers];
+
+    constexpr int NUM_CORES_PER_SOCKET = 24;
+
+    if (rank % 2 == 0) {
+        for (int i = 0; i < nworkers; i++) {
+            CPU_ZERO(&cpusets[i]);
+            CPU_SET(i, &cpusets[i]);
+        }
+    } else {
+        for (int i = 0; i < nworkers; i++) {
+            CPU_ZERO(&cpusets[i]);
+            CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
+        }
+    }
+
+    set_worker_affinity(nworkers, cpusets, calling_thread);
+
+    delete[] cpusets;
+#endif
 
   MPI_Comm lammps_comm = MPI_COMM_WORLD;
 
