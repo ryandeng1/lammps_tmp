@@ -6526,9 +6526,9 @@ public:
     static constexpr int NUM_CUTS_Y = 4;
     static constexpr int NUM_CUTS_Z = 4;
 
-    static constexpr int NUM_ZOIDS_X = 8;
-    static constexpr int NUM_ZOIDS_Y = 8;
-    static constexpr int NUM_ZOIDS_Z = 8;
+    static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
+    static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
+    static constexpr int NUM_ZOIDS_Z = NUM_CUTS_Z * 2;
     static constexpr int NUM_SPLIT_X = 2;
     static constexpr int NUM_SPLIT_Y = 2;
     static constexpr int NUM_SPLIT_Z = 2;
@@ -6619,10 +6619,12 @@ public:
                 assert(false);
             }
 
-            double narrow_base_width = ((width / num_cuts_in_dimension) - 2 * NUM_TIMESTEPS_IN_PARALLEL * ALLEGRO_SLOPE) / 2;
+            double narrow_base_width = ((width / num_cuts_in_dimension) - 2 * NUM_TIMESTEPS_IN_PARALLEL * ALLEGRO_SLOPE) / 2 + 0.1;
             double wide_base_width = (width - num_cuts_in_dimension * narrow_base_width) / num_cuts_in_dimension;
 
-            std::cout << "dim: " << dim << " narrow base width: " << narrow_base_width << " wide base width: " << wide_base_width << " total: " << NUM_CUTS_PER_DIMENSION * (narrow_base_width + wide_base_width) << " width: " << width << std::endl;
+            std::cout << "dim: " << dim << " narrow base width: " << narrow_base_width << " wide base width: " << wide_base_width
+            << " total: " << num_cuts_in_dimension * (narrow_base_width + wide_base_width) << " width: " << width << std::endl;
+
             double first_lo = domain->boxlo[dim] - narrow_base_width / 2.0;
             double first_hi = domain->boxlo[dim] + narrow_base_width / 2.0;
 
@@ -6636,7 +6638,7 @@ public:
 
             double one_set_width = narrow_base_width + wide_base_width;
 
-            for (int i = 0; i < NUM_CUTS_PER_DIMENSION - 1; i++) {
+            for (int i = 0; i < num_cuts_in_dimension - 1; i++) {
                 double lo = bounds[bounds.size() - 1];
                 double hi = lo + narrow_base_width;
                 double next_hi = std::min(domain->boxhi[0] - narrow_base_width / 2, hi + wide_base_width);
@@ -8356,7 +8358,7 @@ public:
                             while (pos >= hi_borders) {
                                 pos -= domain->prd[dim];
                             }
-                            borders_zoid = borders_zoid && pos >= lo_borders && pos < hi_borders;
+                            borders_zoid = borders_zoid && pos >= lo_borders && pos <= hi_borders;
                             new_pos_borders[dim] = pos;
 
                             zoid_lo[dim] = lo;
@@ -8366,20 +8368,6 @@ public:
                         }
 
                         if (in_zoid || borders_zoid) {
-                            /*
-                            if (idx == 255412 || idx == 254682) {
-                                std::cout << "FOUND TAG in CONSTRUCTION. tag: " << idx << " zoid: " << zoid.num
-                                << " time: " << t
-                                << " in zoid? " << in_zoid << " borders zoid? " << borders_zoid
-                                << " pos: " << new_pos[0] << " " << new_pos[1] << " " << new_pos[2]
-                                << " borders pos: " << new_pos_borders[0] << " " << new_pos_borders[1] << " " << new_pos_borders[2]
-                                << " zoid lo: " << zoid_lo[0] << " " << zoid_lo[1] << " " << zoid_lo[2]
-                                << " zoid hi: " << zoid_hi[0] << " " << zoid_hi[1] << " " << zoid_hi[2]
-                                << " zoid borders lo: " << zoid_borders_lo[0] << " " << zoid_borders_lo[1] << " " << zoid_borders_lo[2]
-                                << " zoid borders hi: " << zoid_borders_hi[0] << " " << zoid_borders_hi[1] << " " << zoid_borders_hi[2]
-                                << std::endl;
-                            }
-                            */
                             if (tags_in_zoid.find(idx) == tags_in_zoid.end()) {
                                 tags_in_zoid.insert(idx);
                                 if (in_zoid) {
@@ -8613,14 +8601,6 @@ public:
                         int idx = local_idxs[i];
                         int tag = zoid.tag_stencil_md[0][idx];
                         all_tags[tag]++;
-                        if (tag == 147) {
-                            std::stringstream s1;
-                            s1 << "THIS TAG CAUSES ISSUES. pos: " << zoid.x_stencil_md[0][idx].x << " " << zoid.x_stencil_md[0][idx].y << " " << zoid.x_stencil_md[0][idx].z
-                            << " lo: " << zoid.zoid.cuts[0].lower + t * zoid.zoid.cuts[0].slope_lower << " " << zoid.zoid.cuts[1].lower + t * zoid.zoid.cuts[1].slope_lower << " " << zoid.zoid.cuts[2].lower + t * zoid.zoid.cuts[2].slope_lower
-                            << " hi: " << zoid.zoid.cuts[0].lower + t * zoid.zoid.cuts[0].slope_lower << " " << zoid.zoid.cuts[1].lower + t * zoid.zoid.cuts[1].slope_lower << " " << zoid.zoid.cuts[2].lower + t * zoid.zoid.cuts[2].slope_lower
-                            << std::endl;
-                            std::cout << s1.str();
-                        }
                     }
                 }
             }
@@ -8655,10 +8635,8 @@ public:
                                          zoid.x_stencil_md[0][i].y,
                                          zoid.x_stencil_md[0][i].z};
                         for (int dim = 0; dim < domain->dimension; dim++) {
-                            double lo = zoid.zoid.cuts[dim].lower +
-                                        t * zoid.zoid.cuts[dim].slope_lower;
-                            double hi = zoid.zoid.cuts[dim].upper +
-                                        t * zoid.zoid.cuts[dim].slope_upper;
+                            double lo = zoid.lo[t][dim];
+                            double hi = zoid.hi[t][dim];
                             in_zoid = in_zoid && pos[dim] >= lo && pos[dim] < hi;
                         }
 
@@ -8764,8 +8742,10 @@ public:
                         double neigh_pos[3] = {x[neigh_idx].x, x[neigh_idx].y, x[neigh_idx].z};
 
                         for (int dim = 0; dim < domain->dimension; dim++) {
-                            double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                            double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                            // double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                            // double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                            double lo = zoid.lo[t][dim];
+                            double hi = zoid.hi[t][dim];
                             bool my_dim_shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
                             bool out_of_bounds = (neigh_pos[dim] < lo || neigh_pos[dim] >= hi);
                             if (my_dim_shrinking && out_of_bounds) {
@@ -9020,8 +9000,10 @@ public:
                         double neigh_pos[3] = {x[neigh_idx].x, x[neigh_idx].y, x[neigh_idx].z};
 
                         for (int dim = 0; dim < domain->dimension; dim++) {
-                            double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                            double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                            // double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                            // double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                            double lo = zoid.lo[t][dim];
+                            double hi = zoid.hi[t][dim];
                             bool my_dim_shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
                             bool out_of_bounds = (neigh_pos[dim] < lo || neigh_pos[dim] >= hi);
                             if (my_dim_shrinking && out_of_bounds) {
@@ -9292,11 +9274,13 @@ public:
 
                 bool borders_zoid = true;
                 for (int dim = 0; dim < domain->dimension; dim++) {
-                    double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                    double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    // double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                    // double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    double lo = zoid.lo[t][dim];
+                    double hi = zoid.hi[t][dim];
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] <= hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
@@ -9315,8 +9299,10 @@ public:
 
                     bool in_neighbor_zoid = true;
                     for (int dim = 0; dim < domain->dimension; dim++) {
-                        double lo = send_zoid.zoid.cuts[dim].lower + t * send_zoid.zoid.cuts[dim].slope_lower;
-                        double hi = send_zoid.zoid.cuts[dim].upper + t * send_zoid.zoid.cuts[dim].slope_upper;
+                        // double lo = send_zoid.zoid.cuts[dim].lower + t * send_zoid.zoid.cuts[dim].slope_lower;
+                        // double hi = send_zoid.zoid.cuts[dim].upper + t * send_zoid.zoid.cuts[dim].slope_upper;
+                        double lo = send_zoid.lo[t][dim];
+                        double hi = send_zoid.hi[t][dim];
                         double p = atom_pos[dim];
                         while (p < lo) {
                             p += domain->prd[dim];
@@ -9391,11 +9377,13 @@ public:
 
                 bool borders_zoid = true;
                 for (int dim = 0; dim < domain->dimension; dim++) {
-                    double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
-                    double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    // double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                    // double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    double lo = zoid.lo[t][dim];
+                    double hi = zoid.hi[t][dim];
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] <= hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
@@ -9414,8 +9402,10 @@ public:
 
                     bool in_neighbor_zoid = true;
                     for (int dim = 0; dim < domain->dimension; dim++) {
-                        double lo = send_zoid.zoid.cuts[dim].lower + t * send_zoid.zoid.cuts[dim].slope_lower;
-                        double hi = send_zoid.zoid.cuts[dim].upper + t * send_zoid.zoid.cuts[dim].slope_upper;
+                        // double lo = send_zoid.zoid.cuts[dim].lower + t * send_zoid.zoid.cuts[dim].slope_lower;
+                        // double hi = send_zoid.zoid.cuts[dim].upper + t * send_zoid.zoid.cuts[dim].slope_upper;
+                        double lo = send_zoid.lo[t][dim];
+                        double hi = send_zoid.hi[t][dim];
                         double p = atom_pos[dim];
                         while (p < lo) {
                             p += domain->prd[dim];
@@ -9453,6 +9443,7 @@ public:
 
     template <bool curr_dt>
     void CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS_HELPER(queue_info& zoid) {
+        /*
         int zoid_num = zoid.num;
         auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num] : send_to_neighbors_many_cuts_next_dt[zoid_num];
 
@@ -9494,9 +9485,9 @@ public:
                 for (int dim = 0; dim < domain->dimension; dim++) {
                     double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
                     double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
-                    double lo_borders = lo - ALLEGRO_SLOPE;
-                    double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
+                    double lo_borders = lo - (ALLEGRO_SLOPE - epsilon);
+                    double hi_borders = hi + (ALLEGRO_SLOPE - epsilon);
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] <= hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
@@ -9542,8 +9533,8 @@ public:
                             p -= domain->prd[dim];
                         }
 
-                        borders_neighbor_zoid = borders_neighbor_zoid && p >= lo_borders && p < hi_borders;
-                        bool borders_dim = p >= lo_borders && p < hi_borders;
+                        borders_neighbor_zoid = borders_neighbor_zoid && p >= lo_borders && p <= hi_borders;
+                        bool borders_dim = p >= lo_borders && p <= hi_borders;
 
                         while (p < lo) {
                             p += domain->prd[dim];
@@ -9568,21 +9559,10 @@ public:
                             zoid.send_pos_idxs_double_buffering[t][j].push_back(i);
                         }
                     }
-
-                    /*
-                    if (borders_neighbor_zoid) {
-                        zoid.send_pos_idxs_double_buffering[t][j].push_back(i);
-                        if (t == 1 && zoid.tag_stencil_md[0][i] == 118790) {
-                            std::cout << "time: " << t << " zoid: " << zoid.num << " send to: " << send_zoid_num << " is_local: " << is_local
-                            << " is local prev: " << is_local_prev << std::endl;
-                        }
-                        // break;
-                    }
-                    */
                 }
             }
         }
-
+        */
     }
 
     template <bool curr_dt>
@@ -9732,6 +9712,9 @@ public:
 
         zoid.recv_pos_idxs_double_buffering[0] = new std::vector<int>[recv_neighbors.size()];
 
+        std::map<int, int> tag_to_timestep_odd;
+        std::map<int, int> tag_to_timestep_even;
+
         for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             zoid.recv_pos_idxs_double_buffering[t] = new std::vector<int>[recv_neighbors.size()];
 
@@ -9763,10 +9746,10 @@ public:
                     // double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
                     // double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
                     double lo = zoid.lo[t][dim];
-                    double hi = zoid.lo[t][dim];
+                    double hi = zoid.hi[t][dim];
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] <= hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
@@ -9816,7 +9799,7 @@ public:
                         // double lo = recv_zoid.zoid.cuts[dim].lower + (t - 1) * recv_zoid.zoid.cuts[dim].slope_lower;
                         // double hi = recv_zoid.zoid.cuts[dim].upper + (t - 1) * recv_zoid.zoid.cuts[dim].slope_upper;
                         double lo = recv_zoid.lo[t - 1][dim];
-                        double hi = recv_zoid.lo[t - 1][dim];
+                        double hi = recv_zoid.hi[t - 1][dim];
 
                         double p = atom_pos[dim];
                         while (p < lo) {
@@ -9831,6 +9814,47 @@ public:
 
                     if (in_neighbor_zoid) {
                         zoid.recv_pos_idxs_double_buffering[t][j].push_back(i);
+
+                        int tag = zoid.tag_stencil_md[0][i];
+                        if (t % 2 == 0) {
+                            if (tag_to_timestep_even.count(tag)) {
+                                if (tag_to_timestep_even.at(tag) != t) {
+                                    int other_t = tag_to_timestep_even.at(tag);
+                                    std::cout << std::setprecision (std::numeric_limits<double>::digits10 + 1)
+                                              << "EVEN tag: " << tag << " timestep: " << t << " overlapping recv pos timestep: " << tag_to_timestep_even.at(tag)
+                                              << " pos: " << zoid.x_stencil_md[0][i].x << " " << zoid.x_stencil_md[0][i].y << " " << zoid.x_stencil_md[0][i].z
+                                              << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
+                                              << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
+                                              << " other lo: " << zoid.lo[other_t][0] << " " << zoid.lo[other_t][1] << " " << zoid.lo[other_t][2]
+                                              << " other hi: " << zoid.hi[other_t][0] << " " << zoid.hi[other_t][1] << " " << zoid.hi[other_t][2]
+                                              << std::endl;
+                                }
+                                assert(tag_to_timestep_even.at(tag) == t);
+                            }
+                            tag_to_timestep_even[tag] = t;
+                        } else {
+                            if (tag_to_timestep_odd.count(tag)) {
+                                int other_t = tag_to_timestep_odd.at(tag);
+                                if (tag_to_timestep_odd.at(tag) != t) {
+                                    std::cout << std::setprecision (std::numeric_limits<double>::digits10 + 1)
+                                              << "ODD tag: " << tag << " timestep: " << t
+                                              << " overlapping recv pos timestep: " << tag_to_timestep_odd.at(tag)
+                                              << " pos: " << zoid.x_stencil_md[0][i].x << " "
+                                              << zoid.x_stencil_md[0][i].y << " " << zoid.x_stencil_md[0][i].z
+                                              << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " "
+                                              << zoid.lo[t][2]
+                                              << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " "
+                                              << zoid.hi[t][2]
+                                              << " other lo: " << zoid.lo[other_t][0] << " " << zoid.lo[other_t][1]
+                                              << " " << zoid.lo[other_t][2]
+                                              << " other hi: " << zoid.hi[other_t][0] << " " << zoid.hi[other_t][1]
+                                              << " " << zoid.hi[other_t][2]
+                                              << std::endl;
+                                }
+                                assert(tag_to_timestep_odd.at(tag) == t);
+                            }
+                            tag_to_timestep_odd[tag] = t;
+                        }
                         break;
                     }
                 }
@@ -10085,6 +10109,8 @@ public:
                 auto& recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
                                                     : recv_from_neighbors_many_cuts_next_dt[zoid.num];
 
+                std::map<int, int> tag_to_timestep;
+
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.recv_force_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
 
@@ -10105,6 +10131,25 @@ public:
                             zoid.recv_force_idxs_double_buffering[t][i].reserve(nrecv);
                             for (int k = 0; k < nrecv; k++) {
                                 zoid.recv_force_idxs_double_buffering[t][i].push_back(tag_to_idx.at(recv_buf[k]));
+
+                                if (tag_to_timestep.count(recv_buf[k])) {
+                                    if (tag_to_timestep.at(recv_buf[k]) != t) {
+                                        int other_t = tag_to_timestep.at(recv_buf[k]);
+                                        int tag_idx = tag_to_idx.at(recv_buf[k]);
+
+                                        std::cout << std::setprecision (std::numeric_limits<double>::digits10 + 1)
+                                        << "tag: " << recv_buf[k] << " timestep: " << t << " overlapping recv force timestep: " << tag_to_timestep.at(recv_buf[k])
+                                        << " pos: " << zoid.x_stencil_md[0][tag_idx].x << " " << zoid.x_stencil_md[0][tag_idx].y << " " << zoid.x_stencil_md[0][tag_idx].z
+                                        << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
+                                        << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
+                                        << " other lo: " << zoid.lo[other_t][0] << " " << zoid.lo[other_t][1] << " " << zoid.lo[other_t][2]
+                                        << " other hi: " << zoid.hi[other_t][0] << " " << zoid.hi[other_t][1] << " " << zoid.hi[other_t][2]
+                                        << std::endl;
+                                    }
+                                    assert(tag_to_timestep.at(recv_buf[k]) == t);
+                                } else {
+                                    tag_to_timestep[recv_buf[k]] = t;
+                                }
                             }
                             delete[] recv_buf;
                         }
@@ -10240,6 +10285,8 @@ public:
                 auto& recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
                                                     : recv_from_neighbors_many_cuts_next_dt[zoid.num];
 
+                std::map<int, int> tag_to_timestep;
+
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid.recv_vel_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
 
@@ -10260,6 +10307,18 @@ public:
                             zoid.recv_vel_idxs_double_buffering[t][i].reserve(nrecv);
                             for (int k = 0; k < nrecv; k++) {
                                 zoid.recv_vel_idxs_double_buffering[t][i].push_back(tag_to_idx.at(recv_buf[k]));
+
+                                if (tag_to_timestep.count(recv_buf[k])) {
+                                    if (tag_to_timestep.at(recv_buf[k]) != t) {
+                                        std::cout << "tag: " << recv_buf[k] << " timestep: " << t
+                                                  << " overlapping recv vel timestep: " << tag_to_timestep.at(recv_buf[k])
+                                                  << std::endl;
+                                    }
+                                    assert(tag_to_timestep.at(recv_buf[k]) == t);
+                                } else {
+                                    tag_to_timestep[recv_buf[k]] = t;
+                                }
+
                             }
                             delete[] recv_buf;
                         }
@@ -13648,9 +13707,6 @@ public:
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
                 }
-
-                delete[] zoid.lo;
-                delete[] zoid.hi;
 
                 delete[] zoid.local_idxs_per_timestep;
                 delete[] zoid.neighbor_list;
