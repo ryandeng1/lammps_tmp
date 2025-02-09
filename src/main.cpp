@@ -61,7 +61,7 @@ int main(int argc, char **argv)
   }
 
 #ifdef __linux__
-    constexpr bool USE_MULTI_SOCKET = false;
+    constexpr bool USE_MULTI_SOCKET = true;
     if (USE_MULTI_SOCKET) {
         auto calling_thread = pthread_self();
 
