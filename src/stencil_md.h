@@ -6523,8 +6523,8 @@ public:
     static constexpr int NUM_ZOIDS_PER_DIMENSION = NUM_CUTS_PER_DIMENSION * 2;
 
     static constexpr int NUM_CUTS_X = 5;
-    static constexpr int NUM_CUTS_Y = 5;
-    static constexpr int NUM_CUTS_Z = 5;
+    static constexpr int NUM_CUTS_Y = 4;
+    static constexpr int NUM_CUTS_Z = 4;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
     static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
