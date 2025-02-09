@@ -11739,7 +11739,7 @@ public:
                 zoid.v_stencil_md[0][idx].z = v_z;
             }
         } else {
-            for (int i = 0; i < recv_force_idxs.size(); i++) {
+            cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
                 int buf_idx = i * 3;
                 int idx = recv_force_idxs[i];
                 double f_x = buf[buf_idx];
@@ -11753,7 +11753,7 @@ public:
 
             int pos_starting_idx = num_recv_force * 3;
 
-            for (int i = 0; i < recv_pos_idxs.size(); i++) {
+            cilk_for (int i = 0; i < recv_pos_idxs.size(); i++) {
                 int idx = recv_pos_idxs[i];
                 int buf_idx = pos_starting_idx + i * 3;
                 double x_x = buf[buf_idx];
@@ -11767,7 +11767,7 @@ public:
 
             int pos_starting_idx2 = (num_recv_force + num_recv_pos) * 3;
 
-            for (int i = 0; i < recv_pos_idxs2.size(); i++) {
+            cilk_for (int i = 0; i < recv_pos_idxs2.size(); i++) {
                 int idx = recv_pos_idxs2[i];
                 int buf_idx = pos_starting_idx2 + i * 3;
                 double x_x = buf[buf_idx];
@@ -11779,7 +11779,7 @@ public:
             }
 
             int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2) * 3;
-            for (int i = 0; i < recv_vel_idxs.size(); i++) {
+            cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
                 int idx = recv_vel_idxs[i];
                 int buf_idx = vel_starting_idx + i * 3;
                 double v_x = buf[buf_idx];
