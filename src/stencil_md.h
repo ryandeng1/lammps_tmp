@@ -8352,6 +8352,7 @@ public:
 
                             double lo_borders = lo - ALLEGRO_SLOPE;
                             double hi_borders = hi + ALLEGRO_SLOPE;
+
                             while (pos < lo_borders) {
                                 pos += domain->prd[dim];
                             }
@@ -8557,10 +8558,9 @@ public:
                         double zoid_hi[3] = {0};
 
                         for (int dim = 0; dim < domain->dimension; dim++) {
-                            double lo = zoid.zoid.cuts[dim].lower +
-                                        t * zoid.zoid.cuts[dim].slope_lower;
-                            double hi = zoid.zoid.cuts[dim].upper +
-                                        t * zoid.zoid.cuts[dim].slope_upper;
+                            double lo = zoid.lo[t][dim];
+                            double hi = zoid.hi[t][dim];
+
                             in_zoid = in_zoid && pos[dim] >= lo && pos[dim] < hi;
 
                             zoid_lo[dim] = lo;
@@ -9280,7 +9280,9 @@ public:
                     double hi = zoid.hi[t][dim];
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] <= hi_borders;
+                    // TODO: Ryan, change this back to <= hi_borders if this doesn't work
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
+                    // borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] <= hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
@@ -9749,7 +9751,8 @@ public:
                     double hi = zoid.hi[t][dim];
                     double lo_borders = lo - ALLEGRO_SLOPE;
                     double hi_borders = hi + ALLEGRO_SLOPE;
-                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] <= hi_borders;
+                    // borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] <= hi_borders;
+                    borders_zoid = borders_zoid && atom_pos[dim] >= lo_borders && atom_pos[dim] < hi_borders;
 
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
@@ -9820,7 +9823,8 @@ public:
                             if (tag_to_timestep_even.count(tag)) {
                                 if (tag_to_timestep_even.at(tag) != t) {
                                     int other_t = tag_to_timestep_even.at(tag);
-                                    std::cout << std::setprecision (std::numeric_limits<double>::digits10 + 1)
+                                    std::cout << std::setprecision(20)
+                                              << "curr_dt: " << curr_dt << " zoid: " << zoid.num
                                               << "EVEN tag: " << tag << " timestep: " << t << " overlapping recv pos timestep: " << tag_to_timestep_even.at(tag)
                                               << " pos: " << zoid.x_stencil_md[0][i].x << " " << zoid.x_stencil_md[0][i].y << " " << zoid.x_stencil_md[0][i].z
                                               << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
@@ -9836,7 +9840,8 @@ public:
                             if (tag_to_timestep_odd.count(tag)) {
                                 int other_t = tag_to_timestep_odd.at(tag);
                                 if (tag_to_timestep_odd.at(tag) != t) {
-                                    std::cout << std::setprecision (std::numeric_limits<double>::digits10 + 1)
+                                    std::cout << std::setprecision(20)
+                                              << "curr_dt: " << curr_dt << " zoid: " << zoid.num
                                               << "ODD tag: " << tag << " timestep: " << t
                                               << " overlapping recv pos timestep: " << tag_to_timestep_odd.at(tag)
                                               << " pos: " << zoid.x_stencil_md[0][i].x << " "
