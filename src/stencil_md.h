@@ -13773,6 +13773,9 @@ public:
     }
 
     ~StencilMD() {
+        if (ONLY_RUN_LAMMPS) {
+            return;
+        }
         /*
         MPI_Comm_free(&stream_comm);
 

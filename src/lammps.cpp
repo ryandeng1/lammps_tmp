@@ -148,9 +148,7 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator) :
   initclock = platform::walltime();
 
   // Stencil MD init
-  if (!ONLY_RUN_LAMMPS) {
-      stencilMD = new StencilMD(this);
-  }
+  stencilMD = new StencilMD(this);
 
   init_pkg_lists();
 
@@ -1099,10 +1097,8 @@ void LAMMPS::destroy()
                           //   since they delete fixes
   modify = nullptr;
 
-  if (!ONLY_RUN_LAMMPS) {
-      delete stencilMD;
-      stencilMD = nullptr;
-  }
+  delete stencilMD;
+  stencilMD = nullptr;
 
   delete comm;            // comm must come after modify
                           //   since fix destructors may access comm
