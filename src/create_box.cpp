@@ -103,9 +103,11 @@ void CreateBox::command(int narg, char **arg)
   atom->nimpropertypes = 0;
 
   // stencil_md
-  for (int i = 0; i < NUM_ZOIDS; i++) {
-      for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
-          lmp->atom_stencil_md[i][j]->ntypes = atom->ntypes;
+  if (!ONLY_RUN_LAMMPS) {
+      for (int i = 0; i < NUM_ZOIDS; i++) {
+          for (int j = 0; j < lmp->atom_stencil_md[i].size(); j++) {
+              lmp->atom_stencil_md[i][j]->ntypes = atom->ntypes;
+          }
       }
   }
 
