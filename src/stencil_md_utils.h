@@ -81,6 +81,11 @@ constexpr int RIGHT = 1;
 constexpr int MIDDLE = 2;
 constexpr int PBC = 3;
 
+constexpr int BOND_FENE = 0;
+constexpr int LJ = 1;
+
+constexpr int EXPERIMENT = LJ;
+
 constexpr bool LOCAL_SEGMENT_TYPE = true;
 constexpr bool GHOST_SEGMENT_TYPE = false;
 
@@ -98,9 +103,11 @@ constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 // constexpr double ADDITIONAL_CUTOFF = 0.4001;
-constexpr double ADDITIONAL_CUTOFF = 0.4;
+// constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
+constexpr double ADDITIONAL_CUTOFF = 0.3 + 1e-10;
 
-constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
+// constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
+constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
 
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 

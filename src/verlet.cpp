@@ -5522,7 +5522,9 @@ void Verlet::setup_stencil_md_many_zoids() {
     }
 
     begin = std::chrono::high_resolution_clock::now();
-    stencilMD->CREATE_BOND_LIST();
+    if (EXPERIMENT == BOND_FENE) {
+        stencilMD->CREATE_BOND_LIST();
+    }
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
     if (comm->me == 0) {
@@ -5607,10 +5609,17 @@ void Verlet::setup_stencil_md_many_zoids() {
             auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
             int zoid_num = zoid.num;
             assert(zoid_num % comm->nprocs == comm->me);
-            // stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<true, true>(zoid, all_recv_requests[zoid_num]);
             stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SETUP(zoid, all_recv_requests[zoid_num]);
-            stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
-            stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
+            if constexpr (EXPERIMENT == BOND_FENE) {
+                stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+            } else {
+                stencilMD->LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+            }
+
+            if constexpr (EXPERIMENT == BOND_FENE) {
+                stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
+            }
+
             if (TEST_AGAINST_LAMMPS) {
                 stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
             }
@@ -7838,9 +7847,14 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
 
         }
 
-        stencilMD->INITIAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t);
-        stencilMD->FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
-        stencilMD->FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+        stencilMD->NVE_INITIAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t);
+        if constexpr (EXPERIMENT == BOND_FENE) {
+            stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            stencilMD->FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+        } else {
+            stencilMD->LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+        }
     }
 }
 

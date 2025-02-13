@@ -6522,9 +6522,9 @@ public:
     static constexpr int NUM_CUTS_PER_DIMENSION = 4;
     static constexpr int NUM_ZOIDS_PER_DIMENSION = NUM_CUTS_PER_DIMENSION * 2;
 
-    static constexpr int NUM_CUTS_X = 5;
-    static constexpr int NUM_CUTS_Y = 4;
-    static constexpr int NUM_CUTS_Z = 4;
+    static constexpr int NUM_CUTS_X = 2;
+    static constexpr int NUM_CUTS_Y = 2;
+    static constexpr int NUM_CUTS_Z = 2;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
     static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
@@ -6963,21 +6963,21 @@ public:
             std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_send_neighbors;
             std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_recv_neighbors;
 
-            for (int i = 0; i < NUM_ZOIDS_PER_DIMENSION; i++) {
-                for (int j = 0; j < NUM_ZOIDS_PER_DIMENSION; j++) {
-                    for (int k = 0; k < NUM_ZOIDS_PER_DIMENSION; k++) {
+            for (int i = 0; i < NUM_ZOIDS_X; i++) {
+                for (int j = 0; j < NUM_ZOIDS_Y; j++) {
+                    for (int k = 0; k < NUM_ZOIDS_Z; k++) {
                         std::array<int, 3> my_pos = {i, j, k};
                         if (i % 2 == 1) {
                             tmp_send_neighbors[my_pos].insert({i - 1, j, k});
-                            tmp_send_neighbors[my_pos].insert({(i + 1) % NUM_ZOIDS_PER_DIMENSION, j, k});
+                            tmp_send_neighbors[my_pos].insert({(i + 1) % NUM_ZOIDS_X, j, k});
                         }
                         if (j % 2 == 1) {
                             tmp_send_neighbors[my_pos].insert({i, j - 1, k});
-                            tmp_send_neighbors[my_pos].insert({i, (j + 1) % NUM_ZOIDS_PER_DIMENSION, k});
+                            tmp_send_neighbors[my_pos].insert({i, (j + 1) % NUM_ZOIDS_Y, k});
                         }
                         if (k % 2 == 1) {
                             tmp_send_neighbors[my_pos].insert({i, j, k - 1});
-                            tmp_send_neighbors[my_pos].insert({i, j, (k + 1) % NUM_ZOIDS_PER_DIMENSION});
+                            tmp_send_neighbors[my_pos].insert({i, j, (k + 1) % NUM_ZOIDS_Z});
                         }
                     }
                 }
@@ -7146,15 +7146,15 @@ public:
                     std::array<int, 3> my_pos = {i, j, k};
                     if (i % 2 == 1) {
                         tmp_send_neighbors[my_pos].insert({i - 1, j, k});
-                        tmp_send_neighbors[my_pos].insert({(i + 1) % NUM_ZOIDS_PER_DIMENSION, j, k});
+                        tmp_send_neighbors[my_pos].insert({(i + 1) % NUM_ZOIDS_X, j, k});
                     }
                     if (j % 2 == 1) {
                         tmp_send_neighbors[my_pos].insert({i, j - 1, k});
-                        tmp_send_neighbors[my_pos].insert({i, (j + 1) % NUM_ZOIDS_PER_DIMENSION, k});
+                        tmp_send_neighbors[my_pos].insert({i, (j + 1) % NUM_ZOIDS_Y, k});
                     }
                     if (k % 2 == 1) {
                         tmp_send_neighbors[my_pos].insert({i, j, k - 1});
-                        tmp_send_neighbors[my_pos].insert({i, j, (k + 1) % NUM_ZOIDS_PER_DIMENSION});
+                        tmp_send_neighbors[my_pos].insert({i, j, (k + 1) % NUM_ZOIDS_Z});
                     }
                 }
             }
@@ -12929,7 +12929,7 @@ public:
         return buf_idx;
     }
 
-    void INITIAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+    void NVE_INITIAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         auto * _noalias x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
 
@@ -13172,7 +13172,79 @@ public:
         }
     }
 
-    void FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+    void NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
+        auto * _noalias f = zoid.f_stencil_md[timestep % 1].data();
+
+        auto * _noalias mask = zoid.mask_stencil_md[0].data();
+        auto * _noalias local_idxs = zoid.local_idxs_per_timestep[timestep].data();
+        auto * _noalias type = zoid.type_stencil_md[0].data();
+
+        int nlocal = zoid.local_idxs_per_timestep[timestep].size();
+
+        double dtv = update->dt;
+
+        const double * const mass = atom->mass;
+        double dtf = 0.5 * update->dt * force->ftm2v;
+
+        if (nlocal > MODIFY_GRAINSIZE) {
+            int num_workers = __cilkrts_get_nworkers();
+            int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+            int chunks_per_worker = num_chunks / num_workers;
+            int chunk_size = MODIFY_GRAINSIZE;
+            auto* claimed = zoid.claimed_flags_stencil_md[0];
+
+            #pragma cilk grainsize 1
+            cilk_for (int ii = 0; ii < num_chunks; ii++) {
+                int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+                for (int c = 0; c < num_chunks; ++c) {
+                    int s = (c + start_chunk) % num_chunks;
+
+                    if (claimed[s].test(std::memory_order_relaxed)) {
+                        continue;
+                    }
+
+                    if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                        for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nlocal; idx++) {
+                            int i = local_idxs[idx];
+
+                            int atom_type = type[i];
+
+                            const double dtfm = dtf / mass[atom_type];
+
+                            v[i].x += dtfm * f[i].x;
+                            v[i].y += dtfm * f[i].y;
+                            v[i].z += dtfm * f[i].z;
+                        }
+                        if (USE_BREAK) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < num_chunks; i++) {
+                claimed[i].clear(std::memory_order_relaxed);
+            }
+        } else {
+            for (int idx = 0; idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+                int atom_type = type[i];
+
+                const double dtfm = dtf / mass[atom_type];
+
+                double rand_x = 0.6;
+                double rand_y = 0.6;
+                double rand_z = 0.6;
+
+                v[i].x += dtfm * f[i].x;
+                v[i].y += dtfm * f[i].y;
+                v[i].z += dtfm * f[i].z;
+            }
+        }
+    }
+
+    void BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -13637,6 +13709,173 @@ public:
                 f[i].z += fdrag.z + fran.z;
             } else {
                 assert(false);
+            }
+        }
+    }
+
+    void LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
+
+        auto pair = (PairLJCut*) force->pair;
+        auto bond = (BondFENE*) force->bond;
+
+        const auto& bond_list = zoid.bond_list[timestep];
+        const auto& neighbor_list = zoid.neighbor_list[timestep];
+
+        const double * _noalias const special_lj = force->special_lj;
+
+        // auto* spinlocks = next->spinlocks;
+        auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
+
+        const auto* cutsq = pair->cutsq;
+        const auto* offset = pair->offset;
+        const auto* lj1 = pair->lj1;
+        const auto* lj2 = pair->lj2;
+        const auto* lj3 = pair->lj3;
+        const auto* lj4 = pair->lj4;
+        auto newton_pair = force->newton_pair;
+
+        const auto& atom_type = zoid.type_stencil_md[0];
+
+        const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
+        const int nlocal = local_idxs.size();
+
+        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        int num_workers = __cilkrts_get_nworkers();
+
+        auto* claimed = zoid.claimed_flags_stencil_md[0];
+
+        const auto& tags = zoid.tag_stencil_md[0];
+
+        int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = MODIFY_GRAINSIZE;
+
+        // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
+        if (nlocal > MODIFY_GRAINSIZE) {
+            #pragma cilk grainsize MODIFY_GRAINSIZE
+            cilk_for (int idx = 0; idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                const int itype = atom_type[i];
+
+                // const int *_noalias const jlist = firstneigh[i];
+                const auto &jlist = neighbor_list[i];
+                const double *_noalias const cutsqi = cutsq[itype];
+                const double *_noalias const offseti = offset[itype];
+                const double *_noalias const lj1i = lj1[itype];
+                const double *_noalias const lj2i = lj2[itype];
+                const double *_noalias const lj3i = lj3[itype];
+                const double *_noalias const lj4i = lj4[itype];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                // int jnum = numneigh[i];
+                int jnum = jlist.size();
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    double evdwl = 0.0;
+                    // int j = jlist[jj];
+                    int j = jlist[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0 / rsq;
+                        double r6inv = r2inv * r2inv * r2inv;
+                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                        double fpair = factor_lj * forcelj * r2inv;
+
+                        fxtmp += delx * fpair;
+                        fytmp += dely * fpair;
+                        fztmp += delz * fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            spinlocks[j].lock();
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                            spinlocks[j].unlock();
+                        }
+                    }
+                }
+
+                spinlocks[i].lock();
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+                spinlocks[i].unlock();
+            }
+        } else {
+            for (int idx = 0; idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                const int itype = atom_type[i];
+
+                // const int *_noalias const jlist = firstneigh[i];
+                const auto &jlist = neighbor_list[i];
+                const double *_noalias const cutsqi = cutsq[itype];
+                const double *_noalias const offseti = offset[itype];
+                const double *_noalias const lj1i = lj1[itype];
+                const double *_noalias const lj2i = lj2[itype];
+                const double *_noalias const lj3i = lj3[itype];
+                const double *_noalias const lj4i = lj4[itype];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                // int jnum = numneigh[i];
+                int jnum = jlist.size();
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    double evdwl = 0.0;
+                    // int j = jlist[jj];
+                    int j = jlist[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0 / rsq;
+                        double r6inv = r2inv * r2inv * r2inv;
+                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                        double fpair = factor_lj * forcelj * r2inv;
+
+                        fxtmp += delx * fpair;
+                        fytmp += dely * fpair;
+                        fztmp += delz * fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                        }
+                    }
+                }
+
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
             }
         }
     }

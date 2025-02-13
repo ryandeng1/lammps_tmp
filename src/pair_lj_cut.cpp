@@ -113,6 +113,13 @@ void PairLJCut::compute(int eflag, int vflag)
       rsq = delx * delx + dely * dely + delz * delz;
       jtype = type[j];
 
+      if (false && (atom->tag[i] == 254682 || atom->tag[j] == 254682)) {
+          std::cout << "LAMMPS PAIR. tags: " << atom->tag[i] << " " << atom->tag[j]
+          << " pos: " << x[i][0] << " " << x[i][1] << " " << x[i][2]
+          << " other pos: " << x[j][0] << " " << x[j][1] << " " << x[j][2]
+          << std::endl;
+      }
+
       if (rsq < cutsq[itype][jtype]) {
         r2inv = 1.0 / rsq;
         r6inv = r2inv * r2inv * r2inv;
