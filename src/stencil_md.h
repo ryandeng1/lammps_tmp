@@ -11194,7 +11194,8 @@ public:
         auto& send_request_idxs = curr_dt ? send_to_neighbors_not_my_proc_idxs[zoid_num]
                 : send_to_neighbors_not_my_proc_idxs_next_dt[zoid_num];
 
-        cilk_for (int i = 0; i < send_neighbors.size(); i++) {
+        // cilk_for (int i = 0; i < send_neighbors.size(); i++) {
+        for (int i = 0; i < send_neighbors.size(); i++) {
             int send_zoid_num = send_neighbors[i];
             int nsend = curr_dt ? send_zoid_to_zoid_sizes[zoid_num][i] : send_zoid_to_zoid_sizes_next_dt[zoid_num][i];
             int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
