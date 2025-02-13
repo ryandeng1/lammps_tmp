@@ -1539,7 +1539,7 @@ int AtomVec::pack_exchange(int i, double *buf)
 
 int AtomVec::unpack_exchange(double *buf)
 {
-  std::cout << "LAMMPS unpack exchange" << std::endl;
+  // std::cout << "LAMMPS unpack exchange" << std::endl;
   int mm, nn, datatype, cols, collength, ncols;
   void *pdata, *plength;
 
