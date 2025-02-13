@@ -4963,9 +4963,11 @@ void CommBrick::borders()
   iswap = 0;
   smax = rmax = 0;
 
+  /*
   std::cout << "me: " << comm->me << " my lo: " << domain->sublo[0] << " " << domain->sublo[1] << " " << domain->sublo[2]
   << " my hi: " << domain->subhi[0] << " " << domain->subhi[1] << " " << domain->subhi[2] << std::endl;
   MPI_Barrier(world);
+  */
 
   for (dim = 0; dim < 3; dim++) {
     nlast = 0;
