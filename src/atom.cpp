@@ -2135,7 +2135,9 @@ void Atom::sort()
 
   // re-setup sort bins if needed
 
-  std::cout << "domain change: " << domain->box_change << " setup sort bins: num bins: " << nbins << " nlocal: " << nlocal << " nmax: " << nmax << std::endl;
+  if (comm->me == 0) {
+      std::cout << "domain change: " << domain->box_change << " setup sort bins: num bins: " << nbins << " nlocal: " << nlocal << " nmax: " << nmax << std::endl;
+  }
 
   if (domain->box_change) {
       setup_sort_bins();

@@ -137,7 +137,10 @@ void NPairHalfBinAtomonlyNewtonOmp::build(NeighList *list)
       return;
   }
 
-  std::cout << "lammps build openmp npairhalfbinatomonlynewtonomp" << std::endl;
+  if (comm->me == 0) {
+      std::cout << "lammps build openmp npairhalfbinatomonlynewtonomp" << std::endl;
+  }
+
   const int nlocal = (includegroup) ? atom->nfirst : atom->nlocal;
 
   NPAIR_OMP_INIT;
