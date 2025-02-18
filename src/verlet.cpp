@@ -8240,13 +8240,20 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep == 0) {
-            cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
-                auto& zoid = my_queues[dep][j];
-                run_stencil_md_zoid_many_cuts_no_comm_new_comm<curr_dt>(
-                        starting_timestep, dep, zoid, tmp_start_t, tmp_end_t,
-                        send_r,
-                        test_f, test_x, test_v
-                );
+            cilk_scope {
+                for (int j = 0; j < my_queues[dep + 1].size(); j++) {
+                    int zoid_num = my_queues[dep + 1][j].num;
+                    cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
+                }
+
+                cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
+                    auto &zoid = my_queues[dep][j];
+                    run_stencil_md_zoid_many_cuts_no_comm_new_comm<curr_dt>(
+                            starting_timestep, dep, zoid, tmp_start_t, tmp_end_t,
+                            send_r,
+                            test_f, test_x, test_v
+                    );
+                }
             }
         } else {
             cilk_scope {
@@ -8267,10 +8274,9 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
                         auto &zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
                                              : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
 
-                        cilk_spawn
-                        stencilMD->SEND_DATA_ZOID_TO_ZOID_TO_DEP_REVISED<curr_dt>(zoid, dep + 1,
-                                                                                  tmp_start_t, tmp_end_t,
-                                                                                  send_r[zoid.num]);
+                        cilk_spawn stencilMD->SEND_DATA_ZOID_TO_ZOID_TO_DEP_REVISED<curr_dt>(zoid, dep + 1,
+                                                                                             tmp_start_t, tmp_end_t,
+                                                                                             send_r[zoid.num]);
                     }
                 }
 
