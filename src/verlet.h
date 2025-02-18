@@ -103,6 +103,11 @@ class Verlet : public Integrate {
                                              double** test_f, double** test_x, double** test_v);
 
   template <bool curr_dt>
+  void run_stencil_md_zoid_many_cuts_no_comm_new_comm(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
+                                                      std::vector<MPI_Request>* send_r,
+                                                      double** test_f, double** test_x, double** test_v);
+
+  template <bool curr_dt>
   void unpack_self_wrapper(int starting_timestep, int dep, queue_info& zoid,
                            int start_t, int end_t, std::atomic<int>& counter,
                            std::vector<MPI_Request>* send_r,
@@ -130,6 +135,9 @@ class Verlet : public Integrate {
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_waitany(int starting_timestep, double** test_f, double** test_x, double** test_v);
+
+  template <bool curr_dt>
+  void run_stencil_md_many_cuts_new_comm(int starting_timestep, double** test_f, double** test_x, double** test_v);
 
   void run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v);
 
