@@ -10673,7 +10673,7 @@ public:
 
     static constexpr int NUM_STREAMS = 24;
     // 64 VCIs so 1 per comm
-    static constexpr int NUM_COMMS = 4;
+    static constexpr int NUM_COMMS = 24;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
     MPI_Comm stream_comm;
@@ -11341,6 +11341,9 @@ public:
     // pack all zoids, but only send to next dep
     template <bool curr_dt>
     void PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED(queue_info& zoid, int dep, int start_t, int end_t, std::vector<MPI_Request>& r) {
+        if (dep == NUM_DEPS - 1) {
+            return;
+        }
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
 
