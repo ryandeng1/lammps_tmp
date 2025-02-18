@@ -12302,16 +12302,12 @@ public:
             if (USE_STREAMS) {
                 MPIX_Stream_progress(all_streams[stream_idx]);
             }
-            std::cout << "me: " << comm->me << " zoid: " << zoid.num << " waitany BEFORE. total: "
-                      << not_my_proc_idxs.size() << " stream idx: " << stream_idx << std::endl;
             MPI_Waitany(r.size(), r.data(), &idx, MPI_STATUS_IGNORE);
             int recv_neighbor_idx = not_my_proc_idxs[idx];
 
             auto buf = buf_recv_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][recv_neighbor_idx];
 
             int recv_zoid_num = recv_neighbors[recv_neighbor_idx];
-            std::cout << BOLDGREEN << "me: " << comm->me << " zoid: " << zoid.num
-            << " waitany from: " << recv_zoid_num << " DONE. " << RESET_COLOR << std::endl;
             UNPACK_DATA_MANY_CUTS_HELPER_SETUP(zoid, buf, recv_neighbor_idx, recv_zoid_num);
             num_wait++;
         }
