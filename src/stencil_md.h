@@ -11350,7 +11350,70 @@ public:
         auto& send_request_idxs = curr_dt ? send_to_neighbors_not_my_proc_idxs[zoid_num]
                                           : send_to_neighbors_not_my_proc_idxs_next_dt[zoid_num];
 
+        cilk_for (int i = 0; i < send_neighbors.size(); i++) {
+            int send_zoid_num = send_neighbors[i];
+            int nsend = curr_dt ? send_zoid_to_zoid_sizes[zoid_num][i] : send_zoid_to_zoid_sizes_next_dt[zoid_num][i];
+            int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+            int send_request_idx = send_request_idxs[i];
+            int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+
+            if (send_zoid_num % comm->nprocs == comm->me) {
+                continue;
+            }
+
+            if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid.num][i]) {
+                assert(false);
+                GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, DEFAULT_PIPELINE_STAGE);
+            }
+
+            auto *buf = buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i];
+
+            int buf_idx = PACK_DATA_MANY_CUTS_HELPER<curr_dt>(zoid, buf, i, send_zoid_num, start_t, end_t);
+        }
+
+        for (int i = 0; i < send_neighbors.size(); i++) {
+            int send_zoid_num = send_neighbors[i];
+            int nsend = curr_dt ? send_zoid_to_zoid_sizes[zoid_num][i] : send_zoid_to_zoid_sizes_next_dt[zoid_num][i];
+            int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+            int send_request_idx = send_request_idxs[i];
+            int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+
+            if (send_zoid_num % comm->nprocs == comm->me) {
+                continue;
+            }
+
+            if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid.num][i]) {
+                assert(false);
+                GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, DEFAULT_PIPELINE_STAGE);
+            }
+
+            auto *buf = buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i];
+
+            if (send_zoid_dep == dep + 1 && zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+                int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
+
+                assert(send_request_idx != -1);
+
+                if (USE_STREAMS) {
+                    int send_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
+                    int recv_stream_idx = curr_dt ? zoid_to_stream_num_next_dt[send_zoid_num] : zoid_to_stream_num_next_dt[send_zoid_num];
+                    MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
+                                      send_zoid_num % comm->nprocs, mpi_tag,
+                                      stream_comm, send_stream_idx, recv_stream_idx,
+                                      &r[send_request_idx]);
+                    MPIX_Stream_progress(all_streams[send_stream_idx]);
+                } else {
+                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
+                                           : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                    MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
+                              send_zoid_num % comm->nprocs, mpi_tag,
+                              all_comms[comm_idx], &r[send_request_idx]);
+                }
+            }
+        }
+
         // cilk_for (int i = 0; i < send_neighbors.size(); i++) {
+        /*
         cilk_for (int i = 0; i < send_neighbors.size(); i++) {
             int send_zoid_num = send_neighbors[i];
             int nsend = curr_dt ? send_zoid_to_zoid_sizes[zoid_num][i] : send_zoid_to_zoid_sizes_next_dt[zoid_num][i];
@@ -11395,6 +11458,7 @@ public:
                 }
             }
         }
+        */
     }
 
     template <bool curr_dt>
