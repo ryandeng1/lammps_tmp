@@ -8240,10 +8240,72 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep == 0) {
+            cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto &zoid = my_queues[dep][j];
+                run_stencil_md_zoid_many_cuts_no_comm_new_comm<curr_dt>(
+                        starting_timestep, dep, zoid, tmp_start_t, tmp_end_t,
+                        send_r,
+                        test_f, test_x, test_v
+                );
+            }
+        } else {
+            cilk_scope {
+                // kickstart sends for next dep
+                for (int j = 0; j < my_queues[dep].size(); j++) {
+                    int zoid_num = my_queues[dep][j].num;
+                    stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
+                }
+
+                // send data to
+                auto &zoids_to_send_data = curr_dt ? stencilMD->dep_to_send_zoids[dep]
+                                                   : stencilMD->dep_to_send_zoids_next_dt[dep];
+
+                for (int i = 0; i < zoids_to_send_data.size(); i++) {
+                    int zoid_num = zoids_to_send_data[i];
+                    auto &zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                                         : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+
+                    cilk_spawn stencilMD->SEND_DATA_ZOID_TO_ZOID_TO_DEP_REVISED<curr_dt>(zoid, dep,
+                                                                                         tmp_start_t, tmp_end_t,
+                                                                                         send_r[zoid.num]);
+                }
+
+                // start up zoids that do not need any communication
+                for (int j = 0; j < my_queues[dep].size(); j++) {
+                    auto &zoid = my_queues[dep][j];
+                    if (zoid.no_comm_needed) {
+                        cilk_spawn run_stencil_md_zoid_many_cuts_no_comm_new_comm<curr_dt>(
+                                starting_timestep, dep, zoid, tmp_start_t, tmp_end_t,
+                                send_r,
+                                test_f, test_x, test_v
+                        );
+                    }
+                }
+
+                cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
+                    auto &zoid = my_queues[dep][j];
+                    if (!zoid.no_comm_needed) {
+                        stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt>(zoid, recv_r[zoid.num], tmp_start_t,
+                                                                       tmp_end_t);
+                        run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
+                                                               tmp_start_t - 1, tmp_end_t - 1,
+                                                               test_f, test_x, test_v);
+                        stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED<curr_dt>(zoid, dep,
+                                                                                    tmp_start_t, tmp_end_t,
+                                                                                    send_r[zoid.num]);
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        if (dep == 0) {
             cilk_scope {
                 for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                     int zoid_num = my_queues[dep + 1][j].num;
-                    cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
+                    // cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
                 }
 
                 cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
@@ -8308,6 +8370,7 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
             }
         }
     }
+    */
 
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
         for (int j = 0; j < my_queues[dep].size(); j++) {
