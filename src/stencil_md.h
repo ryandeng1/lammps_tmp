@@ -10711,7 +10711,6 @@ public:
             buf_recv_many_cuts[dep] = new double*[comm->nprocs];
             buf_send_many_cuts[dep] = new double*[comm->nprocs];
 
-
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 buf_send_many_cuts[dep][proc] = new double[INITIAL_SIZE];
                 buf_recv_many_cuts[dep][proc] = new double[INITIAL_SIZE];
@@ -11264,7 +11263,7 @@ public:
 
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num});
 
-                if (USE_STREAMS) {
+                if (false && USE_STREAMS) {
                     int send_stream_idx = zoid_to_stream_num.at(zoid_num);
                     int recv_stream_idx = zoid_to_stream_num.at(send_zoid_num);
                     MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
@@ -11601,7 +11600,7 @@ public:
                 r.emplace_back();
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
 
-                if (USE_STREAMS) {
+                if (false && USE_STREAMS) {
                     int send_stream_idx = zoid_to_stream_num.at(recv_zoid_num);
                     int recv_stream_idx = zoid_to_stream_num.at(zoid_num);
 
