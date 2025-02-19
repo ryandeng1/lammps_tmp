@@ -67,6 +67,9 @@ int main(int argc, char **argv)
         if (USE_MULTI_SOCKET) {
             auto calling_thread = pthread_self();
 
+            int world_size;
+            MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
             int rank;
             MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -78,25 +81,57 @@ int main(int argc, char **argv)
 
             int nworkers = __cilkrts_get_nworkers();
 
-            auto* cpusets = new cpu_set_t[nworkers];
+            if (world_size == 16) {
+                auto* cpusets = new cpu_set_t[nworkers];
 
-            constexpr int NUM_CORES_PER_SOCKET = 24;
+                constexpr int NUM_CORES_PER_SOCKET = 24;
 
-            if (rank % 2 == 0) {
-                for (int i = 0; i < nworkers; i++) {
-                    CPU_ZERO(&cpusets[i]);
-                    CPU_SET(i, &cpusets[i]);
+                if (rank % 2 == 0) {
+                    for (int i = 0; i < nworkers; i++) {
+                        CPU_ZERO(&cpusets[i]);
+                        CPU_SET(i, &cpusets[i]);
+                    }
+                } else {
+                    for (int i = 0; i < nworkers; i++) {
+                        CPU_ZERO(&cpusets[i]);
+                        CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
+                    }
                 }
-            } else {
-                for (int i = 0; i < nworkers; i++) {
-                    CPU_ZERO(&cpusets[i]);
-                    CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
+
+                set_worker_affinity(nworkers, cpusets, calling_thread);
+
+                delete[] cpusets;
+            } else if (world_size == 32) {
+                auto* cpusets = new cpu_set_t[nworkers];
+
+                constexpr int NUM_CORES_PER_SOCKET = 24;
+
+                if (rank % 4 == 0) {
+                    for (int i = 0; i < nworkers; i++) {
+                        CPU_ZERO(&cpusets[i]);
+                        CPU_SET(i, &cpusets[i]);
+                    }
+                } else if (rank % 4 == 1) {
+                    for (int i = 0; i < nworkers; i++) {
+                        CPU_ZERO(&cpusets[i]);
+                        CPU_SET(i + nworkers + 1, &cpusets[i]);
+                    }
+                } else if (rank % 4 == 2) {
+                    for (int i = 0; i < nworkers; i++) {
+                        CPU_ZERO(&cpusets[i]);
+                        CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
+                    }
+                } else if (rank % 4 == 3) {
+                    for (int i = 0; i < nworkers; i++) {
+                        CPU_ZERO(&cpusets[i]);
+                        CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1, &cpusets[i]);
+                    }
                 }
+
+                set_worker_affinity(nworkers, cpusets, calling_thread);
+
+                delete[] cpusets;
             }
-
-            set_worker_affinity(nworkers, cpusets, calling_thread);
-
-            delete[] cpusets;
         } else {
             auto calling_thread = pthread_self();
 
