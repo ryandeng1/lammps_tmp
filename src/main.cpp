@@ -136,42 +136,42 @@ int main(int argc, char **argv)
 
                 constexpr int NUM_CORES_PER_SOCKET = 24;
 
-                if (rank % 4 == 0) {
+                if (rank % 8 == 0) {
                     for (int i = 0; i < nworkers; i++) {
                         CPU_ZERO(&cpusets[i]);
                         CPU_SET(i, &cpusets[i]);
                     }
-                } else if (rank % 4 == 1) {
+                } else if (rank % 8 == 1) {
                     for (int i = 0; i < nworkers; i++) {
                         CPU_ZERO(&cpusets[i]);
                         CPU_SET(i + nworkers + 1, &cpusets[i]);
                     }
-                } else if (rank % 4 == 2) {
+                } else if (rank % 8 == 2) {
                     for (int i = 0; i < nworkers; i++) {
                         CPU_ZERO(&cpusets[i]);
                         CPU_SET(i + 2 * (nworkers + 1), &cpusets[i]);
                     }
-                } else if (rank % 4 == 3) {
+                } else if (rank % 8 == 3) {
                     for (int i = 0; i < nworkers; i++) {
                         CPU_ZERO(&cpusets[i]);
                         CPU_SET(i + 3 * (nworkers + 1), &cpusets[i]);
                     }
-                } else if (rank % 4 == 4) {
+                } else if (rank % 8 == 4) {
                     for (int i = 0; i < nworkers; i++) {
                         CPU_ZERO(&cpusets[i]);
                         CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
                     }
-                } else if (rank % 4 == 5) {
+                } else if (rank % 8 == 5) {
                     for (int i = 0; i < nworkers; i++) {
                         CPU_ZERO(&cpusets[i]);
                         CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1, &cpusets[i]);
                     }
-                } else if (rank % 4 == 6) {
+                } else if (rank % 8 == 6) {
                     for (int i = 0; i < nworkers; i++) {
                         CPU_ZERO(&cpusets[i]);
                         CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (nworkers + 1), &cpusets[i]);
                     }
-                } else if (rank % 4 == 7) {
+                } else if (rank % 8 == 7) {
                     for (int i = 0; i < nworkers; i++) {
                         CPU_ZERO(&cpusets[i]);
                         CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (nworkers + 1), &cpusets[i]);
