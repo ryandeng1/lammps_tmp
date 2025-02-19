@@ -11270,7 +11270,7 @@ public:
                                       send_zoid_num % comm->nprocs, mpi_tag,
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[r.size() - 1]);
-                    MPIX_Stream_progress(all_streams[send_stream_idx]);
+                    // MPIX_Stream_progress(all_streams[send_stream_idx]);
                 } else {
                     MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                               send_zoid_num % comm->nprocs, mpi_tag,
@@ -11325,7 +11325,7 @@ public:
                                       send_zoid_num % comm->nprocs, mpi_tag,
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[send_request_idx]);
-                    MPIX_Stream_progress(all_streams[send_stream_idx]);
+                    // MPIX_Stream_progress(all_streams[send_stream_idx]);
                 } else {
                     int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
                                            : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
@@ -11403,7 +11403,7 @@ public:
                                       send_zoid_num % comm->nprocs, mpi_tag,
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[send_request_idx]);
-                    MPIX_Stream_progress(all_streams[send_stream_idx]);
+                    // MPIX_Stream_progress(all_streams[send_stream_idx]);
                 } else {
                     int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
                                            : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
@@ -11514,7 +11514,7 @@ public:
                                       send_zoid_num % comm->nprocs, mpi_tag,
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[send_request_idx]);
-                    MPIX_Stream_progress(all_streams[send_stream_idx]);
+                    // MPIX_Stream_progress(all_streams[send_stream_idx]);
                 } else {
                     int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
                                            : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
@@ -12368,7 +12368,7 @@ public:
             int idx;
             int stream_idx = zoid_to_stream_num[zoid_num];
             if (USE_STREAMS) {
-                MPIX_Stream_progress(all_streams[stream_idx]);
+                // MPIX_Stream_progress(all_streams[stream_idx]);
             }
             MPI_Waitany(r.size(), r.data(), &idx, MPI_STATUS_IGNORE);
             int recv_neighbor_idx = not_my_proc_idxs[idx];
@@ -12495,7 +12495,7 @@ public:
             int idx;
             int stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
             if (USE_STREAMS) {
-                MPIX_Stream_progress(all_streams[stream_idx]);
+                // MPIX_Stream_progress(all_streams[stream_idx]);
             }
             MPI_Waitany(r.size(), r.data(), &idx, MPI_STATUS_IGNORE);
 
