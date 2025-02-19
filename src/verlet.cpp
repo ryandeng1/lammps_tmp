@@ -8243,7 +8243,7 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
             cilk_scope {
                 for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                     int zoid_num = my_queues[dep + 1][j].num;
-                    // cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
+                    cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
                 }
 
                 cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
