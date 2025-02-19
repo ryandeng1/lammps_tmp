@@ -10699,7 +10699,7 @@ public:
             MPI_Info_create(&comm_info);
             MPI_Info_set(comm_info, "mpi_assert_no_any_source", "true");
             MPI_Info_set(comm_info, "mpi_assert_no_any_tag", "true");
-            MPI_Info_set(comm_info, "vci", std::to_string(i).c_str());
+            // MPI_Info_set(comm_info, "vci", std::to_string(i).c_str());
             MPI_Comm_set_info(all_comms[i], comm_info);
             MPI_Info_free(&comm_info);
         }
