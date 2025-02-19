@@ -8020,10 +8020,10 @@ public:
                     int send_zoid_num = send_neighbors[i];
                     if (send_zoid_num % comm->nprocs != comm->me) {
                         ZOID_TO_ZOID_TO_VCI_IDX[{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
-                        // comm_idx++;
+                        comm_idx++;
                     }
                 }
-                comm_idx++;
+                // comm_idx++;
             }
         }
 
@@ -8037,10 +8037,10 @@ public:
                     int send_zoid_num = send_neighbors[i];
                     if (send_zoid_num % comm->nprocs != comm->me) {
                         ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
-                        // comm_idx++;
+                        comm_idx++;
                     }
                 }
-                comm_idx++;
+                // comm_idx++;
             }
         }
 
@@ -10675,7 +10675,7 @@ public:
 
     static constexpr int NUM_STREAMS = 24;
     // 64 VCIs so 1 per comm
-    static constexpr int NUM_COMMS = 24;
+    static constexpr int NUM_COMMS = 48;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
     MPI_Comm stream_comm;
