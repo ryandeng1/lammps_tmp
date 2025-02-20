@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 
                 constexpr int NUM_CORES_PER_SOCKET = 24;
 
-                constexpr bool USE_HYPERTHREADING = true;
+                constexpr bool USE_HYPERTHREADING = false;
 
                 if (USE_HYPERTHREADING) {
                     constexpr int HYPERTHREAD = 48;
@@ -168,8 +168,8 @@ int main(int argc, char **argv)
 
                             if (rank < 8) {
                                 std::stringstream s1;
-                                s1 << "assign thread: " << i + half << " to worker: " << i
-                                << " thread: " << i + half << " to worker: " << i + half << std::endl;
+                                s1 << "assign thread: " << i + half + 1 << " to worker: " << i
+                                << " thread: " << i + half + 1 + HYPERTHREAD << " to worker: " << i + half << std::endl;
                                 std::cout << s1.str();
                             }
                         }
