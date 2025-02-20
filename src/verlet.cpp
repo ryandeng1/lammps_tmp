@@ -8261,11 +8261,11 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
                 if (dep < NUM_DEPS - 1) {
                     for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                         int zoid_num = my_queues[dep + 1][j].num;
-                        cilk_spawn
-                        stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
+                        cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
                     }
 
                     // send data to
+                    /*
                     auto &zoids_to_send_data = curr_dt ? stencilMD->dep_to_send_zoids[dep + 1]
                                                        : stencilMD->dep_to_send_zoids_next_dt[dep + 1];
 
@@ -8278,6 +8278,7 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
                                                                                              tmp_start_t, tmp_end_t,
                                                                                              send_r[zoid.num]);
                     }
+                    */
                 }
 
                 // start up zoids that do not need any communication

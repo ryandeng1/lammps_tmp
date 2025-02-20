@@ -11393,7 +11393,8 @@ public:
 
             auto *buf = buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i];
 
-            if (send_zoid_dep == dep + 1 && zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+            // if (send_zoid_dep == dep + 1 && zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+            if (zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
 
                 assert(send_request_idx != -1);
