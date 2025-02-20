@@ -145,24 +145,24 @@ int main(int argc, char **argv)
                     int half = nworkers / 2;
 
                     if (rank % 8 == 0) {
-                        for (int i = 0; i < nworkers / 2; i++) {
+                        for (int i = 0; i < half; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i, &cpusets[i]);
 
-                            CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + HYPERTHREAD, &cpusets[i + nworkers / 2]);
+                            CPU_ZERO(&cpusets[i + half]);
+                            CPU_SET(i + HYPERTHREAD, &cpusets[i + half]);
 
                             std::stringstream s1;
                             s1 << "assign thread: " << i << " to worker: " << i << " thread: " << i + HYPERTHREAD << " to worker: " << i + nworkers / 2 << std::endl;
                             std::cout << s1.str();
                         }
                     } else if (rank % 8 == 1) {
-                        for (int i = 0; i < nworkers / 2; i++) {
+                        for (int i = 0; i < half; i++) {
                             CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + nworkers + 1, &cpusets[i]);
+                            CPU_SET(i + half + 1, &cpusets[i]);
 
-                            CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + nworkers + 1 + HYPERTHREAD, &cpusets[i + nworkers / 2]);
+                            CPU_ZERO(&cpusets[i + half]);
+                            CPU_SET(i + half + 1 + HYPERTHREAD, &cpusets[i + half]);
 
                             std::stringstream s1;
                             s1 << "assign thread: " << i + nworkers + 1 << " to worker: " << i
@@ -170,12 +170,12 @@ int main(int argc, char **argv)
                             std::cout << s1.str();
                         }
                     } else if (rank % 8 == 2) {
-                        for (int i = 0; i < nworkers / 2; i++) {
+                        for (int i = 0; i < half; i++) {
                             CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + 2 * (nworkers + 1), &cpusets[i]);
+                            CPU_SET(i + 2 * (half + 1), &cpusets[i]);
 
                             CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + 2 * (nworkers + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
+                            CPU_SET(i + 2 * (half + 1) + HYPERTHREAD, &cpusets[i + half]);
 
                             std::stringstream s1;
                             s1 << "assign thread: " << i + 2 * (nworkers + 1) << " to worker: " << i
@@ -183,12 +183,12 @@ int main(int argc, char **argv)
                             std::cout << s1.str();
                         }
                     } else if (rank % 8 == 3) {
-                        for (int i = 0; i < nworkers / 2; i++) {
+                        for (int i = 0; i < half; i++) {
                             CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + 3 * (nworkers + 1), &cpusets[i]);
+                            CPU_SET(i + 3 * (half + 1), &cpusets[i]);
 
                             CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + 3 * (nworkers + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
+                            CPU_SET(i + 3 * (half + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
 
                             std::stringstream s1;
                             s1 << "assign thread: " << i + 3 * (nworkers + 1) << " to worker: " << i
@@ -196,12 +196,12 @@ int main(int argc, char **argv)
                             std::cout << s1.str();
                         }
                     } else if (rank % 8 == 4) {
-                        for (int i = 0; i < nworkers / 2; i++) {
+                        for (int i = 0; i < half; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
 
-                            CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + HYPERTHREAD, &cpusets[i + nworkers / 2]);
+                            CPU_ZERO(&cpusets[i + half]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + HYPERTHREAD, &cpusets[i + half]);
 
                             std::stringstream s1;
                             s1 << "assign thread: " << i + NUM_CORES_PER_SOCKET << " to worker: " << i
@@ -209,12 +209,12 @@ int main(int argc, char **argv)
                             std::cout << s1.str();
                         }
                     } else if (rank % 8 == 5) {
-                        for (int i = 0; i < nworkers / 2; i++) {
+                        for (int i = 0; i < half; i++) {
                             CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1, &cpusets[i]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + half + 1, &cpusets[i]);
 
-                            CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1 + HYPERTHREAD, &cpusets[i + nworkers / 2]);
+                            CPU_ZERO(&cpusets[i + half]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + half + 1 + HYPERTHREAD, &cpusets[i + half]);
 
                             std::stringstream s1;
                             s1 << "assign thread: " << i + NUM_CORES_PER_SOCKET + nworkers + 1 << " to worker: " << i
@@ -222,12 +222,12 @@ int main(int argc, char **argv)
                             std::cout << s1.str();
                         }
                     } else if (rank % 8 == 6) {
-                        for (int i = 0; i < nworkers / 2; i++) {
+                        for (int i = 0; i < half; i++) {
                             CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (nworkers + 1), &cpusets[i]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (half + 1), &cpusets[i]);
 
-                            CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (nworkers + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
+                            CPU_ZERO(&cpusets[i + half]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (half + 1) + HYPERTHREAD, &cpusets[i + half]);
 
                             std::stringstream s1;
                             s1 << "assign thread: " << i + NUM_CORES_PER_SOCKET + 2 * (nworkers + 1) << " to worker: " << i
@@ -235,12 +235,12 @@ int main(int argc, char **argv)
                             std::cout << s1.str();
                         }
                     } else if (rank % 8 == 7) {
-                        for (int i = 0; i < nworkers / 2; i++) {
+                        for (int i = 0; i < half; i++) {
                             CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (nworkers + 1), &cpusets[i]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (half + 1), &cpusets[i]);
 
-                            CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (nworkers + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
+                            CPU_ZERO(&cpusets[i + half]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (half + 1) + HYPERTHREAD, &cpusets[i + half]);
 
                             std::stringstream s1;
                             s1 << "assign thread: " << i + NUM_CORES_PER_SOCKET + 3 * (nworkers + 1) << " to worker: " << i
