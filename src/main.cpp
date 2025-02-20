@@ -18,6 +18,7 @@
 #include "lmppython.h"
 #include "pthread.h"
 #include <cilk/cilk_api.h>
+#include <sstream>
 
 #ifdef __linux__
 #include "stencil_md_utils.h"
