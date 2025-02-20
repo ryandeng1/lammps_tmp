@@ -144,73 +144,65 @@ int main(int argc, char **argv)
                         for (int i = 0; i < nworkers / 2; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i, &cpusets[i]);
-                        }
-                        for (int i = nworkers / 2; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + HYPERTHREAD, &cpusets[i]);
+
+                            CPU_ZERO(&cpusets[i + nworkers / 2]);
+                            CPU_SET(i + HYPERTHREAD, &cpusets[i + nworkers / 2]);
                         }
                     } else if (rank % 8 == 1) {
                         for (int i = 0; i < nworkers / 2; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i + nworkers + 1, &cpusets[i]);
-                        }
-                        for (int i = nworkers / 2; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + nworkers + 1 + HYPERTHREAD, &cpusets[i]);
+
+                            CPU_ZERO(&cpusets[i + nworkers / 2]);
+                            CPU_SET(i + nworkers + 1 + HYPERTHREAD, &cpusets[i + nworkers / 2]);
                         }
                     } else if (rank % 8 == 2) {
                         for (int i = 0; i < nworkers / 2; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i + 2 * (nworkers + 1), &cpusets[i]);
-                        }
-                        for (int i = nworkers / 2; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + 2 * (nworkers + 1) + HYPERTHREAD, &cpusets[i]);
+
+                            CPU_ZERO(&cpusets[i + nworkers / 2]);
+                            CPU_SET(i + 2 * (nworkers + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
                         }
                     } else if (rank % 8 == 3) {
                         for (int i = 0; i < nworkers / 2; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i + 3 * (nworkers + 1), &cpusets[i]);
-                        }
-                        for (int i = nworkers / 2; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + 3 * (nworkers + 1) + HYPERTHREAD, &cpusets[i]);
+
+                            CPU_ZERO(&cpusets[i + nworkers / 2]);
+                            CPU_SET(i + 3 * (nworkers + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
                         }
                     } else if (rank % 8 == 4) {
                         for (int i = 0; i < nworkers / 2; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
-                        }
-                        for (int i = 0; i < nworkers / 2; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + HYPERTHREAD, &cpusets[i]);
+
+                            CPU_ZERO(&cpusets[i + nworkers / 2]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + HYPERTHREAD, &cpusets[i + nworkers / 2]);
                         }
                     } else if (rank % 8 == 5) {
                         for (int i = 0; i < nworkers / 2; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1, &cpusets[i]);
-                        }
-                        for (int i = 0; i < nworkers / 2; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1 + HYPERTHREAD, &cpusets[i]);
+
+                            CPU_ZERO(&cpusets[i + nworkers / 2]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1 + HYPERTHREAD, &cpusets[i + nworkers / 2]);
                         }
                     } else if (rank % 8 == 6) {
                         for (int i = 0; i < nworkers / 2; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (nworkers + 1), &cpusets[i]);
-                        }
-                        for (int i = 0; i < nworkers / 2; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (nworkers + 1) + HYPERTHREAD, &cpusets[i]);
+
+                            CPU_ZERO(&cpusets[i + nworkers / 2]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (nworkers + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
                         }
                     } else if (rank % 8 == 7) {
                         for (int i = 0; i < nworkers / 2; i++) {
                             CPU_ZERO(&cpusets[i]);
                             CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (nworkers + 1), &cpusets[i]);
-                        }
-                        for (int i = 0; i < nworkers / 2; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (nworkers + 1) + HYPERTHREAD, &cpusets[i]);
+
+                            CPU_ZERO(&cpusets[i + nworkers / 2]);
+                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (nworkers + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
                         }
                     }
                 } else {
