@@ -5564,12 +5564,14 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<true>();
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<false>();
 
+    /*
     stencilMD->CONSTRUCT_NEW_RECV_FORCE_IDXS_FLATTENED<true>();
     stencilMD->CONSTRUCT_NEW_RECV_FORCE_IDXS_FLATTENED<false>();
     stencilMD->CONSTRUCT_NEW_RECV_VEL_IDXS_FLATTENED<true>();
     stencilMD->CONSTRUCT_NEW_RECV_VEL_IDXS_FLATTENED<false>();
     stencilMD->CONSTRUCT_NEW_RECV_POS_IDXS_FLATTENED<true>();
     stencilMD->CONSTRUCT_NEW_RECV_POS_IDXS_FLATTENED<false>();
+    */
 
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES_PIPELINED<true>();
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES_PIPELINED<false>();
