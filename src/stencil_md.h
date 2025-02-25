@@ -31,6 +31,7 @@
 #include <sstream>
 #include <iomanip>
 #include <queue>
+#include <bitset>
 
 constexpr bool USE_BREAK = false;
 
@@ -102,7 +103,6 @@ struct MinCostFlow {
         return flow;
     }
 };
-
 
 // Helper functions for sort local atoms double buffering
 template <typename T, typename Compare>
@@ -8487,6 +8487,24 @@ public:
         delete[] all_image;
     }
 
+    bool in_zoid_helper(double* pos, double* lo, double* hi) {
+        bool in_zoid = true;
+        for (int dim = 0; dim < domain->dimension; dim++) {
+            double lo_ = lo[dim];
+            double hi_ = hi[dim];
+            double p = pos[dim];
+            while (p < lo_) {
+                p += domain->prd[dim];
+            }
+            while (p >= hi_) {
+                p -= domain->prd[dim];
+            }
+            in_zoid = in_zoid && p >= lo_ && p < hi_;
+        }
+
+        return in_zoid;
+    }
+
     void SORT_LOCAL_ATOMS_ZOID_MANY_CUTS() {
         // setup lammps code
         double binsize = 0.5 * neighbor->cutneighmax;
@@ -8500,6 +8518,7 @@ public:
         double bininvy = nbiny / (domain->boxhi[1] - domain->boxlo[1]);
         double bininvz = nbinz / (domain->boxhi[2] - domain->boxlo[2]);
 
+
         cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
             cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
                 queue_info &zoid = queues_many_cuts[dep][j];
@@ -8511,104 +8530,216 @@ public:
                         tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
                     }
 
-                    auto permutation = sort_permutation(zoid.tag_stencil_md[0],
-                                                        [&](const tagint &tag_a, const tagint &tag_b) {
-                                                            int idx_a = tag_to_idx[tag_a];
-                                                            int idx_b = tag_to_idx[tag_b];
+                    std::map<int, std::vector<int>> idx_to_zoids;
 
-                                                            int num_timesteps_local_a = 0;
-                                                            int num_timesteps_local_b = 0;
+                    for (int idx = 0; idx < zoid.x_stencil_md[0].size(); idx++) {
+                        double pos[3] = {zoid.x_stencil_md[0][idx].x, zoid.x_stencil_md[0][idx].y, zoid.x_stencil_md[0][idx].z};
 
-                                                            std::set<int> timesteps_a;
-                                                            std::set<int> timesteps_b;
+                        for (int t2 = 1; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
+                            for (int z = 0; z < NUM_ZOIDS_MANY_CUTS; z++) {
+                                auto& curr_zoid = zoid_num_to_zoid_many_cuts[z];
+                                bool in_zoid = in_zoid_helper(pos, curr_zoid.lo[t2].data(), curr_zoid.hi[t2].data());
+                                if (in_zoid) {
+                                    idx_to_zoids[idx].push_back(curr_zoid.num);
+                                }
+                            }
+                        }
+                    }
 
-                                                            for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
-                                                                bool in_zoid = true;
-                                                                double pos[3] = {zoid.x_stencil_md[0][idx_a].x,
-                                                                                 zoid.x_stencil_md[0][idx_a].y,
-                                                                                 zoid.x_stencil_md[0][idx_a].z};
+                    std::vector<unsigned long> permutation;
 
-                                                                for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
-                                                                    double lo = zoid.zoid.cuts[dim].lower +
-                                                                                t2 * zoid.zoid.cuts[dim].slope_lower;
-                                                                    double hi = zoid.zoid.cuts[dim].upper +
-                                                                                t2 * zoid.zoid.cuts[dim].slope_upper;
-                                                                    if (!(pos[dim] >= lo && pos[dim] < hi)) {
-                                                                        in_zoid = false;
-                                                                    }
-                                                                }
+                    constexpr bool TRY_ORIGINAL = true;
+                    if (TRY_ORIGINAL) {
+                        int num_elems = zoid.x_stencil_md[0].size();
+                        std::vector<std::vector<int>> idx_to_timesteps_local;
+                        idx_to_timesteps_local.resize(num_elems);
 
-                                                                if (in_zoid) {
-                                                                    num_timesteps_local_a++;
-                                                                    timesteps_a.insert(t2);
-                                                                }
-                                                            }
+                        std::vector<std::vector<int>> idx_to_border_zoids;
+                        idx_to_border_zoids.resize(num_elems);
 
-                                                            for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
-                                                                bool in_zoid = true;
-                                                                double pos[3] = {zoid.x_stencil_md[0][idx_b].x,
-                                                                                 zoid.x_stencil_md[0][idx_b].y,
-                                                                                 zoid.x_stencil_md[0][idx_b].z};
+                        std::vector<std::vector<int>> idx_to_border_zoids_next_dt;
+                        idx_to_border_zoids_next_dt.resize(num_elems);
 
-                                                                for (int dim = 0; dim < NUM_DIMENSIONS; dim++) {
-                                                                    double lo = zoid.zoid.cuts[dim].lower +
-                                                                                t2 * zoid.zoid.cuts[dim].slope_lower;
-                                                                    double hi = zoid.zoid.cuts[dim].upper +
-                                                                                t2 * zoid.zoid.cuts[dim].slope_upper;
-                                                                    if (!(pos[dim] >= lo && pos[dim] < hi)) {
-                                                                        in_zoid = false;
-                                                                    }
-                                                                }
+                        for (int idx = 0; idx < num_elems; idx++) {
+                            double pos[3] = {zoid.x_stencil_md[0][idx].x,
+                                             zoid.x_stencil_md[0][idx].y,
+                                             zoid.x_stencil_md[0][idx].z};
 
-                                                                if (in_zoid) {
-                                                                    num_timesteps_local_b++;
-                                                                    timesteps_b.insert(t2);
-                                                                }
-                                                            }
+                            for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
+                                bool in_zoid = in_zoid_helper(pos, zoid.lo[t2].data(), zoid.hi[t2].data());
+                                if (in_zoid) {
+                                    idx_to_timesteps_local[idx].push_back(t2);
 
-                                                            if (num_timesteps_local_a != num_timesteps_local_b) {
-                                                                return num_timesteps_local_a > num_timesteps_local_b;
-                                                            }
+                                    auto& recv_neighbors = recv_from_neighbors_many_cuts[zoid.num];
+                                    for (int r = 0; r < recv_neighbors.size(); r++) {
+                                        int recv_zoid_num = recv_neighbors[r];
+                                        auto& recv_zoid = zoid_num_to_zoid_many_cuts[recv_zoid_num];
 
-                                                            if (timesteps_a != timesteps_b) {
-                                                                return timesteps_a > timesteps_b;
-                                                            }
+                                        double neigh_zoid_borders_lo[3] = {recv_zoid.lo[t2][0] - ALLEGRO_SLOPE, recv_zoid.lo[t2][1] - ALLEGRO_SLOPE, recv_zoid.lo[t2][2] - ALLEGRO_SLOPE};
+                                        double neigh_zoid_borders_hi[3] = {recv_zoid.hi[t2][0] + ALLEGRO_SLOPE, recv_zoid.hi[t2][1] + ALLEGRO_SLOPE, recv_zoid.hi[t2][2] + ALLEGRO_SLOPE};
 
-                                                            // USE LAMMPS SORTING
-                                                            const auto &pos_a = zoid.x_stencil_md[0][idx_a];
-                                                            int ix_a = static_cast<int> ((pos_a.x - domain->boxlo[0]) *
-                                                                                         bininvx);
-                                                            int iy_a = static_cast<int> ((pos_a.y - domain->boxlo[1]) *
-                                                                                         bininvy);
-                                                            int iz_a = static_cast<int> ((pos_a.z - domain->boxlo[2]) *
-                                                                                         bininvz);
+                                        bool in_neighbor_zoid = in_zoid_helper(pos, neigh_zoid_borders_lo, neigh_zoid_borders_hi);
+                                        if (in_neighbor_zoid) {
+                                            idx_to_border_zoids[idx].push_back(recv_zoid_num);
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
-                                                            ix_a = MAX(ix_a, 0);
-                                                            iy_a = MAX(iy_a, 0);
-                                                            iz_a = MAX(iz_a, 0);
-                                                            ix_a = MIN(ix_a, nbinx - 1);
-                                                            iy_a = MIN(iy_a, nbiny - 1);
-                                                            iz_a = MIN(iz_a, nbinz - 1);
-                                                            int ibin_a = iz_a * nbiny * nbinx + iy_a * nbinx + ix_a;
+                        for (int idx = 0; idx < num_elems; idx++) {
+                            double pos[3] = {zoid.x_stencil_md[0][idx].x,
+                                             zoid.x_stencil_md[0][idx].y,
+                                             zoid.x_stencil_md[0][idx].z};
 
-                                                            const auto &pos_b = zoid.x_stencil_md[0][idx_b];
-                                                            int ix_b = static_cast<int> ((pos_b.x - domain->boxlo[0]) *
-                                                                                         bininvx);
-                                                            int iy_b = static_cast<int> ((pos_b.y - domain->boxlo[1]) *
-                                                                                         bininvy);
-                                                            int iz_b = static_cast<int> ((pos_b.z - domain->boxlo[2]) *
-                                                                                         bininvz);
+                            auto& zoid_next_dt = zoid_num_to_zoid_many_cuts_next_dt[zoid.num];
+                            for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
+                                bool in_zoid = in_zoid_helper(pos, zoid_next_dt.lo[t2].data(), zoid_next_dt.hi[t2].data());
+                                if (in_zoid) {
+                                    auto& recv_neighbors = recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                                    for (int r = 0; r < recv_neighbors.size(); r++) {
+                                        int recv_zoid_num = recv_neighbors[r];
+                                        auto& recv_zoid = zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
 
-                                                            ix_b = MAX(ix_b, 0);
-                                                            iy_b = MAX(iy_b, 0);
-                                                            iz_b = MAX(iz_b, 0);
-                                                            ix_b = MIN(ix_b, nbinx - 1);
-                                                            iy_b = MIN(iy_b, nbiny - 1);
-                                                            iz_b = MIN(iz_b, nbinz - 1);
-                                                            int ibin_b = iz_b * nbiny * nbinx + iy_b * nbinx + ix_b;
+                                        double neigh_zoid_borders_lo[3] = {recv_zoid.lo[t2][0] - ALLEGRO_SLOPE, recv_zoid.lo[t2][1] - ALLEGRO_SLOPE, recv_zoid.lo[t2][2] - ALLEGRO_SLOPE};
+                                        double neigh_zoid_borders_hi[3] = {recv_zoid.hi[t2][0] + ALLEGRO_SLOPE, recv_zoid.hi[t2][1] + ALLEGRO_SLOPE, recv_zoid.hi[t2][2] + ALLEGRO_SLOPE};
 
-                                                            return ibin_a < ibin_b;
-                                                        });
+                                        bool in_neighbor_zoid = in_zoid_helper(pos, neigh_zoid_borders_lo, neigh_zoid_borders_hi);
+                                        if (in_neighbor_zoid) {
+                                            idx_to_border_zoids_next_dt[idx].push_back(recv_zoid_num);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        permutation = sort_permutation(zoid.tag_stencil_md[0],
+                           [&](const tagint &tag_a, const tagint &tag_b) {
+                               int idx_a = tag_to_idx[tag_a];
+                               int idx_b = tag_to_idx[tag_b];
+
+                               const auto& timesteps_local_a = idx_to_timesteps_local[idx_a];
+                               const auto& timesteps_local_b = idx_to_timesteps_local[idx_b];
+
+                               if (timesteps_local_a.size() == 0) {
+                                   return false;
+                               } else if (timesteps_local_b.size() == 0) {
+                                   return true;
+                               }
+
+                               if (timesteps_local_a.size() != timesteps_local_b.size()) {
+                                   return timesteps_local_a.size() > timesteps_local_b.size();
+                               }
+
+                               int first_timestep_local_a = timesteps_local_a[0];
+                               int first_timestep_local_b = timesteps_local_b[0];
+
+                               int last_timestep_local_a = timesteps_local_a[timesteps_local_a.size() - 1];
+                               int last_timestep_local_b = timesteps_local_b[timesteps_local_b.size() - 1];
+
+                               if (first_timestep_local_a != first_timestep_local_b) {
+                                   return first_timestep_local_a < first_timestep_local_b;
+                               }
+
+                               if (last_timestep_local_a != last_timestep_local_b) {
+                                   return last_timestep_local_a < last_timestep_local_b;
+                               }
+
+                               const auto& border_zoids_a = idx_to_border_zoids[idx_a];
+                               const auto& border_zoids_b = idx_to_border_zoids[idx_b];
+
+                               if (border_zoids_a != border_zoids_b) {
+                                   return border_zoids_a < border_zoids_b;
+                               }
+
+                               const auto& border_zoids_a_next_dt = idx_to_border_zoids_next_dt[idx_a];
+                               const auto& border_zoids_b_next_dt = idx_to_border_zoids_next_dt[idx_b];
+
+                               if (border_zoids_a_next_dt != border_zoids_b_next_dt) {
+                                   return border_zoids_a_next_dt < border_zoids_b_next_dt;
+                               }
+
+                               const auto& zoids_a = idx_to_zoids.at(idx_a);
+                               const auto& zoids_b = idx_to_zoids.at(idx_b);
+
+                               return zoids_a < zoids_b;
+
+                               /*
+                               // USE LAMMPS SORTING
+                               const auto &pos_a = zoid.x_stencil_md[0][idx_a];
+                               int ix_a = static_cast<int> ((pos_a.x - domain->boxlo[0]) *
+                                                            bininvx);
+                               int iy_a = static_cast<int> ((pos_a.y - domain->boxlo[1]) *
+                                                            bininvy);
+                               int iz_a = static_cast<int> ((pos_a.z - domain->boxlo[2]) *
+                                                            bininvz);
+
+                               ix_a = MAX(ix_a, 0);
+                               iy_a = MAX(iy_a, 0);
+                               iz_a = MAX(iz_a, 0);
+                               ix_a = MIN(ix_a, nbinx - 1);
+                               iy_a = MIN(iy_a, nbiny - 1);
+                               iz_a = MIN(iz_a, nbinz - 1);
+                               int ibin_a = iz_a * nbiny * nbinx + iy_a * nbinx + ix_a;
+
+                               const auto &pos_b = zoid.x_stencil_md[0][idx_b];
+                               int ix_b = static_cast<int> ((pos_b.x - domain->boxlo[0]) *
+                                                            bininvx);
+                               int iy_b = static_cast<int> ((pos_b.y - domain->boxlo[1]) *
+                                                            bininvy);
+                               int iz_b = static_cast<int> ((pos_b.z - domain->boxlo[2]) *
+                                                            bininvz);
+
+                               ix_b = MAX(ix_b, 0);
+                               iy_b = MAX(iy_b, 0);
+                               iz_b = MAX(iz_b, 0);
+                               ix_b = MIN(ix_b, nbinx - 1);
+                               iy_b = MIN(iy_b, nbiny - 1);
+                               iz_b = MIN(iz_b, nbinz - 1);
+                               int ibin_b = iz_b * nbiny * nbinx + iy_b * nbinx + ix_b;
+
+                               return ibin_a < ibin_b;
+                               */
+                           });
+
+                        /*
+                        permutation = sort_permutation(zoid.tag_stencil_md[0],
+                           [&](const tagint &tag_a, const tagint &tag_b) {
+                               int idx_a = tag_to_idx[tag_a];
+                               int idx_b = tag_to_idx[tag_b];
+
+                               const auto& timesteps_local_a = idx_to_timesteps_local[idx_a];
+                               const auto& timesteps_local_b = idx_to_timesteps_local[idx_b];
+
+                               int num_timesteps_local_a = timesteps_local_a.size();
+                               int num_timesteps_local_b = timesteps_local_b.size();
+
+                               if (num_timesteps_local_a != num_timesteps_local_b) {
+                                   return num_timesteps_local_a > num_timesteps_local_b;
+                               }
+
+                               if (num_timesteps_local_a == 0) {
+                                   return false;
+                               }
+
+                               if (num_timesteps_local_b == 0) {
+                                   return true;
+                               }
+
+                               int first_timestep_local_a = timesteps_local_a[0];
+                               int first_timestep_local_b = timesteps_local_b[0];
+
+                               if (first_timestep_local_a != first_timestep_local_b) {
+                                   return first_timestep_local_a > first_timestep_local_b;
+                               }
+
+                               const auto& zoids_a = idx_to_zoids.at(idx_a);
+                               const auto& zoids_b = idx_to_zoids.at(idx_b);
+
+                               return zoids_a < zoids_b;
+                        });
+                        */
+                    }
 
                     apply_permutation_in_place(zoid.x_stencil_md[0], permutation);
                     apply_permutation_in_place(zoid.x_stencil_md[1], permutation);
@@ -8621,6 +8752,8 @@ public:
                 }
             }
         }
+
+        cilk::opadd_reducer<int> total_num_local_segments = 0;
 
         cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
             cilk_for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
@@ -8662,12 +8795,22 @@ public:
                     std::vector<int> tmp1;
                     std::vector<int> tmp2;
                     int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp1, tmp2);
-                    /*
-                    std::cout << BOLDYELLOW << "CURR DT dep: " << dep << " zoid: " << zoid.num << " time: " << t << " nlocal: " << zoid.local_idxs_per_timestep[t].size()
+                    std::stringstream o;
+                    o << BOLDYELLOW << "CURR DT: " << 1 << "  dep: " << dep << " zoid: " << zoid.num << " time: " << t << " nlocal: " << zoid.local_idxs_per_timestep[t].size()
                         << " num segments: " << num_segments << RESET_COLOR << std::endl;
-                    */
+                    std::cout << o.str();
+
+                    total_num_local_segments += num_segments;
                 }
             }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_num_local_segments, 1, MPI_INT, MPI_SUM, world);
+
+        if (comm->me == 0) {
+            std::stringstream o;
+            o << "TOTAL NUM LOCAL SEGMENTS: " << total_num_local_segments << std::endl;
+            std::cout << o.str();
         }
 
         // debug curr_dt
@@ -8703,6 +8846,8 @@ public:
             memset(all_tags, 0, total_num_entries * sizeof(int));
         }
 
+
+        cilk::opadd_reducer<int> total_num_local_segments_next_dt = 0;
         cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
             cilk_for (int j = 0; j < queues_many_cuts_next_dt[dep].size(); j++) {
                 queue_info &zoid = queues_many_cuts_next_dt[dep][j];
@@ -8735,18 +8880,22 @@ public:
                     std::vector<int> tmp1;
                     std::vector<int> tmp2;
                     int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp1, tmp2);
-                    if (num_segments > 1) {
-                        /*
-                        std::stringstream s1;
-                        for (auto& size: tmp2) {
-                            s1 << size << " ";
-                        }
-                        std::cout << BOLDYELLOW << "NEXT DT dep: " << dep << " zoid: " << zoid.num << " time: " << t << " nlocal: " << zoid.local_idxs_per_timestep[t].size()
-                                  << " num segments: " << num_segments << " segment sizes: " << s1.str() << RESET_COLOR << std::endl;
-                        */
-                    }
+                    total_num_local_segments_next_dt += num_segments;
+
+                    std::stringstream o;
+                    o << BOLDYELLOW << "NEXT DT dep: " << dep << " zoid: " << zoid.num << " time: " << t
+                    << " num segments: " << num_segments << RESET_COLOR << std::endl;
+                    std::cout << o.str();
                 }
             }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_num_local_segments_next_dt, 1, MPI_INT, MPI_SUM, world);
+
+        if (comm->me == 0) {
+            std::stringstream o;
+            o << "TOTAL NUM LOCAL SEGMENTS NEXT DT: " << total_num_local_segments_next_dt << std::endl;
+            std::cout << o.str();
         }
 
         // debug next_dt
@@ -10474,6 +10623,262 @@ public:
     }
 
     template <bool curr_dt>
+    void CONSTRUCT_NEW_RECV_FORCE_IDXS_FLATTENED() {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+
+        constexpr int MAX_NEIGHBORS = 26;
+
+        std::vector<std::vector<int>> zoid_send_data[NUM_ZOIDS_MANY_CUTS];
+        for (int z = 0; z < NUM_ZOIDS_MANY_CUTS; z++) {
+            zoid_send_data[z].resize(MAX_NEIGHBORS);
+        }
+
+        std::vector<MPI_Request> r;
+        r.reserve(NUM_ZOIDS_MANY_CUTS * MAX_NEIGHBORS);
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    auto& recv_force_idxs_flattened = zoid.recv_force_idxs_double_buffering_flattened[i];
+                    auto permutation = sort_permutation(recv_force_idxs_flattened, std::less<int>());
+                    apply_permutation_in_place(recv_force_idxs_flattened, permutation);
+                    zoid_send_data[zoid.num][i].insert(zoid_send_data[zoid.num][i].end(), permutation.begin(), permutation.end());
+                    int mpi_tag = get_mpi_tag_many_cuts(recv_zoid_num, zoid.num);
+                    r.emplace_back();
+                    MPI_Isend(zoid_send_data[zoid.num][i].data(), permutation.size(), MPI_INT, recv_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                }
+            }
+        }
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < send_neighbors.size(); i++) {
+                    int send_zoid_num = send_neighbors[i];
+                    auto& send_force_idxs_flattened = zoid.send_force_idxs_double_buffering_flattened[i];
+                    int mpi_tag = get_mpi_tag_many_cuts(zoid.num, send_zoid_num);
+                    std::vector<int> recv_buf;
+                    recv_buf.resize(send_force_idxs_flattened.size());
+                    MPI_Recv(recv_buf.data(), recv_buf.size(), MPI_INT, send_zoid_num % comm->nprocs,
+                             mpi_tag, world, MPI_STATUS_IGNORE);
+                    std::vector<size_t> permutation;
+                    permutation.insert(permutation.end(), recv_buf.begin(), recv_buf.end());
+                    apply_permutation_in_place(send_force_idxs_flattened, permutation);
+                }
+            }
+        }
+
+        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    auto& recv_force_idxs_flattened = zoid.recv_force_idxs_double_buffering_flattened[i];
+
+                    std::vector<int> force_segment_idxs;
+                    std::vector<int> force_segment_sizes;
+                    int num_force_segments = get_segments(zoid.recv_force_idxs_double_buffering_flattened[i],
+                                                          force_segment_idxs, force_segment_sizes);
+                    std::stringstream o;
+                    o << BOLDYELLOW << "curr_dt ? " << curr_dt << " zoid: " << zoid.num << " RECV FROM: " << recv_zoid_num
+                      << " NUM FORCE SEGMENTS: " << num_force_segments
+                      << RESET_COLOR << std::endl;
+                    std::cout << o.str();
+                }
+            }
+        }
+
+        /*
+        */
+    }
+
+    template <bool curr_dt>
+    void CONSTRUCT_NEW_RECV_VEL_IDXS_FLATTENED() {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+
+        constexpr int MAX_NEIGHBORS = 26;
+
+        std::vector<std::vector<int>> zoid_send_data[NUM_ZOIDS_MANY_CUTS];
+        for (int z = 0; z < NUM_ZOIDS_MANY_CUTS; z++) {
+            zoid_send_data[z].resize(MAX_NEIGHBORS);
+        }
+
+        std::vector<MPI_Request> r;
+        r.reserve(NUM_ZOIDS_MANY_CUTS * MAX_NEIGHBORS);
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    auto& recv_vel_idxs_flattened = zoid.recv_vel_idxs_double_buffering_flattened[i];
+                    auto permutation = sort_permutation(recv_vel_idxs_flattened, std::less<int>());
+                    apply_permutation_in_place(recv_vel_idxs_flattened, permutation);
+                    zoid_send_data[zoid.num][i].insert(zoid_send_data[zoid.num][i].end(), permutation.begin(), permutation.end());
+                    int mpi_tag = get_mpi_tag_many_cuts(recv_zoid_num, zoid.num);
+                    r.emplace_back();
+                    MPI_Isend(zoid_send_data[zoid.num][i].data(), permutation.size(), MPI_INT, recv_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                }
+            }
+        }
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                                               : send_to_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < send_neighbors.size(); i++) {
+                    int send_zoid_num = send_neighbors[i];
+                    auto& send_vel_idxs_flattened = zoid.send_vel_idxs_double_buffering_flattened[i];
+                    int mpi_tag = get_mpi_tag_many_cuts(zoid.num, send_zoid_num);
+                    std::vector<int> recv_buf;
+                    recv_buf.resize(send_vel_idxs_flattened.size());
+                    MPI_Recv(recv_buf.data(), recv_buf.size(), MPI_INT, send_zoid_num % comm->nprocs,
+                             mpi_tag, world, MPI_STATUS_IGNORE);
+                    std::vector<size_t> permutation;
+                    permutation.insert(permutation.end(), recv_buf.begin(), recv_buf.end());
+                    apply_permutation_in_place(send_vel_idxs_flattened, permutation);
+                }
+            }
+        }
+
+        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    auto& recv_vel_idxs_flattened = zoid.recv_vel_idxs_double_buffering_flattened[i];
+
+                    std::vector<int> vel_segment_idxs;
+                    std::vector<int> vel_segment_sizes;
+                    int num_vel_segments = get_segments(zoid.recv_vel_idxs_double_buffering_flattened[i],
+                                                        vel_segment_idxs, vel_segment_sizes);
+
+                    std::stringstream o2;
+                    o2 << BOLDGREEN << "curr_dt ? " << curr_dt << " zoid: " << zoid.num << " RECV FROM: " << recv_zoid_num
+                       << " NUM VEL SEGMENTS: " << num_vel_segments
+                       << RESET_COLOR << std::endl;
+                    std::cout << o2.str();
+                }
+            }
+        }
+    }
+
+    template <bool curr_dt>
+    void CONSTRUCT_NEW_RECV_POS_IDXS_FLATTENED() {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+
+        constexpr int MAX_NEIGHBORS = 26;
+
+        std::vector<std::vector<int>> zoid_send_data0[NUM_ZOIDS_MANY_CUTS];
+        std::vector<std::vector<int>> zoid_send_data1[NUM_ZOIDS_MANY_CUTS];
+        for (int z = 0; z < NUM_ZOIDS_MANY_CUTS; z++) {
+            zoid_send_data0[z].resize(MAX_NEIGHBORS);
+            zoid_send_data1[z].resize(MAX_NEIGHBORS);
+        }
+
+        std::vector<MPI_Request> r;
+        r.reserve(NUM_ZOIDS_MANY_CUTS * MAX_NEIGHBORS);
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    auto& recv_pos_idxs_flattened0 = zoid.recv_pos_idxs_double_buffering_flattened[0][i];
+                    auto permutation0 = sort_permutation(recv_pos_idxs_flattened0, std::less<int>());
+                    apply_permutation_in_place(recv_pos_idxs_flattened0, permutation0);
+                    zoid_send_data0[zoid.num][i].insert(zoid_send_data0[zoid.num][i].end(), permutation0.begin(), permutation0.end());
+                    int mpi_tag = get_mpi_tag_many_cuts(recv_zoid_num, zoid.num);
+                    r.emplace_back();
+                    MPI_Isend(zoid_send_data0[zoid.num][i].data(), permutation0.size(), MPI_INT,
+                              recv_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+
+                    auto& recv_pos_idxs_flattened1 = zoid.recv_pos_idxs_double_buffering_flattened[1][i];
+                    auto permutation1 = sort_permutation(recv_pos_idxs_flattened1, std::less<int>());
+                    apply_permutation_in_place(recv_pos_idxs_flattened1, permutation1);
+                    zoid_send_data1[zoid.num][i].insert(zoid_send_data1[zoid.num][i].end(), permutation1.begin(), permutation1.end());
+                    r.emplace_back();
+                    MPI_Isend(zoid_send_data1[zoid.num][i].data(), permutation1.size(), MPI_INT,
+                              recv_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                }
+            }
+        }
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                                               : send_to_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < send_neighbors.size(); i++) {
+                    int send_zoid_num = send_neighbors[i];
+                    auto& send_pos_idxs_flattened0 = zoid.send_pos_idxs_double_buffering_flattened[0][i];
+                    int mpi_tag = get_mpi_tag_many_cuts(zoid.num, send_zoid_num);
+                    std::vector<int> recv_buf0;
+                    recv_buf0.resize(send_pos_idxs_flattened0.size());
+                    MPI_Recv(recv_buf0.data(), recv_buf0.size(), MPI_INT, send_zoid_num % comm->nprocs,
+                             mpi_tag, world, MPI_STATUS_IGNORE);
+                    std::vector<size_t> permutation0;
+                    permutation0.insert(permutation0.end(), recv_buf0.begin(), recv_buf0.end());
+                    apply_permutation_in_place(send_pos_idxs_flattened0, permutation0);
+
+                    auto& send_pos_idxs_flattened1 = zoid.send_pos_idxs_double_buffering_flattened[1][i];
+                    std::vector<int> recv_buf1;
+                    recv_buf1.resize(send_pos_idxs_flattened1.size());
+                    MPI_Recv(recv_buf1.data(), recv_buf1.size(), MPI_INT, send_zoid_num % comm->nprocs,
+                             mpi_tag, world, MPI_STATUS_IGNORE);
+                    std::vector<size_t> permutation1;
+                    permutation1.insert(permutation1.end(), recv_buf1.begin(), recv_buf1.end());
+                    apply_permutation_in_place(send_pos_idxs_flattened1, permutation1);
+                }
+            }
+        }
+
+        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    std::vector<int> pos_segment_idxs0;
+                    std::vector<int> pos_segment_sizes0;
+                    int num_pos_segments0 = get_segments(zoid.recv_pos_idxs_double_buffering_flattened[0][i],
+                                                        pos_segment_idxs0, pos_segment_sizes0);
+
+                    std::vector<int> pos_segment_idxs1;
+                    std::vector<int> pos_segment_sizes1;
+                    int num_pos_segments1 = get_segments(zoid.recv_pos_idxs_double_buffering_flattened[1][i],
+                                                         pos_segment_idxs1, pos_segment_sizes1);
+
+                    std::stringstream o;
+                    o << BOLDGREEN << "curr_dt ? " << curr_dt << " zoid: " << zoid.num << " RECV FROM: " << recv_neighbors[i]
+                    << " NUM POS SEGMENTS 0: " << num_pos_segments0
+                    << " NUM POS SEGMENTS 1: " << num_pos_segments1
+                    << RESET_COLOR << std::endl;
+                    std::cout << o.str();
+                }
+            }
+        }
+    }
+
+    template <bool curr_dt>
     void GET_SEND_STATISTICS() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -10972,6 +11377,16 @@ public:
                             send_zoid.send_pos_idxs_double_buffering_flattened[t % DOUBLE_BUFFERING][i].push_back(idx);
                         }
                     }
+
+                    std::vector<int> force_segment_idxs;
+                    std::vector<int> force_segment_sizes;
+                    int num_force_segments = get_segments(send_zoid.send_force_idxs_double_buffering_flattened[i],
+                                                          force_segment_idxs, force_segment_sizes);
+                    /*
+                    std::cout << BOLDYELLOW << "zoid: " << send_zoid_num << " SEND TO: " << neigh
+                    << " NUM FORCE SEGMENTS: " << num_force_segments
+                    << RESET_COLOR << std::endl;
+                    */
 
                     int nsend_total = nsend_force + nsend_pos + nsend_vel;
 
