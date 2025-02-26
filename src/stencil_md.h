@@ -8613,6 +8613,7 @@ public:
                             }
                         }
 
+                        /*
                         permutation = sort_permutation(zoid.tag_stencil_md[0],
                            [&](const tagint &tag_a, const tagint &tag_b) {
                                int idx_a = tag_to_idx[tag_a];
@@ -8664,7 +8665,6 @@ public:
 
                                return zoids_a < zoids_b;
 
-                               /*
                                // USE LAMMPS SORTING
                                const auto &pos_a = zoid.x_stencil_md[0][idx_a];
                                int ix_a = static_cast<int> ((pos_a.x - domain->boxlo[0]) *
@@ -8699,7 +8699,65 @@ public:
                                int ibin_b = iz_b * nbiny * nbinx + iy_b * nbinx + ix_b;
 
                                return ibin_a < ibin_b;
-                               */
+                           });
+                        */
+
+                        permutation = sort_permutation(zoid.tag_stencil_md[0],
+                           [&](const tagint &tag_a, const tagint &tag_b) {
+                                int idx_a = tag_to_idx[tag_a];
+                                int idx_b = tag_to_idx[tag_b];
+
+                                const auto& timesteps_local_a = idx_to_timesteps_local[idx_a];
+                                const auto& timesteps_local_b = idx_to_timesteps_local[idx_b];
+
+                                if (timesteps_local_a.size() == 0) {
+                                   return false;
+                                } else if (timesteps_local_b.size() == 0) {
+                                   return true;
+                                }
+
+                                int first_timestep_local_a = timesteps_local_a[0];
+                                int first_timestep_local_b = timesteps_local_b[0];
+
+                                int last_timestep_local_a = timesteps_local_a[timesteps_local_a.size() - 1];
+                                int last_timestep_local_b = timesteps_local_b[timesteps_local_b.size() - 1];
+
+                                if (first_timestep_local_a != first_timestep_local_b) {
+                                    return first_timestep_local_a < first_timestep_local_b;
+                                }
+
+                                if (last_timestep_local_a != last_timestep_local_b) {
+                                    return last_timestep_local_a < last_timestep_local_b;
+                                }
+
+                                // USE LAMMPS SORTING
+                                const auto &pos_a = zoid.x_stencil_md[0][idx_a];
+                                int ix_a = static_cast<int> ((pos_a.x - domain->boxlo[0]) * bininvx);
+                                int iy_a = static_cast<int> ((pos_a.y - domain->boxlo[1]) * bininvy);
+                                int iz_a = static_cast<int> ((pos_a.z - domain->boxlo[2]) * bininvz);
+
+                                ix_a = MAX(ix_a, 0);
+                                iy_a = MAX(iy_a, 0);
+                                iz_a = MAX(iz_a, 0);
+                                ix_a = MIN(ix_a, nbinx - 1);
+                                iy_a = MIN(iy_a, nbiny - 1);
+                                iz_a = MIN(iz_a, nbinz - 1);
+                                int ibin_a = iz_a * nbiny * nbinx + iy_a * nbinx + ix_a;
+
+                                const auto &pos_b = zoid.x_stencil_md[0][idx_b];
+                                int ix_b = static_cast<int> ((pos_b.x - domain->boxlo[0]) * bininvx);
+                                int iy_b = static_cast<int> ((pos_b.y - domain->boxlo[1]) * bininvy);
+                                int iz_b = static_cast<int> ((pos_b.z - domain->boxlo[2]) * bininvz);
+
+                                ix_b = MAX(ix_b, 0);
+                                iy_b = MAX(iy_b, 0);
+                                iz_b = MAX(iz_b, 0);
+                                ix_b = MIN(ix_b, nbinx - 1);
+                                iy_b = MIN(iy_b, nbiny - 1);
+                                iz_b = MIN(iz_b, nbinz - 1);
+                                int ibin_b = iz_b * nbiny * nbinx + iy_b * nbinx + ix_b;
+
+                                return ibin_a < ibin_b;
                            });
 
                         /*
