@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 
                 constexpr int NUM_CORES_PER_SOCKET = 24;
 
-                constexpr bool USE_HYPERTHREADING = false;
+                constexpr bool USE_HYPERTHREADING = true;
 
                 if (USE_HYPERTHREADING) {
                     constexpr int HYPERTHREAD = 48;
