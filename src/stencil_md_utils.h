@@ -571,6 +571,7 @@ struct queue_info {
   std::atomic_flag** claimed_flags_stencil_md;
 
   std::vector<int>* local_idxs_per_timestep;
+  std::vector<std::vector<int>>* force_partitions_per_timestep;
 
   std::vector<std::vector<int>>* neighbor_list;
   std::vector<std::vector<std::pair<int, int>>>* bond_list;

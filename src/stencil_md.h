@@ -104,6 +104,64 @@ struct MinCostFlow {
     }
 };
 
+// Graph coloring for atom partitioning
+static std::vector<std::vector<int>> prepareForcePartitioning(const std::vector<std::vector<int>>& neighborsList) {
+    int numAtoms = neighborsList.size();
+
+    // Create adjacency set representation for each atom
+    std::vector<std::unordered_set<int>> adjSets(numAtoms);
+    for (int i = 0; i < numAtoms; i++) {
+        for (int j : neighborsList[i]) {
+            if (i < j) {
+                adjSets[i].insert(j);
+                adjSets[j].insert(i);
+            }
+        }
+    }
+
+    // Greedy graph coloring
+    std::vector<int> atomColors(numAtoms, -1);
+    std::vector<bool> usedColors;
+
+    // Sort atoms by degree (number of neighbors) for better coloring
+    std::vector<std::pair<int, int>> atomDegrees;
+    for (int i = 0; i < numAtoms; i++) {
+        atomDegrees.push_back({adjSets[i].size(), i});
+    }
+    std::sort(atomDegrees.begin(), atomDegrees.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first; });
+
+    for (const auto& [degree, atom] : atomDegrees) {
+        // Find the first available color
+        usedColors.assign(numAtoms, false);
+
+        // Mark colors used by neighbors
+        for (int neighbor : adjSets[atom]) {
+            if (atomColors[neighbor] != -1) {
+                usedColors[atomColors[neighbor]] = true;
+            }
+        }
+
+        // Find the first available color
+        int color = 0;
+        while (color < (int)usedColors.size() && usedColors[color]) {
+            color++;
+        }
+
+        atomColors[atom] = color;
+    }
+
+    // Group atoms by color
+    int maxColor = *std::max_element(atomColors.begin(), atomColors.end());
+    std::vector<std::vector<int>> partitions(maxColor + 1);
+
+    for (int atom = 0; atom < numAtoms; atom++) {
+        partitions[atomColors[atom]].push_back(atom);
+    }
+
+    return partitions;
+}
+
 // Helper functions for sort local atoms double buffering
 template <typename T, typename Compare>
 std::vector<std::size_t> sort_permutation(
@@ -7591,6 +7649,7 @@ public:
                     zoid.claimed_flags_stencil_md = new std::atomic_flag*[1];
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.force_partitions_per_timestep = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     // zoid.neighbor_list = new std::vector<int>*[1];
@@ -7654,6 +7713,7 @@ public:
                     zoid.claimed_flags_stencil_md = queues_many_cuts[coord.first][coord.second].claimed_flags_stencil_md;
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.force_partitions_per_timestep = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
@@ -14649,6 +14709,196 @@ public:
                             f[j].y -= dely * fpair;
                             f[j].z -= delz * fpair;
                         }
+                    }
+                }
+
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+            }
+        }
+    }
+
+    template <bool curr_dt>
+    void CONSTRUCT_FORCE_PARTITIONS() {
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    auto& local_idxs = zoid.local_idxs_per_timestep[t];
+                    int nlocal = local_idxs.size();
+                    std::vector<std::vector<int>> all_neighbors(zoid.x_stencil_md[0].size());
+                    for (int idx = 0; idx < local_idxs.size(); idx++) {
+                        int i = local_idxs[idx];
+                        for (auto& n : zoid.neighbor_list[t][i]) {
+                            all_neighbors[i].push_back(n);
+                        }
+                        for (auto& n : zoid.bond_list[t][i]) {
+                            all_neighbors[i].push_back(n.first);
+                        }
+                    }
+
+                    auto partitions = prepareForcePartitioning(all_neighbors);
+                    zoid.force_partitions_per_timestep[t] = partitions;
+                    std::cout << "curr_dt: " << curr_dt << " zoid: " << zoid.num << " time: " << t << " nlocal: " << local_idxs.size() << " num partitions: " << partitions.size() << std::endl;
+                }
+            }
+        }
+    }
+
+    void BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS_PARTITIONS(queue_info& zoid, int dep, int timestep) {
+        const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
+
+        auto pair = (PairLJCut*) force->pair;
+        auto bond = (BondFENE*) force->bond;
+
+        const auto& bond_list = zoid.bond_list[timestep];
+        const auto& neighbor_list = zoid.neighbor_list[timestep];
+
+        const double * _noalias const special_lj = force->special_lj;
+
+        // auto* spinlocks = next->spinlocks;
+        auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
+
+        const auto* cutsq = pair->cutsq;
+        const auto* offset = pair->offset;
+        const auto* lj1 = pair->lj1;
+        const auto* lj2 = pair->lj2;
+        const auto* lj3 = pair->lj3;
+        const auto* lj4 = pair->lj4;
+        auto newton_pair = force->newton_pair;
+
+        const auto* _noalias const sigma = bond->sigma;
+        const auto* _noalias const epsilon = bond->epsilon;
+        const auto* _noalias const r0 = bond->r0;
+        const auto* _noalias const k = bond->k;
+
+        const auto& atom_type = zoid.type_stencil_md[0];
+
+        const auto& force_partitions = zoid.force_partitions_per_timestep[timestep];
+
+        int nlocal = zoid.local_idxs_per_timestep[timestep].size();
+
+        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        int num_workers = __cilkrts_get_nworkers();
+
+        auto* claimed = zoid.claimed_flags_stencil_md[0];
+
+        const auto& tags = zoid.tag_stencil_md[0];
+
+        int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = MODIFY_GRAINSIZE;
+
+        for (int p = 0; p < force_partitions.size(); p++) {
+            auto& partition = force_partitions[p];
+            for (int idx = 0; idx < partition.size(); idx++) {
+                int i = partition[idx];
+                const int itype = atom_type[i];
+
+                // const int *_noalias const jlist = firstneigh[i];
+                const auto &jlist = neighbor_list[i];
+                const double *_noalias const cutsqi = cutsq[itype];
+                const double *_noalias const offseti = offset[itype];
+                const double *_noalias const lj1i = lj1[itype];
+                const double *_noalias const lj2i = lj2[itype];
+                const double *_noalias const lj3i = lj3[itype];
+                const double *_noalias const lj4i = lj4[itype];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                // int jnum = numneigh[i];
+                int jnum = jlist.size();
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    double evdwl = 0.0;
+                    // int j = jlist[jj];
+                    int j = jlist[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0 / rsq;
+                        double r6inv = r2inv * r2inv * r2inv;
+                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                        double fpair = factor_lj * forcelj * r2inv;
+
+                        fxtmp += delx * fpair;
+                        fytmp += dely * fpair;
+                        fztmp += delz * fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            spinlocks[j].lock();
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                            spinlocks[j].unlock();
+                        }
+                    }
+                }
+
+                auto &lst_bonds = bond_list[i];
+                for (int j = 0; j < lst_bonds.size(); j++) {
+                    auto &bond_info = lst_bonds[j];
+                    int i2 = bond_info.first;
+                    int type = bond_info.second;
+
+                    double delx = xtmp - x[i2].x;
+                    double dely = ytmp - x[i2].y;
+                    double delz = ztmp - x[i2].z;
+
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    double r0sq = r0[type] * r0[type];
+                    double rlogarg = 1.0 - rsq / r0sq;
+
+                    if (rlogarg < 0.1) {
+                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                        //                                return;
+                        assert(false);
+
+                        rlogarg = 0.1;
+                    }
+
+                    double fbond = -k[type] / rlogarg;
+
+                    // force from LJ term
+                    double sr2 = 0.0;
+                    double sr6 = 0.0;
+
+                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                        sr2 = sigma[type] * sigma[type] / rsq;
+                        sr6 = sr2 * sr2 * sr2;
+                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                    }
+
+                    // energy
+
+                    // apply force to each of 2 atoms
+
+                    if (newton_pair || i < nlocal) {
+                        fxtmp += delx * fbond;
+                        fytmp += dely * fbond;
+                        fztmp += delz * fbond;
+                    }
+
+                    if (newton_pair || i2 < nlocal) {
+                        f[i2].x -= delx * fbond;
+                        f[i2].y -= dely * fbond;
+                        f[i2].z -= delz * fbond;
                     }
                 }
 
