@@ -8593,7 +8593,7 @@ public:
                                              zoid.x_stencil_md[0][idx].z};
 
                             auto& zoid_next_dt = zoid_num_to_zoid_many_cuts_next_dt[zoid.num];
-                            for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
+                            for (int t2 = 1; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
                                 bool in_zoid = in_zoid_helper(pos, zoid_next_dt.lo[t2].data(), zoid_next_dt.hi[t2].data());
                                 if (in_zoid) {
                                     auto& recv_neighbors = recv_from_neighbors_many_cuts_next_dt[zoid.num];
