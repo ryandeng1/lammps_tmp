@@ -8593,7 +8593,7 @@ public:
                                              zoid.x_stencil_md[0][idx].z};
 
                             auto& zoid_next_dt = zoid_num_to_zoid_many_cuts_next_dt[zoid.num];
-                            for (int t2 = 1; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
+                            for (int t2 = 0; t2 < NUM_TIMESTEPS_IN_PARALLEL + 1; t2++) {
                                 bool in_zoid = in_zoid_helper(pos, zoid_next_dt.lo[t2].data(), zoid_next_dt.hi[t2].data());
                                 if (in_zoid) {
                                     auto& recv_neighbors = recv_from_neighbors_many_cuts_next_dt[zoid.num];
@@ -8613,7 +8613,6 @@ public:
                             }
                         }
 
-                        /*
                         permutation = sort_permutation(zoid.tag_stencil_md[0],
                            [&](const tagint &tag_a, const tagint &tag_b) {
                                int idx_a = tag_to_idx[tag_a];
@@ -8646,6 +8645,7 @@ public:
                                    return last_timestep_local_a < last_timestep_local_b;
                                }
 
+                               /*
                                const auto& border_zoids_a = idx_to_border_zoids[idx_a];
                                const auto& border_zoids_b = idx_to_border_zoids[idx_b];
 
@@ -8664,6 +8664,7 @@ public:
                                const auto& zoids_b = idx_to_zoids.at(idx_b);
 
                                return zoids_a < zoids_b;
+                               */
 
                                // USE LAMMPS SORTING
                                const auto &pos_a = zoid.x_stencil_md[0][idx_a];
@@ -8700,8 +8701,8 @@ public:
 
                                return ibin_a < ibin_b;
                            });
-                        */
 
+                        /*
                         permutation = sort_permutation(zoid.tag_stencil_md[0],
                            [&](const tagint &tag_a, const tagint &tag_b) {
                                 int idx_a = tag_to_idx[tag_a];
@@ -8759,8 +8760,8 @@ public:
 
                                 return ibin_a < ibin_b;
                            });
-
                         /*
+
                         permutation = sort_permutation(zoid.tag_stencil_md[0],
                            [&](const tagint &tag_a, const tagint &tag_b) {
                                int idx_a = tag_to_idx[tag_a];
