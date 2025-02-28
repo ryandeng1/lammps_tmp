@@ -7649,7 +7649,7 @@ public:
                     zoid.claimed_flags_stencil_md = new std::atomic_flag*[1];
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.force_partitions_per_timestep = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.atom_domains_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     // zoid.neighbor_list = new std::vector<int>*[1];
@@ -7713,7 +7713,7 @@ public:
                     zoid.claimed_flags_stencil_md = queues_many_cuts[coord.first][coord.second].claimed_flags_stencil_md;
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.force_partitions_per_timestep = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.atom_domains_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
@@ -7856,6 +7856,111 @@ public:
 
                     return num_neighbors_a < num_neighbors_b;
                 });
+            }
+        }
+    }
+
+    /*
+    // Domain definition
+    struct Domain {
+        std::vector<int> primary_atoms;    // Fully owned by this domain
+        std::vector<int> neutral_atoms;    // Atoms in neutral territory (shared)
+        std::vector<int> all_atoms;        // Union of primary and neutral
+        int domain_id;
+    };
+
+    // Atom ownership tracker
+    struct AtomInfo {
+        int primary_domain;                // Domain that owns this atom
+        bool is_neutral;                   // Whether in neutral territory
+        std::vector<int> neutral_domains;  // Domains that include this atom in neutral territory
+    };
+
+    template <bool curr_dt>
+    void SETUP_NEUTRAL_TERRITORY(queue_info& zoid) {
+        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            int num_domains = __cilkrts_get_nworkers();
+            auto& local_idxs = zoid.local_idxs_per_timestep[t];
+            int num_atoms = local_idxs.size();
+
+            std::vector<AtomInfo> atom_info;
+            std::vector<Domain> domains(num_domains);
+            atom_info.resize(num_atoms);
+
+            // Initialize atom info
+            for (int i = 0; i < num_atoms; i++) {
+                atom_info[i].primary_domain = -1;
+                atom_info[i].is_neutral = false;
+                atom_info[i].neutral_domains.clear();
+            }
+
+            for (int i = 0; i < num_atoms; i++) {
+                // Simple domain assignment - replace with better algorithm for production
+                int domain_id = i / num_domains;
+                // domain_id = std::max(0, std::min(domain_id, numDomains - 1));
+
+                domains[domain_id].primary_atoms.push_back(i);
+                domains[domain_id].all_atoms.push_back(i);
+                domains[domain_id].domain_id = domain_id;
+
+                atom_info[i].primary_domain = domain_id;
+            }
+
+            for (int domain_id = 0; domain_id < num_domains; domain_id++) {
+                for (int i: domains[domain_id].primary_atoms) {
+                    // Check all neighbors of primary atoms
+                    for (int j: zoid.neighbor_list[t][i]) {
+                        // If neighbor belongs to different domain, add to neutral territory
+                        if (atom_info[j].primary_domain != domain_id) {
+                            // Check if already in neutral territory of this domain
+                            bool already_in_neutral = false;
+                            for (int dom: atom_info[j].neutral_domains) {
+                                if (dom == domain_id) {
+                                    already_in_neutral = true;
+                                    break;
+                                }
+                            }
+
+                            if (!already_in_neutral) {
+                                domains[domain_id].neutral_atoms.push_back(j);
+                                domains[domain_id].all_atoms.push_back(j);
+
+                                atom_info[j].is_neutral = true;
+                                atom_info[j].neutral_domains.push_back(domain_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    */
+
+    template <bool curr_dt>
+    void SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE() {
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.atom_domains_per_timestep[t].resize(zoid.x_stencil_md[0].size());
+                    auto& local_idxs = zoid.local_idxs_per_timestep[t];
+                    std::set<int> local_idxs_set;
+                    local_idxs_set.insert(local_idxs.begin(), local_idxs.end());
+                    std::map<int, int> idx_to_local_idx;
+                    for (int i = 0; i < local_idxs.size(); i++) {
+                        idx_to_local_idx[local_idxs[i]] = i;
+                    }
+
+                    for (int idx = 0; idx < zoid.x_stencil_md[0].size(); idx++) {
+                        bool is_local = (local_idxs_set.find(idx) != local_idxs_set.end());
+                        if (is_local) {
+                            zoid.atom_domains_per_timestep[t][idx] = idx_to_local_idx.at(idx) / MODIFY_GRAINSIZE;
+                        } else {
+                            zoid.atom_domains_per_timestep[t][idx] = -1;
+                        }
+                    }
+                }
             }
         }
     }
@@ -9082,6 +9187,11 @@ public:
                     int neigh_idx = zoid_tag_to_idx[neigh_tag];
                     bool neigh_nlocal = (local_idxs_set.find(neigh_idx) != local_idxs_set.end());
                     if (neigh_nlocal) {
+                        /*
+                        if (neigh_idx > idx) {
+                            continue;
+                        }
+                        */
                         if (x[neigh_idx].z < ztmp) continue;
                         if (x[neigh_idx].z == ztmp) {
                             if (x[neigh_idx].y < ytmp) continue;
@@ -9340,6 +9450,11 @@ public:
 
                     bool neigh_nlocal = (local_idxs_set.find(neigh_idx) != local_idxs_set.end());
                     if (neigh_nlocal) {
+                        /*
+                        if (neigh_idx > idx) {
+                            continue;
+                        }
+                        */
                         if (x[neigh_idx].z < ztmp) continue;
                         if (x[neigh_idx].z == ztmp) {
                             if (x[neigh_idx].y < ytmp) continue;
@@ -14508,6 +14623,303 @@ public:
         }
     }
 
+    void BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS_NEUTRAL_TERRITORY_ESQUE(queue_info& zoid, int dep, int timestep) {
+        const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
+
+        auto pair = (PairLJCut*) force->pair;
+        auto bond = (BondFENE*) force->bond;
+
+        const auto& bond_list = zoid.bond_list[timestep];
+        const auto& neighbor_list = zoid.neighbor_list[timestep];
+
+        const double * _noalias const special_lj = force->special_lj;
+
+        // auto* spinlocks = next->spinlocks;
+        auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
+
+        const auto* cutsq = pair->cutsq;
+        const auto* offset = pair->offset;
+        const auto* lj1 = pair->lj1;
+        const auto* lj2 = pair->lj2;
+        const auto* lj3 = pair->lj3;
+        const auto* lj4 = pair->lj4;
+        auto newton_pair = force->newton_pair;
+
+        const auto* _noalias const sigma = bond->sigma;
+        const auto* _noalias const epsilon = bond->epsilon;
+        const auto* _noalias const r0 = bond->r0;
+        const auto* _noalias const k = bond->k;
+
+        const auto& atom_type = zoid.type_stencil_md[0];
+
+        const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
+        const int nlocal = local_idxs.size();
+
+        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        int num_workers = __cilkrts_get_nworkers();
+
+        auto* claimed = zoid.claimed_flags_stencil_md[0];
+
+        const auto& tags = zoid.tag_stencil_md[0];
+        const auto& atom_domains = zoid.atom_domains_per_timestep[timestep];
+
+        int chunks_per_worker = num_chunks / num_workers;
+        int chunk_size = MODIFY_GRAINSIZE;
+
+        // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
+        if (nlocal > MODIFY_GRAINSIZE) {
+            #pragma cilk grainsize MODIFY_GRAINSIZE
+            cilk_for (int idx = 0; idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                int my_domain = i / MODIFY_GRAINSIZE;
+
+                const int itype = atom_type[i];
+
+                // const int *_noalias const jlist = firstneigh[i];
+                const auto &jlist = neighbor_list[i];
+                const double *_noalias const cutsqi = cutsq[itype];
+                const double *_noalias const offseti = offset[itype];
+                const double *_noalias const lj1i = lj1[itype];
+                const double *_noalias const lj2i = lj2[itype];
+                const double *_noalias const lj3i = lj3[itype];
+                const double *_noalias const lj4i = lj4[itype];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                // int jnum = numneigh[i];
+                int jnum = jlist.size();
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    double evdwl = 0.0;
+                    // int j = jlist[jj];
+                    int j = jlist[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0 / rsq;
+                        double r6inv = r2inv * r2inv * r2inv;
+                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                        double fpair = factor_lj * forcelj * r2inv;
+
+                        fxtmp += delx * fpair;
+                        fytmp += dely * fpair;
+                        fztmp += delz * fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            int neigh_domain = atom_domains[j];
+                            if (my_domain == neigh_domain) {
+                                f[j].x -= delx * fpair;
+                                f[j].y -= dely * fpair;
+                                f[j].z -= delz * fpair;
+                            } else {
+                                spinlocks[j].lock();
+                                f[j].x -= delx * fpair;
+                                f[j].y -= dely * fpair;
+                                f[j].z -= delz * fpair;
+                                spinlocks[j].unlock();
+                            }
+                        }
+                    }
+                }
+
+                auto &lst_bonds = bond_list[i];
+                for (int j = 0; j < lst_bonds.size(); j++) {
+                    auto &bond_info = lst_bonds[j];
+                    int i2 = bond_info.first;
+                    int type = bond_info.second;
+
+                    double delx = xtmp - x[i2].x;
+                    double dely = ytmp - x[i2].y;
+                    double delz = ztmp - x[i2].z;
+
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    double r0sq = r0[type] * r0[type];
+                    double rlogarg = 1.0 - rsq / r0sq;
+
+                    if (rlogarg < 0.1) {
+                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                        //                                return;
+                        assert(false);
+
+                        rlogarg = 0.1;
+                    }
+
+                    double fbond = -k[type] / rlogarg;
+
+                    // force from LJ term
+                    double sr2 = 0.0;
+                    double sr6 = 0.0;
+
+                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                        sr2 = sigma[type] * sigma[type] / rsq;
+                        sr6 = sr2 * sr2 * sr2;
+                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                    }
+
+                    // energy
+
+                    // apply force to each of 2 atoms
+
+                    if (newton_pair || i < nlocal) {
+                        fxtmp += delx * fbond;
+                        fytmp += dely * fbond;
+                        fztmp += delz * fbond;
+                    }
+
+                    if (newton_pair || i2 < nlocal) {
+                        int neigh_domain = atom_domains[i2];
+                        if (neigh_domain == my_domain) {
+                            f[i2].x -= delx * fbond;
+                            f[i2].y -= dely * fbond;
+                            f[i2].z -= delz * fbond;
+                        } else {
+                            spinlocks[i2].lock();
+                            f[i2].x -= delx * fbond;
+                            f[i2].y -= dely * fbond;
+                            f[i2].z -= delz * fbond;
+                            spinlocks[i2].unlock();
+                        }
+                    }
+                }
+
+                spinlocks[i].lock();
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+                spinlocks[i].unlock();
+            }
+        } else {
+            for (int idx = 0; idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                const int itype = atom_type[i];
+
+                // const int *_noalias const jlist = firstneigh[i];
+                const auto &jlist = neighbor_list[i];
+                const double *_noalias const cutsqi = cutsq[itype];
+                const double *_noalias const offseti = offset[itype];
+                const double *_noalias const lj1i = lj1[itype];
+                const double *_noalias const lj2i = lj2[itype];
+                const double *_noalias const lj3i = lj3[itype];
+                const double *_noalias const lj4i = lj4[itype];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                // int jnum = numneigh[i];
+                int jnum = jlist.size();
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    double evdwl = 0.0;
+                    // int j = jlist[jj];
+                    int j = jlist[jj];
+                    double factor_lj = special_lj[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsqi[jtype]) {
+                        double r2inv = 1.0 / rsq;
+                        double r6inv = r2inv * r2inv * r2inv;
+                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                        double fpair = factor_lj * forcelj * r2inv;
+
+                        fxtmp += delx * fpair;
+                        fytmp += dely * fpair;
+                        fztmp += delz * fpair;
+
+                        if (newton_pair || j < nlocal) {
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                        }
+                    }
+                }
+
+                auto &lst_bonds = bond_list[i];
+                for (int j = 0; j < lst_bonds.size(); j++) {
+                    auto &bond_info = lst_bonds[j];
+                    int i2 = bond_info.first;
+                    int type = bond_info.second;
+
+                    double delx = xtmp - x[i2].x;
+                    double dely = ytmp - x[i2].y;
+                    double delz = ztmp - x[i2].z;
+
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    double r0sq = r0[type] * r0[type];
+                    double rlogarg = 1.0 - rsq / r0sq;
+
+                    if (rlogarg < 0.1) {
+                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                        //                                return;
+                        assert(false);
+
+                        rlogarg = 0.1;
+                    }
+
+                    double fbond = -k[type] / rlogarg;
+
+                    // force from LJ term
+                    double sr2 = 0.0;
+                    double sr6 = 0.0;
+
+                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                        sr2 = sigma[type] * sigma[type] / rsq;
+                        sr6 = sr2 * sr2 * sr2;
+                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                    }
+
+                    // energy
+
+                    // apply force to each of 2 atoms
+
+                    if (newton_pair || i < nlocal) {
+                        fxtmp += delx * fbond;
+                        fytmp += dely * fbond;
+                        fztmp += delz * fbond;
+                    }
+
+                    if (newton_pair || i2 < nlocal) {
+                        f[i2].x -= delx * fbond;
+                        f[i2].y -= dely * fbond;
+                        f[i2].z -= delz * fbond;
+                    }
+                }
+
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+            }
+        }
+    }
+
     inline void post_force_stencil_md_zoid_many_cuts_setup(queue_info& zoid, int timestep) {
         const auto& v = zoid.v_stencil_md[timestep % 1];
         auto& f = zoid.f_stencil_md[timestep % 1];
@@ -14719,196 +15131,6 @@ public:
         }
     }
 
-    template <bool curr_dt>
-    void CONSTRUCT_FORCE_PARTITIONS() {
-        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < my_queues[dep].size(); j++) {
-                auto& zoid = my_queues[dep][j];
-                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    auto& local_idxs = zoid.local_idxs_per_timestep[t];
-                    int nlocal = local_idxs.size();
-                    std::vector<std::vector<int>> all_neighbors(zoid.x_stencil_md[0].size());
-                    for (int idx = 0; idx < local_idxs.size(); idx++) {
-                        int i = local_idxs[idx];
-                        for (auto& n : zoid.neighbor_list[t][i]) {
-                            all_neighbors[i].push_back(n);
-                        }
-                        for (auto& n : zoid.bond_list[t][i]) {
-                            all_neighbors[i].push_back(n.first);
-                        }
-                    }
-
-                    auto partitions = prepareForcePartitioning(all_neighbors);
-                    zoid.force_partitions_per_timestep[t] = partitions;
-                    std::cout << "curr_dt: " << curr_dt << " zoid: " << zoid.num << " time: " << t << " nlocal: " << local_idxs.size() << " num partitions: " << partitions.size() << std::endl;
-                }
-            }
-        }
-    }
-
-    void BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS_PARTITIONS(queue_info& zoid, int dep, int timestep) {
-        const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
-        auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
-
-        auto pair = (PairLJCut*) force->pair;
-        auto bond = (BondFENE*) force->bond;
-
-        const auto& bond_list = zoid.bond_list[timestep];
-        const auto& neighbor_list = zoid.neighbor_list[timestep];
-
-        const double * _noalias const special_lj = force->special_lj;
-
-        // auto* spinlocks = next->spinlocks;
-        auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
-
-        const auto* cutsq = pair->cutsq;
-        const auto* offset = pair->offset;
-        const auto* lj1 = pair->lj1;
-        const auto* lj2 = pair->lj2;
-        const auto* lj3 = pair->lj3;
-        const auto* lj4 = pair->lj4;
-        auto newton_pair = force->newton_pair;
-
-        const auto* _noalias const sigma = bond->sigma;
-        const auto* _noalias const epsilon = bond->epsilon;
-        const auto* _noalias const r0 = bond->r0;
-        const auto* _noalias const k = bond->k;
-
-        const auto& atom_type = zoid.type_stencil_md[0];
-
-        const auto& force_partitions = zoid.force_partitions_per_timestep[timestep];
-
-        int nlocal = zoid.local_idxs_per_timestep[timestep].size();
-
-        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
-        int num_workers = __cilkrts_get_nworkers();
-
-        auto* claimed = zoid.claimed_flags_stencil_md[0];
-
-        const auto& tags = zoid.tag_stencil_md[0];
-
-        int chunks_per_worker = num_chunks / num_workers;
-        int chunk_size = MODIFY_GRAINSIZE;
-
-        for (int p = 0; p < force_partitions.size(); p++) {
-            auto& partition = force_partitions[p];
-            for (int idx = 0; idx < partition.size(); idx++) {
-                int i = partition[idx];
-                const int itype = atom_type[i];
-
-                // const int *_noalias const jlist = firstneigh[i];
-                const auto &jlist = neighbor_list[i];
-                const double *_noalias const cutsqi = cutsq[itype];
-                const double *_noalias const offseti = offset[itype];
-                const double *_noalias const lj1i = lj1[itype];
-                const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
-
-                double xtmp = x[i].x;
-                double ytmp = x[i].y;
-                double ztmp = x[i].z;
-                // int jnum = numneigh[i];
-                int jnum = jlist.size();
-
-                double fxtmp = 0.0;
-                double fytmp = 0.0;
-                double fztmp = 0.0;
-
-                for (int jj = 0; jj < jnum; jj++) {
-                    double evdwl = 0.0;
-                    // int j = jlist[jj];
-                    int j = jlist[jj];
-                    double factor_lj = special_lj[pair->sbmask(j)];
-                    j &= NEIGHMASK;
-
-                    double delx = xtmp - x[j].x;
-                    double dely = ytmp - x[j].y;
-                    double delz = ztmp - x[j].z;
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    int jtype = atom_type[j];
-
-                    if (rsq < cutsqi[jtype]) {
-                        double r2inv = 1.0 / rsq;
-                        double r6inv = r2inv * r2inv * r2inv;
-                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
-                        double fpair = factor_lj * forcelj * r2inv;
-
-                        fxtmp += delx * fpair;
-                        fytmp += dely * fpair;
-                        fztmp += delz * fpair;
-
-                        if (newton_pair || j < nlocal) {
-                            spinlocks[j].lock();
-                            f[j].x -= delx * fpair;
-                            f[j].y -= dely * fpair;
-                            f[j].z -= delz * fpair;
-                            spinlocks[j].unlock();
-                        }
-                    }
-                }
-
-                auto &lst_bonds = bond_list[i];
-                for (int j = 0; j < lst_bonds.size(); j++) {
-                    auto &bond_info = lst_bonds[j];
-                    int i2 = bond_info.first;
-                    int type = bond_info.second;
-
-                    double delx = xtmp - x[i2].x;
-                    double dely = ytmp - x[i2].y;
-                    double delz = ztmp - x[i2].z;
-
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    double r0sq = r0[type] * r0[type];
-                    double rlogarg = 1.0 - rsq / r0sq;
-
-                    if (rlogarg < 0.1) {
-                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                        //                                return;
-                        assert(false);
-
-                        rlogarg = 0.1;
-                    }
-
-                    double fbond = -k[type] / rlogarg;
-
-                    // force from LJ term
-                    double sr2 = 0.0;
-                    double sr6 = 0.0;
-
-                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                        sr2 = sigma[type] * sigma[type] / rsq;
-                        sr6 = sr2 * sr2 * sr2;
-                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                    }
-
-                    // energy
-
-                    // apply force to each of 2 atoms
-
-                    if (newton_pair || i < nlocal) {
-                        fxtmp += delx * fbond;
-                        fytmp += dely * fbond;
-                        fztmp += delz * fbond;
-                    }
-
-                    if (newton_pair || i2 < nlocal) {
-                        f[i2].x -= delx * fbond;
-                        f[i2].y -= dely * fbond;
-                        f[i2].z -= delz * fbond;
-                    }
-                }
-
-                f[i].x += fxtmp;
-                f[i].y += fytmp;
-                f[i].z += fztmp;
-            }
-        }
-    }
-
     /* End code for many zoids per dimension */
     void DELETE_ZOID_DATA_MANY_CUTS() {
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -14937,6 +15159,7 @@ public:
                 delete[] zoid.claimed_flags_stencil_md;
 
                 delete[] zoid.local_idxs_per_timestep;
+                delete[] zoid.atom_domains_per_timestep;
                 delete[] zoid.neighbor_list;
                 delete[] zoid.bond_list;
 
@@ -14982,6 +15205,7 @@ public:
                 }
 
                 delete[] zoid.local_idxs_per_timestep;
+                delete[] zoid.atom_domains_per_timestep;
                 delete[] zoid.neighbor_list;
                 delete[] zoid.bond_list;
 

@@ -5580,13 +5580,13 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     stencilMD->GET_SEND_STATISTICS<true>();
 
+    stencilMD->SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE<true>();
+    stencilMD->SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE<false>();
+
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<true>();
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<false>();
     stencilMD->INIT_DEP_TO_SEND_ZOIDS<true>();
     stencilMD->INIT_DEP_TO_SEND_ZOIDS<false>();
-
-    stencilMD->CONSTRUCT_FORCE_PARTITIONS<true>();
-    stencilMD->CONSTRUCT_FORCE_PARTITIONS<false>();
 
     std::vector<MPI_Request> send_r[NUM_DEPS];
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
@@ -5626,7 +5626,7 @@ void Verlet::setup_stencil_md_many_zoids() {
             stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SETUP(zoid, all_recv_requests[zoid_num]);
             if constexpr (EXPERIMENT == BOND_FENE) {
                 // stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
-                stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS_PARTITIONS(zoid, dep, 0);
+                stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS_NEUTRAL_TERRITORY_ESQUE(zoid, dep, 0);
             } else {
                 stencilMD->LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             }
