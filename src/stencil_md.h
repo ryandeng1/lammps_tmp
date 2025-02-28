@@ -8783,7 +8783,6 @@ public:
                                int idx_a = tag_to_idx[tag_a];
                                int idx_b = tag_to_idx[tag_b];
 
-                               /*
                                const auto& timesteps_local_a = idx_to_timesteps_local[idx_a];
                                const auto& timesteps_local_b = idx_to_timesteps_local[idx_b];
 
@@ -8810,7 +8809,6 @@ public:
                                if (last_timestep_local_a != last_timestep_local_b) {
                                    return last_timestep_local_a < last_timestep_local_b;
                                }
-                               */
 
                                /*
                                const auto& border_zoids_a = idx_to_border_zoids[idx_a];
