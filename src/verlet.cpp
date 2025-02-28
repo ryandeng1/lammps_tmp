@@ -5625,8 +5625,8 @@ void Verlet::setup_stencil_md_many_zoids() {
             assert(zoid_num % comm->nprocs == comm->me);
             stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SETUP(zoid, all_recv_requests[zoid_num]);
             if constexpr (EXPERIMENT == BOND_FENE) {
-                // stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
-                stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS_NEUTRAL_TERRITORY_ESQUE(zoid, dep, 0);
+                stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+                // stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS_NEUTRAL_TERRITORY_ESQUE(zoid, dep, 0);
             } else {
                 stencilMD->LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             }
