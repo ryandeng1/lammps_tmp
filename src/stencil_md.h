@@ -8783,6 +8783,7 @@ public:
                                int idx_a = tag_to_idx[tag_a];
                                int idx_b = tag_to_idx[tag_b];
 
+                               /*
                                const auto& timesteps_local_a = idx_to_timesteps_local[idx_a];
                                const auto& timesteps_local_b = idx_to_timesteps_local[idx_b];
 
@@ -8791,11 +8792,15 @@ public:
                                } else if (timesteps_local_b.size() == 0) {
                                    return true;
                                }
+                               */
 
+                               /*
                                if (timesteps_local_a.size() != timesteps_local_b.size()) {
                                    return timesteps_local_a.size() > timesteps_local_b.size();
                                }
+                               */
 
+                               /*
                                int first_timestep_local_a = timesteps_local_a[0];
                                int first_timestep_local_b = timesteps_local_b[0];
 
@@ -8809,6 +8814,7 @@ public:
                                if (last_timestep_local_a != last_timestep_local_b) {
                                    return last_timestep_local_a < last_timestep_local_b;
                                }
+                               */
 
                                /*
                                const auto& border_zoids_a = idx_to_border_zoids[idx_a];
@@ -14241,6 +14247,8 @@ public:
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = MODIFY_GRAINSIZE;
 
+        constexpr bool USE_LOCKS = false;
+
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
         if (nlocal > MODIFY_GRAINSIZE) {
             #pragma cilk grainsize MODIFY_GRAINSIZE
@@ -14292,11 +14300,17 @@ public:
                         fztmp += delz * fpair;
 
                         if (newton_pair || j < nlocal) {
-                            spinlocks[j].lock();
-                            f[j].x -= delx * fpair;
-                            f[j].y -= dely * fpair;
-                            f[j].z -= delz * fpair;
-                            spinlocks[j].unlock();
+                            if (USE_LOCKS) {
+                                spinlocks[j].lock();
+                                f[j].x -= delx * fpair;
+                                f[j].y -= dely * fpair;
+                                f[j].z -= delz * fpair;
+                                spinlocks[j].unlock();
+                            } else {
+                                __atomic_fetch_add(&f[j].x, -delx * fpair, __ATOMIC_RELAXED);
+                                __atomic_fetch_add(&f[j].y, -dely * fpair, __ATOMIC_RELAXED);
+                                __atomic_fetch_add(&f[j].z, -delz * fpair, __ATOMIC_RELAXED);
+                            }
                         }
                     }
                 }
@@ -14348,19 +14362,31 @@ public:
                     }
 
                     if (newton_pair || i2 < nlocal) {
-                        spinlocks[i2].lock();
-                        f[i2].x -= delx * fbond;
-                        f[i2].y -= dely * fbond;
-                        f[i2].z -= delz * fbond;
-                        spinlocks[i2].unlock();
+                        if (USE_LOCKS) {
+                            spinlocks[i2].lock();
+                            f[i2].x -= delx * fbond;
+                            f[i2].y -= dely * fbond;
+                            f[i2].z -= delz * fbond;
+                            spinlocks[i2].unlock();
+                        } else {
+                            __atomic_fetch_add(&f[i2].x, -delx * fbond, __ATOMIC_RELAXED);
+                            __atomic_fetch_add(&f[i2].y, -dely * fbond, __ATOMIC_RELAXED);
+                            __atomic_fetch_add(&f[i2].z, -delz * fbond, __ATOMIC_RELAXED);
+                        }
                     }
                 }
 
-                spinlocks[i].lock();
-                f[i].x += fxtmp;
-                f[i].y += fytmp;
-                f[i].z += fztmp;
-                spinlocks[i].unlock();
+                if (USE_LOCKS) {
+                    spinlocks[i].lock();
+                    f[i].x += fxtmp;
+                    f[i].y += fytmp;
+                    f[i].z += fztmp;
+                    spinlocks[i].unlock();
+                } else {
+                    __atomic_fetch_add(&f[i].x, fxtmp, __ATOMIC_RELAXED);
+                    __atomic_fetch_add(&f[i].y, fytmp, __ATOMIC_RELAXED);
+                    __atomic_fetch_add(&f[i].z, fztmp, __ATOMIC_RELAXED);
+                }
             }
 
             /*
@@ -14669,140 +14695,142 @@ public:
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
         if (nlocal > MODIFY_GRAINSIZE) {
-            #pragma cilk grainsize MODIFY_GRAINSIZE
-            cilk_for (int idx = 0; idx < nlocal; idx++) {
-                int i = local_idxs[idx];
+            #pragma cilk grainsize 1
+            cilk_for (int c = 0; c < num_chunks; c++) {
+                for (int idx = c * chunk_size; idx < (c + 1) * chunk_size && idx < nlocal; idx++) {
+                    int i = local_idxs[idx];
 
-                int my_domain = i / MODIFY_GRAINSIZE;
+                    int my_domain = atom_domains[i];
 
-                const int itype = atom_type[i];
+                    const int itype = atom_type[i];
 
-                // const int *_noalias const jlist = firstneigh[i];
-                const auto &jlist = neighbor_list[i];
-                const double *_noalias const cutsqi = cutsq[itype];
-                const double *_noalias const offseti = offset[itype];
-                const double *_noalias const lj1i = lj1[itype];
-                const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
+                    // const int *_noalias const jlist = firstneigh[i];
+                    const auto &jlist = neighbor_list[i];
+                    const double *_noalias const cutsqi = cutsq[itype];
+                    const double *_noalias const offseti = offset[itype];
+                    const double *_noalias const lj1i = lj1[itype];
+                    const double *_noalias const lj2i = lj2[itype];
+                    const double *_noalias const lj3i = lj3[itype];
+                    const double *_noalias const lj4i = lj4[itype];
 
-                double xtmp = x[i].x;
-                double ytmp = x[i].y;
-                double ztmp = x[i].z;
-                // int jnum = numneigh[i];
-                int jnum = jlist.size();
+                    double xtmp = x[i].x;
+                    double ytmp = x[i].y;
+                    double ztmp = x[i].z;
+                    // int jnum = numneigh[i];
+                    int jnum = jlist.size();
 
-                double fxtmp = 0.0;
-                double fytmp = 0.0;
-                double fztmp = 0.0;
+                    double fxtmp = 0.0;
+                    double fytmp = 0.0;
+                    double fztmp = 0.0;
 
-                for (int jj = 0; jj < jnum; jj++) {
-                    double evdwl = 0.0;
-                    // int j = jlist[jj];
-                    int j = jlist[jj];
-                    double factor_lj = special_lj[pair->sbmask(j)];
-                    j &= NEIGHMASK;
+                    for (int jj = 0; jj < jnum; jj++) {
+                        double evdwl = 0.0;
+                        // int j = jlist[jj];
+                        int j = jlist[jj];
+                        double factor_lj = special_lj[pair->sbmask(j)];
+                        j &= NEIGHMASK;
 
-                    double delx = xtmp - x[j].x;
-                    double dely = ytmp - x[j].y;
-                    double delz = ztmp - x[j].z;
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    int jtype = atom_type[j];
+                        double delx = xtmp - x[j].x;
+                        double dely = ytmp - x[j].y;
+                        double delz = ztmp - x[j].z;
+                        double rsq = delx * delx + dely * dely + delz * delz;
+                        int jtype = atom_type[j];
 
-                    if (rsq < cutsqi[jtype]) {
-                        double r2inv = 1.0 / rsq;
-                        double r6inv = r2inv * r2inv * r2inv;
-                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
-                        double fpair = factor_lj * forcelj * r2inv;
+                        if (rsq < cutsqi[jtype]) {
+                            double r2inv = 1.0 / rsq;
+                            double r6inv = r2inv * r2inv * r2inv;
+                            double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                            double fpair = factor_lj * forcelj * r2inv;
 
-                        fxtmp += delx * fpair;
-                        fytmp += dely * fpair;
-                        fztmp += delz * fpair;
+                            fxtmp += delx * fpair;
+                            fytmp += dely * fpair;
+                            fztmp += delz * fpair;
 
-                        if (newton_pair || j < nlocal) {
-                            int neigh_domain = atom_domains[j];
-                            if (my_domain == neigh_domain) {
-                                f[j].x -= delx * fpair;
-                                f[j].y -= dely * fpair;
-                                f[j].z -= delz * fpair;
-                            } else {
-                                spinlocks[j].lock();
-                                f[j].x -= delx * fpair;
-                                f[j].y -= dely * fpair;
-                                f[j].z -= delz * fpair;
-                                spinlocks[j].unlock();
+                            if (newton_pair || j < nlocal) {
+                                int neigh_domain = atom_domains[j];
+                                if (my_domain == neigh_domain) {
+                                    f[j].x -= delx * fpair;
+                                    f[j].y -= dely * fpair;
+                                    f[j].z -= delz * fpair;
+                                } else {
+                                    spinlocks[j].lock();
+                                    f[j].x -= delx * fpair;
+                                    f[j].y -= dely * fpair;
+                                    f[j].z -= delz * fpair;
+                                    spinlocks[j].unlock();
+                                }
                             }
                         }
                     }
-                }
 
-                auto &lst_bonds = bond_list[i];
-                for (int j = 0; j < lst_bonds.size(); j++) {
-                    auto &bond_info = lst_bonds[j];
-                    int i2 = bond_info.first;
-                    int type = bond_info.second;
+                    auto &lst_bonds = bond_list[i];
+                    for (int j = 0; j < lst_bonds.size(); j++) {
+                        auto &bond_info = lst_bonds[j];
+                        int i2 = bond_info.first;
+                        int type = bond_info.second;
 
-                    double delx = xtmp - x[i2].x;
-                    double dely = ytmp - x[i2].y;
-                    double delz = ztmp - x[i2].z;
+                        double delx = xtmp - x[i2].x;
+                        double dely = ytmp - x[i2].y;
+                        double delz = ztmp - x[i2].z;
 
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    double r0sq = r0[type] * r0[type];
-                    double rlogarg = 1.0 - rsq / r0sq;
+                        double rsq = delx * delx + dely * dely + delz * delz;
+                        double r0sq = r0[type] * r0[type];
+                        double rlogarg = 1.0 - rsq / r0sq;
 
-                    if (rlogarg < 0.1) {
-                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                        //                                return;
-                        assert(false);
+                        if (rlogarg < 0.1) {
+                            error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                           update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                            //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                            //                                return;
+                            assert(false);
 
-                        rlogarg = 0.1;
-                    }
+                            rlogarg = 0.1;
+                        }
 
-                    double fbond = -k[type] / rlogarg;
+                        double fbond = -k[type] / rlogarg;
 
-                    // force from LJ term
-                    double sr2 = 0.0;
-                    double sr6 = 0.0;
+                        // force from LJ term
+                        double sr2 = 0.0;
+                        double sr6 = 0.0;
 
-                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                        sr2 = sigma[type] * sigma[type] / rsq;
-                        sr6 = sr2 * sr2 * sr2;
-                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                    }
+                        if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                            sr2 = sigma[type] * sigma[type] / rsq;
+                            sr6 = sr2 * sr2 * sr2;
+                            fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                        }
 
-                    // energy
+                        // energy
 
-                    // apply force to each of 2 atoms
+                        // apply force to each of 2 atoms
 
-                    if (newton_pair || i < nlocal) {
-                        fxtmp += delx * fbond;
-                        fytmp += dely * fbond;
-                        fztmp += delz * fbond;
-                    }
+                        if (newton_pair || i < nlocal) {
+                            fxtmp += delx * fbond;
+                            fytmp += dely * fbond;
+                            fztmp += delz * fbond;
+                        }
 
-                    if (newton_pair || i2 < nlocal) {
-                        int neigh_domain = atom_domains[i2];
-                        if (neigh_domain == my_domain) {
-                            f[i2].x -= delx * fbond;
-                            f[i2].y -= dely * fbond;
-                            f[i2].z -= delz * fbond;
-                        } else {
-                            spinlocks[i2].lock();
-                            f[i2].x -= delx * fbond;
-                            f[i2].y -= dely * fbond;
-                            f[i2].z -= delz * fbond;
-                            spinlocks[i2].unlock();
+                        if (newton_pair || i2 < nlocal) {
+                            int neigh_domain = atom_domains[i2];
+                            if (neigh_domain == my_domain) {
+                                f[i2].x -= delx * fbond;
+                                f[i2].y -= dely * fbond;
+                                f[i2].z -= delz * fbond;
+                            } else {
+                                spinlocks[i2].lock();
+                                f[i2].x -= delx * fbond;
+                                f[i2].y -= dely * fbond;
+                                f[i2].z -= delz * fbond;
+                                spinlocks[i2].unlock();
+                            }
                         }
                     }
-                }
 
-                spinlocks[i].lock();
-                f[i].x += fxtmp;
-                f[i].y += fytmp;
-                f[i].z += fztmp;
-                spinlocks[i].unlock();
+                    spinlocks[i].lock();
+                    f[i].x += fxtmp;
+                    f[i].y += fytmp;
+                    f[i].z += fztmp;
+                    spinlocks[i].unlock();
+                }
             }
         } else {
             for (int idx = 0; idx < nlocal; idx++) {
