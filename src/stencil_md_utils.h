@@ -575,6 +575,7 @@ struct queue_info {
 
   std::vector<std::vector<int>>* neighbor_list;
   std::vector<std::vector<std::pair<int, int>>>* bond_list;
+  std::vector<std::tuple<int, int, int>>* bond_list_modified;
 
   // TODO:
   std::vector<int>* send_force_idxs_double_buffering_flattened;

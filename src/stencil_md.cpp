@@ -450,6 +450,7 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.atom_domains_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 // zoid.neighbor_list = new std::vector<int>*[1];
                 // zoid.bond_list = new std::vector<std::pair<int, int>>*[1];
 
@@ -669,6 +670,8 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.atom_domains_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
                 // zoid.neighbor_list = lmp->queues[coord.first][coord.second].neighbor_list;
                 // zoid.bond_list = lmp->queues[coord.first][coord.second].bond_list;
 
