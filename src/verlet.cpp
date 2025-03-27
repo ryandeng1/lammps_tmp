@@ -79,6 +79,10 @@ static cilk::opadd_reducer<int64_t> pre_recv_time = 0;
 
 constexpr bool USE_DOUBLE_BUFFERING = true;
 
+static std::vector<std::tuple<std::string, std::string, int, uint64_t>> stencil_md_timings;
+static spinlock m;
+static constexpr bool TIME_STENCILMD_STATES = false;
+
 /* ---------------------------------------------------------------------- */
 
 Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
@@ -5783,6 +5787,8 @@ void Verlet::setup_minimal(int flag) {
 ------------------------------------------------------------------------- */
 
 void Verlet::run(int n) {
+    stencil_md_timings.reserve(1024 * 10);
+
     // TODO: This is meant to maximize spending time ONLY on what I am tracking
     eflag = 0; vflag = 0;
 
@@ -6315,6 +6321,14 @@ void Verlet::run(int n) {
     std::stringstream output_stream;
     output_stream << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << " total duration: " << total_duration_stencil_md << std::endl;
     std::cout << output_stream.str();
+
+    if (comm->me == 0) {
+        for (auto& tup : stencil_md_timings) {
+	    std::stringstream s_w;
+	    s_w << std::get<0>(tup) << "," << std::get<1>(tup) << "," << std::get<2>(tup) << "," << std::get<3>(tup) << std::endl;
+	    std::cout << s_w.str();
+        }
+    }
 
     int64_t stencil_md_total_send_comm_duration = 0;
     int64_t stencil_md_total_recv_comm_duration = 0;
@@ -7767,9 +7781,12 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm(int starting_timestep, int de
                                                    double** test_f, double** test_x, double** test_v) {
     int zoid_num = zoid.num;
     int num_neighbors_receive_self = stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY<curr_dt>(zoid, start_t, end_t);
+
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
                                            start_t - 1, end_t - 1,
                                            test_f, test_x, test_v);
+
+
     stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep,
                                                         start_t, end_t,
                                                         send_r[zoid_num]);
@@ -7783,13 +7800,38 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm_new_comm(int starting_timeste
                                                             double** test_f, double** test_x, double** test_v) {
     int zoid_num = zoid.num;
     int num_neighbors_receive_self = stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY<curr_dt>(zoid, start_t, end_t);
+
+    if (TIME_STENCILMD_STATES) {
+	struct timeval tv_compute_start;
+	gettimeofday(&tv_compute_start, NULL);
+	m.lock();
+	stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_start.tv_usec));
+	m.unlock();
+    }
+
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
                                            start_t - 1, end_t - 1,
                                            test_f, test_x, test_v);
+
+    if (TIME_STENCILMD_STATES) {
+	struct timeval tv_compute_end;
+	gettimeofday(&tv_compute_end, NULL);
+	m.lock();
+	stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_usec));
+	stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_usec));
+	m.unlock();
+    }
+
     stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED<curr_dt>(zoid, dep,
                                                                 start_t, end_t,
                                                                 send_r[zoid_num]);
-
+    if (TIME_STENCILMD_STATES) {
+	struct timeval tv_send_end;
+	gettimeofday(&tv_send_end, NULL);
+	m.lock();
+	stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_usec));
+	m.unlock();
+    }
 }
 
 template <bool curr_dt>
@@ -8120,6 +8162,16 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
             cilk_scope {
                 for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                     int zoid_num = my_queues[dep + 1][j].num;
+		    if (TIME_STENCILMD_STATES) {
+			if (!my_queues[dep + 1][j].no_comm_needed) {
+			    struct timeval tv_recv_start;
+			    gettimeofday(&tv_recv_start, NULL);
+			    m.lock();
+			    stencil_md_timings.push_back(std::make_tuple("RECEIVE", "START", zoid_num, tv_recv_start.tv_usec));
+			    m.unlock();
+			}
+		    }
+
                     cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
                 }
 
@@ -8138,6 +8190,15 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
                 if (dep < NUM_DEPS - 1) {
                     for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                         int zoid_num = my_queues[dep + 1][j].num;
+		    	if (TIME_STENCILMD_STATES) {
+			    if (!my_queues[dep + 1][j].no_comm_needed) {
+				struct timeval tv_recv_start;
+				gettimeofday(&tv_recv_start, NULL);
+				m.lock();
+				stencil_md_timings.push_back(std::make_tuple("RECEIVE", "START", zoid_num, tv_recv_start.tv_usec));
+				m.unlock();
+			    }
+			}
                         cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
                     }
 
@@ -8173,14 +8234,50 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
                 cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto &zoid = my_queues[dep][j];
                     if (!zoid.no_comm_needed) {
-                        stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt>(zoid, recv_r[zoid.num], tmp_start_t,
-                                                                       tmp_end_t);
+		    	if (TIME_STENCILMD_STATES) {
+			    struct timeval tv_recv_end;
+			    gettimeofday(&tv_recv_end, NULL);
+			    m.lock();
+			    stencil_md_timings.push_back(std::make_tuple("RECEIVE", "END", zoid.num, tv_recv_end.tv_usec));
+			    stencil_md_timings.push_back(std::make_tuple("WAIT", "START", zoid.num, tv_recv_end.tv_usec));
+			    m.unlock();
+			}
+
+                        stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt>(zoid, recv_r[zoid.num], tmp_start_t, tmp_end_t);
+
+			if (TIME_STENCILMD_STATES) {
+			    struct timeval tv_wait_end;
+			    gettimeofday(&tv_wait_end, NULL);
+			    m.lock();
+			    stencil_md_timings.push_back(std::make_tuple("WAIT", "END", zoid.num, tv_wait_end.tv_usec));
+			    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_wait_end.tv_usec));
+			    m.unlock();
+			}
+
                         run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
                                                                tmp_start_t - 1, tmp_end_t - 1,
                                                                test_f, test_x, test_v);
+
+			if (TIME_STENCILMD_STATES) {
+			    struct timeval tv_compute_end;
+			    gettimeofday(&tv_compute_end, NULL);
+			    m.lock();
+			    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_usec));
+			    stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_usec));
+			    m.unlock();
+			}
+
                         stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED<curr_dt>(zoid, dep,
                                                                                     tmp_start_t, tmp_end_t,
                                                                                     send_r[zoid.num]);
+
+			if (TIME_STENCILMD_STATES) {
+			    struct timeval tv_send_end;
+			    gettimeofday(&tv_send_end, NULL);
+			    m.lock();
+			    stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_usec));
+			    m.unlock();
+			}
                     }
                 }
             }
