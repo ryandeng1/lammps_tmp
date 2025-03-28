@@ -111,18 +111,21 @@ class Verlet : public Integrate {
   void unpack_self_wrapper(int starting_timestep, int dep, queue_info& zoid,
                            int start_t, int end_t, std::atomic<int>& counter,
                            std::vector<MPI_Request>* send_r,
-                           double** test_f, double** test_x, double** test_v);
+                           double** test_f, double** test_x, double** test_v,
+                           std::vector<spinlock>& spinlocks);
 
   template <bool curr_dt>
   void unpack_other_wrapper(int starting_timestep, int dep, queue_info& zoid,
                             int recv_zoid_num,
                             int start_t, int end_t, std::atomic<int>& counter,
                             std::vector<MPI_Request>* send_r,
-                            double** test_f, double** test_x, double** test_v);
+                            double** test_f, double** test_x, double** test_v,
+                            std::vector<spinlock>& spinlocks);
 
   template <bool curr_dt>
   void run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
                                      double** test_f, double** test_x, double** test_v);
+
   template <bool curr_dt>
   void run_stencil_md_many_cuts_helper_dep(int starting_timestep, int dep,
                                            std::vector<MPI_Request>* recv_requests,
@@ -134,12 +137,14 @@ class Verlet : public Integrate {
   void run_stencil_md_many_cuts_helper(int starting_timestep, double** test_f, double** test_x, double** test_v);
 
   template <bool curr_dt>
-  void run_stencil_md_many_cuts_waitany(int starting_timestep, double** test_f, double** test_x, double** test_v);
+  void run_stencil_md_many_cuts_waitany(int starting_timestep, double** test_f, double** test_x, double** test_v,
+                                        std::vector<spinlock>& spinlocks);
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_new_comm(int starting_timestep, double** test_f, double** test_x, double** test_v);
 
-  void run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v);
+  void run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v,
+                                std::vector<spinlock>& spinlocks);
 
   template <bool curr_dt>
   void run_stencil_md_zoid_double_buffering(int start_timestep, int start_eval, int end_eval, int zoid_num,

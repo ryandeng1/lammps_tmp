@@ -8217,8 +8217,8 @@ public:
             for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
                 auto& zoid = my_queues_many_cuts[dep][j];
                 int zoid_num = zoid.num;
-                zoid_to_stream_num[zoid_num] = stream_idx;
-                assert(stream_idx < NUM_STREAMS);
+                zoid_to_stream_num[zoid_num] = stream_idx % NUM_STREAMS;
+                // assert(stream_idx < NUM_STREAMS);
                 stream_idx++;
             }
         }
@@ -8229,8 +8229,8 @@ public:
             for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
                 auto& zoid = my_queues_many_cuts_next_dt[dep][j];
                 int zoid_num = zoid.num;
-                zoid_to_stream_num_next_dt[zoid_num] = stream_idx;
-                assert(stream_idx < NUM_STREAMS);
+                zoid_to_stream_num_next_dt[zoid_num] = stream_idx % NUM_STREAMS;
+                // assert(stream_idx < NUM_STREAMS);
                 stream_idx++;
             }
         }
@@ -8506,7 +8506,7 @@ public:
         for (int dep = 1; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
                 auto& zoid = queues[dep][j];
-                if (zoid.num % comm->nprocs == comm->me && zoid.no_comm_needed) {
+                if (zoid.num % comm->nprocs == comm->me) {
                     continue;
                 }
 
