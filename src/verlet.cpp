@@ -7954,7 +7954,7 @@ void Verlet::run_stencil_md_many_cuts_waitany(int starting_timestep, double **te
         for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
             assert(zoid_num % comm->nprocs == comm->me);
-            // stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY<curr_dt>(dep, zoid_num, recv_r[dep]);
+            stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY<curr_dt>(dep, zoid_num, recv_r[dep]);
         }
     }
 
@@ -7974,6 +7974,7 @@ void Verlet::run_stencil_md_many_cuts_waitany(int starting_timestep, double **te
         }
 
         cilk_scope {
+            /*
             if (dep < NUM_DEPS - 1) {
                 for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                     auto& zoid = my_queues[dep + 1][j];
@@ -7981,6 +7982,7 @@ void Verlet::run_stencil_md_many_cuts_waitany(int starting_timestep, double **te
                     cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY<curr_dt>(dep + 1, zoid_num, recv_r[dep + 1]);
                 }
             }
+            */
 
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 auto& zoid = my_queues[dep][j];
