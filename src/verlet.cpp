@@ -81,8 +81,10 @@ static cilk::opadd_reducer<int64_t> pre_recv_time = 0;
 constexpr bool USE_DOUBLE_BUFFERING = true;
 
 static std::vector<std::tuple<std::string, std::string, int, uint64_t>> stencil_md_timings;
+static std::vector<std::tuple<std::string, std::string, int, uint64_t>> lammps_timings;
 static spinlock m;
 static constexpr bool TIME_STENCILMD_STATES = false;
+static constexpr bool TIME_LAMMPS_STATES = false;
 
 /* ---------------------------------------------------------------------- */
 
@@ -5788,7 +5790,13 @@ void Verlet::setup_minimal(int flag) {
 ------------------------------------------------------------------------- */
 
 void Verlet::run(int n) {
-    stencil_md_timings.reserve(1024 * 10);
+    if (TIME_STENCILMD_STATES) {
+        stencil_md_timings.reserve(1024 * 10);
+    }
+
+    if (TIME_LAMMPS_STATES) {
+	lammps_timings.reserve(3 * n);
+    }
 
     // TODO: This is meant to maximize spending time ONLY on what I am tracking
     eflag = 0; vflag = 0;
@@ -5923,7 +5931,21 @@ void Verlet::run(int n) {
         // end stencil md code
 
         // auto begin_m = std::chrono::high_resolution_clock::now();
+	if (TIME_LAMMPS_STATES) {
+	    struct timeval tv_compute_start;
+	    gettimeofday(&tv_compute_start, NULL);
+	    lammps_timings.push_back(std::make_tuple("COMPUTE", "START", comm->me, tv_compute_start.tv_usec));
+	}
+
         modify->initial_integrate(vflag);
+
+	if (TIME_LAMMPS_STATES) {
+	    struct timeval tv_compute_end;
+	    gettimeofday(&tv_compute_end, NULL);
+	    lammps_timings.push_back(std::make_tuple("COMPUTE", "END", comm->me, tv_compute_end.tv_usec));
+	    lammps_timings.push_back(std::make_tuple("COMM", "START", comm->me, tv_compute_end.tv_usec));
+	}
+
         // auto end_m = std::chrono::high_resolution_clock::now();
         // auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
         // lammps_modify_initial_integrate_duration += duration_m;
@@ -5947,6 +5969,11 @@ void Verlet::run(int n) {
             // lammps_forward_comm_duration += duration;
             // lammps_forward_comm_times.push_back(duration);
             timer->stamp(Timer::COMM);
+	    if (TIME_LAMMPS_STATES) {
+		struct timeval tv_comm_end;
+		gettimeofday(&tv_comm_end, NULL);
+		lammps_timings.push_back(std::make_tuple("COMM", "END", comm->me, tv_comm_end.tv_usec));
+	    }
         } else {
             assert(false);
             if (n_pre_exchange) {
@@ -5988,6 +6015,12 @@ void Verlet::run(int n) {
         // important for pair to come before bonded contributions
         // since some bonded potentials tally pairwise energy/virial
         // and Pair:ev_tally() needs to be called before any tallying
+
+	if (TIME_LAMMPS_STATES) {
+	    struct timeval tv_compute_start;
+	    gettimeofday(&tv_compute_start, NULL);
+	    lammps_timings.push_back(std::make_tuple("COMPUTE", "START", comm->me, tv_compute_start.tv_usec));
+	}
 
         force_clear();
 
@@ -6062,6 +6095,13 @@ void Verlet::run(int n) {
             timer->stamp(Timer::MODIFY);
         }
 
+	if (TIME_LAMMPS_STATES) {
+	    struct timeval tv_compute_end;
+	    gettimeofday(&tv_compute_end, NULL);
+	    lammps_timings.push_back(std::make_tuple("COMPUTE", "END", comm->me, tv_compute_end.tv_usec));
+	    lammps_timings.push_back(std::make_tuple("COMM", "START", comm->me, tv_compute_end.tv_usec));
+	}
+
         // reverse communication of forces
         if (force->newton) {
             // auto begin = std::chrono::high_resolution_clock::now();
@@ -6072,6 +6112,11 @@ void Verlet::run(int n) {
             // lammps_reverse_comm_duration += duration;
             // lammps_reverse_comm_times.push_back(duration);
             timer->stamp(Timer::COMM);
+	    if (TIME_LAMMPS_STATES) {
+		struct timeval tv_comm_end;
+		gettimeofday(&tv_comm_end, NULL);
+		lammps_timings.push_back(std::make_tuple("COMM", "END", comm->me, tv_comm_end.tv_usec));
+	    }
         }
 
         // force modifications, final time integration, diagnostics
@@ -6157,6 +6202,14 @@ void Verlet::run(int n) {
                   << " total modify pre force duration: " << total_modify_pre_force_duration
                   << " total modify post force duration: " << total_modify_post_force_duration
                   << RESET_COLOR << std::endl;
+    }
+
+    if (comm->me == 0) {
+        for (auto& tup : lammps_timings) {
+	    std::stringstream s_w;
+	    s_w << std::get<0>(tup) << "," << std::get<1>(tup) << "," << std::get<2>(tup) << "," << std::get<3>(tup) << std::endl;
+	    std::cout << s_w.str();
+        }
     }
 
     /*
@@ -7925,9 +7978,7 @@ void Verlet::run_stencil_md_many_cuts_waitany(int starting_timestep, double **te
                 for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                     auto& zoid = my_queues[dep + 1][j];
                     int zoid_num = zoid.num;
-                    if (!zoid.no_comm_needed) {
-                        cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY<curr_dt>(dep + 1, zoid_num, recv_r[dep + 1]);
-                    }
+                    cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY<curr_dt>(dep + 1, zoid_num, recv_r[dep + 1]);
                 }
             }
 
