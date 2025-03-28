@@ -112,7 +112,7 @@ class Verlet : public Integrate {
                            int start_t, int end_t, std::atomic<int>& counter,
                            std::vector<MPI_Request>* send_r,
                            double** test_f, double** test_x, double** test_v,
-                           std::vector<spinlock>& spinlocks);
+                           std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
   void unpack_other_wrapper(int starting_timestep, int dep, queue_info& zoid,
@@ -120,7 +120,7 @@ class Verlet : public Integrate {
                             int start_t, int end_t, std::atomic<int>& counter,
                             std::vector<MPI_Request>* send_r,
                             double** test_f, double** test_x, double** test_v,
-                            std::vector<spinlock>& spinlocks);
+                            std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
   void run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
@@ -138,13 +138,13 @@ class Verlet : public Integrate {
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_waitany(int starting_timestep, double** test_f, double** test_x, double** test_v,
-                                        std::vector<spinlock>& spinlocks);
+                                        std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_new_comm(int starting_timestep, double** test_f, double** test_x, double** test_v);
 
   void run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v,
-                                std::vector<spinlock>& spinlocks);
+                                std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
   void run_stencil_md_zoid_double_buffering(int start_timestep, int start_eval, int end_eval, int zoid_num,
