@@ -7267,9 +7267,29 @@ public:
 
         assert(dep0_zoids.size() % comm->nprocs == 0);
 
-        for (int i = 0; i < dep0_zoids.size(); i++) {
-            int proc = i / (dep0_zoids.size() / comm->nprocs);
-            proc_to_zoids[proc].push_back(dep0_zoids[i]);
+        if (NUM_ZOIDS_MANY_CUTS % comm->nprocs == 0) {
+            for (int i = 0; i < dep0_zoids.size(); i++) {
+                int proc = i / (dep0_zoids.size() / comm->nprocs);
+                proc_to_zoids[proc].push_back(dep0_zoids[i]);
+            }
+        } else {
+            int base = dep0_zoids.size() / comm->nprocs;
+            int rem = dep0_zoids.size() % comm->nprocs;
+            int current = 0;
+            for (int i = 0; i < comm->nprocs; i++) {
+                // Groups 0 to rem-1 get an extra element
+                int groupSize = base + (i < rem ? 1 : 0);
+                for (int j = 0; j < groupSize; j++) {
+                    proc_to_zoids[i].push_back(dep0_zoids[current]);  // Elements numbered from 1 to n
+                    current++;
+                }
+            }
+            /*
+            for (int i = 0; i < dep0_zoids.size(); i++) {
+                int proc = i / (dep0_zoids.size() / comm->nprocs);
+                proc_to_zoids[proc].push_back(dep0_zoids[i]);
+            }
+            */
         }
 
         if (comm->me == 0) {
