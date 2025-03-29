@@ -92,7 +92,7 @@ int main(int argc, char **argv)
             int num_nodes = world_size / num_processes_per_node;
             int num_processes_per_socket = num_processes_per_node / 2;
 
-            int rank_within_node = rank % num_nodes;
+            int rank_within_node = rank % num_processes_per_node;
 
             int start;
             if (rank_within_node >= num_processes_per_socket) {
