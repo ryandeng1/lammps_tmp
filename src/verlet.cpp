@@ -6354,8 +6354,8 @@ void Verlet::run(int n) {
     */
 
     auto begin = std::chrono::high_resolution_clock::now();
-    std::vector<std::atomic_flag> zoid_claimed(NUM_ZOIDS);
-    for (int i = 0; i < NUM_ZOIDS; i++) {
+    std::vector<std::atomic_flag> zoid_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
+    for (int i = 0; i < stencilMD->NUM_ZOIDS_MANY_CUTS; i++) {
         zoid_claimed[i].clear();
     }
     run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
