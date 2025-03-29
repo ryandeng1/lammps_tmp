@@ -89,22 +89,24 @@ int main(int argc, char **argv)
             constexpr int NUM_CORES_PER_NODE = 24 * 2;
 
             int num_processes_per_node = NUM_CORES_PER_NODE / (nworkers + 1);
+            int num_nodes = world_size / num_processes_per_node;
             int num_processes_per_socket = num_processes_per_node / 2;
 
-            for (int i = 0; i < num_processes_per_node; i++) {
-                int start;
-                if (i >= num_processes_per_socket) {
-                    start = (nworkers + 1) * i;
-                } else {
-                    start = (nworkers + 1) * i + NUM_CORES_PER_SOCKET;
-                }
+            int rank_within_node = rank % num_nodes;
 
-                for (int w = 0; w < nworkers; w++) {
-                    CPU_ZERO(&cpusets[w]);
-                    CPU_SET(start + w, &cpusets[w]);
-                }
+            int start;
+            if (rank_within_node >= num_processes_per_socket) {
+                start = (rank_within_node - num_processes_per_socket) * (nworkers + 1) + NUM_CORES_PER_SOCKET;
+            } else {
+                start = rank_within_node * (nworkers + 1);
             }
 
+            for (int w = 0; w < nworkers; w++) {
+                CPU_ZERO(&cpusets[w]);
+                CPU_SET(start + w, &cpusets[w]);
+            }
+
+            set_worker_affinity(nworkers, cpusets, calling_thread);
             delete[] cpusets;
         }
 
