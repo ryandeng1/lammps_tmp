@@ -82,6 +82,33 @@ int main(int argc, char **argv)
 
             int nworkers = __cilkrts_get_nworkers();
 
+            // assume each process gets 1 progress thread
+
+            auto* cpusets = new cpu_set_t[nworkers];
+            constexpr int NUM_CORES_PER_SOCKET = 24;
+            constexpr int NUM_CORES_PER_NODE = 24 * 2;
+
+            int num_processes_per_node = NUM_CORES_PER_NODE / (nworkers + 1);
+            int num_processes_per_socket = num_processes_per_node / 2;
+
+            for (int i = 0; i < num_processes_per_node; i++) {
+                int start;
+                if (i >= num_processes_per_socket) {
+                    start = (nworkers + 1) * i;
+                } else {
+                    start = (nworkers + 1) * i + NUM_CORES_PER_SOCKET;
+                }
+
+                for (int w = 0; w < nworkers; w++) {
+                    CPU_ZERO(&cpusets[w]);
+                    CPU_SET(start + w, &cpusets[w]);
+                }
+            }
+
+            delete[] cpusets;
+        }
+
+            /*
             if (world_size == 16) {
                 auto* cpusets = new cpu_set_t[nworkers];
 
@@ -336,6 +363,7 @@ int main(int argc, char **argv)
 
             delete[] cpusets;
         }
+        */
     }
 #endif
 
