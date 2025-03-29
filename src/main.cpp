@@ -101,10 +101,14 @@ int main(int argc, char **argv)
                 start = rank_within_node * (nworkers + 1);
             }
 
+            std::stringstream workers_str;
             for (int w = 0; w < nworkers; w++) {
                 CPU_ZERO(&cpusets[w]);
                 CPU_SET(start + w, &cpusets[w]);
+                workers_str << start + w << " ";
             }
+
+            std::cout << "rank: " << rank << " workers: " << workers_str.str() << std::endl;
 
             set_worker_affinity(nworkers, cpusets, calling_thread);
             delete[] cpusets;
