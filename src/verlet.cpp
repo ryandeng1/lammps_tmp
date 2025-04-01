@@ -5587,6 +5587,9 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     stencilMD->GET_SEND_STATISTICS<true>();
 
+    stencilMD->GET_RECV_STATISTICS<true>();
+    stencilMD->GET_RECV_STATISTICS<false>();
+
     stencilMD->SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE<true>();
     stencilMD->SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE<false>();
 
