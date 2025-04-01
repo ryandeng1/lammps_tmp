@@ -46,6 +46,8 @@ using namespace LAMMPS_NS;
 #define BUFMIN 1024
 #define BIG 1.0e20
 
+static constexpr bool TRACK_LAMMPS_DATA = true;
+
 /* ---------------------------------------------------------------------- */
 
 CommBrick::CommBrick(LAMMPS *lmp) :
@@ -748,7 +750,7 @@ void CommBrick::forward_comm(int /*dummy*/)
   // n_ghost + ___ (we fill in the last ___)
   //
 
-  int num_send = 0;
+  int num_recv_mpi = 0;
 
   for (int iswap = 0; iswap < nswap; iswap++) {
     if (sendproc[iswap] != me) {
@@ -760,8 +762,7 @@ void CommBrick::forward_comm(int /*dummy*/)
         n = avec->pack_comm(sendnum[iswap], sendlist[iswap], buf_send, pbc_flag[iswap], pbc[iswap]);
         if (n) MPI_Send(buf_send, n, MPI_DOUBLE, sendproc[iswap], 0, world);
         if (size_forward_recv[iswap]) MPI_Wait(&request, MPI_STATUS_IGNORE);
-        num_send += size_forward_recv[iswap];
-        // std::cout << GREEN << "lammps forward comm num recv " << size_forward_recv[iswap] << " other way around? " << n << RESET_COLOR << std::endl;
+        num_recv_mpi += size_forward_recv[iswap];
       } else if (ghost_velocity) {
         assert(false);
         if (size_forward_recv[iswap])
@@ -798,12 +799,10 @@ void CommBrick::forward_comm(int /*dummy*/)
     }
   }
 
-  /*
-  MPI_Allreduce(MPI_IN_PLACE, &num_send, 1, MPI_INT, MPI_SUM, world);
-  if (comm->me == 0) {
-      std::cout << "num send forward: " << num_send << std::endl;
+  if (TRACK_LAMMPS_DATA) {
+      MPI_Allreduce(MPI_IN_PLACE, &num_recv_mpi, 1, MPI_INT, MPI_SUM, world);
+      std::cout << "num recv forward: " << num_recv_mpi << std::endl;
   }
-  */
 }
 
 /* ----------------------------------------------------------------------
@@ -833,7 +832,7 @@ void CommBrick::reverse_comm()
   */
 
   // std::cout << "me: " << comm->me << " lammps no force. num: " << num_no_force << " out of: " << atom->nghost << std::endl;
-  int num_send = 0;
+  int num_recv_mpi = 0;
 
   for (int iswap = nswap - 1; iswap >= 0; iswap--) {
     if (sendproc[iswap] != me) {
@@ -846,7 +845,7 @@ void CommBrick::reverse_comm()
           MPI_Send(buf, size_reverse_send[iswap], MPI_DOUBLE, recvproc[iswap], 0, world);
         }
         if (size_reverse_recv[iswap]) MPI_Wait(&request, MPI_STATUS_IGNORE);
-        num_send += size_reverse_recv[iswap];
+        num_recv_mpi += size_reverse_recv[iswap];
         // std::cout << GREEN << "lammps reverse comm num recv " << size_reverse_recv[iswap] << RESET_COLOR << std::endl;
       } else {
         if (size_reverse_recv[iswap])
@@ -867,12 +866,13 @@ void CommBrick::reverse_comm()
       }
     }
   }
-  /*
-  MPI_Allreduce(MPI_IN_PLACE, &num_send, 1, MPI_INT, MPI_SUM, world);
-  if (comm->me == 0) {
-      std::cout << "num send reverse: " << num_send << std::endl;
+
+  if (TRACK_LAMMPS_DATA) {
+      MPI_Allreduce(MPI_IN_PLACE, &num_recv_mpi, 1, MPI_INT, MPI_SUM, world);
+      if (comm->me == 0) {
+          std::cout << "num send reverse: " << num_recv_mpi << std::endl;
+      }
   }
-  */
 }
 
 /* ----------------------------------------------------------------------
