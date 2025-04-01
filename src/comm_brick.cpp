@@ -801,7 +801,9 @@ void CommBrick::forward_comm(int /*dummy*/)
 
   if (TRACK_LAMMPS_DATA) {
       MPI_Allreduce(MPI_IN_PLACE, &num_recv_mpi, 1, MPI_INT, MPI_SUM, world);
-      std::cout << "num recv forward: " << num_recv_mpi << std::endl;
+      if (comm->me == 0) {
+          std::cout << "num recv forward: " << num_recv_mpi << std::endl;
+      }
   }
 }
 
