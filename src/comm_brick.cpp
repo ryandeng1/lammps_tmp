@@ -46,7 +46,7 @@ using namespace LAMMPS_NS;
 #define BUFMIN 1024
 #define BIG 1.0e20
 
-static constexpr bool TRACK_LAMMPS_DATA = true;
+static constexpr bool TRACK_LAMMPS_DATA = false;
 
 /* ---------------------------------------------------------------------- */
 
