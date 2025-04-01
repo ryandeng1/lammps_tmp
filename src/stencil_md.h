@@ -11187,36 +11187,9 @@ public:
                       << " all in all total: " << total_send_ndoubles
                       << std::endl;
                     std::cout << o.str();
-
-                    /*
-                    for (int i = 0; i < send_neighbors.size(); i++) {
-                        int send_zoid_num = send_neighbors[i];
-                        auto &send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
-                                                  : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
-                        int send_zoid_dep = (send_zoid.where[0] % 2 == 0) + (send_zoid.where[1] % 2 == 0) +
-                                            (send_zoid.where[2] % 2 == 0);
-                        if (send_zoid_dep == my_zoid_dep + 1 && send_zoid_num % comm->nprocs != comm->me) {
-                            int total_send_force = zoid.send_force_idxs_double_buffering_flattened[i].size();
-                            int total_send_pos = zoid.send_pos_idxs_double_buffering_flattened[0][i].size() +
-                                                 zoid.send_pos_idxs_double_buffering_flattened[1][i].size();
-                            int total_send_vel = zoid.send_vel_idxs_double_buffering_flattened[i].size();
-
-                            std::stringstream s2;
-                            s2 << "zoid: " << zoid.num << " where: " << zoid.where[0] << " " << zoid.where[1] << " "
-                               << zoid.where[2]
-                               << " send to: " << send_zoid_num << " where: " << send_zoid.where[0] << " "
-                               << send_zoid.where[1] << " " << send_zoid.where[2]
-                               << " num send force: " << total_send_force * 3 << " num send pos: " << total_send_pos * 3
-                               << " num send vel: " << total_send_vel * 3
-                               << std::endl;
-                            std::cout << s2.str();
-                        }
-                    }
-                    */
                 }
             }
         }
-
 
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
             for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
@@ -11244,6 +11217,49 @@ public:
             }
 
             MPI_Barrier(world);
+        }
+    }
+
+    template <bool curr_dt>
+    void GET_RECV_STATISTICS() {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+        int total_recv_proc = 0;
+        int total_recv_proc_mpi = 0;
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto& zoid = queues[dep][j];
+                int zoid_num = zoid.num;
+                if (zoid_num % comm->nprocs != comm->me) {
+                    continue;
+                }
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num] : recv_from_neighbors_many_cuts_next_dt[zoid_num];
+
+                // int total_recv_doubles = 0;
+                // int total_recv_doubles_mpi = 0;
+
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    int total_recv_force = zoid.recv_force_idxs_double_buffering_flattened[i].size();
+                    int total_recv_pos = zoid.recv_pos_idxs_double_buffering_flattened[0][i].size() + zoid.recv_pos_idxs_double_buffering_flattened[1][i].size();
+                    int total_recv_vel = zoid.recv_vel_idxs_double_buffering_flattened[i].size();
+                    int total_recv = total_recv_force + total_recv_pos + total_recv_vel;
+                    if (recv_zoid_num % comm->nprocs == comm->me) {
+                        // total_recv_doubles += total_recv;
+                        total_recv_proc += total_recv;
+                    } else {
+                        // total_recv_doubles_mpi += total_recv;
+                        total_recv_proc_mpi += total_recv;
+                        total_recv_proc += total_recv;
+                    }
+                }
+            }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, &total_recv_proc, 1, MPI_INT, MPI_SUM, world);
+        MPI_Allreduce(MPI_IN_PLACE, &total_recv_proc_mpi, 1, MPI_INT, MPI_SUM, world);
+        if (comm->me == 0) {
+            std::cout << "total recv: " << total_recv_proc << " total recv through MPI: " << total_recv_proc_mpi << " dt: " << NUM_TIMESTEPS_IN_PARALLEL << std::endl;
         }
     }
 
