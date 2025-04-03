@@ -5965,11 +5965,11 @@ void Verlet::run(int n) {
 
         if (nflag == 0) {
             timer->stamp();
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             comm->forward_comm();
-            // auto end = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            // lammps_comm_duration += duration;
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            lammps_comm_duration += duration;
             // lammps_forward_comm_duration += duration;
             // lammps_forward_comm_times.push_back(duration);
             timer->stamp(Timer::COMM);
@@ -6103,11 +6103,11 @@ void Verlet::run(int n) {
 
         // reverse communication of forces
         if (force->newton) {
-            // auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = std::chrono::high_resolution_clock::now();
             comm->reverse_comm();
-            // auto end = std::chrono::high_resolution_clock::now();
-            // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            // lammps_comm_duration += duration;
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            lammps_comm_duration += duration;
             // lammps_reverse_comm_duration += duration;
             // lammps_reverse_comm_times.push_back(duration);
             timer->stamp(Timer::COMM);
@@ -6190,7 +6190,9 @@ void Verlet::run(int n) {
                   << " reverse: " << lammps_reverse_comm_duration
                   << " microseconds. " << " total comm duration: " << total_comm_duration
                   << " total forward comm: " << total_forward_comm_duration << " total reverse comm: "
-                  << total_reverse_comm_duration << RESET_COLOR << std::endl;
+                  << total_reverse_comm_duration
+                  << " percent comm: " << total_comm_duration * 1.0 / total_duration_lammps
+                  << RESET_COLOR << std::endl;
 
         std::cout << YELLOW
                   << "lammps pair duration: " << lammps_pair_duration << " bond duration: " << lammps_bond_duration << " ratio: " << (double) lammps_num_atoms / lammps_pair_duration
