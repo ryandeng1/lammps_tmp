@@ -19,6 +19,8 @@
 #include "pthread.h"
 #include <cilk/cilk_api.h>
 #include <sstream>
+#include "CLI11.hpp"
+#include "stencil_md_utils.h"
 
 #ifdef __linux__
 #include "stencil_md_utils.h"
@@ -61,6 +63,14 @@ int main(int argc, char **argv)
     std::cout << "COULD NOT PROVIDE MPI_THREAD_MULTIPLE" << std::endl;
     return 0;
   }
+
+  CLI::App app{"StencilMD YAML file"};
+  argv = app.ensure_utf8(argv);
+
+  std::string config_filename = "default";
+  app.add_option("-c,--config", config_filename, "config file for StencilMD");
+
+  CLI11_PARSE(app, argc, argv);
 
 #ifdef __linux__
     if (!ONLY_RUN_LAMMPS) {

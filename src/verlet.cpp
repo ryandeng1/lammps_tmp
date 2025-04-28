@@ -5522,7 +5522,7 @@ void Verlet::setup_stencil_md_many_zoids() {
     }
 
     begin = std::chrono::high_resolution_clock::now();
-    stencilMD->CREATE_NEIGHBOR_LIST();
+    stencilMD->CREATE_NEIGHBOR_LIST<USE_NEWTON>();
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
     if (comm->me == 0) {
@@ -5531,7 +5531,7 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     begin = std::chrono::high_resolution_clock::now();
     if (EXPERIMENT == BOND_FENE) {
-        stencilMD->CREATE_BOND_LIST();
+        stencilMD->CREATE_BOND_LIST<USE_NEWTON>();
     }
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
@@ -5541,8 +5541,8 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     stencilMD->INIT_AFFINITY_AND_LOCKS();
 
-    stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<true>();
-    stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<false>();
+    stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<true, USE_NEWTON>();
+    stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<false, USE_NEWTON>();
 
     stencilMD->CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_SEND_VEL_IDXS_ZOID_MANY_CUTS<false>();
@@ -5556,16 +5556,16 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS<false>();
 
-    stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<true>();
-    stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<false>();
+    stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<true, USE_NEWTON>();
+    stencilMD->CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS<false, USE_NEWTON>();
 
     stencilMD->INIT_SEND_RECV_BUFFERS_MANY_CUTS();
 
-    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS<true>();
-    stencilMD->CONSTRUCT_SEND_PROC_OFFSETS<false>();
+    // stencilMD->CONSTRUCT_SEND_PROC_OFFSETS<true>();
+    // stencilMD->CONSTRUCT_SEND_PROC_OFFSETS<false>();
 
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
-    stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
+    // stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<true>();
+    // stencilMD->CONSTRUCT_RECV_PROC_OFFSETS<false>();
 
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES<true>();
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES<false>();
@@ -5591,8 +5591,8 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->GET_RECV_STATISTICS<true>();
     stencilMD->GET_RECV_STATISTICS<false>();
 
-    stencilMD->SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE<true>();
-    stencilMD->SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE<false>();
+    // stencilMD->SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE<true>();
+    // stencilMD->SETUP_ATOM_DOMAINS_NEUTRAL_TERRITORY_ESQUE<false>();
 
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<true>();
     stencilMD->INIT_DEP_PROC_RECV_ZOID_DATA<false>();

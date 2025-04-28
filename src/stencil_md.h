@@ -9180,6 +9180,7 @@ public:
         std::cout << "GOT LOCAL ATOMS PASSED I THINK. " << std::endl;
     }
 
+    template <bool newton>
     void CREATE_NEIGHBOR_LIST_HELPER(queue_info& zoid, std::vector<int>* neighbor_lst) {
         std::unordered_map<int, int> zoid_tag_to_idx;
         for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
@@ -9222,7 +9223,8 @@ public:
                     }
 
                     // add an edge if the ghost atom is ghost in a shrinking dimension
-                    if (!neigh_nlocal) {
+                    // if (!neigh_nlocal) {
+                    if (!neigh_nlocal && newton) {
                         bool shrinking_out_of_bounds = false;
                         bool expanding_out_of_bounds = false;
 
@@ -9271,6 +9273,7 @@ public:
     }
 
     // Complete hack
+    template <bool newton>
     void CREATE_NEIGHBOR_LIST() {
         std::vector<int> my_neigh_pairs_src;
         std::vector<int> my_neigh_pairs_dst;
@@ -9335,7 +9338,7 @@ public:
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
                 }
-                CREATE_NEIGHBOR_LIST_HELPER(zoid, neighbor_lst);
+                CREATE_NEIGHBOR_LIST_HELPER<newton>(zoid, neighbor_lst);
             }
         }
 
@@ -9345,7 +9348,7 @@ public:
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
                 }
-                CREATE_NEIGHBOR_LIST_HELPER(zoid, neighbor_lst);
+                CREATE_NEIGHBOR_LIST_HELPER<newton>(zoid, neighbor_lst);
             }
         }
 
@@ -9436,6 +9439,7 @@ public:
         */
     }
 
+    template <bool newton>
     void CREATE_BOND_LIST_HELPER(queue_info& zoid, std::vector<std::pair<int, int>>* bond_lst) {
         std::unordered_map<int, int> zoid_tag_to_idx;
         for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
@@ -9485,7 +9489,8 @@ public:
                     }
 
                     // add an edge if the ghost atom is ghost in a shrinking dimension
-                    if (!neigh_nlocal) {
+                    // if (!neigh_nlocal) {
+                    if (!neigh_nlocal && newton) {
                         bool shrinking_out_of_bounds = false;
                         bool expanding_out_of_bounds = false;
 
@@ -9541,6 +9546,7 @@ public:
     }
 
     // Complete hack
+    template <bool newton>
     void CREATE_BOND_LIST() {
         std::vector<int> my_bond_pairs_src;
         std::vector<int> my_bond_pairs_dst;
@@ -9609,7 +9615,7 @@ public:
                     continue;
                 }
 
-                CREATE_BOND_LIST_HELPER(zoid, bond_lst);
+                CREATE_BOND_LIST_HELPER<newton>(zoid, bond_lst);
             }
         }
 
@@ -9620,7 +9626,7 @@ public:
                     continue;
                 }
 
-                CREATE_BOND_LIST_HELPER(zoid, bond_lst);
+                CREATE_BOND_LIST_HELPER<newton>(zoid, bond_lst);
             }
         }
 
@@ -9742,7 +9748,7 @@ public:
     }
 
     // Sending forces is strictly ghost to local. There is no point propagating things.
-    template <bool curr_dt>
+    template <bool curr_dt, bool newton>
     void CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS_HELPER(queue_info& zoid) {
         int zoid_num = zoid.num;
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num]
@@ -9753,6 +9759,10 @@ public:
 
         for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
             zoid.send_force_idxs_double_buffering[t] = new std::vector<int>[send_neighbors.size()];
+
+            if (!newton) {
+                continue;
+            }
 
             std::set<int> send_idxs;
             auto& local_idxs = zoid.local_idxs_per_timestep[t];
@@ -9824,7 +9834,7 @@ public:
         }
     }
 
-    template <bool curr_dt>
+    template <bool curr_dt, bool newton>
     void CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
@@ -9835,7 +9845,7 @@ public:
                     continue;
                 }
 
-                CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS_HELPER<curr_dt>(zoid);
+                CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS_HELPER<curr_dt, newton>(zoid);
             }
         }
     }
@@ -10543,12 +10553,32 @@ public:
         */
     }
 
-    template <bool curr_dt>
+    template <bool curr_dt, bool newton>
     void CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS() {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+
+        if (!newton) {
+            for (int dep = 0; dep < NUM_DEPS; dep++) {
+                for (int j = 0; j < queues[dep].size(); j++) {
+                    auto& zoid = queues[dep][j];
+                    if (zoid.num % comm->nprocs != comm->me) {
+                        continue;
+                    }
+
+                    auto &recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
+                                                        : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        zoid.recv_force_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
+                    }
+                }
+            }
+
+            return;
+        }
+
         std::vector<MPI_Request> r;
         r.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1) * 4 / comm->nprocs);
-
-        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         std::vector<int>** zoid_send_data[NUM_ZOIDS_MANY_CUTS];
         int** zoid_send_data_sizes[NUM_ZOIDS_MANY_CUTS];
@@ -11827,12 +11857,16 @@ public:
             for (int i = 0; i < recv_neighbors.size(); i++) {
                 int recv_zoid_num = recv_neighbors[i];
 
-                int nrecv_from_zoid = 0;
+                int nrecv_force = 0;
+                int nrecv_pos = 0;
+                int nrecv_vel = 0;
                 for (int t = start_t; t < end_t; t++) {
-                    nrecv_from_zoid += zoid.recv_force_idxs_double_buffering[t][i].size();
-                    nrecv_from_zoid += zoid.recv_pos_idxs_double_buffering[t][i].size();
-                    nrecv_from_zoid += zoid.recv_vel_idxs_double_buffering[t][i].size();
+                    nrecv_force += zoid.recv_force_idxs_double_buffering[t][i].size();
+                    nrecv_pos += zoid.recv_pos_idxs_double_buffering[t][i].size();
+                    nrecv_vel += zoid.recv_vel_idxs_double_buffering[t][i].size();
                 }
+
+                int nrecv_from_zoid = nrecv_force + nrecv_pos + nrecv_vel;
 
                 for (int t = start_t; t < end_t; t++) {
                     for (auto& idx : zoid.recv_force_idxs_double_buffering[t][i]) {
