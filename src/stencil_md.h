@@ -9040,6 +9040,14 @@ public:
                         }
                     }
 
+                    zoid.is_local_per_timestep[t].resize(zoid.tag_stencil_md[0].size());
+                    for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+                        zoid.is_local_per_timestep[t][i] = false;
+                    }
+                    for (int local_idx : zoid.local_idxs_per_timestep[t]) {
+                        zoid.is_local_per_timestep[t][local_idx] = true;
+                    }
+
                     std::vector<int> tmp1;
                     std::vector<int> tmp2;
                     int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp1, tmp2);
@@ -9123,6 +9131,14 @@ public:
                         if (in_zoid) {
                             zoid.local_idxs_per_timestep[t].push_back(i);
                         }
+                    }
+
+                    zoid.is_local_per_timestep[t].resize(zoid.tag_stencil_md[0].size());
+                    for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+                        zoid.is_local_per_timestep[t][i] = false;
+                    }
+                    for (int local_idx : zoid.local_idxs_per_timestep[t]) {
+                        zoid.is_local_per_timestep[t][local_idx] = true;
                     }
 
                     std::vector<int> tmp1;

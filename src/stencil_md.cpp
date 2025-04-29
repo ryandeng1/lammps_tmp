@@ -1627,14 +1627,6 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
                     zoid.local_idxs_per_timestep[t] = real_idxs;
                     assert(zoid.local_idxs_per_timestep[t].size() == atom_->nlocal);
 
-                    zoid.is_local_per_timestep[t].resize(zoid.tag_stencil_md[0].size());
-                    for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
-                        zoid.is_local_per_timestep[t][i] = false;
-                    }
-                    for (int local_idx : zoid.local_idxs_per_timestep[t]) {
-                        zoid.is_local_per_timestep[t][local_idx] = true;
-                    }
-
                     std::vector<int> tmp_segments_idxs;
                     std::vector<int> tmp_segments_sizes;
                     int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp_segments_idxs, tmp_segments_sizes);
@@ -1680,14 +1672,6 @@ void StencilMD::CREATE_ATOM_IDXS_DOUBLE_BUFFERING() {
 
                     zoid.local_idxs_per_timestep[t] = real_idxs;
                     assert(zoid.local_idxs_per_timestep[t].size() == atom_->nlocal);
-
-                    zoid.is_local_per_timestep[t].resize(zoid.tag_stencil_md[0].size());
-                    for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
-                        zoid.is_local_per_timestep[t][i] = false;
-                    }
-                    for (int local_idx : zoid.local_idxs_per_timestep[t]) {
-                        zoid.is_local_per_timestep[t][local_idx] = true;
-                    }
 
                     std::vector<int> tmp_segments_idxs;
                     std::vector<int> tmp_segments_sizes;
