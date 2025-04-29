@@ -7670,6 +7670,7 @@ public:
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.atom_domains_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.is_local_per_timestep = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -7735,6 +7736,7 @@ public:
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.atom_domains_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.is_local_per_timestep = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -9192,7 +9194,7 @@ public:
             zoid.neighbor_list[t].resize(zoid.x_stencil_md[0].size());
 
             std::unordered_set<int> local_idxs_set;
-            auto &local_idxs = zoid.local_idxs_per_timestep[t];
+            const auto& local_idxs = zoid.local_idxs_per_timestep[t];
             local_idxs_set.insert(local_idxs.begin(), local_idxs.end());
             for (int i = 0; i < local_idxs.size(); i++) {
                 int idx = local_idxs[i];
@@ -9207,7 +9209,7 @@ public:
                 double ztmp = x[idx].z;
 
                 for (auto &neigh_tag: neigh_set) {
-                    int neigh_idx = zoid_tag_to_idx[neigh_tag];
+                    int neigh_idx = zoid_tag_to_idx.at(neigh_tag);
                     bool neigh_nlocal = (local_idxs_set.find(neigh_idx) != local_idxs_set.end());
                     if (neigh_nlocal) {
                         /*
@@ -9261,7 +9263,7 @@ public:
                     if (rsq <= neighbor->cutneighsq[itype][jtype]) {
                         zoid.neighbor_list[t][idx].push_back(neigh_idx);
                     } else {
-                        std::cout << "zoid: " << zoid.num << " failed check? "
+                        std::cout << "zoid: " << zoid.num << " neighbor failed check? "
                             << " x: " << xtmp << " " << ytmp << " " << ztmp
                             << " other x: " << x[neigh_idx].x << " " << x[neigh_idx].y << " " << x[neigh_idx].z
                             << " rsq: " << rsq << " neighbor cut: " << neighbor->cutneighsq[itype][jtype]
@@ -9290,6 +9292,18 @@ public:
                 // my_neigh_pairs.push_back({atom->tag[i], atom->tag[neigh]});
                 my_neigh_pairs_src.push_back(atom->tag[i]);
                 my_neigh_pairs_dst.push_back(atom->tag[neigh]);
+
+                my_neigh_pairs_src.push_back(atom->tag[neigh]);
+                my_neigh_pairs_dst.push_back(atom->tag[i]);
+
+                double xdiff = atom->x[i][0] - atom->x[neigh][0];
+                double ydiff = atom->x[i][1] - atom->x[neigh][1];
+                double zdiff = atom->x[i][2] - atom->x[neigh][2];
+                double rsq = xdiff * xdiff + ydiff * ydiff + zdiff * zdiff;
+                if (rsq >= 10) {
+                    std::cout << "lammps failed check atom. " << rsq << std::endl;
+                    assert(false);
+                }
             }
         }
 
@@ -14299,7 +14313,7 @@ public:
         const auto* lj3 = pair->lj3;
         const auto* lj4 = pair->lj4;
         // auto newton_pair = force->newton_pair;
-        constexpr bool NEWTON_PAIR = true;
+        constexpr bool NEWTON_PAIR = USE_NEWTON;
 
         const auto* _noalias const sigma = bond->sigma;
         const auto* _noalias const epsilon = bond->epsilon;
@@ -14309,6 +14323,7 @@ public:
         const auto& atom_type = zoid.type_stencil_md[0];
 
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
+        const auto& is_local_idx = zoid.is_local_per_timestep[timestep];
         const int nlocal = local_idxs.size();
 
         int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
@@ -14371,7 +14386,7 @@ public:
                         fytmp += dely * fpair;
                         fztmp += delz * fpair;
 
-                        if (NEWTON_PAIR || j < nlocal) {
+                        if (NEWTON_PAIR || is_local_idx[j]) {
                             spinlocks[j].lock();
                             f[j].x -= delx * fpair;
                             f[j].y -= dely * fpair;
@@ -14432,7 +14447,7 @@ public:
 
                 // apply force to each of 2 atoms
 
-                if (NEWTON_PAIR || i < nlocal) {
+                if (NEWTON_PAIR || is_local_idx[i]) {
                     spinlocks[i1].lock();
                     f[i1].x += delx * fbond;
                     f[i1].y += dely * fbond;
@@ -14440,7 +14455,7 @@ public:
                     spinlocks[i1].unlock();
                 }
 
-                if (NEWTON_PAIR || i2 < nlocal) {
+                if (NEWTON_PAIR || is_local_idx[i2]) {
                     spinlocks[i2].lock();
                     f[i2].x -= delx * fbond;
                     f[i2].y -= dely * fbond;
@@ -14781,7 +14796,7 @@ public:
                         fytmp += dely * fpair;
                         fztmp += delz * fpair;
 
-                        if (NEWTON_PAIR || j < nlocal) {
+                        if (NEWTON_PAIR || is_local_idx[j]) {
                             f[j].x -= delx * fpair;
                             f[j].y -= dely * fpair;
                             f[j].z -= delz * fpair;
@@ -14835,13 +14850,13 @@ public:
 
                 // apply force to each of 2 atoms
 
-                if (NEWTON_PAIR || i < nlocal) {
+                if (NEWTON_PAIR || is_local_idx[i]) {
                     f[i1].x += delx * fbond;
                     f[i1].y += dely * fbond;
                     f[i1].z += delz * fbond;
                 }
 
-                if (NEWTON_PAIR || i2 < nlocal) {
+                if (NEWTON_PAIR || is_local_idx[i2]) {
                     f[i2].x -= delx * fbond;
                     f[i2].y -= dely * fbond;
                     f[i2].z -= delz * fbond;

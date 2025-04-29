@@ -272,7 +272,7 @@ void Verlet::setup(int flag) {
     if (force->newton) {
         comm->reverse_comm();
     } else {
-        assert(false);
+        // assert(false);
     }
 
     modify->setup(vflag);

@@ -59,7 +59,7 @@ void BondFENE::compute(int eflag, int vflag)
   int nlocal = atom->nlocal;
   int newton_bond = force->newton_bond;
 
-  assert(newton_bond);
+  // assert(newton_bond);
 
   for (n = 0; n < nbondlist; n++) {
     i1 = bondlist[n][0];
