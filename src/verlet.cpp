@@ -6366,6 +6366,7 @@ void Verlet::run(int n) {
         zoid_claimed[i].clear();
     }
     run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
+
     cilk_scope {
         /*
         if (USE_DOUBLE_BUFFERING) {
@@ -7848,11 +7849,11 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm(int starting_timestep, int de
     int num_neighbors_receive_self = stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY<curr_dt>(zoid, start_t, end_t);
 
     if (TIME_STENCILMD_STATES) {
-	struct timeval tv_compute_begin;
-	gettimeofday(&tv_compute_begin, NULL);
-	m.lock();
-	stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_begin.tv_sec * MICROSECOND_FACTOR + tv_compute_begin.tv_usec));
-	m.unlock();
+        struct timeval tv_compute_begin;
+        gettimeofday(&tv_compute_begin, NULL);
+        m.lock();
+        stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_begin.tv_sec * MICROSECOND_FACTOR + tv_compute_begin.tv_usec));
+        m.unlock();
     }
 
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
@@ -7860,12 +7861,12 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm(int starting_timestep, int de
                                            test_f, test_x, test_v);
 
     if (TIME_STENCILMD_STATES) {
-	struct timeval tv_compute_end;
-	gettimeofday(&tv_compute_end, NULL);
-	m.lock();
-	stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
-	stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
-	m.unlock();
+        struct timeval tv_compute_end;
+        gettimeofday(&tv_compute_end, NULL);
+        m.lock();
+        stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
+        stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
+        m.unlock();
     }
 
     stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep,
@@ -7873,11 +7874,11 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm(int starting_timestep, int de
                                                         send_r[zoid_num]);
 
     if (TIME_STENCILMD_STATES) {
-	struct timeval tv_send_end;
-	gettimeofday(&tv_send_end, NULL);
-	m.lock();
-	stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_sec * MICROSECOND_FACTOR + tv_send_end.tv_usec));
-	m.unlock();
+        struct timeval tv_send_end;
+        gettimeofday(&tv_send_end, NULL);
+        m.lock();
+        stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_sec * MICROSECOND_FACTOR + tv_send_end.tv_usec));
+        m.unlock();
     }
 }
 
@@ -7890,11 +7891,11 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm_new_comm(int starting_timeste
     int num_neighbors_receive_self = stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY<curr_dt>(zoid, start_t, end_t);
 
     if (TIME_STENCILMD_STATES) {
-	struct timeval tv_compute_start;
-	gettimeofday(&tv_compute_start, NULL);
-	m.lock();
-	stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_start.tv_usec));
-	m.unlock();
+        struct timeval tv_compute_start;
+        gettimeofday(&tv_compute_start, NULL);
+        m.lock();
+        stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_start.tv_usec));
+        m.unlock();
     }
 
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
@@ -7902,23 +7903,23 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm_new_comm(int starting_timeste
                                            test_f, test_x, test_v);
 
     if (TIME_STENCILMD_STATES) {
-	struct timeval tv_compute_end;
-	gettimeofday(&tv_compute_end, NULL);
-	m.lock();
-	stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_usec));
-	stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_usec));
-	m.unlock();
+        struct timeval tv_compute_end;
+        gettimeofday(&tv_compute_end, NULL);
+        m.lock();
+        stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_usec));
+        stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_usec));
+        m.unlock();
     }
 
     stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED<curr_dt>(zoid, dep,
                                                                 start_t, end_t,
                                                                 send_r[zoid_num]);
     if (TIME_STENCILMD_STATES) {
-	struct timeval tv_send_end;
-	gettimeofday(&tv_send_end, NULL);
-	m.lock();
-	stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_usec));
-	m.unlock();
+        struct timeval tv_send_end;
+        gettimeofday(&tv_send_end, NULL);
+        m.lock();
+        stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_usec));
+        m.unlock();
     }
 }
 
@@ -7934,33 +7935,34 @@ void Verlet::unpack_self_wrapper(int starting_timestep, int dep, queue_info& zoi
         if (!claimed[zoid.num].test(std::memory_order_relaxed)) {
             if (!claimed[zoid.num].test_and_set(std::memory_order_relaxed)) {
                 stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID<curr_dt>(zoid, start_t, end_t);
-		if (TIME_STENCILMD_STATES) {
-		    struct timeval tv_compute_begin;
-		    gettimeofday(&tv_compute_begin, NULL);
-		    m.lock();
-		    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_begin.tv_sec * MICROSECOND_FACTOR + tv_compute_begin.tv_usec));
-		    m.unlock();
-		}
+                if (TIME_STENCILMD_STATES) {
+                    struct timeval tv_compute_begin;
+                    gettimeofday(&tv_compute_begin, NULL);
+                    m.lock();
+                    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_begin.tv_sec * MICROSECOND_FACTOR + tv_compute_begin.tv_usec));
+                    m.unlock();
+                }
                 run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
                                                        test_f, test_x, test_v);
-		if (TIME_STENCILMD_STATES) {
-		    struct timeval tv_compute_end;
-		    gettimeofday(&tv_compute_end, NULL);
-		    m.lock();
-		    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
-		    stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
-		    m.unlock();
-		}
+                if (TIME_STENCILMD_STATES) {
+                    struct timeval tv_compute_end;
+                    gettimeofday(&tv_compute_end, NULL);
+                    m.lock();
+                    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
+                    stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
+                    m.unlock();
+                }
+
                 stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep,
                                                                     start_t, end_t, send_r[zoid.num]);
 
-		if (TIME_STENCILMD_STATES) {
-		    struct timeval tv_send_end;
-		    gettimeofday(&tv_send_end, NULL);
-		    m.lock();
-		    stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_sec * MICROSECOND_FACTOR + tv_send_end.tv_usec));
-		    m.unlock();
-		}
+                if (TIME_STENCILMD_STATES) {
+                    struct timeval tv_send_end;
+                    gettimeofday(&tv_send_end, NULL);
+                    m.lock();
+                    stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_sec * MICROSECOND_FACTOR + tv_send_end.tv_usec));
+                    m.unlock();
+                }
             }
         }
     }
@@ -7980,37 +7982,36 @@ void Verlet::unpack_other_wrapper(int starting_timestep, int dep, queue_info& zo
             if (!claimed[zoid.num].test_and_set(std::memory_order_relaxed)) {
                 stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID<curr_dt>(zoid, start_t, end_t);
 
-		if (TIME_STENCILMD_STATES) {
-		    struct timeval tv_compute_begin;
-		    gettimeofday(&tv_compute_begin, NULL);
-		    m.lock();
-		    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_begin.tv_sec * MICROSECOND_FACTOR + tv_compute_begin.tv_usec));
-		    m.unlock();
-		}
-
+                if (TIME_STENCILMD_STATES) {
+                    struct timeval tv_compute_begin;
+                    gettimeofday(&tv_compute_begin, NULL);
+                    m.lock();
+                    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_compute_begin.tv_sec * MICROSECOND_FACTOR + tv_compute_begin.tv_usec));
+                    m.unlock();
+                }
 
                 run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
                                                        test_f, test_x, test_v);
 
-		if (TIME_STENCILMD_STATES) {
-		    struct timeval tv_compute_end;
-		    gettimeofday(&tv_compute_end, NULL);
-		    m.lock();
-		    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
-		    stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
-		    m.unlock();
-		}
+                if (TIME_STENCILMD_STATES) {
+                    struct timeval tv_compute_end;
+                    gettimeofday(&tv_compute_end, NULL);
+                    m.lock();
+                    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
+                    stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
+                    m.unlock();
+                }
 
                 stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep,
-                                                                    start_t, end_t, send_r[zoid.num]);
+                                                                            start_t, end_t, send_r[zoid.num]);
 
-		if (TIME_STENCILMD_STATES) {
-		    struct timeval tv_send_end;
-		    gettimeofday(&tv_send_end, NULL);
-		    m.lock();
-		    stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_sec * MICROSECOND_FACTOR + tv_send_end.tv_usec));
-		    m.unlock();
-		}
+                if (TIME_STENCILMD_STATES) {
+                    struct timeval tv_send_end;
+                    gettimeofday(&tv_send_end, NULL);
+                    m.lock();
+                    stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_sec * MICROSECOND_FACTOR + tv_send_end.tv_usec));
+                    m.unlock();
+                }
             }
         }
     }
@@ -8096,23 +8097,25 @@ void Verlet::run_stencil_md_many_cuts_waitany(int starting_timestep, double **te
             auto& recv_request_map = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep]
                     : stencilMD->recv_request_idx_to_zoid_next_dt[dep];
             while (num_wait < recv_request_map.size()) {
-		if (TIME_STENCILMD_STATES) {
-		    struct timeval tv_wait_begin;
-		    gettimeofday(&tv_wait_begin, NULL);
-		    m.lock();
-		    stencil_md_timings.push_back(std::make_tuple("WAIT", "START", 0, tv_wait_begin.tv_sec * MICROSECOND_FACTOR + tv_wait_begin.tv_usec));
-		    m.unlock();
-		}
+
+                if (TIME_STENCILMD_STATES) {
+                    struct timeval tv_wait_begin;
+                    gettimeofday(&tv_wait_begin, NULL);
+                    m.lock();
+                    stencil_md_timings.push_back(std::make_tuple("WAIT", "START", 0, tv_wait_begin.tv_sec * MICROSECOND_FACTOR + tv_wait_begin.tv_usec));
+                    m.unlock();
+                }
+
                 int idx;
                 MPI_Waitany(recv_r[dep].size(), recv_r[dep].data(), &idx, MPI_STATUSES_IGNORE);
 
-		if (TIME_STENCILMD_STATES) {
-		    struct timeval tv_wait_end;
-		    gettimeofday(&tv_wait_end, NULL);
-		    m.lock();
-		    stencil_md_timings.push_back(std::make_tuple("WAIT", "END", 0, tv_wait_end.tv_sec * MICROSECOND_FACTOR + tv_wait_end.tv_usec));
-		    m.unlock();
-		}
+                if (TIME_STENCILMD_STATES) {
+                    struct timeval tv_wait_end;
+                    gettimeofday(&tv_wait_end, NULL);
+                    m.lock();
+                    stencil_md_timings.push_back(std::make_tuple("WAIT", "END", 0, tv_wait_end.tv_sec * MICROSECOND_FACTOR + tv_wait_end.tv_usec));
+                    m.unlock();
+                }
 
                 auto [recv_zoid_num, zoid_num] = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep].at(idx)
                         : stencilMD->recv_request_idx_to_zoid_next_dt[dep].at(idx);
@@ -8339,15 +8342,15 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
             cilk_scope {
                 for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                     int zoid_num = my_queues[dep + 1][j].num;
-		    if (TIME_STENCILMD_STATES) {
-			if (!my_queues[dep + 1][j].no_comm_needed) {
-			    struct timeval tv_recv_start;
-			    gettimeofday(&tv_recv_start, NULL);
-			    m.lock();
-			    stencil_md_timings.push_back(std::make_tuple("RECEIVE", "START", zoid_num, tv_recv_start.tv_usec));
-			    m.unlock();
-			}
-		    }
+                    if (TIME_STENCILMD_STATES) {
+                        if (!my_queues[dep + 1][j].no_comm_needed) {
+                            struct timeval tv_recv_start;
+                            gettimeofday(&tv_recv_start, NULL);
+                            m.lock();
+                            stencil_md_timings.push_back(std::make_tuple("RECEIVE", "START", zoid_num, tv_recv_start.tv_usec));
+                            m.unlock();
+                        }
+		            }
 
                     cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
                 }
@@ -8367,15 +8370,15 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
                 if (dep < NUM_DEPS - 1) {
                     for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                         int zoid_num = my_queues[dep + 1][j].num;
-		    	if (TIME_STENCILMD_STATES) {
-			    if (!my_queues[dep + 1][j].no_comm_needed) {
-				struct timeval tv_recv_start;
-				gettimeofday(&tv_recv_start, NULL);
-				m.lock();
-				stencil_md_timings.push_back(std::make_tuple("RECEIVE", "START", zoid_num, tv_recv_start.tv_usec));
-				m.unlock();
-			    }
-			}
+                        if (TIME_STENCILMD_STATES) {
+                            if (!my_queues[dep + 1][j].no_comm_needed) {
+                            struct timeval tv_recv_start;
+                            gettimeofday(&tv_recv_start, NULL);
+                            m.lock();
+                            stencil_md_timings.push_back(std::make_tuple("RECEIVE", "START", zoid_num, tv_recv_start.tv_usec));
+                            m.unlock();
+                            }
+                        }
                         cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(zoid_num, recv_r[zoid_num]);
                     }
 
@@ -8411,50 +8414,50 @@ void Verlet::run_stencil_md_many_cuts_new_comm(int starting_timestep, double **t
                 cilk_for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto &zoid = my_queues[dep][j];
                     if (!zoid.no_comm_needed) {
-		    	if (TIME_STENCILMD_STATES) {
-			    struct timeval tv_recv_end;
-			    gettimeofday(&tv_recv_end, NULL);
-			    m.lock();
-			    stencil_md_timings.push_back(std::make_tuple("RECEIVE", "END", zoid.num, tv_recv_end.tv_usec));
-			    stencil_md_timings.push_back(std::make_tuple("WAIT", "START", zoid.num, tv_recv_end.tv_usec));
-			    m.unlock();
-			}
+		    	        if (TIME_STENCILMD_STATES) {
+			                struct timeval tv_recv_end;
+                            gettimeofday(&tv_recv_end, NULL);
+                            m.lock();
+                            stencil_md_timings.push_back(std::make_tuple("RECEIVE", "END", zoid.num, tv_recv_end.tv_usec));
+                            stencil_md_timings.push_back(std::make_tuple("WAIT", "START", zoid.num, tv_recv_end.tv_usec));
+                            m.unlock();
+                        }
 
                         stencilMD->UNPACK_DATA_MANY_CUTS_ZOID<curr_dt>(zoid, recv_r[zoid.num], tmp_start_t, tmp_end_t);
 
-			if (TIME_STENCILMD_STATES) {
-			    struct timeval tv_wait_end;
-			    gettimeofday(&tv_wait_end, NULL);
-			    m.lock();
-			    stencil_md_timings.push_back(std::make_tuple("WAIT", "END", zoid.num, tv_wait_end.tv_usec));
-			    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_wait_end.tv_usec));
-			    m.unlock();
-			}
+                        if (TIME_STENCILMD_STATES) {
+                            struct timeval tv_wait_end;
+                            gettimeofday(&tv_wait_end, NULL);
+                            m.lock();
+                            stencil_md_timings.push_back(std::make_tuple("WAIT", "END", zoid.num, tv_wait_end.tv_usec));
+                            stencil_md_timings.push_back(std::make_tuple("COMPUTE", "START", zoid.num, tv_wait_end.tv_usec));
+                            m.unlock();
+                        }
 
                         run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
                                                                tmp_start_t - 1, tmp_end_t - 1,
                                                                test_f, test_x, test_v);
 
-			if (TIME_STENCILMD_STATES) {
-			    struct timeval tv_compute_end;
-			    gettimeofday(&tv_compute_end, NULL);
-			    m.lock();
-			    stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_usec));
-			    stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_usec));
-			    m.unlock();
-			}
+                        if (TIME_STENCILMD_STATES) {
+                            struct timeval tv_compute_end;
+                            gettimeofday(&tv_compute_end, NULL);
+                            m.lock();
+                            stencil_md_timings.push_back(std::make_tuple("COMPUTE", "END", zoid.num, tv_compute_end.tv_usec));
+                            stencil_md_timings.push_back(std::make_tuple("SEND", "START", zoid.num, tv_compute_end.tv_usec));
+                            m.unlock();
+                        }
 
                         stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED<curr_dt>(zoid, dep,
                                                                                     tmp_start_t, tmp_end_t,
                                                                                     send_r[zoid.num]);
 
-			if (TIME_STENCILMD_STATES) {
-			    struct timeval tv_send_end;
-			    gettimeofday(&tv_send_end, NULL);
-			    m.lock();
-			    stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_usec));
-			    m.unlock();
-			}
+                        if (TIME_STENCILMD_STATES) {
+                            struct timeval tv_send_end;
+                            gettimeofday(&tv_send_end, NULL);
+                            m.lock();
+                            stencil_md_timings.push_back(std::make_tuple("SEND", "END", zoid.num, tv_send_end.tv_usec));
+                            m.unlock();
+                        }
                     }
                 }
             }

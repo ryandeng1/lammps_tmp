@@ -14463,7 +14463,7 @@ public:
 
                 // apply force to each of 2 atoms
 
-                if (NEWTON_PAIR || is_local_idx[i]) {
+                if (NEWTON_PAIR || is_local_idx[i1]) {
                     spinlocks[i1].lock();
                     f[i1].x += delx * fbond;
                     f[i1].y += dely * fbond;
@@ -14866,7 +14866,7 @@ public:
 
                 // apply force to each of 2 atoms
 
-                if (NEWTON_PAIR || is_local_idx[i]) {
+                if (NEWTON_PAIR || is_local_idx[i1]) {
                     f[i1].x += delx * fbond;
                     f[i1].y += dely * fbond;
                     f[i1].z += delz * fbond;
@@ -15236,6 +15236,7 @@ public:
 
                 delete[] zoid.local_idxs_per_timestep;
                 delete[] zoid.atom_domains_per_timestep;
+                delete[] zoid.is_local_per_timestep;
                 delete[] zoid.neighbor_list;
                 delete[] zoid.bond_list;
                 delete[] zoid.bond_list_modified;
@@ -15283,6 +15284,7 @@ public:
 
                 delete[] zoid.local_idxs_per_timestep;
                 delete[] zoid.atom_domains_per_timestep;
+                delete[] zoid.is_local_per_timestep;
                 delete[] zoid.neighbor_list;
                 delete[] zoid.bond_list;
                 delete[] zoid.bond_list_modified;
@@ -15359,6 +15361,7 @@ public:
             MPI_Comm_free(&all_comms[i]);
         }
 
+        /*
         for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
             if (i % comm->nprocs == comm->me) {
                 int num_recv_neighbors = recv_from_neighbors_many_cuts[i].size();
@@ -15374,6 +15377,7 @@ public:
                 }
             }
         }
+        */
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int proc = 0; proc < comm->nprocs; proc++) {
