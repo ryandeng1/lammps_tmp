@@ -73,7 +73,11 @@ int main(int argc, char **argv)
   std::string lammps_input_file = "default";
   app.add_option("-i,--input", lammps_input_file, "lammps input file, not directly used for StencilMD");
 
-  // CLI11_PARSE(app, argc, argv);
+  try {
+      CLI11_PARSE(app, argc, argv);
+  } catch(const CLI::ParseError &e) {
+      std::cout << "PARSE ERROR. " << e.what() << std::endl;
+  }
 
 #ifdef __linux__
     if (!ONLY_RUN_LAMMPS) {
