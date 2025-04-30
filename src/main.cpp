@@ -71,13 +71,17 @@ int main(int argc, char **argv)
   app.add_option("-c,--config", config_filename, "config file for StencilMD");
 
   std::string lammps_input_file = "default";
-  app.add_option("-i,--input", lammps_input_file, "lammps input file, not directly used for StencilMD");
+  app.add_option("-i,-in", lammps_input_file, "lammps input file, not directly used for StencilMD");
 
-  try {
-      CLI11_PARSE(app, argc, argv);
-  } catch(const CLI::ParseError &e) {
-      std::cout << "PARSE ERROR. " << e.what() << std::endl;
-  }
+  std::string lammps_package = "default";
+  app.add_option("-pk,-package", lammps_package, "lammps package, not directly used for StencilMD");
+
+  std::string lammps_suffix = "default";
+  app.add_option("-sf,-suffix", lammps_suffix, "lammps package suffix, not directly used for StencilMD");
+
+  app.allow_non_standard_option_names();
+
+  CLI11_PARSE(app, argc, argv);
 
 #ifdef __linux__
     if (!ONLY_RUN_LAMMPS) {
