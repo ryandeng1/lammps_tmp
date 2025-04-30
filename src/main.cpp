@@ -65,6 +65,8 @@ int main(int argc, char **argv)
   }
 
   CLI::App app{"StencilMD YAML file"};
+  app.allow_non_standard_option_names();
+
   argv = app.ensure_utf8(argv);
 
   std::string config_filename = "default";
@@ -78,8 +80,6 @@ int main(int argc, char **argv)
 
   std::string lammps_suffix = "default";
   app.add_option("-sf,-suffix", lammps_suffix, "lammps package suffix, not directly used for StencilMD");
-
-  app.allow_non_standard_option_names();
 
   CLI11_PARSE(app, argc, argv);
 
