@@ -14354,6 +14354,7 @@ public:
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
         if (true || nlocal > MODIFY_GRAINSIZE) {
+            /*
             #pragma cilk grainsize MODIFY_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -14418,6 +14419,8 @@ public:
                 f[i].z += fztmp;
                 spinlocks[i].unlock();
             }
+
+            */
 
             /*
             auto& bond_list = zoid.bond_list_modified[timestep];
