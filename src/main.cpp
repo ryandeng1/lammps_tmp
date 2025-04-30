@@ -83,7 +83,9 @@ int main(int argc, char **argv)
 
   try {
       CLI11_PARSE(app, argc, argv);
-  } catch (std::exception& e) {
+  } catch (std::runtime_error& e) {
+      std::cout << "parse error: " << e.what() << std::endl;
+  } catch (CLI::ParseError& e) {
       std::cout << "parse error: " << e.what() << std::endl;
   }
 
