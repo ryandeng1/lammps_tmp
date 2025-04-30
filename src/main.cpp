@@ -81,7 +81,11 @@ int main(int argc, char **argv)
   std::string lammps_suffix = "default";
   app.add_option("-sf,-suffix", lammps_suffix, "lammps package suffix, not directly used for StencilMD");
 
-  CLI11_PARSE(app, argc, argv);
+  try {
+      CLI11_PARSE(app, argc, argv);
+  } catch (std::exception& e) {
+      std::cout << "parse error: " << e.what() << std::endl;
+  }
 
 #ifdef __linux__
     if (!ONLY_RUN_LAMMPS) {
