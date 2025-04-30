@@ -14419,6 +14419,7 @@ public:
                 spinlocks[i].unlock();
             }
 
+            /*
             auto& bond_list = zoid.bond_list_modified[timestep];
             int nbonds = bond_list.size();
 
@@ -14479,7 +14480,13 @@ public:
                     spinlocks[i2].unlock();
                 }
             }
+            */
 
+
+
+
+
+            
             /*
             #pragma cilk grainsize MODIFY_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
