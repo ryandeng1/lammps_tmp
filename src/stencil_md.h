@@ -14353,7 +14353,7 @@ public:
         int chunk_size = MODIFY_GRAINSIZE;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > MODIFY_GRAINSIZE) {
+        if (true || nlocal > MODIFY_GRAINSIZE) {
             #pragma cilk grainsize MODIFY_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -14486,7 +14486,9 @@ public:
 
 
 
-            
+
+
+
             /*
             #pragma cilk grainsize MODIFY_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
