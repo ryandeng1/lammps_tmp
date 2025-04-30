@@ -82,7 +82,8 @@ int main(int argc, char **argv)
   app.add_option("-sf,-suffix", lammps_suffix, "lammps package suffix, not directly used for StencilMD");
 
   try {
-      CLI11_PARSE(app, argc, argv);
+      // CLI11_PARSE(app, argc, argv);
+      app.parse(argc, argv);
   } catch (std::runtime_error& e) {
       std::cout << "parse error: " << e.what() << std::endl;
   } catch (CLI::ParseError& e) {
