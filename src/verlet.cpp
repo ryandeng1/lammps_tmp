@@ -95,35 +95,6 @@ Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
    initialization before run
 ------------------------------------------------------------------------- */
 
-double mean(const std::vector<int64_t> &v)
-{
-    int64_t sum = 0;
-
-    for (auto &each: v)
-        sum += each;
-
-    return (double) sum / v.size();
-}
-
-double sd(const std::vector<int64_t> &v)
-{
-    double square_sum_of_difference = 0;
-    double mean_var = mean(v);
-    auto len = v.size();
-
-    double tmp;
-    for (auto &each: v) {
-        tmp = each - mean_var;
-        square_sum_of_difference += tmp * tmp;
-    }
-
-    return std::sqrt(square_sum_of_difference / (len - 1));
-}
-
-int atom_coord_to_bin(double* lo, double* hi, double* pos) {
-
-}
-
 void Verlet::init() {
     Integrate::init();
 
@@ -175,7 +146,6 @@ void Verlet::init() {
 ------------------------------------------------------------------------- */
 
 void Verlet::setup(int flag) {
-
     if (comm->me == 0 && screen) {
         fputs("Setting up Verlet run ...\n", screen);
         if (flag) {

@@ -9048,13 +9048,18 @@ public:
                         zoid.is_local_per_timestep[t][local_idx] = true;
                     }
 
-                    std::vector<int> tmp1;
-                    std::vector<int> tmp2;
-                    int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp1, tmp2);
+                    std::vector<int> segment_idxs;
+                    std::vector<int> segment_sizes;
+                    int num_segments = get_segments(zoid.local_idxs_per_timestep[t], segment_idxs, segment_sizes);
                     std::stringstream o;
                     o << BOLDYELLOW << "CURR DT: " << 1 << "  dep: " << dep << " zoid: " << zoid.num << " time: " << t << " nlocal: " << zoid.local_idxs_per_timestep[t].size()
                         << " num segments: " << num_segments << RESET_COLOR << std::endl;
                     std::cout << o.str();
+
+                    for (int i = 0; i < num_segments; i++) {
+                        zoid.local_idxs_per_timestep_segment_idxs[t].push_back(segment_idxs[i]);
+                        zoid.local_idxs_per_timestep_segment_sizes[t].push_back(segment_sizes[i]);
+                    }
 
                     total_num_local_segments += num_segments;
                 }
@@ -9141,10 +9146,15 @@ public:
                         zoid.is_local_per_timestep[t][local_idx] = true;
                     }
 
-                    std::vector<int> tmp1;
-                    std::vector<int> tmp2;
-                    int num_segments = get_segments(zoid.local_idxs_per_timestep[t], tmp1, tmp2);
+                    std::vector<int> segment_idxs;
+                    std::vector<int> segment_sizes;
+                    int num_segments = get_segments(zoid.local_idxs_per_timestep[t], segment_idxs, segment_sizes);
                     total_num_local_segments_next_dt += num_segments;
+
+                    for (int i = 0; i < num_segments; i++) {
+                        zoid.local_idxs_per_timestep_segment_idxs[t].push_back(segment_idxs[i]);
+                        zoid.local_idxs_per_timestep_segment_sizes[t].push_back(segment_sizes[i]);
+                    }
 
                     std::stringstream o;
                     o << BOLDYELLOW << "NEXT DT dep: " << dep << " zoid: " << zoid.num << " time: " << t
@@ -14353,7 +14363,78 @@ public:
         int chunk_size = MODIFY_GRAINSIZE;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (true || nlocal > MODIFY_GRAINSIZE) {
+        if (nlocal > MODIFY_GRAINSIZE) {
+            auto& segment_idxs = zoid.local_idxs_per_timestep_segment_idxs[timestep];
+            auto& segment_sizes = zoid.local_idxs_per_timestep_segment_sizes[timestep];
+
+            for (int idx = 0; idx < segment_idxs.size(); idx++) {
+                int segment_idx = segment_idxs[idx];
+                int segment_size = segment_sizes[idx];
+                for (int j = 0; j < segment_size; j++) {
+                    int i = segment_idx + j;
+                    const int itype = atom_type[i];
+
+                    // const int *_noalias const jlist = firstneigh[i];
+                    const auto &jlist = neighbor_list[i];
+                    const double *_noalias const cutsqi = cutsq[itype];
+                    const double *_noalias const offseti = offset[itype];
+                    const double *_noalias const lj1i = lj1[itype];
+                    const double *_noalias const lj2i = lj2[itype];
+                    const double *_noalias const lj3i = lj3[itype];
+                    const double *_noalias const lj4i = lj4[itype];
+
+                    double xtmp = x[i].x;
+                    double ytmp = x[i].y;
+                    double ztmp = x[i].z;
+                    // int jnum = numneigh[i];
+                    int jnum = jlist.size();
+
+                    double fxtmp = 0.0;
+                    double fytmp = 0.0;
+                    double fztmp = 0.0;
+
+                    for (int jj = 0; jj < jnum; jj++) {
+                        double evdwl = 0.0;
+                        // int j = jlist[jj];
+                        int j = jlist[jj];
+                        double factor_lj = special_lj[pair->sbmask(j)];
+                        j &= NEIGHMASK;
+
+                        double delx = xtmp - x[j].x;
+                        double dely = ytmp - x[j].y;
+                        double delz = ztmp - x[j].z;
+                        double rsq = delx * delx + dely * dely + delz * delz;
+                        int jtype = atom_type[j];
+
+                        if (rsq < cutsqi[jtype]) {
+                            double r2inv = 1.0 / rsq;
+                            double r6inv = r2inv * r2inv * r2inv;
+                            double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                            double fpair = factor_lj * forcelj * r2inv;
+
+                            fxtmp += delx * fpair;
+                            fytmp += dely * fpair;
+                            fztmp += delz * fpair;
+
+                            if (NEWTON_PAIR || is_local_idx[j]) {
+                                spinlocks[j].lock();
+                                f[j].x -= delx * fpair;
+                                f[j].y -= dely * fpair;
+                                f[j].z -= delz * fpair;
+                                spinlocks[j].unlock();
+                            }
+                        }
+                    }
+
+                    spinlocks[i].lock();
+                    f[i].x += fxtmp;
+                    f[i].y += fytmp;
+                    f[i].z += fztmp;
+                    spinlocks[i].unlock();
+                }
+            }
+
+            /*
             #pragma cilk grainsize MODIFY_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -14418,6 +14499,7 @@ public:
                 f[i].z += fztmp;
                 spinlocks[i].unlock();
             }
+            */
 
             auto& bond_list = zoid.bond_list_modified[timestep];
             int nbonds = bond_list.size();
@@ -15236,6 +15318,8 @@ public:
                 delete[] zoid.claimed_flags_stencil_md;
 
                 delete[] zoid.local_idxs_per_timestep;
+                delete[] zoid.local_idxs_per_timestep_segment_idxs;
+                delete[] zoid.local_idxs_per_timestep_segment_sizes;
                 delete[] zoid.atom_domains_per_timestep;
                 delete[] zoid.is_local_per_timestep;
                 delete[] zoid.neighbor_list;
@@ -15284,6 +15368,8 @@ public:
                 }
 
                 delete[] zoid.local_idxs_per_timestep;
+                delete[] zoid.local_idxs_per_timestep_segment_idxs;
+                delete[] zoid.local_idxs_per_timestep_segment_sizes;
                 delete[] zoid.atom_domains_per_timestep;
                 delete[] zoid.is_local_per_timestep;
                 delete[] zoid.neighbor_list;

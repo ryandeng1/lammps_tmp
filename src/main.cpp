@@ -20,7 +20,7 @@
 #include <cilk/cilk_api.h>
 #include <sstream>
 #include "CLI11.hpp"
-#include "stencil_md_utils.h"
+#include "stencil_md_config.hpp"
 
 #ifdef __linux__
 #include "stencil_md_utils.h"
@@ -69,8 +69,8 @@ int main(int argc, char **argv)
 
   argv = app.ensure_utf8(argv);
 
-  std::string config_filename = "default";
-  app.add_option("-c,--config", config_filename, "config file for StencilMD");
+  std::string config_path = "default";
+  app.add_option("-c,--config", config_path, "config file path for StencilMD");
 
   std::string lammps_input_file = "default";
   app.add_option("-i,-in", lammps_input_file, "lammps input file, not directly used for StencilMD");
@@ -90,7 +90,14 @@ int main(int argc, char **argv)
       std::cout << "parse error: " << e.what() << std::endl;
   }
 
+  // StencilMDConfigManager::get_instance().load_from_config_file(config_path);
+  // std::cout << "Configuration loaded successfully via Singleton for StencilMD." << std::endl;
+
+  // const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+  // stencilMDConfig = StencilMDConfigManager::get_instance().get_config();
+
 #ifdef __linux__
+    // if (!stencilMDConfig.ONLY_RUN_LAMMPS) {
     if (!ONLY_RUN_LAMMPS) {
         constexpr bool USE_MULTI_SOCKET = true;
         if (USE_MULTI_SOCKET) {
@@ -141,263 +148,6 @@ int main(int argc, char **argv)
             set_worker_affinity(nworkers, cpusets, calling_thread);
             delete[] cpusets;
         }
-
-            /*
-            if (world_size == 16) {
-                auto* cpusets = new cpu_set_t[nworkers];
-
-                constexpr int NUM_CORES_PER_SOCKET = 24;
-
-                if (rank % 2 == 0) {
-                    for (int i = 0; i < nworkers; i++) {
-                        CPU_ZERO(&cpusets[i]);
-                        CPU_SET(i, &cpusets[i]);
-                    }
-                } else {
-                    for (int i = 0; i < nworkers; i++) {
-                        CPU_ZERO(&cpusets[i]);
-                        CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
-                    }
-                }
-
-                set_worker_affinity(nworkers, cpusets, calling_thread);
-
-                delete[] cpusets;
-            } else if (world_size == 32) {
-                auto* cpusets = new cpu_set_t[nworkers];
-
-                constexpr int NUM_CORES_PER_SOCKET = 24;
-
-                if (rank % 4 == 0) {
-                    for (int i = 0; i < nworkers; i++) {
-                        CPU_ZERO(&cpusets[i]);
-                        CPU_SET(i, &cpusets[i]);
-                    }
-                } else if (rank % 4 == 1) {
-                    for (int i = 0; i < nworkers; i++) {
-                        CPU_ZERO(&cpusets[i]);
-                        CPU_SET(i + nworkers + 1, &cpusets[i]);
-                    }
-                } else if (rank % 4 == 2) {
-                    for (int i = 0; i < nworkers; i++) {
-                        CPU_ZERO(&cpusets[i]);
-                        CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
-                    }
-                } else if (rank % 4 == 3) {
-                    for (int i = 0; i < nworkers; i++) {
-                        CPU_ZERO(&cpusets[i]);
-                        CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1, &cpusets[i]);
-                    }
-                }
-
-                set_worker_affinity(nworkers, cpusets, calling_thread);
-
-                delete[] cpusets;
-            } else if (world_size == 64) {
-                auto* cpusets = new cpu_set_t[nworkers];
-
-                constexpr int NUM_CORES_PER_SOCKET = 24;
-
-                constexpr bool USE_HYPERTHREADING = true;
-
-                if (USE_HYPERTHREADING) {
-                    constexpr int HYPERTHREAD = 48;
-                    assert(nworkers % 2 == 0);
-                    int half = nworkers / 2;
-
-                    if (rank % 8 == 0) {
-                        for (int i = 0; i < half; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i, &cpusets[i]);
-
-                            CPU_ZERO(&cpusets[i + half]);
-                            CPU_SET(i + HYPERTHREAD, &cpusets[i + half]);
-
-                            if (rank < 8) {
-                                std::stringstream s1;
-                                s1 << "assign thread: " << i << " to worker: " << i << " thread: " << i + HYPERTHREAD << " to worker: " << i + nworkers / 2 << std::endl;
-                                std::cout << s1.str();
-                            }
-                        }
-                    } else if (rank % 8 == 1) {
-                        for (int i = 0; i < half; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + half + 1, &cpusets[i]);
-
-                            CPU_ZERO(&cpusets[i + half]);
-                            CPU_SET(i + half + 1 + HYPERTHREAD, &cpusets[i + half]);
-
-                            if (rank < 8) {
-                                std::stringstream s1;
-                                s1 << "assign thread: " << i + half + 1 << " to worker: " << i
-                                << " thread: " << i + half + 1 + HYPERTHREAD << " to worker: " << i + half << std::endl;
-                                std::cout << s1.str();
-                            }
-                        }
-                    } else if (rank % 8 == 2) {
-                        for (int i = 0; i < half; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + 2 * (half + 1), &cpusets[i]);
-
-                            CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + 2 * (half + 1) + HYPERTHREAD, &cpusets[i + half]);
-
-                            if (rank < 8) {
-                                std::stringstream s1;
-                                s1 << "assign thread: " << i + 2 * (half + 1) << " to worker: " << i
-                                << " thread: " << i + 2 * (half + 1) + HYPERTHREAD << " to worker: " << i + half << std::endl;
-                                std::cout << s1.str();
-                            }
-                        }
-                    } else if (rank % 8 == 3) {
-                        for (int i = 0; i < half; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + 3 * (half + 1), &cpusets[i]);
-
-                            CPU_ZERO(&cpusets[i + nworkers / 2]);
-                            CPU_SET(i + 3 * (half + 1) + HYPERTHREAD, &cpusets[i + nworkers / 2]);
-
-                            if (rank < 8) {
-                                std::stringstream s1;
-                                s1 << "assign thread: " << i + 3 * (half + 1) << " to worker: " << i
-                                << " thread: " << i + 3 * (half + 1) + HYPERTHREAD << " to worker: " << i + half << std::endl;
-                                std::cout << s1.str();
-                            }
-                        }
-                    } else if (rank % 8 == 4) {
-                        for (int i = 0; i < half; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
-
-                            CPU_ZERO(&cpusets[i + half]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + HYPERTHREAD, &cpusets[i + half]);
-
-                            if (rank < 8) {
-                                std::stringstream s1;
-                                s1 << "assign thread: " << i + NUM_CORES_PER_SOCKET << " to worker: " << i
-                                << " thread: " << i + NUM_CORES_PER_SOCKET + HYPERTHREAD << " to worker: " << i + half << std::endl;
-                                std::cout << s1.str();
-                            }
-                        }
-                    } else if (rank % 8 == 5) {
-                        for (int i = 0; i < half; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + half + 1, &cpusets[i]);
-
-                            CPU_ZERO(&cpusets[i + half]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + half + 1 + HYPERTHREAD, &cpusets[i + half]);
-
-                            if (rank < 8) {
-                                std::stringstream s1;
-                                s1 << "assign thread: " << i + NUM_CORES_PER_SOCKET + half + 1 << " to worker: " << i
-                                << " thread: " << i + NUM_CORES_PER_SOCKET + half + 1 + HYPERTHREAD << " to worker: " << i + half << std::endl;
-                                std::cout << s1.str();
-                            }
-                        }
-                    } else if (rank % 8 == 6) {
-                        for (int i = 0; i < half; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (half + 1), &cpusets[i]);
-
-                            CPU_ZERO(&cpusets[i + half]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (half + 1) + HYPERTHREAD, &cpusets[i + half]);
-
-                            if (rank < 8) {
-                                std::stringstream s1;
-                                s1 << "assign thread: " << i + NUM_CORES_PER_SOCKET + 2 * (half + 1) << " to worker: " << i
-                                << " thread: " << i + NUM_CORES_PER_SOCKET + 2 * (half + 1) + HYPERTHREAD << " to worker: " << i + half << std::endl;
-                                std::cout << s1.str();
-                            }
-                        }
-                    } else if (rank % 8 == 7) {
-                        for (int i = 0; i < half; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (half + 1), &cpusets[i]);
-
-                            CPU_ZERO(&cpusets[i + half]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (half + 1) + HYPERTHREAD, &cpusets[i + half]);
-
-                            if (rank < 8) {
-                                std::stringstream s1;
-                                s1 << "assign thread: " << i + NUM_CORES_PER_SOCKET + 3 * (half + 1) << " to worker: " << i
-                                << " thread: " << i + NUM_CORES_PER_SOCKET + 3 * (half + 1) + HYPERTHREAD << " to worker: " << i + half << std::endl;
-                                std::cout << s1.str();
-                            }
-                        }
-                    }
-                } else {
-                    if (rank % 8 == 0) {
-                        for (int i = 0; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i, &cpusets[i]);
-                        }
-                    } else if (rank % 8 == 1) {
-                        for (int i = 0; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + nworkers + 1, &cpusets[i]);
-                        }
-                    } else if (rank % 8 == 2) {
-                        for (int i = 0; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + 2 * (nworkers + 1), &cpusets[i]);
-                        }
-                    } else if (rank % 8 == 3) {
-                        for (int i = 0; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + 3 * (nworkers + 1), &cpusets[i]);
-                        }
-                    } else if (rank % 8 == 4) {
-                        for (int i = 0; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
-                        }
-                    } else if (rank % 8 == 5) {
-                        for (int i = 0; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + nworkers + 1, &cpusets[i]);
-                        }
-                    } else if (rank % 8 == 6) {
-                        for (int i = 0; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 2 * (nworkers + 1), &cpusets[i]);
-                        }
-                    } else if (rank % 8 == 7) {
-                        for (int i = 0; i < nworkers; i++) {
-                            CPU_ZERO(&cpusets[i]);
-                            CPU_SET(i + NUM_CORES_PER_SOCKET + 3 * (nworkers + 1), &cpusets[i]);
-                        }
-                    }
-                }
-
-                set_worker_affinity(nworkers, cpusets, calling_thread);
-
-                delete[] cpusets;
-            }
-        } else {
-            auto calling_thread = pthread_self();
-
-            cilk_for (int i = 0; i < 1e6; i++) {
-                if (rand() == 0) {
-                    std::cout << "i: " << i << std::endl;
-                }
-            }
-
-            int nworkers = __cilkrts_get_nworkers();
-
-            auto* cpusets = new cpu_set_t[nworkers];
-
-            constexpr int NUM_CORES_PER_SOCKET = 24;
-
-            for (int i = 0; i < nworkers; i++) {
-                CPU_ZERO(&cpusets[i]);
-                CPU_SET(i + NUM_CORES_PER_SOCKET, &cpusets[i]);
-            }
-
-            set_worker_affinity(nworkers, cpusets, calling_thread);
-
-            delete[] cpusets;
-        }
-        */
     }
 #endif
 
