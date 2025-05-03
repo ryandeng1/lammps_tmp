@@ -14506,7 +14506,7 @@ public:
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = MODIFY_GRAINSIZE;
 
-        constexpr int PAIR_BOND_GRAINSIZE = 128;
+        constexpr int PAIR_BOND_GRAINSIZE = 256;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
         if (nlocal > PAIR_BOND_GRAINSIZE) {
