@@ -34,6 +34,7 @@
 #include <bitset>
 
 constexpr bool USE_BREAK = false;
+constexpr bool NO_LOCKS_BOND = true;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -7669,11 +7670,14 @@ public:
                     zoid.claimed_flags_stencil_md = new std::atomic_flag*[1];
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.local_idxs_per_timestep_segment_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.local_idxs_per_timestep_segment_sizes = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.atom_domains_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.is_local_per_timestep = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.bond_list_modified_num_colors = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     // zoid.neighbor_list = new std::vector<int>*[1];
                     // zoid.bond_list = new std::vector<std::pair<int, int>>*[1];
 
@@ -7735,11 +7739,14 @@ public:
                     zoid.claimed_flags_stencil_md = queues_many_cuts[coord.first][coord.second].claimed_flags_stencil_md;
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.local_idxs_per_timestep_segment_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.local_idxs_per_timestep_segment_sizes = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.atom_domains_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.is_local_per_timestep = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.bond_list_modified_num_colors = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                     zoid.send_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -9581,6 +9588,56 @@ public:
                 for (auto& p : zoid.bond_list[t][idx]) {
                     zoid.bond_list_modified[t].push_back({idx, p.first, p.second});
                 }
+            }
+
+            if (NO_LOCKS_BOND) {
+                auto conflict_adj_list = build_conflict_graph(zoid.bond_list_modified[t]);
+                auto bond_colors = greedy_coloring(zoid.bond_list_modified[t].size(), conflict_adj_list);
+                int max_color = 0;
+                if (!bond_colors.empty()) {
+                    auto max_it = std::max_element(bond_colors.begin(), bond_colors.end());
+                    if (max_it != bond_colors.end()) {
+                        max_color = *max_it;
+                    }
+                }
+                int num_colors = (max_color >= 0) ? (max_color + 1) : 0;
+
+                std::vector<std::vector<int>> bond_idxs_by_color(num_colors);
+                if (num_colors > 0) {
+                    for (int bond_idx = 0; bond_idx < zoid.bond_list_modified[t].size(); ++bond_idx) {
+                        int color = bond_colors[bond_idx];
+                        if (color >= 0 && color < num_colors) { // Safety check
+                            bond_idxs_by_color[color].push_back(bond_idx);
+                        } else {
+                            std::cerr << "Warning: Bond " << bond_idx << " has invalid color " << color << std::endl;
+                        }
+                    }
+                }
+
+                std::map<std::tuple<int, int, int>, int> bond_to_color;
+                std::vector<int> color_counts(num_colors, 0);
+                for (int c = 0; c < num_colors; c++) {
+                    color_counts[c] = bond_idxs_by_color[c].size();
+                    for (auto& idx : bond_idxs_by_color[c]) {
+                        // bond_to_color[bond_list[idx]] = c;
+                        bond_to_color[zoid.bond_list_modified[t][idx]] = c;
+                    }
+                }
+
+                std::sort(zoid.bond_list_modified[t].begin(), zoid.bond_list_modified[t].end(),
+                          [&](const auto& bond_a, const auto& bond_b) {
+                    auto color_a = bond_to_color.at(bond_a);
+                    auto color_b = bond_to_color.at(bond_b);
+                    if (color_a < color_b) {
+                        return true;
+                    } else if (color_a > color_b) {
+                        return false;
+                    }
+
+                    return bond_a < bond_b;
+                });
+
+                zoid.bond_list_modified_num_colors[t] = color_counts;
             }
         }
     }
@@ -14317,6 +14374,93 @@ public:
         }
     }
 
+    /**
+     * @brief Performs greedy graph coloring on a given graph.
+     *
+     * Assigns a color (non-negative integer) to each vertex such that no two
+     * adjacent vertices share the same color. It uses the smallest available
+     * color for each vertex based on its already colored neighbors.
+     *
+     * @param num_vertices The total number of vertices in the graph (labeled 0 to num_vertices-1).
+     * @param adj_list An adjacency list representation of the graph.
+     * adj_list[i] contains a vector of vertices adjacent to vertex i.
+     * @return A vector where the i-th element is the color assigned to vertex i.
+     * Colors are 0-indexed integers. Returns an empty vector if num_vertices is 0.
+     */
+    std::vector<int> greedy_coloring(int num_vertices, const std::vector<std::vector<int>>& adj_list) {
+        assert(num_vertices > 0);
+
+        // Initialize colors for all vertices. -1 indicates uncolored.
+        std::vector<int> result_colors(num_vertices, -1);
+
+        // Process vertices one by one (in default order 0, 1, ..., n-1)
+        for (int u = 0; u < num_vertices; ++u) {
+            // Keep track of colors used by neighbors of u that are already colored
+            std::unordered_set<int> neighbor_colors;
+
+            // Iterate through neighbors of the current vertex u
+            for (int neighbor : adj_list[u]) {
+                // If the neighbor has already been assigned a color
+                if (result_colors[neighbor] != -1) {
+                    neighbor_colors.insert(result_colors[neighbor]);
+                }
+            }
+
+            // Find the smallest non-negative integer (color) that is
+            // not present in the set of neighbor colors.
+            int current_color = 0;
+            while (neighbor_colors.count(current_color)) {
+                current_color++;
+            }
+
+            // Assign the found color to the current vertex u
+            result_colors[u] = current_color;
+        }
+
+        return result_colors;
+    }
+
+    // --- Build Bond Conflict Graph ---
+    /**
+     * @brief Builds the adjacency list for the bond conflict graph.
+     *
+     * Nodes in the conflict graph represent bonds. An edge exists if
+     * the corresponding bonds share an atom.
+     *
+     * @param bonds The list of bonds in the molecule.
+     * @param num_bonds Total number of bonds.
+     * @return Adjacency list for the conflict graph.
+     */
+    std::vector<std::vector<int>> build_conflict_graph(const std::vector<std::tuple<int, int, int>>& bond_list) {
+        int num_bonds = bond_list.size();
+        std::vector<std::vector<int>> conflict_adj_list(num_bonds);
+
+        std::vector<std::pair<int, int>> bonds;
+        bonds.reserve(num_bonds);
+        for (int i = 0; i < num_bonds; i++) {
+            int i1 = std::get<0>(bond_list[i]);
+            int i2 = std::get<1>(bond_list[i]);
+            bonds.push_back(std::make_pair(i1, i2));
+        }
+
+        for (int k1 = 0; k1 < num_bonds; ++k1) {
+            for (int k2 = k1 + 1; k2 < num_bonds; ++k2) {
+                const auto& bond1 = bonds[k1]; // (i1, j1)
+                const auto& bond2 = bonds[k2]; // (i2, j2)
+
+                // Check for shared atom
+                if (bond1.first == bond2.first || bond1.first == bond2.second ||
+                    bond1.second == bond2.first || bond1.second == bond2.second)
+                {
+                    // Add edge in the conflict graph
+                    conflict_adj_list[k1].push_back(k2);
+                    conflict_adj_list[k2].push_back(k1);
+                }
+            }
+        }
+        return conflict_adj_list;
+    }
+
     void BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
@@ -14370,8 +14514,8 @@ public:
             for (int idx = 0; idx < segment_idxs.size(); idx++) {
                 int segment_idx = segment_idxs[idx];
                 int segment_size = segment_sizes[idx];
-                for (int j = 0; j < segment_size; j++) {
-                    int i = segment_idx + j;
+                for (int k = 0; k < segment_size; k++) {
+                    int i = segment_idx + k;
                     const int itype = atom_type[i];
 
                     // const int *_noalias const jlist = firstneigh[i];
@@ -14504,64 +14648,128 @@ public:
             auto& bond_list = zoid.bond_list_modified[timestep];
             int nbonds = bond_list.size();
 
-            #pragma cilk grainsize MODIFY_GRAINSIZE
-            cilk_for (int i = 0; i < nbonds; i++) {
-                auto& tup = bond_list[i];
-                int i1 = std::get<0>(tup);
-                int i2 = std::get<1>(tup);
-                int type = std::get<2>(tup);
+            if (NO_LOCKS_BOND) {
+                auto& color_counts = zoid.bond_list_modified_num_colors[timestep];
 
-                double delx = x[i1].x - x[i2].x;
-                double dely = x[i1].y - x[i2].y;
-                double delz = x[i1].z - x[i2].z;
+                int start_idx = 0;
+                for (int c = 0; c < color_counts.size(); c++) {
+                    int num_bonds_color = color_counts[c];
 
-                double rsq = delx * delx + dely * dely + delz * delz;
-                double r0sq = r0[type] * r0[type];
-                double rlogarg = 1.0 - rsq / r0sq;
+                    #pragma cilk grainsize MODIFY_GRAINSIZE
+                    cilk_for (int i = 0; i < num_bonds_color; i++) {
+                        auto& tup = bond_list[start_idx + i];
+                        int i1 = std::get<0>(tup);
+                        int i2 = std::get<1>(tup);
+                        int type = std::get<2>(tup);
 
-                if (rlogarg < 0.1) {
-                    error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                   update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                    //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                    //                                return;
-                    assert(false);
+                        double delx = x[i1].x - x[i2].x;
+                        double dely = x[i1].y - x[i2].y;
+                        double delz = x[i1].z - x[i2].z;
 
-                    rlogarg = 0.1;
+                        double rsq = delx * delx + dely * dely + delz * delz;
+                        double r0sq = r0[type] * r0[type];
+                        double rlogarg = 1.0 - rsq / r0sq;
+
+                        if (rlogarg < 0.1) {
+                            error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                           update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                            //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                            //                                return;
+                            assert(false);
+
+                            rlogarg = 0.1;
+                        }
+
+                        double fbond = -k[type] / rlogarg;
+
+                        // force from LJ term
+                        double sr2 = 0.0;
+                        double sr6 = 0.0;
+
+                        if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                            sr2 = sigma[type] * sigma[type] / rsq;
+                            sr6 = sr2 * sr2 * sr2;
+                            fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                        }
+
+                        // energy
+
+                        // apply force to each of 2 atoms
+
+                        if (NEWTON_PAIR || is_local_idx[i1]) {
+                            f[i1].x += delx * fbond;
+                            f[i1].y += dely * fbond;
+                            f[i1].z += delz * fbond;
+                        }
+
+                        if (NEWTON_PAIR || is_local_idx[i2]) {
+                            f[i2].x -= delx * fbond;
+                            f[i2].y -= dely * fbond;
+                            f[i2].z -= delz * fbond;
+                        }
+                    }
+
+                    start_idx += num_bonds_color;
                 }
+            } else {
+                #pragma cilk grainsize MODIFY_GRAINSIZE
+                cilk_for (int i = 0; i < nbonds; i++) {
+                    auto& tup = bond_list[i];
+                    int i1 = std::get<0>(tup);
+                    int i2 = std::get<1>(tup);
+                    int type = std::get<2>(tup);
 
-                double fbond = -k[type] / rlogarg;
+                    double delx = x[i1].x - x[i2].x;
+                    double dely = x[i1].y - x[i2].y;
+                    double delz = x[i1].z - x[i2].z;
 
-                // force from LJ term
-                double sr2 = 0.0;
-                double sr6 = 0.0;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    double r0sq = r0[type] * r0[type];
+                    double rlogarg = 1.0 - rsq / r0sq;
 
-                if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                    sr2 = sigma[type] * sigma[type] / rsq;
-                    sr6 = sr2 * sr2 * sr2;
-                    fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                }
+                    if (rlogarg < 0.1) {
+                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                        //                                return;
+                        assert(false);
 
-                // energy
+                        rlogarg = 0.1;
+                    }
 
-                // apply force to each of 2 atoms
+                    double fbond = -k[type] / rlogarg;
 
-                if (NEWTON_PAIR || is_local_idx[i1]) {
-                    spinlocks[i1].lock();
-                    f[i1].x += delx * fbond;
-                    f[i1].y += dely * fbond;
-                    f[i1].z += delz * fbond;
-                    spinlocks[i1].unlock();
-                }
+                    // force from LJ term
+                    double sr2 = 0.0;
+                    double sr6 = 0.0;
 
-                if (NEWTON_PAIR || is_local_idx[i2]) {
-                    spinlocks[i2].lock();
-                    f[i2].x -= delx * fbond;
-                    f[i2].y -= dely * fbond;
-                    f[i2].z -= delz * fbond;
-                    spinlocks[i2].unlock();
+                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                        sr2 = sigma[type] * sigma[type] / rsq;
+                        sr6 = sr2 * sr2 * sr2;
+                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                    }
+
+                    // energy
+
+                    // apply force to each of 2 atoms
+
+                    if (NEWTON_PAIR || is_local_idx[i1]) {
+                        spinlocks[i1].lock();
+                        f[i1].x += delx * fbond;
+                        f[i1].y += dely * fbond;
+                        f[i1].z += delz * fbond;
+                        spinlocks[i1].unlock();
+                    }
+
+                    if (NEWTON_PAIR || is_local_idx[i2]) {
+                        spinlocks[i2].lock();
+                        f[i2].x -= delx * fbond;
+                        f[i2].y -= dely * fbond;
+                        f[i2].z -= delz * fbond;
+                        spinlocks[i2].unlock();
+                    }
                 }
             }
-
 
             /*
             #pragma cilk grainsize MODIFY_GRAINSIZE
@@ -15325,6 +15533,7 @@ public:
                 delete[] zoid.neighbor_list;
                 delete[] zoid.bond_list;
                 delete[] zoid.bond_list_modified;
+                delete[] zoid.bond_list_modified_num_colors;
 
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     delete[] zoid.send_force_idxs_double_buffering[t];
@@ -15375,6 +15584,7 @@ public:
                 delete[] zoid.neighbor_list;
                 delete[] zoid.bond_list;
                 delete[] zoid.bond_list_modified;
+                delete[] zoid.bond_list_modified_num_colors;
 
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     delete[] zoid.send_force_idxs_double_buffering[t];
