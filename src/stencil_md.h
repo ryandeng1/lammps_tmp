@@ -14508,6 +14508,7 @@ public:
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
         if (nlocal > MODIFY_GRAINSIZE) {
+            /*
             auto& segment_idxs = zoid.local_idxs_per_timestep_segment_idxs[timestep];
             auto& segment_sizes = zoid.local_idxs_per_timestep_segment_sizes[timestep];
 
@@ -14577,8 +14578,8 @@ public:
                     spinlocks[i].unlock();
                 }
             }
+            */
 
-            /*
             #pragma cilk grainsize MODIFY_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -14643,7 +14644,6 @@ public:
                 f[i].z += fztmp;
                 spinlocks[i].unlock();
             }
-            */
 
             auto& bond_list = zoid.bond_list_modified[timestep];
             int nbonds = bond_list.size();
