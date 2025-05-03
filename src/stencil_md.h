@@ -14580,7 +14580,7 @@ public:
             }
             */
 
-            #pragma cilk grainsize MODIFY_GRAINSIZE
+            #pragma cilk grainsize 512
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -14655,7 +14655,7 @@ public:
                 for (int c = 0; c < color_counts.size(); c++) {
                     int num_bonds_color = color_counts[c];
 
-                    #pragma cilk grainsize MODIFY_GRAINSIZE
+                    #pragma cilk grainsize 512
                     cilk_for (int i = 0; i < num_bonds_color; i++) {
                         auto& tup = bond_list[start_idx + i];
                         int i1 = std::get<0>(tup);
