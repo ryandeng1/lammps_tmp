@@ -14506,8 +14506,10 @@ public:
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = MODIFY_GRAINSIZE;
 
+        constexpr int PAIR_BOND_GRAINSIZE = 128;
+
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > MODIFY_GRAINSIZE) {
+        if (nlocal > PAIR_BOND_GRAINSIZE) {
             /*
             auto& segment_idxs = zoid.local_idxs_per_timestep_segment_idxs[timestep];
             auto& segment_sizes = zoid.local_idxs_per_timestep_segment_sizes[timestep];
@@ -14580,7 +14582,7 @@ public:
             }
             */
 
-            #pragma cilk grainsize 128
+            #pragma cilk grainsize PAIR_BOND_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -14655,7 +14657,7 @@ public:
                 for (int c = 0; c < color_counts.size(); c++) {
                     int num_bonds_color = color_counts[c];
 
-                    #pragma cilk grainsize 128
+                    #pragma cilk grainsize PAIR_BOND_GRAINSIZE
                     cilk_for (int i = 0; i < num_bonds_color; i++) {
                         auto& tup = bond_list[start_idx + i];
                         int i1 = std::get<0>(tup);
@@ -14712,7 +14714,7 @@ public:
                     start_idx += num_bonds_color;
                 }
             } else {
-                #pragma cilk grainsize MODIFY_GRAINSIZE
+                #pragma cilk grainsize PAIR_BOND_GRAINSIZE
                 cilk_for (int i = 0; i < nbonds; i++) {
                     auto& tup = bond_list[i];
                     int i1 = std::get<0>(tup);
