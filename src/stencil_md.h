@@ -11491,7 +11491,7 @@ public:
     MPIX_Stream all_streams[NUM_STREAMS];
     MPI_Comm stream_comm;
 
-    static constexpr bool USE_STREAMS = false;
+    static constexpr bool USE_STREAMS = true;
 
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
         if (USE_STREAMS) {
