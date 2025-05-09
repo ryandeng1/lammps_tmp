@@ -8107,8 +8107,6 @@ void Verlet::run_stencil_md_many_cuts_waitany(int starting_timestep, double **te
             int zoid_num = my_queues[dep][j].num;
             claimed[zoid_num].clear();
         }
-
-        MPI_Barrier(world);
     }
 
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
