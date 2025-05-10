@@ -12264,7 +12264,7 @@ public:
                                       send_zoid_num % comm->nprocs, mpi_tag,
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[send_request_idx]);
-                    // MPIX_Stream_progress(all_streams[send_stream_idx]);
+                    MPIX_Stream_progress(all_streams[send_stream_idx]);
                 } else {
                     int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
                                            : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
