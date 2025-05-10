@@ -8209,6 +8209,39 @@ public:
         }
         */
 
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            int comm_idx = 0;
+            for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
+                auto& zoid = my_queues_many_cuts[dep][j];
+                int zoid_num = zoid.num;
+                auto& recv_neighbors = recv_from_neighbors_many_cuts[zoid_num];
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    if (recv_zoid_num % comm->nprocs != comm->me) {
+                        ZOID_TO_ZOID_TO_VCI_IDX[{recv_zoid_num, zoid_num}] = (comm_idx) % NUM_COMMS;
+                        comm_idx++;
+                    }
+                }
+            }
+        }
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            int comm_idx = 0;
+            for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
+                auto& zoid = my_queues_many_cuts_next_dt[dep][j];
+                int zoid_num = zoid.num;
+                auto& recv_neighbors = recv_from_neighbors_many_cuts_next_dt[zoid_num];
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    if (recv_zoid_num % comm->nprocs != comm->me) {
+                        ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{recv_zoid_num, zoid_num}] = (comm_idx) % NUM_COMMS;
+                        comm_idx++;
+                    }
+                }
+            }
+        }
+
+        /*
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
             int comm_idx = 0;
             for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
@@ -8242,6 +8275,7 @@ public:
                 // comm_idx++;
             }
         }
+        */
 
         zoid_to_stream_num.resize(NUM_ZOIDS_MANY_CUTS);
         for (int dep = 0; dep < NUM_DEPS; dep++) {
