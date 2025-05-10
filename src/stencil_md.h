@@ -6650,6 +6650,9 @@ public:
     std::vector<int> zoid_to_stream_num;
     std::vector<int> zoid_to_stream_num_next_dt;
 
+    std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_STREAM_NUM;
+    std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT;
+
     std::vector<std::vector<int>> send_zoid_to_zoid_sizes;
     std::vector<std::vector<int>> send_zoid_to_zoid_sizes_next_dt;
     std::vector<std::vector<int>> recv_zoid_to_zoid_sizes;
@@ -8460,6 +8463,107 @@ public:
     }
 
     template <bool curr_dt>
+    void INIT_ZOID_STREAM_DATA() {
+        std::map<std::pair<int, int>, int> dep_to_dep_to_count;
+        auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+
+        auto get_dep_curr_dt = [](const queue_info& zoid) {
+            return (zoid.where[0] % 2 == 0) + (zoid.where[1] % 2 == 0) + (zoid.where[2] % 2 == 0);
+        };
+
+        auto get_dep_next_dt = [](const queue_info& zoid) {
+            return (zoid.where[0] % 2 == 1) + (zoid.where[1] % 2 == 1) + (zoid.where[2] % 2 == 1);
+        };
+
+        std::map<std::pair<int, int>, int> comm_to_stream_num;
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            int stream_idx = 0;
+            for (int j = 0; j < queues[dep].size(); j++) {
+                const auto& zoid = queues[dep][j];
+                const auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int neigh : recv_neighbors) {
+                    if (neigh % comm->nprocs != comm->me) {
+                        comm_to_stream_num[{neigh, zoid.num}] = stream_idx++;
+                    }
+                }
+            }
+        }
+
+        std::vector<int> my_zoids_src;
+        std::vector<int> my_zoids_dst;
+        std::vector<int> my_zoids_stream_num;
+
+        for (auto& [k, v] : comm_to_stream_num) {
+            my_zoids_src.push_back(k.first);
+            my_zoids_dst.push_back(k.second);
+            my_zoids_stream_num.push_back(v);
+        }
+
+        std::vector<int> counts(comm->nprocs, 0);
+        std::vector<int> displacements(comm->nprocs, 0);
+
+        int my_count = my_zoids_src.size();
+        MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, world);
+
+        int total_size = 0;
+        for (int proc = 0; proc < comm->nprocs; proc++) {
+            total_size += counts[proc];
+        }
+
+        displacements[0] = 0;
+        for (int proc = 1; proc < comm->nprocs; proc++) {
+            displacements[proc] = displacements[proc - 1] + counts[proc - 1];
+        }
+
+        std::vector<int> all_src;
+        std::vector<int> all_dst;
+        std::vector<int> all_comm_idx;
+        all_src.resize(total_size);
+        all_dst.resize(total_size);
+        all_comm_idx.resize(total_size);
+
+        MPI_Allgatherv(my_zoids_src.data(), counts[comm->me], MPI_INT, all_src.data(),
+                       counts.data(), displacements.data(), MPI_INT, world);
+
+        MPI_Allgatherv(my_zoids_dst.data(), counts[comm->me], MPI_INT, all_dst.data(),
+                       counts.data(), displacements.data(), MPI_INT, world);
+
+        MPI_Allgatherv(my_zoids_stream_num.data(), counts[comm->me], MPI_INT, all_comm_idx.data(),
+                       counts.data(), displacements.data(), MPI_INT, world);
+
+        for (int i = 0; i < all_src.size(); i++) {
+            int src = all_src[i];
+            int dst = all_dst[i];
+            int comm_idx = all_comm_idx[i];
+            ZOID_TO_ZOID_TO_STREAM_NUM[{src, dst}] = comm_idx;
+        }
+
+        MPI_Barrier(world);
+
+        if (comm->me == 0) {
+            for (int dep = 0; dep < NUM_DEPS; dep++) {
+                int total_nrecv_neighbors = 0;
+                for (int j = 0; j < queues[dep].size(); j++) {
+                    auto& zoid = queues[dep][j];
+                    auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                    for (auto& neigh : recv_neighbors) {
+                        if (neigh % comm->nprocs != comm->me) {
+                            total_nrecv_neighbors++;
+                        }
+                    }
+                }
+            }
+
+            for (auto& [k, v] : ZOID_TO_ZOID_TO_STREAM_NUM) {
+                std::cout << BOLDYELLOW << "zoid: " << k.first << " to zoid: " << k.second << " stream num: " << v << RESET_COLOR << std::endl;
+            }
+
+            // assert(false);
+        }
+    }
+
+    template <bool curr_dt>
     void INIT_DEP_PROC_RECV_ZOID_DATA() {
         auto& queues = curr_dt ? queues_many_cuts
                 : queues_many_cuts_next_dt;
@@ -9212,7 +9316,10 @@ public:
 
         delete[] all_tags;
 
-        std::cout << "GOT LOCAL ATOMS PASSED I THINK. " << std::endl;
+        MPI_Barrier(world);
+        if (comm->me == 0) {
+            std::cout << "GOT LOCAL ATOMS PASSED I THINK. " << std::endl;
+        }
     }
 
     template <bool newton>
@@ -11484,7 +11591,7 @@ public:
         }
     }
 
-    static constexpr int NUM_STREAMS = 4;
+    static constexpr int NUM_STREAMS = 19;
     // 64 VCIs so 1 per comm
     static constexpr int NUM_COMMS = 48;
     std::vector<MPI_Comm> all_comms;
@@ -12146,8 +12253,13 @@ public:
                 assert(send_request_idx != -1);
 
                 if (USE_STREAMS) {
+                    /*
                     int send_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
                     int recv_stream_idx = curr_dt ? zoid_to_stream_num[send_zoid_num] : zoid_to_stream_num_next_dt[send_zoid_num];
+                    */
+                    int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({zoid_num, send_zoid_num});;
+                    int recv_stream_idx = send_stream_idx;
+
                     MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
                                       send_zoid_num % comm->nprocs, mpi_tag,
                                       stream_comm, send_stream_idx, recv_stream_idx,
@@ -12477,8 +12589,12 @@ public:
                 int recv_request_idx = curr_dt ? recv_request_zoid_to_idx[dep].at({recv_zoid_num, zoid_num})
                                                : recv_request_zoid_to_idx_next_dt[dep].at({recv_zoid_num, zoid_num});
                 if (USE_STREAMS) {
+                    /*
                     int send_stream_idx = curr_dt ? zoid_to_stream_num[recv_zoid_num] : zoid_to_stream_num_next_dt[recv_zoid_num];
                     int recv_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
+                    */
+                    int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({recv_zoid_num, zoid_num});;
+                    int recv_stream_idx = send_stream_idx;
 
                     MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                                       recv_zoid_num % comm->nprocs, mpi_tag,

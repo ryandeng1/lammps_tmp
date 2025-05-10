@@ -5476,6 +5476,8 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->INIT_ZOID_DATA_MANY_CUTS();
     stencilMD->INIT_MY_ZOIDS();
     stencilMD->INIT_ZOID_MANY_CUTS_NEIGHBORS();
+    stencilMD->INIT_ZOID_STREAM_DATA<true>();
+    stencilMD->INIT_ZOID_STREAM_DATA<false>();
     stencilMD->SORT_MY_ZOIDS<true>();
     stencilMD->SORT_MY_ZOIDS<false>();
     auto begin = std::chrono::high_resolution_clock::now();
