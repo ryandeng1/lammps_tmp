@@ -12294,11 +12294,11 @@ public:
                     int send_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
                     int recv_stream_idx = curr_dt ? zoid_to_stream_num[send_zoid_num] : zoid_to_stream_num_next_dt[send_zoid_num];
                     */
-                    // int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({zoid_num, send_zoid_num});;
-                    // int recv_stream_idx = send_stream_idx;
+                    int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({zoid_num, send_zoid_num});;
+                    int recv_stream_idx = send_stream_idx;
 
-                    int send_stream_idx = 0;
-                    int recv_stream_idx = 0;
+                    // int send_stream_idx = 0;
+                    // int recv_stream_idx = 0;
 
                     MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
                                       send_zoid_num % comm->nprocs, mpi_tag,
@@ -12633,10 +12633,10 @@ public:
                     int send_stream_idx = curr_dt ? zoid_to_stream_num[recv_zoid_num] : zoid_to_stream_num_next_dt[recv_zoid_num];
                     int recv_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
                     */
-                    // int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({recv_zoid_num, zoid_num});;
-                    // int recv_stream_idx = send_stream_idx;
-                    int send_stream_idx = 0;
-                    int recv_stream_idx = 0;
+                    int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({recv_zoid_num, zoid_num});;
+                    int recv_stream_idx = send_stream_idx;
+                    // int send_stream_idx = 0;
+                    // int recv_stream_idx = 0;
 
                     MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                                       recv_zoid_num % comm->nprocs, mpi_tag,
