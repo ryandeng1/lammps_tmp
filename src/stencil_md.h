@@ -8212,6 +8212,7 @@ public:
         }
         */
 
+        /*
         for (int dep = 1; dep < NUM_DEPS; dep++) {
             int comm_idx = 0;
             for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
@@ -8243,8 +8244,8 @@ public:
                 }
             }
         }
+        */
 
-        /*
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
             int comm_idx = 0;
             for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
@@ -8278,7 +8279,6 @@ public:
                 // comm_idx++;
             }
         }
-        */
 
         zoid_to_stream_num.resize(NUM_ZOIDS_MANY_CUTS);
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -11630,7 +11630,7 @@ public:
 
     static constexpr int NUM_STREAMS = 8;
     // 64 VCIs so 1 per comm
-    static constexpr int NUM_COMMS = 24;
+    static constexpr int NUM_COMMS = 48;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
     MPI_Comm stream_comm;
@@ -15003,9 +15003,7 @@ public:
                         spinlocks[i2].unlock();
                     }
                 }
-
             }
-
 
             /*
             if (NO_LOCKS_BOND) {
