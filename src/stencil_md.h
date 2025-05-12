@@ -11628,14 +11628,14 @@ public:
         }
     }
 
-    static constexpr int NUM_STREAMS = 4;
+    static constexpr int NUM_STREAMS = 8;
     // 64 VCIs so 1 per comm
-    static constexpr int NUM_COMMS = 128;
+    static constexpr int NUM_COMMS = 24;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
     MPI_Comm stream_comm;
 
-    static constexpr bool USE_STREAMS = true;
+    static constexpr bool USE_STREAMS = false;
 
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
         if (USE_STREAMS) {
