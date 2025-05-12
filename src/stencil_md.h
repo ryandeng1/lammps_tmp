@@ -14748,7 +14748,7 @@ public:
             }
             */
 
-            constexpr bool LOCK_STRIPING = true;
+            constexpr bool LOCK_STRIPING = false;
             constexpr int STRIPE_FACTOR = 1024;
 
             if (LOCK_STRIPING) {
