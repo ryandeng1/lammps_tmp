@@ -8589,8 +8589,10 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
         // run_stencil_md_many_cuts_new_comm<false>(t, test_f, test_x, test_v);
         // run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
         // run_stencil_md_many_cuts_helper<false>(t, test_f, test_x, test_v);
-        run_stencil_md_many_cuts_waitany<true>(t, test_f, test_x, test_v, claimed);
-        run_stencil_md_many_cuts_waitany<false>(t, test_f, test_x, test_v, claimed);
+        // run_stencil_md_many_cuts_waitany<true>(t, test_f, test_x, test_v, claimed);
+        // run_stencil_md_many_cuts_waitany<false>(t, test_f, test_x, test_v, claimed);
+        run_stencil_md_many_cuts_waitany_spawn_wait_loop<true>(t, test_f, test_x, test_v, claimed);
+        run_stencil_md_many_cuts_waitany_spawn_wait_loop<false>(t, test_f, test_x, test_v, claimed);
     }
 }
 
