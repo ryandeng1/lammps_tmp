@@ -7899,14 +7899,6 @@ void Verlet::unpack_self_wrapper(int starting_timestep, int dep, queue_info& zoi
                                  double** test_f, double** test_x, double** test_v,
                                  std::vector<std::atomic_flag>& claimed) {
 
-    if (!USE_NEWTON) {
-        int num_neighbors_receive_self = stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY<curr_dt>(zoid, start_t, end_t);
-        run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
-                                               test_f, test_x, test_v);
-
-        return;
-    }
-
     int num_neighbors_receive_self = stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY<curr_dt>(zoid, start_t, end_t);
     counter -= num_neighbors_receive_self;
     if (counter == 0) {
@@ -7953,6 +7945,7 @@ void Verlet::unpack_other_wrapper(int starting_timestep, int dep, queue_info& zo
                                   std::vector<MPI_Request>* send_r,
                                   double** test_f, double** test_x, double** test_v,
                                   std::vector<std::atomic_flag>& claimed) {
+    
     stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID<curr_dt>(zoid, recv_zoid_num, start_t, end_t);
     counter--;
     if (counter == 0) {
