@@ -447,8 +447,6 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.claimed_flags_stencil_md = new std::atomic_flag*[1];
 
                 zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.local_idxs_per_timestep_segment_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.local_idxs_per_timestep_segment_sizes = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -668,8 +666,6 @@ void StencilMD::INIT_ZOID_DATA() {
                 zoid.claimed_flags_stencil_md = lmp->queues[coord.first][coord.second].claimed_flags_stencil_md;
 
                 zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.local_idxs_per_timestep_segment_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.local_idxs_per_timestep_segment_sizes = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];

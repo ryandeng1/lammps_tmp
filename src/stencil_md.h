@@ -7676,13 +7676,13 @@ public:
                     zoid.claimed_flags_stencil_md = new std::atomic_flag*[1];
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.local_idxs_per_timestep_segment_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.local_idxs_per_timestep_segment_sizes = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.is_local_per_timestep = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // zoid.local_idxs_per_timestep_segment_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // zoid.local_idxs_per_timestep_segment_sizes = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // zoid.is_local_per_timestep = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.bond_list_modified_num_colors = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // zoid.bond_list_modified_num_colors = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     // zoid.neighbor_list = new std::vector<int>*[1];
                     // zoid.bond_list = new std::vector<std::pair<int, int>>*[1];
 
@@ -7744,13 +7744,13 @@ public:
                     zoid.claimed_flags_stencil_md = queues_many_cuts[coord.first][coord.second].claimed_flags_stencil_md;
 
                     zoid.local_idxs_per_timestep = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.local_idxs_per_timestep_segment_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.local_idxs_per_timestep_segment_sizes = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.is_local_per_timestep = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // zoid.local_idxs_per_timestep_segment_idxs = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // zoid.local_idxs_per_timestep_segment_sizes = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // zoid.is_local_per_timestep = new std::vector<bool>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.neighbor_list = new std::vector<std::vector<int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list = new std::vector<std::vector<std::pair<int, int>>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.bond_list_modified = new std::vector<std::tuple<int, int, int>>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    zoid.bond_list_modified_num_colors = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // zoid.bond_list_modified_num_colors = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                     zoid.send_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_force_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -9157,6 +9157,7 @@ public:
                         }
                     }
 
+                    /*
                     zoid.is_local_per_timestep[t].resize(zoid.tag_stencil_md[0].size());
                     for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
                         zoid.is_local_per_timestep[t][i] = false;
@@ -9164,6 +9165,7 @@ public:
                     for (int local_idx : zoid.local_idxs_per_timestep[t]) {
                         zoid.is_local_per_timestep[t][local_idx] = true;
                     }
+                    */
 
                     std::vector<int> segment_idxs;
                     std::vector<int> segment_sizes;
@@ -9175,10 +9177,12 @@ public:
                     std::cout << o.str();
                     */
 
+                    /*
                     for (int i = 0; i < num_segments; i++) {
                         zoid.local_idxs_per_timestep_segment_idxs[t].push_back(segment_idxs[i]);
                         zoid.local_idxs_per_timestep_segment_sizes[t].push_back(segment_sizes[i]);
                     }
+                    */
 
                     total_num_local_segments += num_segments;
                 }
@@ -9257,6 +9261,7 @@ public:
                         }
                     }
 
+                    /*
                     zoid.is_local_per_timestep[t].resize(zoid.tag_stencil_md[0].size());
                     for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
                         zoid.is_local_per_timestep[t][i] = false;
@@ -9264,16 +9269,19 @@ public:
                     for (int local_idx : zoid.local_idxs_per_timestep[t]) {
                         zoid.is_local_per_timestep[t][local_idx] = true;
                     }
+                    */
 
                     std::vector<int> segment_idxs;
                     std::vector<int> segment_sizes;
                     int num_segments = get_segments(zoid.local_idxs_per_timestep[t], segment_idxs, segment_sizes);
                     total_num_local_segments_next_dt += num_segments;
 
+                    /*
                     for (int i = 0; i < num_segments; i++) {
                         zoid.local_idxs_per_timestep_segment_idxs[t].push_back(segment_idxs[i]);
                         zoid.local_idxs_per_timestep_segment_sizes[t].push_back(segment_sizes[i]);
                     }
+                    */
 
                     /*
                     std::stringstream o;
@@ -9754,7 +9762,7 @@ public:
                     return bond_a < bond_b;
                 });
 
-                zoid.bond_list_modified_num_colors[t] = color_counts;
+                // zoid.bond_list_modified_num_colors[t] = color_counts;
             }
         }
     }
@@ -14663,7 +14671,7 @@ public:
         const auto& atom_type = zoid.type_stencil_md[0];
 
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
-        const auto& is_local_idx = zoid.is_local_per_timestep[timestep];
+        // const auto& is_local_idx = zoid.is_local_per_timestep[timestep];
         const int nlocal = local_idxs.size();
 
         int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
@@ -14931,7 +14939,8 @@ public:
                         fytmp += dely * fpair;
                         fztmp += delz * fpair;
 
-                        if (NEWTON_PAIR || is_local_idx[j]) {
+                        // if (NEWTON_PAIR || is_local_idx[j]) {
+                        if (NEWTON_PAIR) {
                             spinlocks[j].lock();
                             f[j].x -= delx * fpair;
                             f[j].y -= dely * fpair;
@@ -14992,7 +15001,8 @@ public:
 
                 // apply force to each of 2 atoms
 
-                if (NEWTON_PAIR || is_local_idx[i1]) {
+                // if (NEWTON_PAIR || is_local_idx[i1]) {
+                if (NEWTON_PAIR) {
                     spinlocks[i1].lock();
                     f[i1].x += delx * fbond;
                     f[i1].y += dely * fbond;
@@ -15000,7 +15010,8 @@ public:
                     spinlocks[i1].unlock();
                 }
 
-                if (NEWTON_PAIR || is_local_idx[i2]) {
+                // if (NEWTON_PAIR || is_local_idx[i2]) {
+                if (NEWTON_PAIR) {
                     spinlocks[i2].lock();
                     f[i2].x -= delx * fbond;
                     f[i2].y -= dely * fbond;
@@ -15467,7 +15478,8 @@ public:
                         fytmp += dely * fpair;
                         fztmp += delz * fpair;
 
-                        if (NEWTON_PAIR || is_local_idx[j]) {
+                        // if (NEWTON_PAIR || is_local_idx[j]) {
+                        if (NEWTON_PAIR) {
                             f[j].x -= delx * fpair;
                             f[j].y -= dely * fpair;
                             f[j].z -= delz * fpair;
@@ -15521,13 +15533,15 @@ public:
 
                 // apply force to each of 2 atoms
 
-                if (NEWTON_PAIR || is_local_idx[i1]) {
+                // if (NEWTON_PAIR || is_local_idx[i1]) {
+                if (NEWTON_PAIR) {
                     f[i1].x += delx * fbond;
                     f[i1].y += dely * fbond;
                     f[i1].z += delz * fbond;
                 }
 
-                if (NEWTON_PAIR || is_local_idx[i2]) {
+                // if (NEWTON_PAIR || is_local_idx[i2]) {
+                if (NEWTON_PAIR) {
                     f[i2].x -= delx * fbond;
                     f[i2].y -= dely * fbond;
                     f[i2].z -= delz * fbond;
@@ -15890,13 +15904,13 @@ public:
                 delete[] zoid.claimed_flags_stencil_md;
 
                 delete[] zoid.local_idxs_per_timestep;
-                delete[] zoid.local_idxs_per_timestep_segment_idxs;
-                delete[] zoid.local_idxs_per_timestep_segment_sizes;
-                delete[] zoid.is_local_per_timestep;
+                // delete[] zoid.local_idxs_per_timestep_segment_idxs;
+                // delete[] zoid.local_idxs_per_timestep_segment_sizes;
+                // delete[] zoid.is_local_per_timestep;
                 delete[] zoid.neighbor_list;
                 delete[] zoid.bond_list;
                 delete[] zoid.bond_list_modified;
-                delete[] zoid.bond_list_modified_num_colors;
+                // delete[] zoid.bond_list_modified_num_colors;
 
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     delete[] zoid.send_force_idxs_double_buffering[t];
@@ -15940,13 +15954,13 @@ public:
                 }
 
                 delete[] zoid.local_idxs_per_timestep;
-                delete[] zoid.local_idxs_per_timestep_segment_idxs;
-                delete[] zoid.local_idxs_per_timestep_segment_sizes;
-                delete[] zoid.is_local_per_timestep;
+                // delete[] zoid.local_idxs_per_timestep_segment_idxs;
+                // delete[] zoid.local_idxs_per_timestep_segment_sizes;
+                // delete[] zoid.is_local_per_timestep;
                 delete[] zoid.neighbor_list;
                 delete[] zoid.bond_list;
                 delete[] zoid.bond_list_modified;
-                delete[] zoid.bond_list_modified_num_colors;
+                // delete[] zoid.bond_list_modified_num_colors;
 
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     delete[] zoid.send_force_idxs_double_buffering[t];
