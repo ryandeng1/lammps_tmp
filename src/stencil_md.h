@@ -9168,10 +9168,12 @@ public:
                     std::vector<int> segment_idxs;
                     std::vector<int> segment_sizes;
                     int num_segments = get_segments(zoid.local_idxs_per_timestep[t], segment_idxs, segment_sizes);
+                    /*
                     std::stringstream o;
                     o << BOLDYELLOW << "CURR DT: " << 1 << "  dep: " << dep << " zoid: " << zoid.num << " time: " << t << " nlocal: " << zoid.local_idxs_per_timestep[t].size()
                         << " num segments: " << num_segments << RESET_COLOR << std::endl;
                     std::cout << o.str();
+                    */
 
                     for (int i = 0; i < num_segments; i++) {
                         zoid.local_idxs_per_timestep_segment_idxs[t].push_back(segment_idxs[i]);
@@ -9273,10 +9275,12 @@ public:
                         zoid.local_idxs_per_timestep_segment_sizes[t].push_back(segment_sizes[i]);
                     }
 
+                    /*
                     std::stringstream o;
                     o << BOLDYELLOW << "NEXT DT dep: " << dep << " zoid: " << zoid.num << " time: " << t
                     << " num segments: " << num_segments << RESET_COLOR << std::endl;
                     std::cout << o.str();
+                    */
                 }
             }
         }

@@ -7945,7 +7945,7 @@ void Verlet::unpack_other_wrapper(int starting_timestep, int dep, queue_info& zo
                                   std::vector<MPI_Request>* send_r,
                                   double** test_f, double** test_x, double** test_v,
                                   std::vector<std::atomic_flag>& claimed) {
-    
+
     stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID<curr_dt>(zoid, recv_zoid_num, start_t, end_t);
     counter--;
     if (counter == 0) {
@@ -8582,10 +8582,10 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
         // run_stencil_md_many_cuts_new_comm<false>(t, test_f, test_x, test_v);
         // run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
         // run_stencil_md_many_cuts_helper<false>(t, test_f, test_x, test_v);
-        // run_stencil_md_many_cuts_waitany<true>(t, test_f, test_x, test_v, claimed);
-        // run_stencil_md_many_cuts_waitany<false>(t, test_f, test_x, test_v, claimed);
-        run_stencil_md_many_cuts_waitany_spawn_wait_loop<true>(t, test_f, test_x, test_v, claimed);
-        run_stencil_md_many_cuts_waitany_spawn_wait_loop<false>(t, test_f, test_x, test_v, claimed);
+        run_stencil_md_many_cuts_waitany<true>(t, test_f, test_x, test_v, claimed);
+        run_stencil_md_many_cuts_waitany<false>(t, test_f, test_x, test_v, claimed);
+        // run_stencil_md_many_cuts_waitany_spawn_wait_loop<true>(t, test_f, test_x, test_v, claimed);
+        // run_stencil_md_many_cuts_waitany_spawn_wait_loop<false>(t, test_f, test_x, test_v, claimed);
     }
 }
 
