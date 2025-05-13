@@ -14761,7 +14761,7 @@ public:
             }
             */
 
-            #pragma cilk grainsize MODIFY_GRAINSIZE
+            #pragma cilk grainsize 512
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -14830,7 +14830,7 @@ public:
             auto& bond_list = zoid.bond_list_modified[timestep];
             int nbonds = bond_list.size();
 
-            #pragma cilk grainsize MODIFY_GRAINSIZE
+            #pragma cilk grainsize 512
             cilk_for (int i = 0; i < nbonds; i++) {
                 auto& tup = bond_list[i];
                 int i1 = std::get<0>(tup);
