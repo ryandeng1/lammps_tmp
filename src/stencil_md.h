@@ -34,7 +34,7 @@
 #include <bitset>
 
 constexpr bool USE_BREAK = false;
-constexpr bool NO_LOCKS_BOND = true;
+// constexpr bool NO_LOCKS_BOND = true;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -9450,6 +9450,7 @@ public:
                 my_neigh_pairs_src.push_back(atom->tag[i]);
                 my_neigh_pairs_dst.push_back(atom->tag[neigh]);
 
+                /*
                 my_neigh_pairs_src.push_back(atom->tag[neigh]);
                 my_neigh_pairs_dst.push_back(atom->tag[i]);
 
@@ -9461,6 +9462,7 @@ public:
                     std::cout << "lammps failed check atom. " << rsq << std::endl;
                     assert(false);
                 }
+                */
             }
         }
 
@@ -9714,6 +9716,7 @@ public:
                 }
             }
 
+            /*
             if (NO_LOCKS_BOND) {
                 auto conflict_adj_list = build_conflict_graph(zoid.bond_list_modified[t]);
                 auto bond_colors = greedy_coloring(zoid.bond_list_modified[t].size(), conflict_adj_list);
@@ -9761,8 +9764,9 @@ public:
                     return bond_a < bond_b;
                 });
 
-                // zoid.bond_list_modified_num_colors[t] = color_counts;
+                zoid.bond_list_modified_num_colors[t] = color_counts;
             }
+            */
         }
     }
 
@@ -11608,7 +11612,7 @@ public:
         }
     }
 
-    static constexpr int NUM_STREAMS = 8;
+    static constexpr int NUM_STREAMS = 24;
     // 64 VCIs so 1 per comm
     static constexpr int NUM_COMMS = 48;
     std::vector<MPI_Comm> all_comms;
