@@ -20,7 +20,7 @@
 #include <cilk/cilk_api.h>
 #include <sstream>
 #include "CLI11.hpp"
-#include "stencil_md_config.hpp"
+// #include "stencil_md_config.hpp"
 
 #ifdef __linux__
 #include "stencil_md_utils.h"
