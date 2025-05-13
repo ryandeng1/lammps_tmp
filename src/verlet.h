@@ -137,6 +137,13 @@ class Verlet : public Integrate {
   void run_stencil_md_many_cuts_helper(int starting_timestep, double** test_f, double** test_x, double** test_v);
 
   template <bool curr_dt>
+  void run_stencil_md_many_cuts_waitany_loop(int dep, std::vector<MPI_Request>& recv_r);
+
+  template <bool curr_dt>
+  void run_stencil_md_many_cuts_waitany_spawn_wait_loop(int starting_timestep, double** test_f, double** test_x, double** test_v,
+                                                        std::vector<std::atomic_flag>& claimed);
+
+  template <bool curr_dt>
   void run_stencil_md_many_cuts_waitany(int starting_timestep, double** test_f, double** test_x, double** test_v,
                                         std::vector<std::atomic_flag>& claimed);
 
