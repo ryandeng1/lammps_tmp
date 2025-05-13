@@ -19,7 +19,7 @@
 #include "pthread.h"
 #include <cilk/cilk_api.h>
 #include <sstream>
-#include "CLI11.hpp"
+// #include "CLI11.hpp"
 // #include "stencil_md_config.hpp"
 
 #ifdef __linux__
@@ -64,6 +64,7 @@ int main(int argc, char **argv)
     return 0;
   }
 
+  /*
   CLI::App app{"StencilMD YAML file"};
   app.allow_non_standard_option_names();
 
@@ -89,6 +90,7 @@ int main(int argc, char **argv)
   } catch (CLI::ParseError& e) {
       std::cout << "parse error: " << e.what() << std::endl;
   }
+  */
 
   // StencilMDConfigManager::get_instance().load_from_config_file(config_path);
   // std::cout << "Configuration loaded successfully via Singleton for StencilMD." << std::endl;
