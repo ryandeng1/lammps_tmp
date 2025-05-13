@@ -8100,7 +8100,7 @@ void Verlet::run_stencil_md_many_cuts_waitany_spawn_wait_loop(int starting_times
 
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
-                    if (zoid.no_comm_needed) {
+                    if (true || zoid.no_comm_needed) {
                         cilk_spawn run_stencil_md_zoid_many_cuts_no_comm<curr_dt>(
                                 starting_timestep, dep, zoid, tmp_start_t, tmp_end_t,
                                 send_r,
