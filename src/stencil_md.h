@@ -8222,10 +8222,10 @@ public:
                     int send_zoid_num = send_neighbors[i];
                     if (send_zoid_num % comm->nprocs != comm->me) {
                         ZOID_TO_ZOID_TO_VCI_IDX[{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
-                        comm_idx++;
+                        // comm_idx++;
                     }
                 }
-                // comm_idx++;
+                comm_idx++;
             }
         }
 
@@ -8239,10 +8239,10 @@ public:
                     int send_zoid_num = send_neighbors[i];
                     if (send_zoid_num % comm->nprocs != comm->me) {
                         ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
-                        comm_idx++;
+                        // comm_idx++;
                     }
                 }
-                // comm_idx++;
+                comm_idx++;
             }
         }
 
@@ -11461,6 +11461,7 @@ public:
                     }
                 }
 
+                /*
                 std::stringstream s1;
                 for (auto& p : procs) {
                     s1 << p << " ";
@@ -11469,6 +11470,7 @@ public:
                 std::stringstream o;
                 o << "me: " << comm->me << " dep: " << dep << " talk to procs: " << s1.str() << std::endl;
                 std::cout << o.str();
+                */
             }
 
             MPI_Barrier(world);
