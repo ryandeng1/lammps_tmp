@@ -11433,6 +11433,7 @@ public:
 
                 int total_send_ndoubles = (all_neigh_send_f + all_neigh_send_x + all_neigh_send_v) * 3;
 
+                /*
                 if (total_send_ndoubles > 30000) {
                     std::stringstream o;
                     o << "zoid: " << zoid.num << " dep: " << dep << " where: " << zoid.where[0] << " " << zoid.where[1] << " " << zoid.where[2]
@@ -11443,6 +11444,7 @@ public:
                       << std::endl;
                     std::cout << o.str();
                 }
+                */
             }
         }
 
