@@ -11614,7 +11614,7 @@ public:
 
     static constexpr int NUM_STREAMS = 24;
     // 64 VCIs so 1 per comm
-    static constexpr int NUM_COMMS = 48;
+    static constexpr int NUM_COMMS = 8;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
     MPI_Comm stream_comm;
