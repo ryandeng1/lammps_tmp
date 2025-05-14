@@ -12357,8 +12357,8 @@ public:
 
             auto *buf = buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i];
 
-            // if (send_zoid_dep == dep + 1 && zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
-            if (zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+            if (send_zoid_dep == dep + 1 && zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+            // if (zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
 
                 assert(send_request_idx != -1);
@@ -12447,7 +12447,12 @@ public:
             int nsend = curr_dt ? send_zoid_to_zoid_sizes[zoid_num][i] : send_zoid_to_zoid_sizes_next_dt[zoid_num][i];
             int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
             int send_request_idx = send_request_idxs[i];
+            int my_zoid_dep = curr_dt ? zoid_num_to_dep[zoid_num] : zoid_num_to_dep_next_dt[zoid_num];
             int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+
+            if (my_zoid_dep == send_dep - 1) {
+                continue;
+            }
 
             if (send_zoid_dep != send_dep) {
                 continue;

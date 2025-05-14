@@ -7838,9 +7838,14 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm(int starting_timestep, int de
         m.unlock();
     }
 
+    /*
     stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep,
                                                         start_t, end_t,
                                                         send_r[zoid_num]);
+    */
+    stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED<curr_dt>(zoid, dep,
+                                                                start_t, end_t,
+                                                                send_r[zoid_num]);
 
     if (TIME_STENCILMD_STATES) {
         struct timeval tv_send_end;
@@ -7923,8 +7928,12 @@ void Verlet::unpack_self_wrapper(int starting_timestep, int dep, queue_info& zoi
                     m.unlock();
                 }
 
+                /*
                 stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep,
                                                                     start_t, end_t, send_r[zoid.num]);
+                */
+                stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED<curr_dt>(zoid, dep,
+                                                                            start_t, end_t, send_r[zoid.num]);
 
                 if (TIME_STENCILMD_STATES) {
                     struct timeval tv_send_end;
@@ -7973,7 +7982,12 @@ void Verlet::unpack_other_wrapper(int starting_timestep, int dep, queue_info& zo
                     m.unlock();
                 }
 
+                /*
                 stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep,
+                                                                            start_t, end_t, send_r[zoid.num]);
+                */
+
+                stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED<curr_dt>(zoid, dep,
                                                                             start_t, end_t, send_r[zoid.num]);
 
                 if (TIME_STENCILMD_STATES) {
@@ -8179,6 +8193,19 @@ void Verlet::run_stencil_md_many_cuts_waitany(int starting_timestep, double **te
                     auto& zoid = my_queues[dep + 1][j];
                     int zoid_num = zoid.num;
                     cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY<curr_dt>(dep + 1, zoid_num, recv_r[dep + 1]);
+                }
+
+                auto& zoids_to_send_data = curr_dt ? stencilMD->dep_to_send_zoids[dep + 1]
+                                                   : stencilMD->dep_to_send_zoids_next_dt[dep + 1];
+
+                for (int i = 0; i < zoids_to_send_data.size(); i++) {
+                    int zoid_num = zoids_to_send_data[i];
+                    auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                                         : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+
+                    cilk_spawn stencilMD->SEND_DATA_ZOID_TO_ZOID_TO_DEP_REVISED<curr_dt>(zoid, dep + 1,
+                                                                                         tmp_start_t, tmp_end_t,
+                                                                                         send_r[zoid.num]);
                 }
             }
 
