@@ -12721,8 +12721,6 @@ public:
     void RECEIVE_DATA_ZOID_TO_ZOID_WAITANY_PIPELINED(int dep, int zoid_num, int pipeline_stage, std::vector<MPI_Request>& r) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
-        constexpr int DEFAULT_PIPELINE_STAGE = 0;
-
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                                        : recv_from_neighbors_many_cuts_next_dt[zoid_num];
 
@@ -13904,7 +13902,6 @@ public:
 
     template <bool curr_dt>
     void UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED(queue_info& zoid, int recv_zoid_num, int start_t, int end_t, int pipeline_stage) {
-        constexpr int DEFAULT_PIPELINE_STAGE = 0;
         int zoid_num = zoid.num;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                                        : recv_from_neighbors_many_cuts_next_dt[zoid_num];
@@ -13913,7 +13910,7 @@ public:
         assert(find_it != recv_neighbors.end());
         int find_idx = std::distance(recv_neighbors.begin(), find_it);
 
-        auto buf = buf_recv_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][find_idx];
+        auto buf = buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][find_idx];
         UNPACK_POS_VEL_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf, find_idx, recv_zoid_num, start_t, end_t, pipeline_stage);
     }
 
