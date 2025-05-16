@@ -6329,7 +6329,6 @@ void Verlet::run(int n) {
     }
     */
 
-    auto begin = std::chrono::high_resolution_clock::now();
     std::vector<std::atomic_flag> zoid_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
     std::vector<std::atomic_flag> zoid_claimed2(stencilMD->NUM_ZOIDS_MANY_CUTS);
 
@@ -6340,19 +6339,28 @@ void Verlet::run(int n) {
 
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
-    run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
+    // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
+
+    int64_t duration;
 
     cilk_scope {
-        /*
+        auto begin = std::chrono::high_resolution_clock::now();
+        run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
+        auto end = std::chrono::high_resolution_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+    }
+
+    /*
+    cilk_scope {
         if (USE_DOUBLE_BUFFERING) {
             run_stencil_md_pipelined_double_buffering(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, false);
         } else {
             run_stencil_md_pipelined(n, dep_to_wait_idxs, dep_to_wait_idxs_next_dt, test_f, test_x, test_v, false);
         }
-        */
     }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+    */
+
+    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
 
     int64_t total_duration_stencil_md = 0;
     MPI_Allreduce(&duration, &total_duration_stencil_md, 1, MPI_INT64_T, MPI_SUM, world);
