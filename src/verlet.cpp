@@ -6339,8 +6339,8 @@ void Verlet::run(int n) {
     }
 
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
-    run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
-    // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
+    // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
+    run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
 
     cilk_scope {
         /*
