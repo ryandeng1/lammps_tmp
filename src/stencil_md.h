@@ -12588,6 +12588,61 @@ public:
             int send_zoid_num = send_neighbors[i];
             int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
                     : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
+            int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+            int send_request_idx = send_request_idxs[i];
+            int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+
+            if (send_zoid_num % comm->nprocs == comm->me) {
+                continue;
+            }
+
+            if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[pipeline_stage][zoid.num][i]) {
+                assert(false);
+                GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
+            }
+
+            auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
+
+            int buf_idx = PACK_DATA_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf, i, send_zoid_num, start_t, end_t, pipeline_stage);
+        }
+
+        for (int i = 0; i < send_neighbors.size(); i++) {
+            int send_zoid_num = send_neighbors[i];
+            int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
+                                : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
+            int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+            int send_request_idx = send_request_idxs[i];
+            int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+
+            if (send_zoid_num % comm->nprocs == comm->me) {
+                continue;
+            }
+
+            if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[pipeline_stage][zoid.num][i]) {
+                assert(false);
+                GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
+            }
+
+            auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
+
+            if (zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+                int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
+
+                assert(send_request_idx != -1);
+
+                int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
+                                       : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
+                          send_zoid_num % comm->nprocs, mpi_tag,
+                          all_comms[comm_idx], &r[send_request_idx]);
+            }
+        }
+
+        /*
+        for (int i = 0; i < send_neighbors.size(); i++) {
+            int send_zoid_num = send_neighbors[i];
+            int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
+                    : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
 
             int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
             int send_request_idx = send_request_idxs[i];
@@ -12604,7 +12659,6 @@ public:
 
             if (buf_idx > 0 && (send_zoid_num % comm->nprocs != comm->me)) {
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
-                r.emplace_back();
 
                 int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
                                        : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
@@ -12614,6 +12668,7 @@ public:
                           all_comms[comm_idx], &r[send_request_idx]);
             }
         }
+        */
     }
 
     void RECEIVE_DATA_ZOID_TO_ZOID_SETUP(int zoid_num, std::vector<MPI_Request>& r) {
@@ -13867,13 +13922,9 @@ public:
 
     template <bool curr_dt>
     void UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED(queue_info& zoid, int start_t, int end_t, int pipeline_stage) {
-        // cilk_scope {
         int zoid_num = zoid.num;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                                        : recv_from_neighbors_many_cuts_next_dt[zoid_num];
-
-        auto& not_my_proc_idxs = curr_dt ? recv_from_neighbors_not_my_proc_idxs[zoid.num]
-                                         : recv_from_neighbors_not_my_proc_idxs_next_dt[zoid.num];
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             if (recv_neighbors[i] % comm->nprocs != comm->me) {
@@ -14477,9 +14528,9 @@ public:
                 buf[buf_idx + 2] = zoid.f_stencil_md[0][idx].y;
                 buf[buf_idx + 3] = zoid.f_stencil_md[0][idx].z;
 
-                // zoid.f_stencil_md[0][idx].x = 0;
-                // zoid.f_stencil_md[0][idx].y = 0;
-                // zoid.f_stencil_md[0][idx].z = 0;
+                zoid.f_stencil_md[0][idx].x = 0;
+                zoid.f_stencil_md[0][idx].y = 0;
+                zoid.f_stencil_md[0][idx].z = 0;
             }
 
             int pos_starting_idx = num_send_force * (3 + 1);
@@ -14530,9 +14581,9 @@ public:
                 buf[buf_idx + 1] = zoid.f_stencil_md[0][idx].y;
                 buf[buf_idx + 2] = zoid.f_stencil_md[0][idx].z;
 
-                // zoid.f_stencil_md[0][idx].x = 0;
-                // zoid.f_stencil_md[0][idx].y = 0;
-                // zoid.f_stencil_md[0][idx].z = 0;
+                zoid.f_stencil_md[0][idx].x = 0;
+                zoid.f_stencil_md[0][idx].y = 0;
+                zoid.f_stencil_md[0][idx].z = 0;
             }
 
             int pos_starting_idx = num_send_force * 3;
