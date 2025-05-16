@@ -21,8 +21,8 @@
 #include <set>
 #include <unordered_set>
 #include <unordered_map>
+#include <deque>
 #include "stencil_md_utils.h"
-// #include <torch/torch.h>
 
 namespace LAMMPS_NS {
 
