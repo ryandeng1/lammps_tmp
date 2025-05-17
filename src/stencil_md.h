@@ -12199,9 +12199,6 @@ public:
     void CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES_PIPELINED() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
-        int start_t[NUM_PIPELINE_STAGES] = {1, NUM_TIMESTEPS_IN_PARALLEL / 2 + 1};
-        int end_t[NUM_PIPELINE_STAGES] = {NUM_TIMESTEPS_IN_PARALLEL / 2 + 1, NUM_TIMESTEPS_IN_PARALLEL + 1};
-
         for (int p = 0; p < NUM_PIPELINE_STAGES; p++) {
             if (curr_dt) {
                 recv_zoid_to_zoid_sizes_pipelined[p].resize(NUM_ZOIDS_MANY_CUTS);
