@@ -4438,6 +4438,7 @@ public:
 
     template <bool curr_dt>
     void fuse_post_force_stencil_md(queue_info& zoid, int timestep, Atom* atom_, Modify* modify_) {
+        /*
         auto recv_bin_to_idx = zoid.bin_to_idx[timestep];
         auto recv_bin_to_size = zoid.bin_to_size[timestep];
 
@@ -4492,6 +4493,7 @@ public:
             post_force_stencil_md(local_idxs, atom_, modify_);
             final_integrate_stencil_md(local_idxs, atom_);
         }
+        */
     }
 
     void sort_local_bins(queue_info& zoid, int timestep, Atom* curr, Atom* next) {
@@ -12016,9 +12018,6 @@ public:
     void CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES_PIPELINED() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
-        int start_t[NUM_PIPELINE_STAGES] = {1, NUM_TIMESTEPS_IN_PARALLEL / 2 + 1};
-        int end_t[NUM_PIPELINE_STAGES] = {NUM_TIMESTEPS_IN_PARALLEL / 2 + 1, NUM_TIMESTEPS_IN_PARALLEL + 1};
-
         for (int p = 0; p < NUM_PIPELINE_STAGES; p++) {
             if (curr_dt) {
                 send_zoid_to_zoid_sizes_pipelined[p].resize(NUM_ZOIDS_MANY_CUTS);
@@ -15543,132 +15542,6 @@ public:
                     spinlocks[i2].unlock();
                 }
             }
-
-            /*
-            if (NO_LOCKS_BOND) {
-                auto& color_counts = zoid.bond_list_modified_num_colors[timestep];
-
-                int start_idx = 0;
-                for (int c = 0; c < color_counts.size(); c++) {
-                    int num_bonds_color = color_counts[c];
-
-                    #pragma cilk grainsize PAIR_BOND_GRAINSIZE
-                    cilk_for (int i = 0; i < num_bonds_color; i++) {
-                        auto& tup = bond_list[start_idx + i];
-                        int i1 = std::get<0>(tup);
-                        int i2 = std::get<1>(tup);
-                        int type = std::get<2>(tup);
-
-                        double delx = x[i1].x - x[i2].x;
-                        double dely = x[i1].y - x[i2].y;
-                        double delz = x[i1].z - x[i2].z;
-
-                        double rsq = delx * delx + dely * dely + delz * delz;
-                        double r0sq = r0[type] * r0[type];
-                        double rlogarg = 1.0 - rsq / r0sq;
-
-                        if (rlogarg < 0.1) {
-                            error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                           update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                            //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                            //                                return;
-                            assert(false);
-
-                            rlogarg = 0.1;
-                        }
-
-                        double fbond = -k[type] / rlogarg;
-
-                        // force from LJ term
-                        double sr2 = 0.0;
-                        double sr6 = 0.0;
-
-                        if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                            sr2 = sigma[type] * sigma[type] / rsq;
-                            sr6 = sr2 * sr2 * sr2;
-                            fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                        }
-
-                        // energy
-
-                        // apply force to each of 2 atoms
-
-                        if (NEWTON_PAIR || is_local_idx[i1]) {
-                            f[i1].x += delx * fbond;
-                            f[i1].y += dely * fbond;
-                            f[i1].z += delz * fbond;
-                        }
-
-                        if (NEWTON_PAIR || is_local_idx[i2]) {
-                            f[i2].x -= delx * fbond;
-                            f[i2].y -= dely * fbond;
-                            f[i2].z -= delz * fbond;
-                        }
-                    }
-
-                    start_idx += num_bonds_color;
-                }
-            } else {
-                #pragma cilk grainsize PAIR_BOND_GRAINSIZE
-                cilk_for (int i = 0; i < nbonds; i++) {
-                    auto& tup = bond_list[i];
-                    int i1 = std::get<0>(tup);
-                    int i2 = std::get<1>(tup);
-                    int type = std::get<2>(tup);
-
-                    double delx = x[i1].x - x[i2].x;
-                    double dely = x[i1].y - x[i2].y;
-                    double delz = x[i1].z - x[i2].z;
-
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    double r0sq = r0[type] * r0[type];
-                    double rlogarg = 1.0 - rsq / r0sq;
-
-                    if (rlogarg < 0.1) {
-                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                        //                                return;
-                        assert(false);
-
-                        rlogarg = 0.1;
-                    }
-
-                    double fbond = -k[type] / rlogarg;
-
-                    // force from LJ term
-                    double sr2 = 0.0;
-                    double sr6 = 0.0;
-
-                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                        sr2 = sigma[type] * sigma[type] / rsq;
-                        sr6 = sr2 * sr2 * sr2;
-                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                    }
-
-                    // energy
-
-                    // apply force to each of 2 atoms
-
-                    if (NEWTON_PAIR || is_local_idx[i1]) {
-                        spinlocks[i1].lock();
-                        f[i1].x += delx * fbond;
-                        f[i1].y += dely * fbond;
-                        f[i1].z += delz * fbond;
-                        spinlocks[i1].unlock();
-                    }
-
-                    if (NEWTON_PAIR || is_local_idx[i2]) {
-                        spinlocks[i2].lock();
-                        f[i2].x -= delx * fbond;
-                        f[i2].y -= dely * fbond;
-                        f[i2].z -= delz * fbond;
-                        spinlocks[i2].unlock();
-                    }
-                }
-            }
-
-            */
 
             /*
             #pragma cilk grainsize MODIFY_GRAINSIZE

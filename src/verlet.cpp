@@ -8477,52 +8477,48 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined(int starting_timestep, d
         }
     }
 
-    constexpr int start_t = 1;
-    constexpr int mid_t = NUM_TIMESTEPS_IN_PARALLEL / 2 + 1;
-    constexpr int end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
-
-    run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 0, 0, start_t, mid_t,
+    run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 0, 0, start_t[0], end_t[0],
                                                                test_f, test_x, test_v,
                                                                send_r, recv_r, claimed);
 
     cilk_scope {
             cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 0, 1,
-                                                                                  mid_t, end_t,
+                                                                                  start_t[1], end_t[1],
                                                                                   test_f, test_x, test_v,
                                                                                   send_r2, recv_r2, claimed2);
 
             run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 1, 0,
-                                                                       start_t, mid_t,
+                                                                       start_t[0], end_t[0],
                                                                        test_f, test_x, test_v,
                                                                        send_r, recv_r, claimed);
     }
 
     cilk_scope {
             cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 1, 1,
-                                                                                  mid_t, end_t,
+                                                                                  start_t[1], end_t[1],
                                                                                   test_f, test_x, test_v,
                                                                                   send_r2, recv_r2, claimed2);
 
             run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 2, 0,
-                                                                       start_t, mid_t,
+                                                                       start_t[0], end_t[0],
                                                                        test_f, test_x, test_v,
                                                                        send_r, recv_r, claimed);
     }
 
     cilk_scope {
             cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 2, 1,
-                                                                                  mid_t, end_t,
+                                                                                  start_t[1], end_t[1],
                                                                                   test_f, test_x, test_v,
                                                                                   send_r2, recv_r2, claimed2);
 
             run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 3, 0,
-                                                                       start_t, mid_t,
+                                                                       start_t[0], end_t[0],
                                                                        test_f, test_x, test_v,
                                                                        send_r, recv_r, claimed);
     }
 
     run_stencil_md_many_cuts_waitany_pipelined_helper<curr_dt>(starting_timestep, 3, 1,
-                                                               mid_t, end_t,
+                                                               start_t[1], end_t[1],
                                                                test_f, test_x, test_v,
                                                                send_r2, recv_r2, claimed2);
 
