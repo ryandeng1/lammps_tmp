@@ -12569,6 +12569,63 @@ public:
     }
 
     template <bool curr_dt>
+    void SEND_DATA_ZOID_TO_ZOID_TO_DEP_REVISED_PIPELINED(queue_info& zoid, int send_dep,
+                                                         int start_t, int end_t, int pipeline_stage, std::vector<MPI_Request>& r) {
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                                       : send_to_neighbors_many_cuts_next_dt[zoid.num];
+
+        int zoid_num = zoid.num;
+
+        auto& send_request_idxs = curr_dt ? send_to_neighbors_not_my_proc_idxs[zoid_num]
+                                          : send_to_neighbors_not_my_proc_idxs_next_dt[zoid_num];
+
+        for (int i = 0; i < send_neighbors.size(); i++) {
+            int send_zoid_num = send_neighbors[i];
+            int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
+                    : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
+            int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+            int send_request_idx = send_request_idxs[i];
+            int my_zoid_dep = curr_dt ? zoid_num_to_dep[zoid_num] : zoid_num_to_dep_next_dt[zoid_num];
+            int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+
+            if (my_zoid_dep == send_dep - 1) {
+                continue;
+            }
+
+            if (send_zoid_dep != send_dep) {
+                continue;
+            }
+
+            if (send_zoid_num % comm->nprocs == comm->me) {
+                continue;
+            }
+
+            if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[pipeline_stage][zoid.num][i]) {
+                assert(false);
+                GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
+            }
+
+            auto* buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
+
+            int buf_idx = zoid_ndoubles_send;
+
+            assert(buf_idx == zoid_ndoubles_send);
+
+            if ((send_zoid_num % comm->nprocs != comm->me))  {
+                int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
+
+                assert(send_request_idx != -1);
+
+                int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
+                                       : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                MPI_Isend(buf, buf_idx, MPI_DOUBLE,
+                          send_zoid_num % comm->nprocs, mpi_tag,
+                          all_comms[comm_idx], &r[send_request_idx]);
+            }
+        }
+    }
+
+    template <bool curr_dt>
     void PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED(queue_info& zoid, int dep,
                                                    int start_t, int end_t, int pipeline_stage,
                                                    std::vector<MPI_Request>& r) {
@@ -12580,7 +12637,7 @@ public:
 
         int zoid_num = zoid.num;
 
-        for (int i = 0; i < send_neighbors.size(); i++) {
+        cilk_for (int i = 0; i < send_neighbors.size(); i++) {
             int send_zoid_num = send_neighbors[i];
             int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
                     : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
@@ -12621,7 +12678,8 @@ public:
 
             auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
 
-            if (zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+            // if (zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+            if (send_zoid_dep == dep + 1 && zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
 
                 assert(send_request_idx != -1);

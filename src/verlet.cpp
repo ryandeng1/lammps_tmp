@@ -8250,6 +8250,19 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper(int starting_time
                 cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY_PIPELINED<curr_dt>(dep + 1, zoid_num, pipeline_stage,
                                                                                            recv_r[dep + 1]);
             }
+
+            auto& zoids_to_send_data = curr_dt ? stencilMD->dep_to_send_zoids[dep + 1]
+                                               : stencilMD->dep_to_send_zoids_next_dt[dep + 1];
+
+            for (int i = 0; i < zoids_to_send_data.size(); i++) {
+                int zoid_num = zoids_to_send_data[i];
+                auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                                     : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+
+                cilk_spawn stencilMD->SEND_DATA_ZOID_TO_ZOID_TO_DEP_REVISED_PIPELINED<curr_dt>(zoid, dep + 1,
+                                                                                               start_t, end_t, pipeline_stage,
+                                                                                               send_r[zoid.num]);
+            }
         }
 
         for (int j = 0; j < my_queues[dep].size(); j++) {
