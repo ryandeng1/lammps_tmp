@@ -10639,7 +10639,6 @@ class StencilMD : protected Pointers {
                   continue;
               }
 
-              /*
               bool keep = false;
 
               for (int dim = 0; dim < domain->dimension; dim++) {
@@ -10652,7 +10651,6 @@ class StencilMD : protected Pointers {
               if (!keep && !is_local) {
                   continue;
               }
-              */
 
               // find zoid that had it previously
               for (int j = 0; j < recv_neighbors.size(); j++) {
