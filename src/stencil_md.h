@@ -10548,8 +10548,9 @@ public:
                     zoid_lo[dim] = lo;
                     zoid_hi[dim] = hi;
 
-                    if (atom_pos[dim] <= lo || atom_pos[dim] > hi) {
+                    if (atom_pos[dim] < lo || atom_pos[dim] >= hi) {
                         dim_out_of_bounds[dim] = true;
+                        /*
                         if (atom_pos[dim] <= lo) {
                             out_of_bounds[dim] = -1;
                         } else if (atom_pos[dim] > hi) {
@@ -10557,11 +10558,12 @@ public:
                         } else {
                             assert(false);
                         }
+                        */
                     }
                 }
 
                 double dist_to_zoid = distance_to_zoid(domain->prd, zoid.lo[t], zoid.hi[t], atom_pos);
-                borders_zoid = (dist_to_zoid <= ALLEGRO_SLOPE);
+                borders_zoid = (borders_zoid && dist_to_zoid <= ALLEGRO_SLOPE);
 
                 // have to do this check as for later timesteps this might not be the case
                 if (!borders_zoid) {
@@ -10572,7 +10574,7 @@ public:
 
                 for (int dim = 0; dim < domain->dimension; dim++) {
                     bool shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
-                    if (out_of_bounds[dim] && shrinking) {
+                    if (dim_out_of_bounds[dim] && shrinking) {
                         keep = true;
                     }
                 }
