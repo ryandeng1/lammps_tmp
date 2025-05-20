@@ -10568,6 +10568,19 @@ public:
                     continue;
                 }
 
+                bool keep = false;
+
+                for (int dim = 0; dim < domain->dimension; dim++) {
+                    bool shrinking = (zoid.zoid.cuts[dim].slope_lower > 0);
+                    if (out_of_bounds[dim] && shrinking) {
+                        keep = true;
+                    }
+                }
+
+                if (!keep && !is_local) {
+                    continue;
+                }
+
                 // find zoid that had it previously
                 for (int j = 0; j < recv_neighbors.size(); j++) {
                     auto recv_zoid_num = recv_neighbors[j];
