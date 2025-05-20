@@ -32,7 +32,6 @@
 #include <iomanip>
 #include <queue>
 #include <bitset>
-#include <metis.h>
 
 constexpr bool USE_BREAK = false;
 // constexpr bool NO_LOCKS_BOND = true;
