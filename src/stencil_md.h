@@ -13120,6 +13120,7 @@ public:
             }
         }
 
+
         auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened[recv_idx];
         auto& recv_pos_idxs = zoid.recv_pos_idxs_double_buffering_flattened[0][recv_idx];
         auto& recv_pos_idxs2 = zoid.recv_pos_idxs_double_buffering_flattened[1][recv_idx];
@@ -13309,6 +13310,41 @@ public:
                 zoid.v_stencil_md[0][idx].z = v_z;
             }
         } else {
+            auto* _noalias const buf_ = (dbl3_t_stencil_md*) buf;
+            int pos_starting_idx = num_recv_force;
+
+            for (int i = 0; i < recv_pos_idxs.size(); i++) {
+                int idx = recv_pos_idxs[i];
+                int buf_idx = pos_starting_idx + i;
+                const auto& x_ = buf_[buf_idx];
+
+                zoid.x_stencil_md[0][idx].x = x_.x + pbc_flag_[0] * domain->prd[0];
+                zoid.x_stencil_md[0][idx].y = x_.y + pbc_flag_[1] * domain->prd[1];
+                zoid.x_stencil_md[0][idx].z = x_.z + pbc_flag_[2] * domain->prd[2];
+            }
+
+            int pos_starting_idx2 = (num_recv_force + num_recv_pos);
+
+            for (int i = 0; i < recv_pos_idxs2.size(); i++) {
+                int idx = recv_pos_idxs2[i];
+                int buf_idx = pos_starting_idx2 + i;
+                const auto& x_ = buf_[buf_idx];
+                zoid.x_stencil_md[1][idx].x = x_.x + pbc_flag_[0] * domain->prd[0];
+                zoid.x_stencil_md[1][idx].y = x_.y + pbc_flag_[1] * domain->prd[1];
+                zoid.x_stencil_md[1][idx].z = x_.z + pbc_flag_[2] * domain->prd[2];
+            }
+
+            int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2);
+            for (int i = 0; i < recv_vel_idxs.size(); i++) {
+                int idx = recv_vel_idxs[i];
+                int buf_idx = vel_starting_idx + i;
+                const auto& v_ = buf_[buf_idx];
+                zoid.v_stencil_md[0][idx].x = v_.x;
+                zoid.v_stencil_md[0][idx].y = v_.y;
+                zoid.v_stencil_md[0][idx].z = v_.z;
+            }
+
+            /*
             int pos_starting_idx = num_recv_force * 3;
 
             for (int i = 0; i < recv_pos_idxs.size(); i++) {
@@ -13347,6 +13383,7 @@ public:
                 zoid.v_stencil_md[0][idx].y = v_y;
                 zoid.v_stencil_md[0][idx].z = v_z;
             }
+            */
         }
     }
 
