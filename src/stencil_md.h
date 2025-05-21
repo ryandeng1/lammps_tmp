@@ -13070,6 +13070,7 @@ public:
                 zoid.f_stencil_md[0][idx].z += f_z;
             }
         } else {
+            /*
             for (int i = 0; i < recv_force_idxs.size(); i++) {
                 int buf_idx = i * 3;
                 int idx = recv_force_idxs[i];
@@ -13080,6 +13081,15 @@ public:
                 zoid.f_stencil_md[0][idx].x += f_x;
                 zoid.f_stencil_md[0][idx].y += f_y;
                 zoid.f_stencil_md[0][idx].z += f_z;
+            }
+            */
+            auto* _noalias const buf_ = (dbl3_t_stencil_md*) buf;
+            for (int i = 0; i < recv_force_idxs.size(); i++) {
+                int idx = recv_force_idxs[i];
+                const auto& f_ = buf_[i];
+                zoid.f_stencil_md[0][idx].x += f_.x;
+                zoid.f_stencil_md[0][idx].y += f_.y;
+                zoid.f_stencil_md[0][idx].z += f_.z;
             }
         }
     }
