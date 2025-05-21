@@ -13313,7 +13313,8 @@ public:
             auto* _noalias const buf_ = (dbl3_t_stencil_md*) buf;
             int pos_starting_idx = num_recv_force;
 
-            for (int i = 0; i < recv_pos_idxs.size(); i++) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < recv_pos_idxs.size(); i++) {
                 int idx = recv_pos_idxs[i];
                 int buf_idx = pos_starting_idx + i;
                 const auto& x_ = buf_[buf_idx];
@@ -13325,7 +13326,8 @@ public:
 
             int pos_starting_idx2 = (num_recv_force + num_recv_pos);
 
-            for (int i = 0; i < recv_pos_idxs2.size(); i++) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < recv_pos_idxs2.size(); i++) {
                 int idx = recv_pos_idxs2[i];
                 int buf_idx = pos_starting_idx2 + i;
                 const auto& x_ = buf_[buf_idx];
@@ -13335,7 +13337,8 @@ public:
             }
 
             int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2);
-            for (int i = 0; i < recv_vel_idxs.size(); i++) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
                 int idx = recv_vel_idxs[i];
                 int buf_idx = vel_starting_idx + i;
                 const auto& v_ = buf_[buf_idx];
