@@ -6970,240 +6970,6 @@ public:
     }
 
     void INIT_ZOIDS_NUMBERING() {
-        constexpr bool USE_MORTON_NAIVE = false;
-        if (USE_MORTON_NAIVE) {
-            std::map<int, std::array<int, 3>> morton_to_zoid;
-            for (int i = 0; i < NUM_ZOIDS_X; i++) {
-                for (int j = 0; j < NUM_ZOIDS_Y; j++) {
-                    for (int k = 0; k < NUM_ZOIDS_Z; k++) {
-                        int code = morton3D(i, j, k);
-                        morton_to_zoid[code] = {i, j, k};
-                        assert(code >= 0 && code < NUM_ZOIDS_MANY_CUTS);
-                    }
-                }
-            }
-
-            std::vector<int> count_per_proc(comm->nprocs, 0);
-            int num_per_proc = NUM_ZOIDS_MANY_CUTS / comm->nprocs;
-            for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
-                auto& zoid = morton_to_zoid.at(i);
-                int proc = i / num_per_proc;
-                stencilMD->zoid_where_to_num[zoid] = count_per_proc[proc] * comm->nprocs + proc;
-                count_per_proc[proc]++;
-            }
-
-            return;
-        }
-
-        constexpr bool TRY_ORIGINAL = false;
-        if (TRY_ORIGINAL) {
-            // zoid_num to dep0 map?
-            // TODO: renumber zoids
-            std::vector<int> proc_to_zoid_count(comm->nprocs, 0);
-            std::map<int, std::vector<std::array<int, 3>>> proc_to_zoids;
-            std::map<std::array<int, 3>, int> zoid_to_proc;
-
-            int num_dep0_zoids = NUM_ZOIDS_X  * NUM_ZOIDS_Y * NUM_ZOIDS_Z / (2 * 2 * 2);
-            int num_dep1_zoids = (NUM_ZOIDS_MANY_CUTS - 2 * num_dep0_zoids) / 2;
-            int num_dep2_zoids = num_dep1_zoids;
-            int num_dep3_zoids = num_dep0_zoids;
-
-            int curr_proc = 0;
-            for (int i = 1; i < NUM_ZOIDS_PER_DIMENSION; i += 2) {
-                for (int j = 1; j < NUM_ZOIDS_PER_DIMENSION; j += 2) {
-                    for (int k = 1; k < NUM_ZOIDS_PER_DIMENSION; k += 2) {
-                        if (proc_to_zoid_count[curr_proc] >= num_dep0_zoids / comm->nprocs) {
-                            curr_proc++;
-                        }
-                        proc_to_zoid_count[curr_proc]++;
-                        proc_to_zoids[curr_proc].push_back({i, j, k});
-                        zoid_to_proc[{i, j, k}] = curr_proc;
-                    }
-                }
-            }
-
-            bool claimed[NUM_ZOIDS_PER_DIMENSION][NUM_ZOIDS_PER_DIMENSION][NUM_ZOIDS_PER_DIMENSION] = {0};
-
-            std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_send_neighbors;
-            std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_recv_neighbors;
-
-            for (int i = 0; i < NUM_ZOIDS_X; i++) {
-                for (int j = 0; j < NUM_ZOIDS_Y; j++) {
-                    for (int k = 0; k < NUM_ZOIDS_Z; k++) {
-                        std::array<int, 3> my_pos = {i, j, k};
-                        if (i % 2 == 1) {
-                            tmp_send_neighbors[my_pos].insert({i - 1, j, k});
-                            tmp_send_neighbors[my_pos].insert({(i + 1) % NUM_ZOIDS_X, j, k});
-                        }
-                        if (j % 2 == 1) {
-                            tmp_send_neighbors[my_pos].insert({i, j - 1, k});
-                            tmp_send_neighbors[my_pos].insert({i, (j + 1) % NUM_ZOIDS_Y, k});
-                        }
-                        if (k % 2 == 1) {
-                            tmp_send_neighbors[my_pos].insert({i, j, k - 1});
-                            tmp_send_neighbors[my_pos].insert({i, j, (k + 1) % NUM_ZOIDS_Z});
-                        }
-                    }
-                }
-            }
-
-            for (auto& [zoid, send_zoids] : tmp_send_neighbors) {
-                for (auto& z : send_zoids) {
-                    tmp_recv_neighbors[z].insert(zoid);
-                }
-            }
-
-            int num_zoids_per_dep[NUM_DEPS] = {num_dep0_zoids, num_dep0_zoids + num_dep1_zoids,
-                                               num_dep0_zoids + num_dep1_zoids + num_dep2_zoids, NUM_ZOIDS_MANY_CUTS};
-
-            int dep_to_val[NUM_DEPS] = {0, 2, 4, 6};
-
-            for (int dep = 1; dep < NUM_DEPS; dep++) {
-                for (int proc = 0; proc < comm->nprocs; proc++) {
-                    auto& zoids = proc_to_zoids[proc];
-                    std::set<std::array<int, 3>> all_neighbors;
-                    std::map<std::array<int, 3>, int> neighbor_to_count;
-                    for (auto& z : zoids) {
-                        int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
-                        if (zoid_dep == dep - 1) {
-                            auto& neighbors = tmp_send_neighbors[z];
-                            for (auto& n : neighbors) {
-                                all_neighbors.insert(n);
-                                neighbor_to_count[n]++;
-                            }
-                        }
-                    }
-
-                    // pick out the zoids that have most of their neighbors
-                    for (auto& [k, v] : neighbor_to_count) {
-                        if (v == dep_to_val[dep]) {
-                            proc_to_zoids[proc].push_back(k);
-                            proc_to_zoid_count[proc]++;
-                            claimed[k[0]][k[1]][k[2]] = true;
-                        } else if (v > dep_to_val[dep] / 2) {
-                            if (!claimed[k[0]][k[1]][k[2]] && proc_to_zoid_count[proc] < (num_zoids_per_dep[dep]) / comm->nprocs) {
-                                proc_to_zoids[proc].push_back(k);
-                                proc_to_zoid_count[proc]++;
-                                claimed[k[0]][k[1]][k[2]] = true;
-                            }
-                        }
-                    }
-                }
-
-                for (int proc = 0; proc < comm->nprocs; proc++) {
-                    auto& zoids = proc_to_zoids[proc];
-                    std::set<std::array<int, 3>> all_neighbors;
-                    std::map<std::array<int, 3>, int> neighbor_to_count;
-                    for (auto& z : zoids) {
-                        int zoid_dep = (z[0] % 2 == 0) + (z[1] % 2 == 0) + (z[2] % 2 == 0);
-                        if (zoid_dep == dep - 1) {
-                            auto& neighbors = tmp_send_neighbors[z];
-                            for (auto& n : neighbors) {
-                                all_neighbors.insert(n);
-                                neighbor_to_count[n]++;
-                            }
-                        }
-                    }
-
-                    // pick out the zoids that have half of their neighbors, tiebreak I guess based on earlier process
-                    for (auto& [k, v] : neighbor_to_count) {
-                        if (v >= dep_to_val[dep] / 2) {
-                            if (!claimed[k[0]][k[1]][k[2]] && proc_to_zoid_count[proc] < (num_zoids_per_dep[dep]) / comm->nprocs) {
-                                proc_to_zoids[proc].push_back(k);
-                                proc_to_zoid_count[proc]++;
-                                claimed[k[0]][k[1]][k[2]] = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            std::set<std::array<int, 3>> test_zoids;
-            for (int proc = 0; proc < comm->nprocs; proc++) {
-                for (auto& zoid : proc_to_zoids[proc]) {
-                    test_zoids.insert(zoid);
-                }
-            }
-
-            std::cout << "test zoids size: " << test_zoids.size() << std::endl;
-            assert(test_zoids.size() == NUM_ZOIDS_MANY_CUTS);
-
-            std::map<std::array<int, 3>, int> zoid_to_proc_final;
-            for (int proc = 0; proc < comm->nprocs; proc++) {
-                for (auto& zoid : proc_to_zoids[proc]) {
-                    zoid_to_proc_final[zoid] = proc;
-                }
-            }
-
-            std::vector<std::array<int, 3>> zoids_vec;
-            for (auto& [k, v] : zoid_to_proc_final) {
-                zoids_vec.push_back(k);
-            }
-
-            std::sort(zoids_vec.begin(), zoids_vec.end(), [](const auto& zoid_a, const auto& zoid_b) {
-                int dep_a = (zoid_a[0] % 2 == 0) + (zoid_a[1] % 2 == 0) + (zoid_a[2] % 2 == 0);
-                int dep_b = (zoid_b[0] % 2 == 0) + (zoid_b[1] % 2 == 0) + (zoid_b[2] % 2 == 0);
-                return dep_a < dep_b;
-            });
-
-            std::vector<int> proc_zoid_counts(comm->nprocs, 0);
-            for (int i = 0; i < zoids_vec.size(); i++) {
-                auto& zoid = zoids_vec[i];
-                auto proc = zoid_to_proc_final.at(zoid);
-                zoid_where_to_num[zoid] = proc_zoid_counts[proc] * comm->nprocs + proc;
-                proc_zoid_counts[proc]++;
-            }
-
-            return;
-        }
-
-        // Do a systematic thing for the *FIRST* dependency level. After the first dependency level, do
-        // region to number mapping
-
-        /*
-        int region_idx = 0;
-        std::map<std::array<int, 3>, int> region_to_idx;
-        for (int i = 0; i < NUM_SPLIT_X; i++) {
-            for (int j = 0; j < NUM_SPLIT_Y; j++) {
-                for (int k = 0; k < NUM_SPLIT_Z; k++) {
-                    region_to_idx[{i, j, k}] = morton3D(i, j, k);
-                }
-            }
-        }
-
-        assert(NUM_ZOIDS_X % NUM_SPLIT_X == 0);
-        assert(NUM_ZOIDS_Y % NUM_SPLIT_Y == 0);
-        assert(NUM_ZOIDS_Z % NUM_SPLIT_Z == 0);
-
-        std::map<std::array<int, 3>, std::vector<std::array<int, 3>>> region_to_zoids;
-        for (int i = 0; i < NUM_ZOIDS_X; i++) {
-            int x_coord = i / (NUM_ZOIDS_X / NUM_SPLIT_X);
-            for (int j = 0; j < NUM_ZOIDS_Y; j++) {
-                int y_coord = j / (NUM_ZOIDS_Y / NUM_SPLIT_Y);
-                for (int k = 0; k < NUM_ZOIDS_Z; k++) {
-                    int z_coord = k / (NUM_ZOIDS_Z / NUM_SPLIT_Z);
-                    region_to_zoids[{x_coord, y_coord, z_coord}].push_back({i, j, k});
-                }
-            }
-        }
-
-        // assert(NUM_SPLIT_X * NUM_SPLIT_Y * NUM_SPLIT_Z == comm->nprocs);
-
-        std::map<std::array<int, 3>, int> region_to_proc;
-        std::map<int, std::array<int, 3>> proc_to_region;
-
-        int proc_idx = 0;
-        for (int i = 0; i < NUM_SPLIT_X; i++) {
-            for (int j = 0; j < NUM_SPLIT_Y; j++) {
-                for (int k = 0; k < NUM_SPLIT_Z; k++) {
-                    proc_to_region[proc_idx] = {i, j, k};
-                    region_to_proc[{i, j, k}] = proc_idx;
-                    proc_idx++;
-                }
-            }
-        }
-        */
-
         std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_send_neighbors;
         std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_recv_neighbors;
 
@@ -13084,7 +12850,8 @@ public:
             }
             */
             auto* _noalias const buf_ = (dbl3_t_stencil_md*) buf;
-            for (int i = 0; i < recv_force_idxs.size(); i++) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
                 int idx = recv_force_idxs[i];
                 const auto& f_ = buf_[i];
                 zoid.f_stencil_md[0][idx].x += f_.x;
@@ -15535,7 +15302,7 @@ public:
             */
 
             #pragma cilk grainsize 512
-            cilk_for (int idx = 0; idx < nlocal; idx++) {
+            cilk_for(int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
                 const int itype = atom_type[i];
@@ -15599,354 +15366,6 @@ public:
                 f[i].z += fztmp;
                 spinlocks[i].unlock();
             }
-
-            auto& bond_list = zoid.bond_list_modified[timestep];
-            int nbonds = bond_list.size();
-
-            #pragma cilk grainsize 512
-            cilk_for (int i = 0; i < nbonds; i++) {
-                auto& tup = bond_list[i];
-                int i1 = std::get<0>(tup);
-                int i2 = std::get<1>(tup);
-                int type = std::get<2>(tup);
-
-                double delx = x[i1].x - x[i2].x;
-                double dely = x[i1].y - x[i2].y;
-                double delz = x[i1].z - x[i2].z;
-
-                double rsq = delx * delx + dely * dely + delz * delz;
-                double r0sq = r0[type] * r0[type];
-                double rlogarg = 1.0 - rsq / r0sq;
-
-                if (rlogarg < 0.1) {
-                    error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                   update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                    //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                    //                                return;
-                    assert(false);
-
-                    rlogarg = 0.1;
-                }
-
-                double fbond = -k[type] / rlogarg;
-
-                // force from LJ term
-                double sr2 = 0.0;
-                double sr6 = 0.0;
-
-                if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                    sr2 = sigma[type] * sigma[type] / rsq;
-                    sr6 = sr2 * sr2 * sr2;
-                    fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                }
-
-                // energy
-
-                // apply force to each of 2 atoms
-
-                // if (NEWTON_PAIR || is_local_idx[i1]) {
-                if (NEWTON_PAIR) {
-                    spinlocks[i1].lock();
-                    f[i1].x += delx * fbond;
-                    f[i1].y += dely * fbond;
-                    f[i1].z += delz * fbond;
-                    spinlocks[i1].unlock();
-                }
-
-                // if (NEWTON_PAIR || is_local_idx[i2]) {
-                if (NEWTON_PAIR) {
-                    spinlocks[i2].lock();
-                    f[i2].x -= delx * fbond;
-                    f[i2].y -= dely * fbond;
-                    f[i2].z -= delz * fbond;
-                    spinlocks[i2].unlock();
-                }
-            }
-
-            /*
-            #pragma cilk grainsize MODIFY_GRAINSIZE
-            cilk_for (int idx = 0; idx < nlocal; idx++) {
-                int i = local_idxs[idx];
-
-                const int itype = atom_type[i];
-
-                // const int *_noalias const jlist = firstneigh[i];
-                const auto &jlist = neighbor_list[i];
-                const double *_noalias const cutsqi = cutsq[itype];
-                const double *_noalias const offseti = offset[itype];
-                const double *_noalias const lj1i = lj1[itype];
-                const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
-
-                double xtmp = x[i].x;
-                double ytmp = x[i].y;
-                double ztmp = x[i].z;
-                // int jnum = numneigh[i];
-                int jnum = jlist.size();
-
-                double fxtmp = 0.0;
-                double fytmp = 0.0;
-                double fztmp = 0.0;
-
-                for (int jj = 0; jj < jnum; jj++) {
-                    double evdwl = 0.0;
-                    // int j = jlist[jj];
-                    int j = jlist[jj];
-                    double factor_lj = special_lj[pair->sbmask(j)];
-                    j &= NEIGHMASK;
-
-                    double delx = xtmp - x[j].x;
-                    double dely = ytmp - x[j].y;
-                    double delz = ztmp - x[j].z;
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    int jtype = atom_type[j];
-
-                    if (rsq < cutsqi[jtype]) {
-                        double r2inv = 1.0 / rsq;
-                        double r6inv = r2inv * r2inv * r2inv;
-                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
-                        double fpair = factor_lj * forcelj * r2inv;
-
-                        fxtmp += delx * fpair;
-                        fytmp += dely * fpair;
-                        fztmp += delz * fpair;
-
-                        if (NEWTON_PAIR || j < nlocal) {
-                            if (USE_LOCKS) {
-                                spinlocks[j].lock();
-                                f[j].x -= delx * fpair;
-                                f[j].y -= dely * fpair;
-                                f[j].z -= delz * fpair;
-                                spinlocks[j].unlock();
-                            } else {
-                                __atomic_fetch_add(&f[j].x, -delx * fpair, __ATOMIC_RELAXED);
-                                __atomic_fetch_add(&f[j].y, -dely * fpair, __ATOMIC_RELAXED);
-                                __atomic_fetch_add(&f[j].z, -delz * fpair, __ATOMIC_RELAXED);
-                            }
-                        }
-                    }
-                }
-
-                auto &lst_bonds = bond_list[i];
-                for (int j = 0; j < lst_bonds.size(); j++) {
-                    auto &bond_info = lst_bonds[j];
-                    int i2 = bond_info.first;
-                    int type = bond_info.second;
-
-                    double delx = xtmp - x[i2].x;
-                    double dely = ytmp - x[i2].y;
-                    double delz = ztmp - x[i2].z;
-
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    double r0sq = r0[type] * r0[type];
-                    double rlogarg = 1.0 - rsq / r0sq;
-
-                    if (rlogarg < 0.1) {
-                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                        //                                return;
-                        assert(false);
-
-                        rlogarg = 0.1;
-                    }
-
-                    double fbond = -k[type] / rlogarg;
-
-                    // force from LJ term
-                    double sr2 = 0.0;
-                    double sr6 = 0.0;
-
-                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                        sr2 = sigma[type] * sigma[type] / rsq;
-                        sr6 = sr2 * sr2 * sr2;
-                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                    }
-
-                    // energy
-
-                    // apply force to each of 2 atoms
-
-                    if (NEWTON_PAIR || i < nlocal) {
-                        fxtmp += delx * fbond;
-                        fytmp += dely * fbond;
-                        fztmp += delz * fbond;
-                    }
-
-                    if (NEWTON_PAIR || i2 < nlocal) {
-                        if (USE_LOCKS) {
-                            spinlocks[i2].lock();
-                            f[i2].x -= delx * fbond;
-                            f[i2].y -= dely * fbond;
-                            f[i2].z -= delz * fbond;
-                            spinlocks[i2].unlock();
-                        } else {
-                            __atomic_fetch_add(&f[i2].x, -delx * fbond, __ATOMIC_RELAXED);
-                            __atomic_fetch_add(&f[i2].y, -dely * fbond, __ATOMIC_RELAXED);
-                            __atomic_fetch_add(&f[i2].z, -delz * fbond, __ATOMIC_RELAXED);
-                        }
-                    }
-                }
-
-                if (USE_LOCKS) {
-                    spinlocks[i].lock();
-                    f[i].x += fxtmp;
-                    f[i].y += fytmp;
-                    f[i].z += fztmp;
-                    spinlocks[i].unlock();
-                } else {
-                    __atomic_fetch_add(&f[i].x, fxtmp, __ATOMIC_RELAXED);
-                    __atomic_fetch_add(&f[i].y, fytmp, __ATOMIC_RELAXED);
-                    __atomic_fetch_add(&f[i].z, fztmp, __ATOMIC_RELAXED);
-                }
-            }
-            */
-
-            /*
-            #pragma cilk grainsize 1
-            cilk_for (int ii = 0; ii < num_chunks; ii++) {
-                int worker_number = __cilkrts_get_worker_number();
-                int start_chunk = worker_number * chunks_per_worker;
-
-                for (int c = 0; c < num_chunks; ++c) {
-                    int s = (c + start_chunk) % num_chunks;
-
-                    if (claimed[s].test(std::memory_order_relaxed)) {
-                        continue;
-                    }
-
-                    if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
-                        for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nlocal; idx++) {
-                            int i = local_idxs[idx];
-
-                            const int itype = atom_type[i];
-
-                            // const int *_noalias const jlist = firstneigh[i];
-                            const auto &jlist = neighbor_list[i];
-                            const double *_noalias const cutsqi = cutsq[itype];
-                            const double *_noalias const offseti = offset[itype];
-                            const double *_noalias const lj1i = lj1[itype];
-                            const double *_noalias const lj2i = lj2[itype];
-                            const double *_noalias const lj3i = lj3[itype];
-                            const double *_noalias const lj4i = lj4[itype];
-
-                            double xtmp = x[i].x;
-                            double ytmp = x[i].y;
-                            double ztmp = x[i].z;
-                            // int jnum = numneigh[i];
-                            int jnum = jlist.size();
-
-                            double fxtmp = 0.0;
-                            double fytmp = 0.0;
-                            double fztmp = 0.0;
-
-                            for (int jj = 0; jj < jnum; jj++) {
-                                double evdwl = 0.0;
-                                // int j = jlist[jj];
-                                int j = jlist[jj];
-                                double factor_lj = special_lj[pair->sbmask(j)];
-                                j &= NEIGHMASK;
-
-                                double delx = xtmp - x[j].x;
-                                double dely = ytmp - x[j].y;
-                                double delz = ztmp - x[j].z;
-                                double rsq = delx * delx + dely * dely + delz * delz;
-                                int jtype = atom_type[j];
-
-                                if (rsq < cutsqi[jtype]) {
-                                    double r2inv = 1.0 / rsq;
-                                    double r6inv = r2inv * r2inv * r2inv;
-                                    double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
-                                    double fpair = factor_lj * forcelj * r2inv;
-
-                                    fxtmp += delx * fpair;
-                                    fytmp += dely * fpair;
-                                    fztmp += delz * fpair;
-
-                                    if (newton_pair || j < nlocal) {
-                                        spinlocks[j].lock();
-                                        f[j].x -= delx * fpair;
-                                        f[j].y -= dely * fpair;
-                                        f[j].z -= delz * fpair;
-                                        spinlocks[j].unlock();
-                                    }
-                                }
-                            }
-
-                            auto &lst_bonds = bond_list[i];
-                            for (int j = 0; j < lst_bonds.size(); j++) {
-                                auto &bond_info = lst_bonds[j];
-                                int i2 = bond_info.first;
-                                int type = bond_info.second;
-
-                                double delx = xtmp - x[i2].x;
-                                double dely = ytmp - x[i2].y;
-                                double delz = ztmp - x[i2].z;
-
-                                double rsq = delx * delx + dely * dely + delz * delz;
-                                double r0sq = r0[type] * r0[type];
-                                double rlogarg = 1.0 - rsq / r0sq;
-
-                                if (rlogarg < 0.1) {
-                                    error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                                   update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                                    //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                                    //                                return;
-                                    assert(false);
-
-                                    rlogarg = 0.1;
-                                }
-
-                                double fbond = -k[type] / rlogarg;
-
-                                // force from LJ term
-                                double sr2 = 0.0;
-                                double sr6 = 0.0;
-
-                                if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                                    sr2 = sigma[type] * sigma[type] / rsq;
-                                    sr6 = sr2 * sr2 * sr2;
-                                    fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                                }
-
-                                // energy
-
-                                // apply force to each of 2 atoms
-
-                                if (newton_pair || i < nlocal) {
-                                    fxtmp += delx * fbond;
-                                    fytmp += dely * fbond;
-                                    fztmp += delz * fbond;
-                                }
-
-                                if (newton_pair || i2 < nlocal) {
-                                    spinlocks[i2].lock();
-                                    f[i2].x -= delx * fbond;
-                                    f[i2].y -= dely * fbond;
-                                    f[i2].z -= delz * fbond;
-                                    spinlocks[i2].unlock();
-                                }
-                            }
-
-                            spinlocks[i].lock();
-                            f[i].x += fxtmp;
-                            f[i].y += fytmp;
-                            f[i].z += fztmp;
-                            spinlocks[i].unlock();
-                        }
-
-                        if (USE_BREAK) {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            for (int i = 0; i < num_chunks; i++) {
-                claimed[i].clear(std::memory_order_relaxed);
-            }
-            */
         } else {
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -16008,9 +15427,73 @@ public:
                 f[i].y += fytmp;
                 f[i].z += fztmp;
             }
+        }
 
-            auto& bond_list = zoid.bond_list_modified[timestep];
-            for (int i = 0; i < bond_list.size(); i++) {
+        auto& bond_list = zoid.bond_list_modified[timestep];
+        int nbonds = bond_list.size();
+
+        if (nbonds > 512 && (dep == 0 || dep == 3)) {
+            #pragma cilk grainsize 512
+            cilk_for (int i = 0; i < nbonds; i++) {
+                auto& tup = bond_list[i];
+                int i1 = std::get<0>(tup);
+                int i2 = std::get<1>(tup);
+                int type = std::get<2>(tup);
+
+                double delx = x[i1].x - x[i2].x;
+                double dely = x[i1].y - x[i2].y;
+                double delz = x[i1].z - x[i2].z;
+
+                double rsq = delx * delx + dely * dely + delz * delz;
+                double r0sq = r0[type] * r0[type];
+                double rlogarg = 1.0 - rsq / r0sq;
+
+                if (rlogarg < 0.1) {
+                    error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                   update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                    //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                    //                                return;
+                    assert(false);
+
+                    rlogarg = 0.1;
+                }
+
+                double fbond = -k[type] / rlogarg;
+
+                // force from LJ term
+                double sr2 = 0.0;
+                double sr6 = 0.0;
+
+                if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                    sr2 = sigma[type] * sigma[type] / rsq;
+                    sr6 = sr2 * sr2 * sr2;
+                    fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                }
+
+                // energy
+
+                // apply force to each of 2 atoms
+
+                // if (NEWTON_PAIR || is_local_idx[i1]) {
+                if (NEWTON_PAIR) {
+                    spinlocks[i1].lock();
+                    f[i1].x += delx * fbond;
+                    f[i1].y += dely * fbond;
+                    f[i1].z += delz * fbond;
+                    spinlocks[i1].unlock();
+                }
+
+                // if (NEWTON_PAIR || is_local_idx[i2]) {
+                if (NEWTON_PAIR) {
+                    spinlocks[i2].lock();
+                    f[i2].x -= delx * fbond;
+                    f[i2].y -= dely * fbond;
+                    f[i2].z -= delz * fbond;
+                    spinlocks[i2].unlock();
+                }
+            }
+        } else {
+            for (int i = 0; i < nbonds; i++) {
                 auto& tup = bond_list[i];
                 int i1 = std::get<0>(tup);
                 int i2 = std::get<1>(tup);
@@ -16064,122 +15547,152 @@ public:
                     f[i2].z -= delz * fbond;
                 }
             }
-
-            /*
-            for (int idx = 0; idx < nlocal; idx++) {
-                int i = local_idxs[idx];
-
-                const int itype = atom_type[i];
-
-                // const int *_noalias const jlist = firstneigh[i];
-                const auto &jlist = neighbor_list[i];
-                const double *_noalias const cutsqi = cutsq[itype];
-                const double *_noalias const offseti = offset[itype];
-                const double *_noalias const lj1i = lj1[itype];
-                const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
-
-                double xtmp = x[i].x;
-                double ytmp = x[i].y;
-                double ztmp = x[i].z;
-                // int jnum = numneigh[i];
-                int jnum = jlist.size();
-
-                double fxtmp = 0.0;
-                double fytmp = 0.0;
-                double fztmp = 0.0;
-
-                for (int jj = 0; jj < jnum; jj++) {
-                    double evdwl = 0.0;
-                    // int j = jlist[jj];
-                    int j = jlist[jj];
-                    double factor_lj = special_lj[pair->sbmask(j)];
-                    j &= NEIGHMASK;
-
-                    double delx = xtmp - x[j].x;
-                    double dely = ytmp - x[j].y;
-                    double delz = ztmp - x[j].z;
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    int jtype = atom_type[j];
-
-                    if (rsq < cutsqi[jtype]) {
-                        double r2inv = 1.0 / rsq;
-                        double r6inv = r2inv * r2inv * r2inv;
-                        double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
-                        double fpair = factor_lj * forcelj * r2inv;
-
-                        fxtmp += delx * fpair;
-                        fytmp += dely * fpair;
-                        fztmp += delz * fpair;
-
-                        if (NEWTON_PAIR || j < nlocal) {
-                            f[j].x -= delx * fpair;
-                            f[j].y -= dely * fpair;
-                            f[j].z -= delz * fpair;
-                        }
-                    }
-                }
-
-                auto &lst_bonds = bond_list[i];
-                for (int j = 0; j < lst_bonds.size(); j++) {
-                    auto &bond_info = lst_bonds[j];
-                    int i2 = bond_info.first;
-                    int type = bond_info.second;
-
-                    double delx = xtmp - x[i2].x;
-                    double dely = ytmp - x[i2].y;
-                    double delz = ztmp - x[i2].z;
-
-                    double rsq = delx * delx + dely * dely + delz * delz;
-                    double r0sq = r0[type] * r0[type];
-                    double rlogarg = 1.0 - rsq / r0sq;
-
-                    if (rlogarg < 0.1) {
-                        error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
-                                       update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
-                        //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
-                        //                                return;
-                        assert(false);
-
-                        rlogarg = 0.1;
-                    }
-
-                    double fbond = -k[type] / rlogarg;
-
-                    // force from LJ term
-                    double sr2 = 0.0;
-                    double sr6 = 0.0;
-
-                    if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                        sr2 = sigma[type] * sigma[type] / rsq;
-                        sr6 = sr2 * sr2 * sr2;
-                        fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
-                    }
-
-                    // energy
-
-                    // apply force to each of 2 atoms
-
-                    if (NEWTON_PAIR || i < nlocal) {
-                        fxtmp += delx * fbond;
-                        fytmp += dely * fbond;
-                        fztmp += delz * fbond;
-                    }
-
-                    if (NEWTON_PAIR || i2 < nlocal) {
-                        f[i2].x -= delx * fbond;
-                        f[i2].y -= dely * fbond;
-                        f[i2].z -= delz * fbond;
-                    }
-                }
-
-                f[i].x += fxtmp;
-                f[i].y += fytmp;
-                f[i].z += fztmp;
-            }
-            */
         }
+
+        /*
+        #pragma cilk grainsize 1
+        cilk_for (int ii = 0; ii < num_chunks; ii++) {
+            int worker_number = __cilkrts_get_worker_number();
+            int start_chunk = worker_number * chunks_per_worker;
+
+            for (int c = 0; c < num_chunks; ++c) {
+                int s = (c + start_chunk) % num_chunks;
+
+                if (claimed[s].test(std::memory_order_relaxed)) {
+                    continue;
+                }
+
+                if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                    for (int idx = s * chunk_size; idx < (s + 1) * chunk_size && idx < nlocal; idx++) {
+                        int i = local_idxs[idx];
+
+                        const int itype = atom_type[i];
+
+                        // const int *_noalias const jlist = firstneigh[i];
+                        const auto &jlist = neighbor_list[i];
+                        const double *_noalias const cutsqi = cutsq[itype];
+                        const double *_noalias const offseti = offset[itype];
+                        const double *_noalias const lj1i = lj1[itype];
+                        const double *_noalias const lj2i = lj2[itype];
+                        const double *_noalias const lj3i = lj3[itype];
+                        const double *_noalias const lj4i = lj4[itype];
+
+                        double xtmp = x[i].x;
+                        double ytmp = x[i].y;
+                        double ztmp = x[i].z;
+                        // int jnum = numneigh[i];
+                        int jnum = jlist.size();
+
+                        double fxtmp = 0.0;
+                        double fytmp = 0.0;
+                        double fztmp = 0.0;
+
+                        for (int jj = 0; jj < jnum; jj++) {
+                            double evdwl = 0.0;
+                            // int j = jlist[jj];
+                            int j = jlist[jj];
+                            double factor_lj = special_lj[pair->sbmask(j)];
+                            j &= NEIGHMASK;
+
+                            double delx = xtmp - x[j].x;
+                            double dely = ytmp - x[j].y;
+                            double delz = ztmp - x[j].z;
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            int jtype = atom_type[j];
+
+                            if (rsq < cutsqi[jtype]) {
+                                double r2inv = 1.0 / rsq;
+                                double r6inv = r2inv * r2inv * r2inv;
+                                double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                                double fpair = factor_lj * forcelj * r2inv;
+
+                                fxtmp += delx * fpair;
+                                fytmp += dely * fpair;
+                                fztmp += delz * fpair;
+
+                                if (newton_pair || j < nlocal) {
+                                    spinlocks[j].lock();
+                                    f[j].x -= delx * fpair;
+                                    f[j].y -= dely * fpair;
+                                    f[j].z -= delz * fpair;
+                                    spinlocks[j].unlock();
+                                }
+                            }
+                        }
+
+                        auto &lst_bonds = bond_list[i];
+                        for (int j = 0; j < lst_bonds.size(); j++) {
+                            auto &bond_info = lst_bonds[j];
+                            int i2 = bond_info.first;
+                            int type = bond_info.second;
+
+                            double delx = xtmp - x[i2].x;
+                            double dely = ytmp - x[i2].y;
+                            double delz = ztmp - x[i2].z;
+
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            double r0sq = r0[type] * r0[type];
+                            double rlogarg = 1.0 - rsq / r0sq;
+
+                            if (rlogarg < 0.1) {
+                                error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                               update->ntimestep, atom->tag[i], atom->tag[i2], sqrt(rsq));
+                                //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                                //                                return;
+                                assert(false);
+
+                                rlogarg = 0.1;
+                            }
+
+                            double fbond = -k[type] / rlogarg;
+
+                            // force from LJ term
+                            double sr2 = 0.0;
+                            double sr6 = 0.0;
+
+                            if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                                sr2 = sigma[type] * sigma[type] / rsq;
+                                sr6 = sr2 * sr2 * sr2;
+                                fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                            }
+
+                            // energy
+
+                            // apply force to each of 2 atoms
+
+                            if (newton_pair || i < nlocal) {
+                                fxtmp += delx * fbond;
+                                fytmp += dely * fbond;
+                                fztmp += delz * fbond;
+                            }
+
+                            if (newton_pair || i2 < nlocal) {
+                                spinlocks[i2].lock();
+                                f[i2].x -= delx * fbond;
+                                f[i2].y -= dely * fbond;
+                                f[i2].z -= delz * fbond;
+                                spinlocks[i2].unlock();
+                            }
+                        }
+
+                        spinlocks[i].lock();
+                        f[i].x += fxtmp;
+                        f[i].y += fytmp;
+                        f[i].z += fztmp;
+                        spinlocks[i].unlock();
+                    }
+
+                    if (USE_BREAK) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < num_chunks; i++) {
+            claimed[i].clear(std::memory_order_relaxed);
+        }
+        */
     }
 
     inline void post_force_stencil_md_zoid_many_cuts_setup(queue_info& zoid, int timestep) {
