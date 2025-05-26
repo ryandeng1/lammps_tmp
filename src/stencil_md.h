@@ -14769,7 +14769,7 @@ public:
         auto dtf = 0.5 * update->dt * force->ftm2v;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > MODIFY_GRAINSIZE) {
+        if (nlocal > MODIFY_GRAINSIZE && (dep == 0 || dep == 3)) {
             auto* claimed = zoid.claimed_flags_stencil_md[0];
             int num_workers = __cilkrts_get_nworkers();
             int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
@@ -14878,7 +14878,7 @@ public:
         auto tsqrt = fix_post_force->tsqrt;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > MODIFY_GRAINSIZE) {
+        if (nlocal > MODIFY_GRAINSIZE && (dep == 0 || dep == 3)) {
             int num_workers = __cilkrts_get_nworkers();
             int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
             int chunks_per_worker = num_chunks / num_workers;
