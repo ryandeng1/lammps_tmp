@@ -8745,6 +8745,11 @@ public:
                                    return true;
                                }
 
+                               if (timesteps_local_a != timesteps_local_b) {
+                                   return timesteps_local_a < timesteps_local_b;
+                               }
+
+                               /*
                                if (timesteps_local_a.size() != timesteps_local_b.size()) {
                                    return timesteps_local_a.size() > timesteps_local_b.size();
                                }
@@ -8762,6 +8767,7 @@ public:
                                if (last_timestep_local_a != last_timestep_local_b) {
                                    return last_timestep_local_a < last_timestep_local_b;
                                }
+                               */
 
                                /*
                                const auto& border_zoids_a = idx_to_border_zoids[idx_a];
