@@ -8746,7 +8746,7 @@ public:
                                }
 
                                if (timesteps_local_a != timesteps_local_b) {
-                                   return timesteps_local_a < timesteps_local_b;
+                                   return timesteps_local_a > timesteps_local_b;
                                }
 
                                /*
@@ -15234,7 +15234,7 @@ public:
         int chunk_size = MODIFY_GRAINSIZE;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > MODIFY_GRAINSIZE) {
+        if (nlocal > MODIFY_GRAINSIZE && (dep == 0 || dep == 3)) {
             /*
             auto& segment_idxs = zoid.local_idxs_per_timestep_segment_idxs[timestep];
             auto& segment_sizes = zoid.local_idxs_per_timestep_segment_sizes[timestep];
