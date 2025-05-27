@@ -8746,7 +8746,7 @@ public:
                                }
 
                                if (timesteps_local_a != timesteps_local_b) {
-                                   return timesteps_local_a > timesteps_local_b;
+                                   return timesteps_local_a < timesteps_local_b;
                                }
 
                                /*
