@@ -38,63 +38,9 @@ class Verlet : public Integrate {
   void setup_stencil_md();
   void setup_stencil_md_many_zoids();
 
-  void sort_ghost_atoms_stencil_md_bins(Atom*, queue_info&, int);
-  void construct_send_force_bins(bool curr_dt, Atom*, queue_info& zoid, int);
-  void construct_send_pos_bins(bool curr_dt, Atom*, queue_info& zoid, int);
-  void construct_send_vel_bins(bool curr_dt, Atom*, queue_info& zoid, int);
-
-  void construct_recv_force_bins(bool curr_dt, Atom*, queue_info& zoid, int);
-  void construct_recv_pos_bins(bool curr_dt, Atom*, queue_info& zoid, int);
-  void construct_recv_vel_bins(bool curr_dt, Atom*, queue_info& zoid, int);
-
-  void construct_no_comm_bins(bool curr_dt, Atom*, queue_info& zoid, int);
-  void construct_bin_to_comm(bool curr_dt, Atom*, queue_info& zoid, int);
-
-  void construct_dtfm_cache(Atom*);
-
-  void construct_bin_to_idx(bool curr_dt, Atom*, queue_info& zoid, int);
-
-  void construct_bin_to_send_zoids(bool curr_dt, Atom*, queue_info& zoid, int);
-
-  void sort_ghost_atoms_stencil_md(Atom*, Atom*, queue_info&, int);
-  void group_ghost_atoms_stencil_md(Atom*, Atom*, queue_info&, int);
-  void group_ghost_atoms_stencil_md_next_dt(Atom*, Atom*, queue_info&, int);
   virtual void force_clear_stencil_md(Atom*, Force*, Neighbor*);
-  // void setup_bins_stencil_md(Atom*, queue_info&, int);
-  void setup_atom_arr_stencil_md(std::array<Atom*, NUM_TIMESTEPS_IN_PARALLEL + 1>, Domain*);
 
   void cleanup_stencil_md();
-
-  template <bool curr_dt>
-  void run_stencil_md_zoid(int start_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x, double** test_v, bool warmup);
-
-  template <bool curr_dt>
-  void run_stencil_md_big_zoid(int start_timestep, int start_eval, int end_eval, int zoid_num, double** test_f, double** test_x, double** test_v, bool warmup);
-
-  template <bool curr_dt>
-  void run_stencil_md_dep_templated(int dep, int start_timestep, int start_t, int end_t, int* dep_to_idxs,
-                                    std::vector<MPI_Request>* send_requests, std::vector<MPI_Request>& receive_requests,
-                                    std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                    double** test_f, double** test_x, double** test_v, int pipeline_stage=0, bool warmup=false);
-
-  template <bool curr_dt>
-  void run_stencil_md_pipelined_helper(int starting_timestep,
-                                       std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                       double** test_f, double** test_x, double** test_v, bool warmup);
-
-  void run_stencil_md_pipelined(int num_timesteps, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                double** test_f, double** test_x, double** test_v, bool warmup);
-
-  template <bool curr_dt>
-  void run_stencil_md_zoid_no_cilk_for(int start_timestep, int zoid_num,
-                                       double** test_f, double** test_x, double** test_v,
-                                       std::array<std::atomic<int>, NUM_ZOIDS>& counters, const std::array<int, NUM_ZOIDS>& cache);
-
-  template <bool curr_dt>
-  void run_stencil_md_no_cilk_for_helper(int num_timesteps, double** test_f, double** test_x, double** test_v,
-                                         std::array<std::atomic<int>, NUM_ZOIDS>& counters, const std::array<int, NUM_ZOIDS>& cache);
-
-  void run_stencil_md_no_cilk_for(int num_timesteps, double** test_f, double** test_x, double** test_v);
 
   /* BEGIN DOUBLE BUFFERING */
   template <bool curr_dt>
@@ -188,26 +134,6 @@ class Verlet : public Integrate {
 
   void run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                           std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
-
-  template <bool curr_dt>
-  void run_stencil_md_zoid_double_buffering(int start_timestep, int start_eval, int end_eval, int zoid_num,
-                                            double** test_f, double** test_x, double** test_v, bool warmup);
-
-  void run_stencil_md_pipelined_double_buffering(int num_timesteps, std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                                 double** test_f, double** test_x, double** test_v, bool warmup);
-
-  template <bool curr_dt>
-  void run_stencil_md_pipelined_double_buffering_helper(int starting_timestep,
-                                                        std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                                        double** test_f, double** test_x, double** test_v, bool warmup);
-
-  template <bool curr_dt>
-  void run_stencil_md_dep_double_buffering(int dep, int start_timestep, int start_t, int end_t, int* dep_to_idxs,
-                                           std::vector<MPI_Request>* send_requests, std::vector<MPI_Request>& receive_requests,
-                                           std::vector<int>* dep_to_wait_idxs, std::vector<int>* dep_to_wait_idxs_next_dt,
-                                           double** test_f, double** test_x, double** test_v, int pipeline_stage=0, bool warmup=false);
-
-  /* END DOUBLE BUFFERING */
 
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic
