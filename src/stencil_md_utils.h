@@ -135,21 +135,19 @@ constexpr bool ONLY_RUN_STENCIL_MD = false;
 
 constexpr bool LAMMPS_USE_CILK = false;
 
-constexpr bool LAMMPS_USE_BINS = false;
-
 constexpr bool TIME_STENCIL_MD = true;
 
 constexpr bool USE_BOND = true;
 
 constexpr int NUM_PIPELINE_STAGES = 2;
+constexpr int start_t[NUM_PIPELINE_STAGES] = {1, NUM_TIMESTEPS_IN_PARALLEL / 2};
+constexpr int end_t[NUM_PIPELINE_STAGES] = {NUM_TIMESTEPS_IN_PARALLEL / 2, NUM_TIMESTEPS_IN_PARALLEL + 1};
 
 constexpr bool USE_ATOMICS = false;
 
 constexpr int NUM_BINS = 1;
 
 constexpr int LAMMPS_NUM_REGIONS = 4;
-
-constexpr bool PAIR_USE_BINS = true;
 
 constexpr bool SORT_BINS_BASED_ON_LOCAL_IDX = false;
 
@@ -159,6 +157,8 @@ using IDX_3D = std::array<int, 3>;
 
 constexpr int MODIFY_GRAINSIZE = 1024;
 constexpr int MAX_NEIGHBORS_PER_ATOM = 20;
+
+constexpr bool USE_NEWTON = true;
 
 const std::map<IDX_3D, int> partition_to_dep = {
         {{LEFT,   LEFT,   LEFT},   0},
@@ -555,9 +555,6 @@ struct queue_info {
 
   bool no_comm_needed;
 
-  std::pair<int, dbl3_t_stencil_md>** per_worker_force_updates;
-  std::vector<int>** space_cut_idxs;
-
   std::vector<dbl3_t_stencil_md>* x_stencil_md;
   std::vector<dbl3_t_stencil_md>* v_stencil_md;
   std::vector<dbl3_t_stencil_md>* eval_f_stencil_md;
@@ -571,7 +568,6 @@ struct queue_info {
   std::atomic_flag** claimed_flags_stencil_md;
 
   std::vector<int>* local_idxs_per_timestep;
-  std::vector<int>* atom_domains_per_timestep;
 
   std::vector<std::vector<int>>* neighbor_list;
   std::vector<std::vector<std::pair<int, int>>>* bond_list;
@@ -586,137 +582,30 @@ struct queue_info {
   std::vector<int>** recv_pos_idxs_double_buffering_flattened;
   std::vector<int>* recv_vel_idxs_double_buffering_flattened;
 
+  std::vector<int>** send_force_idxs_double_buffering_flattened_pipelined;
+  std::vector<int>*** send_pos_idxs_double_buffering_flattened_pipelined;
+  std::vector<int>** send_vel_idxs_double_buffering_flattened_pipelined;
+
+  std::vector<int>** recv_force_idxs_double_buffering_flattened_pipelined;
+  std::vector<int>*** recv_pos_idxs_double_buffering_flattened_pipelined;
+  std::vector<int>** recv_vel_idxs_double_buffering_flattened_pipelined;
+
   std::vector<int>** send_force_idxs_double_buffering;
   std::vector<int>** recv_force_idxs_double_buffering;
 
   std::vector<int>** send_pos_idxs_double_buffering;
   std::vector<int>** recv_pos_idxs_double_buffering;
 
-  std::vector<int>** recv_pos_local_idxs_double_buffering;
-  std::vector<int>** recv_pos_ghost_idxs_double_buffering;
-
   std::vector<int>** send_vel_idxs_double_buffering;
   std::vector<int>** recv_vel_idxs_double_buffering;
   /* end for two timesteps */
 
-  std::vector<bool>* local_bins_comm;
-  std::vector<IDX_3D>* no_comm_local_bins;
-  std::vector<IDX_3D>* comm_local_bins;
-  std::vector<int>** bin_to_force_comm;
-  int** bin_to_pos_vel_comm;
-
-  int** bin_to_idx;
-  int** bin_to_size;
-
-  int** bin_to_num_send_zoids;
-  int*** bin_to_send_zoids;
-
-  int** send_force_num_bins;
-  // std::tuple<int, int, int>*** send_force_bins;
-  IDX_3D*** send_force_bins;
-
-  int** send_pos_num_bins;
-  // std::tuple<int, int, int>*** send_pos_bins;
-  IDX_3D*** send_pos_bins;
-
-  int** send_vel_num_bins;
-  // std::tuple<int, int, int>*** send_vel_bins;
-  IDX_3D*** send_vel_bins;
-
-  int** recv_force_num_bins;
-  // std::tuple<int, int, int>*** recv_force_bins;
-  IDX_3D*** recv_force_bins;
-
-  int** recv_pos_num_bins;
-  // std::tuple<int, int, int>*** recv_pos_bins;
-  IDX_3D*** recv_pos_bins;
-
-  int** recv_vel_num_bins;
-  // std::tuple<int, int, int>*** recv_vel_bins;
-  IDX_3D*** recv_vel_bins;
-
-  int* inum_per_timestep;
-  int debug_int;
   int t0;
   int t1;
   int dim;
   cuts_t zoid;
   int num;
   int where[3];
-  int **atom_idx_mapping;
-  int **reverse_atom_idx_mapping;
-  std::vector<int>* reverse_atom_idx_mapping_idxs;
-
-  // debugging
-  double** debug_atom_pos;
-
-  // use pointers since any copies, the pointers will be copied over rather than arrays it seems
-  bool **can_eval_center;
-  bool **can_eval_pos;
-
-  int*** recv_list_local;
-  int** recv_list_local_size;
-
-  // for send list
-  int*** send_force_idxs;
-  int*** send_force_sizes;
-  int** send_force_num_segments;
-  int** send_force_total_num_elems;
-
-  int*** send_pos_idxs;
-  int*** send_pos_sizes;
-  int** send_pos_num_segments;
-  int** send_pos_total_num_elems;
-
-  int*** recv_list_local_force_only;
-  int** recv_list_local_num_force_pos;
-
-  int*** recv_list_local_force_pos;
-  int** recv_list_local_num_force_only;
-
-  // for second sendlist
-  int*** send_local_list;
-  int*** send_segment_sizes;
-  bool*** send_segment_types;
-  int*** send_segment_idxs;
-  int** send_num_segments;
-
-  int*** recv_ghost_idxs;
-  int*** recv_ghost_sizes;
-  int** recv_ghost_num_segments;
-
-  int** num_elems_send;
-  int** num_elems_recv;
-
-  // info used for sending data from zoid to a process
-
-  // helper variables to help with having a temporary place to store data when doing MPI_Isend
-  int** num_elems_send_process;
-  int** num_elems_recv_process;
-
-  int*** send_process_segment_sizes;
-  int*** send_process_segment_idxs;
-  bool*** send_process_segment_types;
-  int** send_process_num_segments;
-  int*** send_process_local_list;
-
-  int** recv_process_force_offset;
-  int** recv_process_vel_offset;
-  int** recv_process_pos_offset;
-
-  int*** recv_process_segment_sizes;
-  bool*** recv_process_segment_types;
-  int*** recv_process_segment_idxs;
-  int** recv_process_num_segments;
-
-  std::set<int>* relevant_atom_idxs;
-  std::set<int>* relevant_atom_tags;
-  std::set<int>* can_eval_center_tags;
-
-  // num elems send to process across ALL timesteps
-  int** num_send_process_timestep;
-  int* num_send_process;
-  int* num_recv_process;
 };
 
 int get_zoid_dep(int);

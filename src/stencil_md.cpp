@@ -424,12 +424,6 @@ void StencilMD::INIT_ZOID_DATA() {
             queue_info& zoid = lmp->queues[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
                 /* start stuff for 2 timesteps */
-                zoid.per_worker_force_updates = new std::pair<int, dbl3_t_stencil_md>*[__cilkrts_get_nworkers()];
-                for (int i = 0; i < __cilkrts_get_nworkers(); i++) {
-                    zoid.per_worker_force_updates[i] = new std::pair<int, dbl3_t_stencil_md>[MODIFY_GRAINSIZE * MAX_NEIGHBORS_PER_ATOM];
-                }
-
-                zoid.space_cut_idxs = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.x_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
                 // zoid.v_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
@@ -458,82 +452,10 @@ void StencilMD::INIT_ZOID_DATA() {
 
                 zoid.send_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_pos_local_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_pos_ghost_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 /* end stuff for 2 timesteps */
-
-                int num_bins_3d = NUM_BINS * NUM_BINS * NUM_BINS;
-
-                zoid.num_send_process_timestep = new int*[comm->nprocs];
-                for (int proc = 0; proc < comm->nprocs; proc++) {
-                    zoid.num_send_process_timestep[proc] = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                }
-
-                zoid.num_send_process = new int[comm->nprocs];
-                zoid.num_recv_process = new int[comm->nprocs];
-                // debugging
-
-                zoid.can_eval_center = new bool*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.can_eval_pos = new bool*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                zoid.recv_list_local = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_list_local_size =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                zoid.recv_process_segment_types =
-                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_segment_idxs =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_segment_sizes =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_num_segments =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                zoid.send_process_segment_sizes =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_process_segment_idxs =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_process_segment_types =
-                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_process_num_segments =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_process_local_list =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    zoid.send_process_segment_sizes[t] = new int*[comm->nprocs];
-                    zoid.send_process_segment_idxs[t] = new int*[comm->nprocs];
-                    zoid.send_process_segment_types[t] = new bool*[comm->nprocs];
-                    zoid.send_process_num_segments[t] = new int[comm->nprocs];
-                    zoid.send_process_local_list[t] = new int*[comm->nprocs];
-                }
-
-                zoid.num_elems_send_process =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.num_elems_recv_process =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    zoid.num_elems_send_process[t] = new int[comm->nprocs];
-                    zoid.num_elems_recv_process[t] = new int[comm->nprocs];
-                }
-
-                zoid.recv_process_force_offset =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_vel_offset =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_pos_offset =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                zoid.relevant_atom_idxs =
-                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.relevant_atom_tags =
-                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.can_eval_center_tags =
-                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
             }
         }
     }
@@ -543,11 +465,6 @@ void StencilMD::INIT_ZOID_DATA() {
             queue_info& zoid = lmp->queues_next_dt[dep][j];
             if (zoid.num % comm->nprocs == comm->me) {
                 /* start stuff for 2 timesteps */
-                zoid.per_worker_force_updates = new std::pair<int, dbl3_t_stencil_md>*[__cilkrts_get_nworkers()];
-                for (int i = 0; i < __cilkrts_get_nworkers(); i++) {
-                    zoid.per_worker_force_updates[i] = new std::pair<int, dbl3_t_stencil_md>[MODIFY_GRAINSIZE * MAX_NEIGHBORS_PER_ATOM];
-                }
-                zoid.space_cut_idxs = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 // Copy the main data from the curr_dt zoid
                 auto coord = zoid_num_to_coord[zoid.num];
 
@@ -575,79 +492,10 @@ void StencilMD::INIT_ZOID_DATA() {
 
                 zoid.send_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_pos_local_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_pos_ghost_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                 zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                 /* end stuff for 2 timesteps */
-
-                zoid.num_send_process_timestep = new int*[comm->nprocs];
-                for (int proc = 0; proc < comm->nprocs; proc++) {
-                    zoid.num_send_process_timestep[proc] = new int[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                }
-
-                zoid.num_send_process = new int[comm->nprocs];
-                zoid.num_recv_process = new int[comm->nprocs];
-
-                zoid.can_eval_center = new bool*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.can_eval_pos = new bool*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                zoid.recv_list_local = new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_list_local_size =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                zoid.recv_process_segment_types =
-                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_segment_idxs =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_segment_sizes =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_num_segments =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                zoid.send_process_segment_sizes =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_process_segment_idxs =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_process_segment_types =
-                        new bool**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_process_num_segments =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.send_process_local_list =
-                        new int**[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    zoid.send_process_segment_sizes[t] = new int*[comm->nprocs];
-                    zoid.send_process_segment_idxs[t] = new int*[comm->nprocs];
-                    zoid.send_process_segment_types[t] = new bool*[comm->nprocs];
-                    zoid.send_process_num_segments[t] = new int[comm->nprocs];
-                    zoid.send_process_local_list[t] = new int*[comm->nprocs];
-                }
-
-                zoid.num_elems_send_process =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.num_elems_recv_process =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    zoid.num_elems_send_process[t] = new int[comm->nprocs];
-                    zoid.num_elems_recv_process[t] = new int[comm->nprocs];
-                }
-
-                zoid.recv_process_force_offset =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_vel_offset =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.recv_process_pos_offset =
-                        new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                zoid.relevant_atom_idxs =
-                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.relevant_atom_tags =
-                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid.can_eval_center_tags =
-                        new std::set<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
             }
         }
     }
