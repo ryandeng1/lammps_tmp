@@ -1135,9 +1135,6 @@ public:
             assert(fabs(next->eval_f_stencil_md[k][2]) < 1e-6);
         }
 
-        // begin force computation, inline lj_cut and bond_fene
-        assert(PURELY_LOCAL_POTENTIAL);
-
         const auto * _noalias const x = (dbl3_t_stencil_md *) next->x[0];
         auto * _noalias const f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
         const int * _noalias const type = next->type;

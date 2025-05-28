@@ -115,27 +115,17 @@ constexpr bool DEBUG_SEND_RECV_DATA = true;
 
 constexpr bool TEST_AGAINST_LAMMPS = true;
 
-constexpr bool PURELY_LOCAL_POTENTIAL = true;
-
 constexpr bool USE_FAKE_COMPUTE_TEMP = true;
 
 constexpr double ALLEGRO_SLOPE = ALLEGRO_CUTOFF_RADIUS + ADDITIONAL_CUTOFF;
 
-constexpr bool TRY_PRECOMPUTE_RELEVANT_ATOM_IDX = false;
-
-constexpr bool DEBUG = true;
-
 constexpr int NUM_WORKERS_PER_THREAD = 512;
-
-constexpr int NUM_ATOMS_PER_WORKER = 128;
 
 constexpr bool ONLY_RUN_LAMMPS = false;
 
 constexpr bool ONLY_RUN_STENCIL_MD = false;
 
 constexpr bool LAMMPS_USE_CILK = false;
-
-constexpr bool TIME_STENCIL_MD = true;
 
 constexpr bool USE_BOND = true;
 
