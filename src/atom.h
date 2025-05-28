@@ -313,41 +313,6 @@ class Atom : protected Pointers {
   int num_chunks;
   int chunk_size;
 
-  std::vector<double> local_dtfm;
-
-  std::vector<IDX_3D> bin_no_comm;
-  std::vector<std::vector<int>> bin_force_comm;
-  std::vector<std::vector<int>> bin_pos_vel_comm;
-
-  std::vector<IDX_3D> bin_comm;
-
-  std::vector<IDX_3D> pair_bins[NUM_DEPS_BINS];
-  std::vector<IDX_3D> special_pair_bins[NUM_DEPS_BINS];
-
-  // new set of data structures
-  // loop structure, iterate over dep level --> partitions at dep --> partitions to bins --> bins to idxs
-  std::vector<IDX_3D> partition_to_bins[4][4][4];
-  std::vector<IDX_3D> dep_to_partitions[NUM_DEPS_BINS];
-  int num_deps;
-
-  std::vector<IDX_3D> partition_to_neighbors[4][4][4];
-
-  std::vector<IDX_3D> partition_to_bins_level2[4][4][4][4][4][4];
-  std::vector<IDX_3D> dep_to_partitions_level2[4][4][4][NUM_DEPS_BINS];
-  int num_deps_level2[4][4][4];
-
-  // sorted bin indices
-  std::vector<std::size_t> sorted_local_bin_indices;
-  std::vector<std::size_t> sorted_ghost_bin_indices;
-
-  // segments, replace atom_idx_mapping
-  std::vector<int> atom_idx_mapping_segment_idxs;
-  std::vector<int> atom_idx_mapping_segment_sizes;
-
-  // worker-local updates?
-  dbl3_t_stencil_md*** worker_force_updates;
-  int** worker_force_updates_sizes;
-
   // --------------------------------------------------------------------
   // functions
 
@@ -454,14 +419,8 @@ class Atom : protected Pointers {
 
   void setup_stencil_md(Domain*);
   virtual void sort_stencil_md();
-  // virtual void sort_local_stencil_md_bins(std::vector<double>& bin_bounds);
-  virtual void lammps_sort_local_bins(std::vector<double>& bin_bounds, std::vector<std::size_t>& sorted_bin_indices);
-  virtual void sort_local_stencil_md_bins(std::vector<double>& bin_bounds, std::vector<std::size_t>& sorted_bin_indices);
   int map_style_set_stencil_md();
   virtual void map_init_stencil_md(int check = 1);
-
-  virtual void setup_lammps_pair_bins();
-  virtual void setup_stencil_md_pair_bins(queue_info& zoid, int timestep);
 
   std::map<int, int> tag_to_idx;
 

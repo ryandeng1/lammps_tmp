@@ -94,6 +94,9 @@ void FixNVEOMP::initial_integrate(int /* vflag */)
 }
 
 void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom* next, int* atom_idx_mapping, bool* can_eval) {
+    assert(false);
+
+    /*
     // update v and x of atoms in group
     auto * _noalias const x = (dbl3_t *) atom_->x[0];
     auto * _noalias const next_x = (dbl3_t *) next->x[0];
@@ -147,6 +150,7 @@ void FixNVEOMP::initial_integrate_stencil_md(int /* vflag */, Atom* atom_, Atom*
             // }
         }
     }
+    */
 }
 
 /* ---------------------------------------------------------------------- */
@@ -202,6 +206,8 @@ void FixNVEOMP::final_integrate()
 }
 
 void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* neighbor_, int* atom_idx_mapping, bool* can_eval) {
+    assert(false);
+    /*
     // update v of atoms in group
 
     auto * _noalias const v = (dbl3_t *) atom_->v[0];
@@ -242,5 +248,6 @@ void FixNVEOMP::final_integrate_stencil_md(Atom* atom_, Atom* next, Neighbor* ne
             // }
         }
     }
+    */
 }
 
