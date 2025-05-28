@@ -14,46 +14,6 @@
 #include <deque>
 #include <iostream>
 
-// Used for spatial sorting
-/*
-#include <CGAL/spatial_sort.h>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/point_generators_3.h>
-#include <CGAL/hilbert_sort.h>
-#include <CGAL/Spatial_sort_traits_adapter_3.h>
-
-typedef CGAL::Simple_cartesian<double> K;
-typedef K::Point_3                                          Point;
-typedef CGAL::Spatial_sort_traits_adapter_3<K,
-        CGAL::Pointer_property_map<Point>::type> Search_traits;
-typedef std::pair<Point,int>              Point_with_info;
-typedef std::vector<Point_with_info>      Data_vector;
-
-typedef CGAL::Spatial_sort_traits_adapter_3<K,
-        CGAL::First_of_pair_property_map<Point_with_info>
-> Search_traits_pair;
-*/
-
-/*
-//property map and get as friend
-// to be allowed to use private member
-class Vect_ppmap{
-    const Data_vector& points;
-public:
-    //classical typedefs
-    typedef Data_vector::size_type key_type;
-    typedef Point_d value_type;
-    typedef const value_type& reference;
-    typedef boost::readable_property_map_tag category;
-    Vect_ppmap(const Data_vector& points_):points(points_){}
-    friend reference get(const Vect_ppmap& vmap, key_type i) {
-        return vmap.points[i].first;
-    }
-};
-
-typedef CGAL::Spatial_sort_traits_adapter_3<K,Vect_ppmap>   Search_traits_pair;
-*/
-
 //the following are UBUNTU/LINUX, and MacOS ONLY terminal color codes.
 #define RESET_COLOR   "\033[0m"
 #define BLACK   "\033[30m"      /* Black */
@@ -86,18 +46,7 @@ constexpr int LJ = 1;
 
 constexpr int EXPERIMENT = LJ;
 
-constexpr bool LOCAL_SEGMENT_TYPE = true;
-constexpr bool GHOST_SEGMENT_TYPE = false;
-
-constexpr bool SEND_DATA_PROCESS_LOCAL = true;
-constexpr bool SEND_DATA_PROCESS_GHOST = false;
-
-constexpr bool RECV_DATA_PROCESS_LOCAL = true;
-constexpr bool RECV_DATA_PROCESS_GHOST = false;
-
 constexpr int NUM_DEPS = 4;
-
-constexpr int NUM_DEPS_BINS = 8;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
@@ -137,8 +86,6 @@ constexpr bool USE_ATOMICS = false;
 
 constexpr int NUM_BINS = 1;
 
-constexpr int LAMMPS_NUM_REGIONS = 4;
-
 constexpr bool SORT_BINS_BASED_ON_LOCAL_IDX = false;
 
 using dbl3_t_stencil_md = struct { double x,y,z; };
@@ -146,120 +93,8 @@ using dbl3_t_stencil_md = struct { double x,y,z; };
 using IDX_3D = std::array<int, 3>;
 
 constexpr int MODIFY_GRAINSIZE = 1024;
-constexpr int MAX_NEIGHBORS_PER_ATOM = 20;
 
 constexpr bool USE_NEWTON = true;
-
-const std::map<IDX_3D, int> partition_to_dep = {
-        {{LEFT,   LEFT,   LEFT},   0},
-        {{LEFT,   LEFT,   RIGHT},  0},
-        {{LEFT,   RIGHT,  LEFT},   0},
-        {{RIGHT,  LEFT,   LEFT},   0},
-        {{RIGHT,  RIGHT,  RIGHT},  0},
-        {{RIGHT,  RIGHT,  LEFT},   0},
-        {{RIGHT,  LEFT,   RIGHT},  0},
-        {{LEFT,   RIGHT,  RIGHT},  0},
-
-        {{LEFT,   LEFT,   MIDDLE}, 1},
-        {{LEFT,   RIGHT,  MIDDLE}, 1},
-        {{RIGHT,  LEFT,   MIDDLE}, 1},
-        {{RIGHT,  RIGHT,  MIDDLE}, 1},
-
-        {{LEFT,   MIDDLE, LEFT},   2},
-        {{LEFT,   MIDDLE, RIGHT},  2},
-        {{RIGHT,  MIDDLE, LEFT},   2},
-        {{RIGHT,  MIDDLE, RIGHT},  2},
-
-        {{MIDDLE, LEFT,   LEFT},   3},
-        {{MIDDLE, LEFT,   RIGHT},  3},
-        {{MIDDLE, RIGHT,  LEFT},   3},
-        {{MIDDLE, RIGHT,  RIGHT},  3},
-
-        {{MIDDLE, MIDDLE, LEFT},   4},
-        {{MIDDLE, MIDDLE, RIGHT},  4},
-
-        {{MIDDLE, LEFT,   MIDDLE}, 5},
-        {{MIDDLE, RIGHT,  MIDDLE}, 5},
-
-        {{LEFT,   MIDDLE, MIDDLE}, 6},
-        {{RIGHT,  MIDDLE, MIDDLE}, 6},
-
-        {{MIDDLE, MIDDLE, MIDDLE}, 7},
-};
-
-const std::map<IDX_3D, int> lammps_partition_to_dep = {
-        {{LEFT,   LEFT,   LEFT},   0},
-        {{LEFT,   LEFT,   RIGHT},  0},
-        {{LEFT,   RIGHT,  LEFT},   0},
-        {{RIGHT,  LEFT,   LEFT},   0},
-        {{RIGHT,  RIGHT,  RIGHT},  0},
-        {{RIGHT,  RIGHT,  LEFT},   0},
-        {{RIGHT,  LEFT,   RIGHT},  0},
-        {{LEFT,   RIGHT,  RIGHT},  0},
-
-        {{LEFT,   LEFT,   MIDDLE}, 1},
-        {{LEFT,   RIGHT,  MIDDLE}, 1},
-        {{RIGHT,  LEFT,   MIDDLE}, 1},
-        {{RIGHT,  RIGHT,  MIDDLE}, 1},
-        {{LEFT,   LEFT,   PBC}, 1},
-        {{LEFT,   RIGHT,  PBC}, 1},
-        {{RIGHT,  LEFT,   PBC}, 1},
-        {{RIGHT,  RIGHT,  PBC}, 1},
-
-        {{LEFT,   MIDDLE, LEFT},   2},
-        {{LEFT,   MIDDLE, RIGHT},  2},
-        {{RIGHT,  MIDDLE, LEFT},   2},
-        {{RIGHT,  MIDDLE, RIGHT},  2},
-        {{LEFT,   PBC, LEFT},   2},
-        {{LEFT,   PBC, RIGHT},  2},
-        {{RIGHT,  PBC, LEFT},   2},
-        {{RIGHT,  PBC, RIGHT},  2},
-
-        {{MIDDLE, LEFT,   LEFT},   3},
-        {{MIDDLE, LEFT,   RIGHT},  3},
-        {{MIDDLE, RIGHT,  LEFT},   3},
-        {{MIDDLE, RIGHT,  RIGHT},  3},
-        {{PBC, LEFT,   LEFT},   3},
-        {{PBC, LEFT,   RIGHT},  3},
-        {{PBC, RIGHT,  LEFT},   3},
-        {{PBC, RIGHT,  RIGHT},  3},
-
-        {{MIDDLE, MIDDLE, LEFT},   4},
-        {{MIDDLE, MIDDLE, RIGHT},  4},
-        {{PBC, PBC, LEFT},   4},
-        {{PBC, PBC, RIGHT},  4},
-        {{MIDDLE, PBC, LEFT},   4},
-        {{MIDDLE, PBC, RIGHT},  4},
-        {{PBC, MIDDLE, LEFT},   4},
-        {{PBC, MIDDLE, RIGHT},  4},
-
-        {{MIDDLE, LEFT,   MIDDLE}, 5},
-        {{MIDDLE, RIGHT,  MIDDLE}, 5},
-        {{MIDDLE, LEFT,   PBC}, 5},
-        {{MIDDLE, RIGHT,  PBC}, 5},
-        {{PBC, LEFT,   MIDDLE}, 5},
-        {{PBC, RIGHT,  MIDDLE}, 5},
-        {{PBC, LEFT,   PBC}, 5},
-        {{PBC, RIGHT,  PBC}, 5},
-
-        {{LEFT,   MIDDLE, MIDDLE}, 6},
-        {{RIGHT,  MIDDLE, MIDDLE}, 6},
-        {{LEFT,   PBC, MIDDLE}, 6},
-        {{RIGHT,  PBC, MIDDLE}, 6},
-        {{LEFT,   MIDDLE, PBC}, 6},
-        {{RIGHT,  MIDDLE, PBC}, 6},
-        {{LEFT,   PBC, PBC}, 6},
-        {{RIGHT,  PBC, PBC}, 6},
-
-        {{MIDDLE, MIDDLE, MIDDLE}, 7},
-        {{MIDDLE, MIDDLE, PBC}, 7},
-        {{MIDDLE, PBC, MIDDLE}, 7},
-        {{PBC, MIDDLE, MIDDLE}, 7},
-        {{PBC, PBC, MIDDLE}, 7},
-        {{PBC, MIDDLE, PBC}, 7},
-        {{MIDDLE, PBC, PBC}, 7},
-        {{PBC, PBC, PBC}, 7},
-};
 
 const std::map<IDX_3D, int> zoid_to_num_map = {
         {{LEFT,  LEFT,  LEFT},  0},
@@ -371,120 +206,6 @@ const std::map<IDX_3D, int> zoid_to_num_map = {
 
         {{PBC, MIDDLE, PBC},       63},
 };
-
-/*
-const std::map<std::tuple<int, int, int>, int> zoid_to_num_map = {
-        {std::make_tuple(LEFT, LEFT, LEFT), 0},
-        {std::make_tuple(RIGHT, RIGHT, RIGHT), 1},
-        {std::make_tuple(LEFT, LEFT, RIGHT), 2},
-        {std::make_tuple(RIGHT, RIGHT, LEFT), 3},
-        {std::make_tuple(LEFT, RIGHT, LEFT), 4},
-        {std::make_tuple(RIGHT, LEFT, LEFT), 5},
-        {std::make_tuple(LEFT, RIGHT, RIGHT), 6},
-        {std::make_tuple(RIGHT, LEFT, RIGHT), 7},
-
-        // begin dep 1
-        // group 0
-        {std::make_tuple(LEFT, LEFT, MIDDLE), 8},
-        {std::make_tuple(LEFT, MIDDLE, LEFT), 16},
-        {std::make_tuple(MIDDLE, LEFT, LEFT), 24},
-
-        // group 1
-        {std::make_tuple(RIGHT, RIGHT, PBC), 9},
-        {std::make_tuple(RIGHT, PBC, RIGHT), 17},
-        {std::make_tuple(PBC, RIGHT, RIGHT), 25},
-
-        // group 2
-        {std::make_tuple(LEFT, LEFT, PBC), 10},
-        {std::make_tuple(LEFT, MIDDLE, RIGHT), 18},
-        {std::make_tuple(MIDDLE, LEFT, RIGHT), 26},
-
-        // group 3
-        {std::make_tuple(RIGHT, RIGHT, MIDDLE), 11},
-        {std::make_tuple(RIGHT, PBC, LEFT), 19},
-        {std::make_tuple(PBC, RIGHT, LEFT), 27},
-
-        // group 4
-        {std::make_tuple(LEFT, RIGHT, MIDDLE), 12},
-        {std::make_tuple(LEFT, PBC, LEFT), 20},
-        {std::make_tuple(MIDDLE, RIGHT, LEFT), 28},
-
-        // group 5
-        {std::make_tuple(RIGHT, LEFT, MIDDLE), 13},
-        {std::make_tuple(RIGHT, MIDDLE, LEFT), 21},
-        {std::make_tuple(PBC, LEFT, LEFT), 29},
-
-        // group 6
-        {std::make_tuple(LEFT, RIGHT, PBC), 14},
-        {std::make_tuple(LEFT, PBC, RIGHT), 22},
-        {std::make_tuple(MIDDLE, RIGHT, RIGHT), 30},
-
-        // group 7
-        {std::make_tuple(RIGHT, LEFT, PBC), 15},
-        {std::make_tuple(RIGHT, MIDDLE, RIGHT), 23},
-        {std::make_tuple(PBC, LEFT, RIGHT), 31},
-
-        // begin dep 2
-        // group 0
-        {std::make_tuple(LEFT, MIDDLE, MIDDLE), 32},
-        {std::make_tuple(MIDDLE, LEFT, MIDDLE), 40},
-        {std::make_tuple(MIDDLE, MIDDLE, LEFT), 48},
-
-        // group 1
-        {std::make_tuple(RIGHT, PBC, PBC), 33},
-        {std::make_tuple(PBC, RIGHT, PBC), 41},
-        {std::make_tuple(PBC, PBC, RIGHT), 49},
-
-        // group 2
-        {std::make_tuple(LEFT, MIDDLE, PBC), 34},
-        {std::make_tuple(MIDDLE, LEFT, PBC), 42},
-        {std::make_tuple(MIDDLE, MIDDLE, RIGHT), 50},
-
-        // group 3
-        {std::make_tuple(RIGHT, PBC, MIDDLE), 35},
-        {std::make_tuple(PBC, RIGHT, MIDDLE), 43},
-        {std::make_tuple(PBC, PBC, LEFT), 51},
-
-        // group 4
-        {std::make_tuple(LEFT, PBC, MIDDLE), 36},
-        {std::make_tuple(MIDDLE, RIGHT, MIDDLE), 44},
-        {std::make_tuple(MIDDLE, PBC, LEFT), 52},
-
-        // group 5
-        {std::make_tuple(RIGHT, MIDDLE, MIDDLE), 37},
-        {std::make_tuple(PBC, LEFT, MIDDLE), 45},
-        {std::make_tuple(PBC, MIDDLE, LEFT), 53},
-
-        // group 6
-        {std::make_tuple(LEFT, PBC, PBC), 38},
-        {std::make_tuple(MIDDLE, RIGHT, PBC), 46},
-        {std::make_tuple(MIDDLE, PBC, RIGHT), 54},
-
-
-        // group 7
-        {std::make_tuple(RIGHT, MIDDLE, PBC), 39},
-        {std::make_tuple(PBC, LEFT, PBC), 47},
-        {std::make_tuple(PBC, MIDDLE, RIGHT), 55},
-
-        // begin dep3
-        {std::make_tuple(MIDDLE, MIDDLE, MIDDLE), 56},
-
-        {std::make_tuple(PBC, PBC, PBC), 57},
-
-        {std::make_tuple(MIDDLE, MIDDLE, PBC), 58},
-
-        {std::make_tuple(PBC, PBC, MIDDLE), 59},
-
-        {std::make_tuple(MIDDLE, PBC, MIDDLE), 60},
-
-        {std::make_tuple(PBC, MIDDLE, MIDDLE), 61},
-
-        {std::make_tuple(MIDDLE, PBC, PBC), 62},
-
-        {std::make_tuple(PBC, MIDDLE, PBC), 63},
-        // end dep 3
-};
-*/
 
 struct cut_info {
   double lower;
@@ -619,70 +340,5 @@ void print_cuts(const cuts_t &);
 int get_segments(const std::vector<int>&, std::vector<int>&, std::vector<int>&, bool print=false);
 
 int get_mpi_tag(int dst, int src, int start_timestep=0, int end_timestep=0);
-
-IDX_3D get_bin(std::vector<double>& bounds, double* pos, double* lo, double* hi);
-
-inline __attribute__((always_inline)) int lammps_get_bin_idx(const IDX_3D& bin) {
-    int x = bin[0];
-    int y = bin[1];
-    int z = bin[2];
-    if (x >= LAMMPS_NUM_REGIONS || x < 0) {
-        std::cout << "bin x: " << x << std::endl;
-    }
-    if (y >= LAMMPS_NUM_REGIONS || y < 0) {
-        std::cout << "bin y: " << y << std::endl;
-    }
-    if (z >= LAMMPS_NUM_REGIONS || z < 0) {
-        std::cout << "bin z: " << z << std::endl;
-    }
-    assert(x < LAMMPS_NUM_REGIONS && x >= 0);
-    assert(y < LAMMPS_NUM_REGIONS && y >= 0);
-    assert(z < LAMMPS_NUM_REGIONS && z >= 0);
-    return z * LAMMPS_NUM_REGIONS * LAMMPS_NUM_REGIONS + y * LAMMPS_NUM_REGIONS + x;
-}
-
-inline __attribute__((always_inline)) int get_bin_idx(const IDX_3D& bin) {
-    // int x = std::get<0>(bin);
-    // int y = std::get<1>(bin);
-    // int z = std::get<2>(bin);
-    int x = bin[0];
-    int y = bin[1];
-    int z = bin[2];
-    /*
-    if (x >= NUM_BINS || x < 0) {
-        std::cout << "bin x: " << x << std::endl;
-    }
-    if (y >= NUM_BINS || y < 0) {
-        std::cout << "bin y: " << y << std::endl;
-    }
-    if (z >= NUM_BINS || z < 0) {
-        std::cout << "bin z: " << z << std::endl;
-    }
-    */
-    assert(x < NUM_BINS && x >= 0);
-    assert(y < NUM_BINS && y >= 0);
-    assert(z < NUM_BINS && z >= 0);
-    return z * NUM_BINS * NUM_BINS + y * NUM_BINS + x;
-}
-
-inline __attribute__((always_inline)) double min_dist_to_boundary(const std::array<std::vector<double>, 3>& bounds, dbl3_t_stencil_md pos) {
-    double dist = 10000000;
-
-    for (auto& x_bound : bounds[0]) {
-        for (auto& y_bound : bounds[1]) {
-            for (auto& z_bound : bounds[2]) {
-                double delx = pos.x - x_bound;
-                double dely = pos.y - y_bound;
-                double delz = pos.z - z_bound;
-                dist = std::min(delx * delx + dely * dely + delz * delz, dist);
-            }
-        }
-    }
-
-    assert(dist != 10000000);
-
-    return dist;
-}
-
 
 
