@@ -1079,11 +1079,13 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     stencilMD->INIT_SEND_RECV_BUFFERS_MANY_CUTS();
 
+    /*
     stencilMD->CONSTRUCT_SEND_PROC_TO_PROC_OFFSETS_PIPELINED<true>();
     stencilMD->CONSTRUCT_SEND_PROC_TO_PROC_OFFSETS_PIPELINED<false>();
 
     stencilMD->CONSTRUCT_RECV_PROC_TO_PROC_OFFSETS_PIPELINED<true>();
     stencilMD->CONSTRUCT_RECV_PROC_TO_PROC_OFFSETS_PIPELINED<false>();
+    */
 
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES<true>();
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES<false>();
@@ -1156,7 +1158,7 @@ void Verlet::setup_stencil_md_many_zoids() {
             } else if constexpr (EXPERIMENT == LJ) {
                 stencilMD->LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             } else {
-
+                stencilMD->DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             }
 
             if constexpr (EXPERIMENT == BOND_FENE) {
@@ -1995,8 +1997,11 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
         if constexpr (EXPERIMENT == BOND_FENE) {
             stencilMD->BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
             stencilMD->FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
-        } else {
+        } else if constexpr (EXPERIMENT == LJ) {
             stencilMD->LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+        } else {
+            stencilMD->DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
             stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
         }
     }
