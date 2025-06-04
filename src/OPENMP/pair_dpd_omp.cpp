@@ -178,7 +178,9 @@ void PairDPDOMP::eval(int iifrom, int iito, ThrData * const thr)
         delvz = vztmp - v[j].z;
         dot = delx*delvx + dely*delvy + delz*delvz;
         wd = 1.0 - r/cut[itype][jtype];
-        randnum = rng.gaussian();
+        // randnum = rng.gaussian();
+        // TODO: RYAN
+        randnum = 0.6;
 
         // conservative force = a0 * wd
         // drag force = -gamma * wd^2 * (delx dot delv) / r

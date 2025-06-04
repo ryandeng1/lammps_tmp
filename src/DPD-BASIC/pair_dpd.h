@@ -25,6 +25,7 @@ PairStyle(dpd,PairDPD);
 namespace LAMMPS_NS {
 
 class PairDPD : public Pair {
+ friend class StencilMD;
  public:
   PairDPD(class LAMMPS *);
   ~PairDPD() override;

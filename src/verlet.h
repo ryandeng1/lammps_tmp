@@ -123,8 +123,21 @@ class Verlet : public Integrate {
                                                          std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
+  void run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep(int starting_timestep, int dep, int pipeline_stage,
+                                                                       int start_t, int end_t,
+                                                                       double **test_f, double **test_x, double **test_v,
+                                                                       std::vector<MPI_Request>* send_r,
+                                                                       std::vector<MPI_Request>* recv_r,
+                                                                       std::vector<MPI_Request>& send_proc_to_proc,
+                                                                       std::vector<std::atomic_flag>& claimed);
+
+  template <bool curr_dt>
   void run_stencil_md_many_cuts_waitany_pipelined(int starting_timestep, double** test_f, double** test_x, double** test_v,
                                                   std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
+
+  template <bool curr_dt>
+  void run_stencil_md_many_cuts_waitany_pipelined_only_next_dep(int starting_timestep, double** test_f, double** test_x, double** test_v,
+                                                                std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_new_comm(int starting_timestep, double** test_f, double** test_x, double** test_v);
