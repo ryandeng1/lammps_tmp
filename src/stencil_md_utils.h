@@ -80,8 +80,8 @@ constexpr bool LAMMPS_USE_CILK = false;
 constexpr bool USE_BOND = true;
 
 constexpr int NUM_PIPELINE_STAGES = 2;
-constexpr int start_t[NUM_PIPELINE_STAGES] = {1, NUM_TIMESTEPS_IN_PARALLEL / 2};
-constexpr int end_t[NUM_PIPELINE_STAGES] = {NUM_TIMESTEPS_IN_PARALLEL / 2, NUM_TIMESTEPS_IN_PARALLEL + 1};
+constexpr int start_t[NUM_PIPELINE_STAGES] = {1, NUM_TIMESTEPS_IN_PARALLEL / 2 + 1};
+constexpr int end_t[NUM_PIPELINE_STAGES] = {NUM_TIMESTEPS_IN_PARALLEL / 2 + 1, NUM_TIMESTEPS_IN_PARALLEL + 1};
 
 constexpr bool USE_ATOMICS = false;
 

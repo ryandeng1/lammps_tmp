@@ -2627,37 +2627,72 @@ public:
         auto& local_idxs = zoid.local_idxs_per_timestep[t];
         auto& tags = zoid.tag_stencil_md[0];
         auto& x = zoid.x_stencil_md[t % DOUBLE_BUFFERING];
-        auto& v = zoid.v_stencil_md[0];
 
-        for (int i = 0; i < local_idxs.size(); i++) {
-            int idx = local_idxs[i];
-            int tag = tags[idx];
+        if constexpr (EXPERIMENT == DPD) {
+            const auto& v = zoid.v_stencil_md[t % DOUBLE_BUFFERING];
+            for (int i = 0; i < local_idxs.size(); i++) {
+                int idx = local_idxs[i];
+                int tag = tags[idx];
 
-            double my_x = v[idx].x;
-            double my_y = v[idx].y;
-            double my_z = v[idx].z;
+                double my_x = v[idx].x;
+                double my_y = v[idx].y;
+                double my_z = v[idx].z;
 
-            double lammps_x = test_v[tag * 3 + 0];
-            double lammps_y = test_v[tag * 3 + 1];
-            double lammps_z = test_v[tag * 3 + 2];
+                double lammps_x = test_v[tag * 3 + 0];
+                double lammps_y = test_v[tag * 3 + 1];
+                double lammps_z = test_v[tag * 3 + 2];
 
-            bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
+                bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
 
-            if (!all_close) {
-                std::stringstream o;
-                o << RED << "ERROR ON VEL. curr_dt: " << curr_dt << " zoid: " << zoid.num
-                  << " idx: " << idx << " tag: " << tag
-                  << " what I have: " << my_x << " " << my_y << " " << my_z
-                  << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
-                  << " diff: "
-                  << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
-                  << " overall timestep: " << timestep_to_compare_against
-                  << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z
-                  << RESET_COLOR << std::endl;
+                if (!all_close) {
+                    std::stringstream o;
+                    o << RED << "ERROR ON VEL. curr_dt: " << curr_dt << " zoid: " << zoid.num
+                      << " idx: " << idx << " tag: " << tag
+                      << " what I have: " << my_x << " " << my_y << " " << my_z
+                      << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
+                      << " diff: "
+                      << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
+                      << " overall timestep: " << timestep_to_compare_against
+                      << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z
+                      << RESET_COLOR << std::endl;
 
-                std::cout << o.str();
+                    std::cout << o.str();
 
-                assert(false);
+                    assert(false);
+                }
+            }
+        } else {
+            const auto& v = zoid.v_stencil_md[0];
+            for (int i = 0; i < local_idxs.size(); i++) {
+                int idx = local_idxs[i];
+                int tag = tags[idx];
+
+                double my_x = v[idx].x;
+                double my_y = v[idx].y;
+                double my_z = v[idx].z;
+
+                double lammps_x = test_v[tag * 3 + 0];
+                double lammps_y = test_v[tag * 3 + 1];
+                double lammps_z = test_v[tag * 3 + 2];
+
+                bool all_close = fabs(lammps_x - my_x) < 5e-5 && fabs(lammps_y - my_y) < 5e-5 && fabs(lammps_z - my_z) < 5e-5;
+
+                if (!all_close) {
+                    std::stringstream o;
+                    o << RED << "ERROR ON VEL. curr_dt: " << curr_dt << " zoid: " << zoid.num
+                      << " idx: " << idx << " tag: " << tag
+                      << " what I have: " << my_x << " " << my_y << " " << my_z
+                      << " what lammps has: " << lammps_x << " " << lammps_y << " " << lammps_z
+                      << " diff: "
+                      << fabs(lammps_x - my_x) << " " << fabs(lammps_y - my_y) << " " << fabs(lammps_z - my_z)
+                      << " overall timestep: " << timestep_to_compare_against
+                      << " pos: " << x[idx].x << " " << x[idx].y << " " << x[idx].z
+                      << RESET_COLOR << std::endl;
+
+                    std::cout << o.str();
+
+                    assert(false);
+                }
             }
         }
     }
@@ -5039,6 +5074,9 @@ public:
                                     zoid.x_stencil_md[1].push_back({new_pos_borders[0], new_pos_borders[1], new_pos_borders[2]});
                                 }
                                 zoid.v_stencil_md[0].push_back({all_vel[idx * 3 + 0], all_vel[idx * 3 + 1], all_vel[idx * 3 + 2]});
+                                if constexpr (EXPERIMENT == DPD) {
+                                    zoid.v_stencil_md[1].push_back({all_vel[idx * 3 + 0], all_vel[idx * 3 + 1], all_vel[idx * 3 + 2]});
+                                }
                                 zoid.tag_stencil_md[0].push_back(idx);
                                 zoid.type_stencil_md[0].push_back(all_type[idx]);
                                 zoid.mask_stencil_md[0].push_back(all_mask[idx]);
@@ -5387,6 +5425,9 @@ public:
                     apply_permutation_in_place(zoid.image_stencil_md[0], permutation);
                     apply_permutation_in_place(zoid.mask_stencil_md[0], permutation);
                     apply_permutation_in_place(zoid.v_stencil_md[0], permutation);
+                    if constexpr (EXPERIMENT == DPD) {
+                        apply_permutation_in_place(zoid.v_stencil_md[1], permutation);
+                    }
                 }
             }
         }
@@ -8333,7 +8374,11 @@ public:
                         for (int t = start_t[p]; t < end_t[p]; t++) {
                             nsend_force += send_zoid.send_force_idxs_double_buffering[t][i].size();
                             nsend_pos += send_zoid.send_pos_idxs_double_buffering[t][i].size();
-                            nsend_vel += send_zoid.send_vel_idxs_double_buffering[t][i].size();
+                            if constexpr (EXPERIMENT == DPD) {
+                                nsend_vel += send_zoid.send_pos_idxs_double_buffering[t][i].size();
+                            } else {
+                                nsend_vel += send_zoid.send_vel_idxs_double_buffering[t][i].size();
+                            }
                         }
 
                         int nsend_total = nsend_force + nsend_pos + nsend_vel;
@@ -8501,7 +8546,11 @@ public:
                     for (int t = start_t[p]; t < end_t[p]; t++) {
                         nrecv_from_zoid += zoid.recv_force_idxs_double_buffering[t][i].size();
                         nrecv_from_zoid += zoid.recv_pos_idxs_double_buffering[t][i].size();
-                        nrecv_from_zoid += zoid.recv_vel_idxs_double_buffering[t][i].size();
+                        if constexpr (EXPERIMENT == DPD) {
+                            nrecv_from_zoid += zoid.recv_pos_idxs_double_buffering[t][i].size();
+                        } else {
+                            nrecv_from_zoid += zoid.recv_vel_idxs_double_buffering[t][i].size();
+                        }
                     }
 
                     if (curr_dt) {
@@ -9755,15 +9804,23 @@ public:
             auto* _noalias const buf_ = (dbl3_t_stencil_md*) buf;
             int pos_starting_idx = num_recv_force;
 
+            auto * _noalias x0_ = zoid.x_stencil_md[0].data();
+            auto * _noalias x1_ = zoid.x_stencil_md[1].data();
+
             #pragma cilk grainsize 2048
             cilk_for (int i = 0; i < recv_pos_idxs.size(); i++) {
                 int idx = recv_pos_idxs[i];
                 int buf_idx = pos_starting_idx + i;
                 const auto& x_ = buf_[buf_idx];
 
+                /*
                 zoid.x_stencil_md[0][idx].x = x_.x + pbc_flag_[0] * domain->prd[0];
                 zoid.x_stencil_md[0][idx].y = x_.y + pbc_flag_[1] * domain->prd[1];
                 zoid.x_stencil_md[0][idx].z = x_.z + pbc_flag_[2] * domain->prd[2];
+                */
+                x0_[idx].x = x_.x + pbc_flag_[0] * domain->prd[0];
+                x0_[idx].y = x_.y + pbc_flag_[1] * domain->prd[1];
+                x0_[idx].z = x_.z + pbc_flag_[2] * domain->prd[2];
             }
 
             int pos_starting_idx2 = (num_recv_force + num_recv_pos);
@@ -9773,33 +9830,59 @@ public:
                 int idx = recv_pos_idxs2[i];
                 int buf_idx = pos_starting_idx2 + i;
                 const auto& x_ = buf_[buf_idx];
+                /*
                 zoid.x_stencil_md[1][idx].x = x_.x + pbc_flag_[0] * domain->prd[0];
                 zoid.x_stencil_md[1][idx].y = x_.y + pbc_flag_[1] * domain->prd[1];
                 zoid.x_stencil_md[1][idx].z = x_.z + pbc_flag_[2] * domain->prd[2];
+                */
+                x1_[idx].x = x_.x + pbc_flag_[0] * domain->prd[0];
+                x1_[idx].y = x_.y + pbc_flag_[1] * domain->prd[1];
+                x1_[idx].z = x_.z + pbc_flag_[2] * domain->prd[2];
+            }
+        }
+
+        auto& recv_vel_idxs = zoid.recv_vel_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][recv_idx];
+        if (DEBUG_SEND_RECV_DATA) {
+            int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2) * (3 + 1);
+            for (int i = 0; i < recv_vel_idxs.size(); i++) {
+                int idx = recv_vel_idxs[i];
+                int buf_idx = vel_starting_idx + i * (3 + 1);
+                auto target_tag = (tagint) ubuf(buf[buf_idx]).i;
+                double v_x = buf[buf_idx + 1];
+                double v_y = buf[buf_idx + 2];
+                double v_z = buf[buf_idx + 3];
+                assert(target_tag == zoid.tag_stencil_md[0][idx]);
+                zoid.v_stencil_md[0][idx].x = v_x;
+                zoid.v_stencil_md[0][idx].y = v_y;
+                zoid.v_stencil_md[0][idx].z = v_z;
+            }
+        } else {
+            auto* _noalias const buf_ = (dbl3_t_stencil_md*) buf;
+            auto * _noalias v0_ = zoid.v_stencil_md[0].data();
+
+            int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2);
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
+                int idx = recv_vel_idxs[i];
+                int buf_idx = vel_starting_idx + i;
+                const auto& v_ = buf_[buf_idx];
+                /*
+                zoid.v_stencil_md[0][idx].x = v_.x;
+                zoid.v_stencil_md[0][idx].y = v_.y;
+                zoid.v_stencil_md[0][idx].z = v_.z;
+                */
+                v0_[idx].x = v_.x;
+                v0_[idx].y = v_.y;
+                v0_[idx].z = v_.z;
             }
         }
 
         if constexpr (EXPERIMENT == DPD) {
-            auto& recv_vel_idxs = zoid.recv_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][recv_idx];
-            auto& recv_vel_idxs2 = zoid.recv_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][1][recv_idx];
+            auto& recv_vel_idxs2 = zoid.recv_vel_idxs_double_buffering_flattened_pipelined[pipeline_stage][1][recv_idx];
 
             int num_recv_vel = recv_vel_idxs.size();
 
             if (DEBUG_SEND_RECV_DATA) {
-                int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2) * (3 + 1);
-                for (int i = 0; i < recv_vel_idxs.size(); i++) {
-                    int idx = recv_vel_idxs[i];
-                    int buf_idx = vel_starting_idx + i * (3 + 1);
-                    auto target_tag = (tagint) ubuf(buf[buf_idx]).i;
-                    double v_x = buf[buf_idx + 1];
-                    double v_y = buf[buf_idx + 2];
-                    double v_z = buf[buf_idx + 3];
-                    assert(target_tag == zoid.tag_stencil_md[0][idx]);
-                    zoid.v_stencil_md[0][idx].x = v_x;
-                    zoid.v_stencil_md[0][idx].y = v_y;
-                    zoid.v_stencil_md[0][idx].z = v_z;
-                }
-
                 int vel_starting_idx2 = (num_recv_force + num_recv_pos + num_recv_pos2 + num_recv_vel) * (3 + 1);
                 for (int i = 0; i < recv_vel_idxs2.size(); i++) {
                     int idx = recv_vel_idxs2[i];
@@ -9815,17 +9898,7 @@ public:
                 }
             } else {
                 auto* _noalias const buf_ = (dbl3_t_stencil_md*) buf;
-
-                int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2);
-                #pragma cilk grainsize 2048
-                cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
-                    int idx = recv_vel_idxs[i];
-                    int buf_idx = vel_starting_idx + i;
-                    const auto& v_ = buf_[buf_idx];
-                    zoid.v_stencil_md[0][idx].x = v_.x;
-                    zoid.v_stencil_md[0][idx].y = v_.y;
-                    zoid.v_stencil_md[0][idx].z = v_.z;
-                }
+                auto * _noalias v1_ = zoid.v_stencil_md[1].data();
 
                 int vel_starting_idx2 = (num_recv_force + num_recv_pos + num_recv_pos2 + num_recv_vel);
                 #pragma cilk grainsize 2048
@@ -9833,44 +9906,18 @@ public:
                     int idx = recv_vel_idxs2[i];
                     int buf_idx = vel_starting_idx2 + i;
                     const auto& v_ = buf_[buf_idx];
+                    /*
                     zoid.v_stencil_md[1][idx].x = v_.x;
                     zoid.v_stencil_md[1][idx].y = v_.y;
                     zoid.v_stencil_md[1][idx].z = v_.z;
-                }
-            }
-        } else {
-            auto& recv_vel_idxs = zoid.recv_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][recv_idx];
-
-            if (DEBUG_SEND_RECV_DATA) {
-                int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2) * (3 + 1);
-                for (int i = 0; i < recv_vel_idxs.size(); i++) {
-                    int idx = recv_vel_idxs[i];
-                    int buf_idx = vel_starting_idx + i * (3 + 1);
-                    auto target_tag = (tagint) ubuf(buf[buf_idx]).i;
-                    double v_x = buf[buf_idx + 1];
-                    double v_y = buf[buf_idx + 2];
-                    double v_z = buf[buf_idx + 3];
-                    assert(target_tag == zoid.tag_stencil_md[0][idx]);
-                    zoid.v_stencil_md[0][idx].x = v_x;
-                    zoid.v_stencil_md[0][idx].y = v_y;
-                    zoid.v_stencil_md[0][idx].z = v_z;
-                }
-            } else {
-                auto* _noalias const buf_ = (dbl3_t_stencil_md*) buf;
-                int pos_starting_idx = num_recv_force;
-
-                int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2);
-                #pragma cilk grainsize 2048
-                cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
-                    int idx = recv_vel_idxs[i];
-                    int buf_idx = vel_starting_idx + i;
-                    const auto& v_ = buf_[buf_idx];
-                    zoid.v_stencil_md[0][idx].x = v_.x;
-                    zoid.v_stencil_md[0][idx].y = v_.y;
-                    zoid.v_stencil_md[0][idx].z = v_.z;
+                    */
+                    v1_[idx].x = v_.x;
+                    v1_[idx].y = v_.y;
+                    v1_[idx].z = v_.z;
                 }
             }
         }
+
         /*
         auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][recv_idx];
         auto& recv_pos_idxs = zoid.recv_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][recv_idx];
@@ -10370,13 +10417,24 @@ public:
         auto& recv_pos_idxs = zoid.recv_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][recv_idx];
         auto& recv_pos_idxs2 = zoid.recv_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][1][recv_idx];
 
+        auto * _noalias const recv_f_ = zoid.f_stencil_md[0].data();
+        auto * _noalias const send_f_ = recv_zoid.f_stencil_md[0].data();
+
+        auto * _noalias const recv_x0_ = zoid.x_stencil_md[0].data();
+        auto * _noalias const send_x0_ = recv_zoid.x_stencil_md[0].data();
+
+        auto * _noalias const recv_x1_ = zoid.x_stencil_md[1].data();
+        auto * _noalias const send_x1_ = recv_zoid.x_stencil_md[1].data();
+
         #pragma cilk grainsize 2048
         cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
             int recv_force_idx = recv_force_idxs[i];
             int send_force_idx = send_force_idxs[i];
 
-            auto& recv_f = zoid.f_stencil_md[0][recv_force_idx];
-            auto& send_f = recv_zoid.f_stencil_md[0][send_force_idx];
+            // auto& recv_f = zoid.f_stencil_md[0][recv_force_idx];
+            // auto& send_f = recv_zoid.f_stencil_md[0][send_force_idx];
+            auto& recv_f = recv_f_[recv_force_idx];
+            auto& send_f = send_f_[send_force_idx];
 
             assert(recv_zoid.tag_stencil_md[0][send_force_idx] == zoid.tag_stencil_md[0][recv_force_idx]);
             recv_f.x += send_f.x;
@@ -10393,8 +10451,10 @@ public:
             int recv_pos_idx = recv_pos_idxs[i];
             int send_pos_idx = send_pos_idxs[i];
 
-            auto& recv_pos = zoid.x_stencil_md[0][recv_pos_idx];
-            auto& send_pos = recv_zoid.x_stencil_md[0][send_pos_idx];
+            // auto& recv_pos = zoid.x_stencil_md[0][recv_pos_idx];
+            // auto& send_pos = recv_zoid.x_stencil_md[0][send_pos_idx];
+            auto& recv_pos = recv_x0_[recv_pos_idx];
+            auto& send_pos = send_x0_[send_pos_idx];
 
             assert(recv_zoid.tag_stencil_md[0][send_pos_idx] == zoid.tag_stencil_md[0][recv_pos_idx]);
             recv_pos.x = send_pos.x + pbc_flag_[0] * domain->prd[0];
@@ -10407,8 +10467,10 @@ public:
             int recv_pos_idx = recv_pos_idxs2[i];
             int send_pos_idx = send_pos_idxs2[i];
 
-            auto& recv_pos = zoid.x_stencil_md[1][recv_pos_idx];
-            auto& send_pos = recv_zoid.x_stencil_md[1][send_pos_idx];
+            // auto& recv_pos = zoid.x_stencil_md[1][recv_pos_idx];
+            // auto& send_pos = recv_zoid.x_stencil_md[1][send_pos_idx];
+            auto& recv_pos = recv_x1_[recv_pos_idx];
+            auto& send_pos = send_x1_[send_pos_idx];
 
             assert(recv_zoid.tag_stencil_md[0][send_pos_idx] == zoid.tag_stencil_md[0][recv_pos_idx]);
             recv_pos.x = send_pos.x + pbc_flag_[0] * domain->prd[0];
@@ -10425,15 +10487,21 @@ public:
         auto& recv_vel_idxs = zoid.recv_vel_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][recv_idx];
         assert(send_vel_idxs.size() == recv_vel_idxs.size());
 
+        auto * _noalias const recv_v0_ = zoid.v_stencil_md[0].data();
+        auto * _noalias const send_v0_ = recv_zoid.v_stencil_md[0].data();
+
         #pragma cilk grainsize 2048
         cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
             int recv_vel_idx = recv_vel_idxs[i];
             int send_vel_idx = send_vel_idxs[i];
 
-            auto& recv_vel = zoid.v_stencil_md[0][recv_vel_idx];
-            auto& send_vel = recv_zoid.v_stencil_md[0][send_vel_idx];
+            // auto& recv_vel = zoid.v_stencil_md[0][recv_vel_idx];
+            // auto& send_vel = recv_zoid.v_stencil_md[0][send_vel_idx];
+            auto& recv_vel = recv_v0_[recv_vel_idx];
+            auto& send_vel = send_v0_[send_vel_idx];
 
             assert(recv_zoid.tag_stencil_md[0][send_vel_idx] == zoid.tag_stencil_md[0][recv_vel_idx]);
+
             recv_vel.x = send_vel.x;
             recv_vel.y = send_vel.y;
             recv_vel.z = send_vel.z;
@@ -10444,15 +10512,20 @@ public:
             auto& recv_vel_idxs2 = zoid.recv_vel_idxs_double_buffering_flattened_pipelined[pipeline_stage][1][recv_idx];
             assert(send_vel_idxs2.size() == recv_vel_idxs2.size());
 
+            auto * _noalias const recv_v1_ = zoid.v_stencil_md[1].data();
+            auto * _noalias const send_v1_ = recv_zoid.v_stencil_md[1].data();
+
             #pragma cilk grainsize 2048
             cilk_for (int i = 0; i < recv_vel_idxs2.size(); i++) {
                 int recv_vel_idx = recv_vel_idxs2[i];
                 int send_vel_idx = send_vel_idxs2[i];
 
-                auto& recv_vel = zoid.v_stencil_md[1][recv_vel_idx];
-                auto& send_vel = recv_zoid.v_stencil_md[1][send_vel_idx];
+                // auto& recv_vel = zoid.v_stencil_md[1][recv_vel_idx];
+                // auto& send_vel = recv_zoid.v_stencil_md[1][send_vel_idx];
+                auto& recv_vel = recv_v1_[recv_vel_idx];
+                auto& send_vel = send_v1_[send_vel_idx];
 
-                assert(recv_zoid.tag_stencil_md[1][send_vel_idx] == zoid.tag_stencil_md[1][recv_vel_idx]);
+                assert(recv_zoid.tag_stencil_md[0][send_vel_idx] == zoid.tag_stencil_md[0][recv_vel_idx]);
                 recv_vel.x = send_vel.x;
                 recv_vel.y = send_vel.y;
                 recv_vel.z = send_vel.z;
@@ -10972,10 +11045,13 @@ public:
         auto& send_force_idxs = zoid.send_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][send_idx];
         auto& send_pos_idxs = zoid.send_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][send_idx];
         auto& send_pos_idxs2 = zoid.send_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][1][send_idx];
+        auto& send_vel_idxs = zoid.send_vel_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][send_idx];
 
         int num_send_force = send_force_idxs.size();
         int num_send_pos = send_pos_idxs.size();
         int num_send_pos2 = send_pos_idxs2.size();
+        int num_send_vel = send_vel_idxs.size();
+
 
         if (DEBUG_SEND_RECV_DATA) {
             for (int i = 0; i < send_force_idxs.size(); i++) {
@@ -11016,12 +11092,39 @@ public:
                 buf[buf_idx + 2] = zoid.x_stencil_md[1][idx].y;
                 buf[buf_idx + 3] = zoid.x_stencil_md[1][idx].z;
             }
+
+            int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * (3 + 1);
+
+            for (int i = 0; i < send_vel_idxs.size(); i++) {
+                int idx = send_vel_idxs[i];
+                int buf_idx = vel_starting_idx + i * (3 + 1);
+                int tag = zoid.tag_stencil_md[0][idx];
+
+                buf[buf_idx] = ubuf(tag).d;
+                buf[buf_idx + 1] = zoid.v_stencil_md[0][idx].x;
+                buf[buf_idx + 2] = zoid.v_stencil_md[0][idx].y;
+                buf[buf_idx + 3] = zoid.v_stencil_md[0][idx].z;
+            }
         } else {
+            auto * _noalias f_ = zoid.f_stencil_md[0].data();
+            auto * _noalias x0_ = zoid.x_stencil_md[0].data();
+            auto * _noalias x1_ = zoid.x_stencil_md[1].data();
+            auto * _noalias v_ = zoid.v_stencil_md[0].data();
+
             #pragma cilk grainsize 2048
             cilk_for (int i = 0; i < send_force_idxs.size(); i++) {
                 int idx = send_force_idxs[i];
                 int buf_idx = i * 3;
 
+                buf[buf_idx] = f_[idx].x;
+                buf[buf_idx + 1] = f_[idx].y;
+                buf[buf_idx + 2] = f_[idx].z;
+
+                f_[idx].x = 0;
+                f_[idx].y = 0;
+                f_[idx].z = 0;
+
+                /*
                 buf[buf_idx] = zoid.f_stencil_md[0][idx].x;
                 buf[buf_idx + 1] = zoid.f_stencil_md[0][idx].y;
                 buf[buf_idx + 2] = zoid.f_stencil_md[0][idx].z;
@@ -11029,6 +11132,7 @@ public:
                 zoid.f_stencil_md[0][idx].x = 0;
                 zoid.f_stencil_md[0][idx].y = 0;
                 zoid.f_stencil_md[0][idx].z = 0;
+                */
             }
 
             int pos_starting_idx = num_send_force * 3;
@@ -11037,9 +11141,14 @@ public:
                 int idx = send_pos_idxs[i];
                 int buf_idx = pos_starting_idx + i * 3;
 
+                /*
                 buf[buf_idx] = zoid.x_stencil_md[0][idx].x;
                 buf[buf_idx + 1] = zoid.x_stencil_md[0][idx].y;
                 buf[buf_idx + 2] = zoid.x_stencil_md[0][idx].z;
+                */
+                buf[buf_idx] = x0_[idx].x;
+                buf[buf_idx + 1] = x0_[idx].y;
+                buf[buf_idx + 2] = x0_[idx].z;
             }
 
             int pos_starting_idx2 = (num_send_force + num_send_pos) * 3;
@@ -11048,32 +11157,39 @@ public:
                 int idx = send_pos_idxs2[i];
                 int buf_idx = pos_starting_idx2 + i * 3;
 
+                /*
                 buf[buf_idx] = zoid.x_stencil_md[1][idx].x;
                 buf[buf_idx + 1] = zoid.x_stencil_md[1][idx].y;
                 buf[buf_idx + 2] = zoid.x_stencil_md[1][idx].z;
+                */
+                buf[buf_idx] = x1_[idx].x;
+                buf[buf_idx + 1] = x1_[idx].y;
+                buf[buf_idx + 2] = x1_[idx].z;
+            }
+
+            int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * 3;
+
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < send_vel_idxs.size(); i++) {
+                int idx = send_vel_idxs[i];
+                int buf_idx = vel_starting_idx + i * 3;
+
+                /*
+                buf[buf_idx] = zoid.v_stencil_md[0][idx].x;
+                buf[buf_idx + 1] = zoid.v_stencil_md[0][idx].y;
+                buf[buf_idx + 2] = zoid.v_stencil_md[0][idx].z;
+                */
+                buf[buf_idx] = v_[idx].x;
+                buf[buf_idx + 1] = v_[idx].y;
+                buf[buf_idx + 2] = v_[idx].z;
             }
         }
 
         if constexpr (EXPERIMENT == DPD) {
-            auto& send_vel_idxs = zoid.send_vel_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][send_idx];
             auto& send_vel_idxs2 = zoid.send_vel_idxs_double_buffering_flattened_pipelined[pipeline_stage][1][send_idx];
-            int num_send_vel = send_vel_idxs.size();
             int num_send_vel2 = send_vel_idxs2.size();
 
             if (DEBUG_SEND_RECV_DATA) {
-                int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * (3 + 1);
-
-                for (int i = 0; i < send_vel_idxs.size(); i++) {
-                    int idx = send_vel_idxs[i];
-                    int buf_idx = vel_starting_idx + i * (3 + 1);
-                    int tag = zoid.tag_stencil_md[0][idx];
-
-                    buf[buf_idx] = ubuf(tag).d;
-                    buf[buf_idx + 1] = zoid.v_stencil_md[0][idx].x;
-                    buf[buf_idx + 2] = zoid.v_stencil_md[0][idx].y;
-                    buf[buf_idx + 3] = zoid.v_stencil_md[0][idx].z;
-                }
-
                 int vel_starting_idx2 = (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * (3 + 1);
 
                 for (int i = 0; i < send_vel_idxs2.size(); i++) {
@@ -11089,65 +11205,25 @@ public:
 
                 return (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * (3 + 1);
             } else {
-                int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * 3;
-
-                #pragma cilk grainsize 2048
-                cilk_for (int i = 0; i < send_vel_idxs.size(); i++) {
-                    int idx = send_vel_idxs[i];
-                    int buf_idx = vel_starting_idx + i * 3;
-
-                    buf[buf_idx] = zoid.v_stencil_md[0][idx].x;
-                    buf[buf_idx + 1] = zoid.v_stencil_md[0][idx].y;
-                    buf[buf_idx + 2] = zoid.v_stencil_md[0][idx].z;
-                }
-
                 int vel_starting_idx2 = (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * 3;
+                auto * _noalias v_ = zoid.v_stencil_md[1].data();
 
                 #pragma cilk grainsize 2048
                 cilk_for (int i = 0; i < send_vel_idxs2.size(); i++) {
                     int idx = send_vel_idxs2[i];
                     int buf_idx = vel_starting_idx2 + i * 3;
 
+                    /*
                     buf[buf_idx] = zoid.v_stencil_md[1][idx].x;
                     buf[buf_idx + 1] = zoid.v_stencil_md[1][idx].y;
                     buf[buf_idx + 2] = zoid.v_stencil_md[1][idx].z;
+                    */
+                    buf[buf_idx] = v_[idx].x;
+                    buf[buf_idx + 1] = v_[idx].y;
+                    buf[buf_idx + 2] = v_[idx].z;
                 }
 
                 return (num_send_force + num_send_pos + num_send_pos2 + num_send_vel + num_send_vel2) * 3;
-            }
-        } else {
-            auto& send_vel_idxs = zoid.send_vel_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][send_idx];
-            int num_send_vel = send_vel_idxs.size();
-
-            if (DEBUG_SEND_RECV_DATA) {
-                int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * (3 + 1);
-
-                for (int i = 0; i < send_vel_idxs.size(); i++) {
-                    int idx = send_vel_idxs[i];
-                    int buf_idx = vel_starting_idx + i * (3 + 1);
-                    int tag = zoid.tag_stencil_md[0][idx];
-
-                    buf[buf_idx] = ubuf(tag).d;
-                    buf[buf_idx + 1] = zoid.v_stencil_md[0][idx].x;
-                    buf[buf_idx + 2] = zoid.v_stencil_md[0][idx].y;
-                    buf[buf_idx + 3] = zoid.v_stencil_md[0][idx].z;
-                }
-
-                return (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * (3 + 1);
-            } else {
-                int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * 3;
-
-                #pragma cilk grainsize 2048
-                cilk_for (int i = 0; i < send_vel_idxs.size(); i++) {
-                    int idx = send_vel_idxs[i];
-                    int buf_idx = vel_starting_idx + i * 3;
-
-                    buf[buf_idx] = zoid.v_stencil_md[0][idx].x;
-                    buf[buf_idx + 1] = zoid.v_stencil_md[0][idx].y;
-                    buf[buf_idx + 2] = zoid.v_stencil_md[0][idx].z;
-                }
-
-                return (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * 3;
             }
         }
 
@@ -11512,6 +11588,13 @@ public:
         auto * _noalias next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
 
         auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
+        auto * _noalias next_v = v;
+
+        if constexpr (EXPERIMENT == DPD) {
+            v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING].data();
+            next_v = zoid.v_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
+        }
+
         auto * _noalias f = zoid.f_stencil_md[timestep % 1].data();
 
         auto * _noalias mask = zoid.mask_stencil_md[0].data();
@@ -11567,17 +11650,29 @@ public:
                             int i = local_idxs[idx];
 
                             const double dtfm = dtf / mass[type[i]];
-                            v[i].x += dtfm * f[i].x;
-                            v[i].y += dtfm * f[i].y;
-                            v[i].z += dtfm * f[i].z;
+                            if constexpr (EXPERIMENT == DPD) {
+                                next_v[i].x = v[i].x + dtfm * f[i].x;
+                                next_v[i].y = v[i].y + dtfm * f[i].y;
+                                next_v[i].z = v[i].z + dtfm * f[i].z;
+                            } else {
+                                v[i].x += dtfm * f[i].x;
+                                v[i].y += dtfm * f[i].y;
+                                v[i].z += dtfm * f[i].z;
+                            }
 
                             f[i].x = 0.0;
                             f[i].y = 0.0;
                             f[i].z = 0.0;
 
-                            next_x[i].x = x[i].x + dtv * v[i].x;
-                            next_x[i].y = x[i].y + dtv * v[i].y;
-                            next_x[i].z = x[i].z + dtv * v[i].z;
+                            if constexpr (EXPERIMENT == DPD) {
+                                next_x[i].x = x[i].x + dtv * next_v[i].x;
+                                next_x[i].y = x[i].y + dtv * next_v[i].y;
+                                next_x[i].z = x[i].z + dtv * next_v[i].z;
+                            } else {
+                                next_x[i].x = x[i].x + dtv * v[i].x;
+                                next_x[i].y = x[i].y + dtv * v[i].y;
+                                next_x[i].z = x[i].z + dtv * v[i].z;
+                            }
                         }
 
                         if (USE_BREAK) {
@@ -11596,17 +11691,29 @@ public:
 
                 const double dtfm = dtf / mass[type[i]];
 
-                v[i].x += dtfm * f[i].x;
-                v[i].y += dtfm * f[i].y;
-                v[i].z += dtfm * f[i].z;
+                if constexpr (EXPERIMENT == DPD) {
+                    next_v[i].x = v[i].x + dtfm * f[i].x;
+                    next_v[i].y = v[i].y + dtfm * f[i].y;
+                    next_v[i].z = v[i].z + dtfm * f[i].z;
+                } else {
+                    v[i].x += dtfm * f[i].x;
+                    v[i].y += dtfm * f[i].y;
+                    v[i].z += dtfm * f[i].z;
+                }
 
                 f[i].x = 0.0;
                 f[i].y = 0.0;
                 f[i].z = 0.0;
 
-                next_x[i].x = x[i].x + dtv * v[i].x;
-                next_x[i].y = x[i].y + dtv * v[i].y;
-                next_x[i].z = x[i].z + dtv * v[i].z;
+                if constexpr (EXPERIMENT == DPD) {
+                    next_x[i].x = x[i].x + dtv * next_v[i].x;
+                    next_x[i].y = x[i].y + dtv * next_v[i].y;
+                    next_x[i].z = x[i].z + dtv * next_v[i].z;
+                } else {
+                    next_x[i].x = x[i].x + dtv * v[i].x;
+                    next_x[i].y = x[i].y + dtv * v[i].y;
+                    next_x[i].z = x[i].z + dtv * v[i].z;
+                }
             }
         }
     }
@@ -11754,6 +11861,10 @@ public:
 
     void NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
+        if constexpr (EXPERIMENT == DPD) {
+            v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        }
+
         auto * _noalias f = zoid.f_stencil_md[timestep % 1].data();
 
         auto * _noalias mask = zoid.mask_stencil_md[0].data();
@@ -12673,7 +12784,7 @@ public:
     void DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
-        auto * _noalias const v = zoid.f_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias const v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING].data();
 
         auto pair = (PairDPD*) force->pair;
 
@@ -12695,13 +12806,12 @@ public:
         auto special_sqrt = pair->special_sqrt;
         auto cut = pair->cut;
 
-        // #pragma cilk grainsize MODIFY_GRAINSIZE
-        for (int idx = 0; idx < nlocal; idx++) {
+        #pragma cilk grainsize MODIFY_GRAINSIZE
+        cilk_for (int idx = 0; idx < nlocal; idx++) {
             int i = local_idxs[idx];
 
             const int itype = atom_type[i];
             const auto &jlist = neighbor_list[i];
-            const double *_noalias const cutsqi = cutsq[itype];
 
             double xtmp = x[i].x;
             double ytmp = x[i].y;
@@ -12717,7 +12827,6 @@ public:
 
             for (int jj = 0; jj < jnum; jj++) {
                 int j = jlist[jj];
-                double factor_lj = special_lj[pair->sbmask(j)];
                 double factor_dpd = special_lj[pair->sbmask(j)];
                 double factor_sqrt = special_sqrt[pair->sbmask(j)];
                 j &= NEIGHMASK;
@@ -12748,6 +12857,7 @@ public:
                     fxtmp += delx*fpair;
                     fytmp += dely*fpair;
                     fztmp += delz*fpair;
+
                     if (USE_NEWTON) {
                         spinlocks[j].lock();
                         f[j].x -= delx * fpair;

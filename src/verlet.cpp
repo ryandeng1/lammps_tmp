@@ -2096,12 +2096,7 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm_pipelined(int starting_timest
                                            test_f, test_x, test_v);
 
 
-    bool try_this = true;
-    if (try_this) {
-        stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
-    } else {
-        stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
-    }
+    stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
 }
 
 // Assume no comm needed
@@ -2211,12 +2206,7 @@ void Verlet::unpack_self_wrapper_pipelined(int starting_timestep, int dep, queue
                 stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, start_t, end_t, pipeline_stage);
                 run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
                                                        test_f, test_x, test_v);
-                bool try_this = true;
-                if (try_this) {
-                    stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
-                } else {
-                    stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
-                }
+                stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
             }
         }
     }
@@ -2295,12 +2285,7 @@ void Verlet::unpack_other_wrapper_pipelined(int starting_timestep, int dep, queu
                 run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
                                                        test_f, test_x, test_v);
 
-                bool try_this = true;
-                if (try_this) {
-                    stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
-                } else {
-                    stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
-                }
+                stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
             }
         }
     }
