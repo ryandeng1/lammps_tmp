@@ -1055,7 +1055,7 @@ public:
     std::vector<std::vector<int>> recv_proc_zoid_sizes[2][NUM_PIPELINE_STAGES];
 
     // Map from proc -> (list of (zoid, recv_zoid, recv_idxs) from that proc)
-    std::map<int, std::vector<std::array<int, 3>>> recv_zoids_from_proc[2][NUM_PIPELINE_STAGES][NUM_DEPS];
+    std::vector<std::vector<std::array<int, 3>>> recv_zoids_from_proc[2][NUM_PIPELINE_STAGES][NUM_DEPS];
 
     std::map<std::pair<int, int>, int> recv_request_zoid_to_idx_with_proc_to_proc[2][NUM_PIPELINE_STAGES][NUM_DEPS];
     std::map<int, std::pair<int, int>> recv_request_idx_to_zoid_with_proc_to_proc[2][NUM_PIPELINE_STAGES][NUM_DEPS];
@@ -2698,14 +2698,15 @@ public:
                 for (int send_dep = 0; send_dep < dep - 1; send_dep++) {
                     for (int proc = 0; proc < comm->nprocs; proc++) {
                         auto& zoids_recv_from_proc = recv_zoids_from_proc[curr_dt_idx][p][send_dep][proc];
+
                         if (zoids_recv_from_proc.size() > 0 && deps_seen[proc].find({send_dep, dep}) == deps_seen[proc].end()) {
                             recv_request_idx_to_zoid_with_proc_to_proc[curr_dt_idx][p][dep][recv_request_idx] = {proc, send_dep};
                             recv_request_idx++;
 
                             dep_to_recv_proc_to_proc[curr_dt_idx][p][dep].emplace_back(send_dep, proc);
                             int nrecv_from_proc = 0;
-                            auto& lst_zoids_from_proc = recv_zoids_from_proc[curr_dt_idx][p][send_dep][proc];
-                            for (auto& lst_info : lst_zoids_from_proc) {
+                            // auto& lst_zoids_from_proc = recv_zoids_from_proc[curr_dt_idx][p][send_dep][proc];
+                            for (auto& lst_info : zoids_recv_from_proc) {
                                 int recv_zoid_num = lst_info[0];
                                 int send_zoid_num = lst_info[1];
                                 int find_idx = lst_info[2];
@@ -5846,6 +5847,10 @@ public:
             recv_proc_zoid_sizes[curr_dt_idx][pipeline_stage][zoid_num].resize(recv_neighbors.size());
         }
 
+        for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+            recv_zoids_from_proc[curr_dt_idx][pipeline_stage][dep].resize(comm->nprocs);
+        }
+
         for (int send_dep = 0; send_dep < NUM_DEPS - 1; send_dep++) {
             std::vector<int> nsend_per_proc(comm->nprocs, 0);
             std::vector<int> offsets_per_proc(comm->nprocs, 0);
@@ -6132,13 +6137,11 @@ public:
                         assert(nsend == 0);
                     }
 
-                    if (nsend > 0) {
-                        auto pair = std::make_pair(send_zoid.num, proc);
-                        send_proc_zoid_offsets[curr_dt_idx][pipeline_stage][pair] = offsets_per_proc[proc];
-                        send_proc_zoid_sizes[curr_dt_idx][pipeline_stage][pair] = nsend;
+                    auto pair = std::make_pair(send_zoid.num, proc);
+                    send_proc_zoid_offsets[curr_dt_idx][pipeline_stage][pair] = offsets_per_proc[proc];
+                    send_proc_zoid_sizes[curr_dt_idx][pipeline_stage][pair] = nsend;
 
-                        offsets_per_proc[proc] += nsend;
-                    }
+                    offsets_per_proc[proc] += nsend;
                 }
             }
 
@@ -9028,10 +9031,13 @@ public:
         auto pair = std::make_pair(zoid.num, proc);
 
         auto buf = buf_send_proc_to_proc[pipeline_stage][dep][proc];
-        int offset = send_proc_zoid_offsets[curr_dt_idx][pipeline_stage][pair];
+
+        assert(send_proc_zoid_offsets[curr_dt_idx][pipeline_stage].count(pair));
+        int offset = send_proc_zoid_offsets[curr_dt_idx][pipeline_stage].at(pair);
         offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
 
-        int size = send_proc_zoid_sizes[curr_dt_idx][pipeline_stage][pair];
+        assert(send_proc_zoid_sizes[curr_dt_idx][pipeline_stage].count(pair));
+        int size = send_proc_zoid_sizes[curr_dt_idx][pipeline_stage].at(pair);
         size = DEBUG_SEND_RECV_DATA ? size * (3 + 1) : size * 3;
 
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] : send_to_neighbors_many_cuts_next_dt[zoid.num];

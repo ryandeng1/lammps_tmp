@@ -116,6 +116,13 @@ class Verlet : public Integrate {
                                                  std::vector<std::vector<MPI_Request>>& send_r,
                                                  double** test_f, double** test_x, double** test_v);
   template <bool curr_dt>
+  void unpack_data_pipelined_proc_to_proc_wrapper(int starting_timestep, int dep,
+                                                  queue_info& zoid, int recv_zoid_num, int find_idx, int send_dep, int proc, std::atomic<int>& counter,
+                                                  int start_t, int end_t, int pipeline_stage,
+                                                  std::vector<std::vector<MPI_Request>>& send_r,
+                                                  std::atomic_flag& claimed,
+                                                  double** test_f, double** test_x, double** test_v);
+  template <bool curr_dt>
   void unpack_data_pipelined_proc_to_proc(int starting_timestep, int dep,
                                           int proc, int send_dep,
                                           int start_t, int end_t, int pipeline_stage, std::vector<std::atomic<int>>& counter,

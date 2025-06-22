@@ -2344,6 +2344,38 @@ void Verlet::unpack_data_pipelined_proc_to_proc_helper(int starting_timestep, in
     stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
 }
 
+template <bool curr_dt>
+void Verlet::unpack_data_pipelined_proc_to_proc_wrapper(int starting_timestep, int dep,
+                                                queue_info& zoid, int recv_zoid_num, int find_idx, int send_dep, int proc, std::atomic<int>& counter,
+                                                int start_t, int end_t, int pipeline_stage,
+                                                std::vector<std::vector<MPI_Request>>& send_r,
+                                                std::atomic_flag& claimed,
+                                                double** test_f, double** test_x, double** test_v) {
+
+    stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED_PROC_TO_PROC<curr_dt>(zoid,
+                                                                            send_dep,
+                                                                            proc,
+                                                                            recv_zoid_num,
+                                                                            find_idx,
+                                                                            start_t,
+                                                                            end_t,
+                                                                            pipeline_stage);
+    counter--;
+    if (counter == 0) {
+        if (!claimed.test(std::memory_order_relaxed)) {
+            if (!claimed.test_and_set(std::memory_order_relaxed)) {
+                unpack_data_pipelined_proc_to_proc_helper<curr_dt>(starting_timestep,
+                                                                dep,zoid,
+                                                                start_t, end_t,
+                                                                pipeline_stage,
+                                                                send_r,
+                                                                test_f, test_x, test_v);
+            }
+        }
+    }
+}
+
+
 
 template <bool curr_dt>
 void Verlet::unpack_data_pipelined_proc_to_proc(int starting_timestep, int dep,
@@ -2363,6 +2395,11 @@ void Verlet::unpack_data_pipelined_proc_to_proc(int starting_timestep, int dep,
         int find_idx = lst_info[2];
         auto &zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
                              : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+
+        cilk_spawn unpack_data_pipelined_proc_to_proc_wrapper<curr_dt>(starting_timestep, dep, zoid, recv_zoid_num, find_idx, send_dep, proc, counters[zoid.num],
+                                                    start_t, end_t, pipeline_stage, send_r, claimed[zoid.num], test_f, test_x, test_v);
+        
+        /*
         stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED_PROC_TO_PROC<curr_dt>(zoid,
                                                                                  send_dep,
                                                                                  proc,
@@ -2372,7 +2409,7 @@ void Verlet::unpack_data_pipelined_proc_to_proc(int starting_timestep, int dep,
                                                                                  end_t,
                                                                                  pipeline_stage);
         counters[zoid_num]--;
-        if (zoid_dep == dep) {
+        // if (zoid_dep == dep) {
             if (counters[zoid_num] == 0) {
                 if (!claimed[zoid_num].test(std::memory_order_relaxed)) {
                     if (!claimed[zoid_num].test_and_set(std::memory_order_relaxed)) {
@@ -2389,7 +2426,8 @@ void Verlet::unpack_data_pipelined_proc_to_proc(int starting_timestep, int dep,
                     }
                 }
             }
-        }
+        // }
+        */
     }
 
     /*
@@ -2602,24 +2640,54 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper(int starting_time
         auto& recv_request_map = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep]
                 : stencilMD->recv_request_idx_to_zoid_next_dt[dep];
 
-        while (num_wait < recv_request_map.size()) {
-            int idx;
-            MPI_Waitany(recv_r[dep].size(), recv_r[dep].data(), &idx, MPI_STATUSES_IGNORE);
+        constexpr bool USE_WAIT_ANY = false;
 
-            auto [recv_zoid_num, zoid_num] = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep].at(idx)
-                    : stencilMD->recv_request_idx_to_zoid_next_dt[dep].at(idx);
+        if (USE_WAIT_ANY) {
+            while (num_wait < recv_request_map.size()) {
+                int idx;
+                MPI_Waitany(recv_r[dep].size(), recv_r[dep].data(), &idx, MPI_STATUSES_IGNORE);
 
-            auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
-                    : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+                auto [recv_zoid_num, zoid_num] = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep].at(idx)
+                        : stencilMD->recv_request_idx_to_zoid_next_dt[dep].at(idx);
 
-            int my_queue_idx = zoid_to_my_queue_idx.at(zoid_num);
+                auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                        : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
 
-            cilk_spawn unpack_other_wrapper_pipelined<curr_dt>(starting_timestep, dep, zoid,
-                                                               recv_zoid_num,
-                                                               start_t, end_t, pipeline_stage,
-                                                               recv_neighbor_counts[my_queue_idx],
-                                                               send_r, test_f, test_x, test_v, claimed);
-            num_wait++;
+                int my_queue_idx = zoid_to_my_queue_idx.at(zoid_num);
+
+                cilk_spawn unpack_other_wrapper_pipelined<curr_dt>(starting_timestep, dep, zoid,
+                                                                recv_zoid_num,
+                                                                start_t, end_t, pipeline_stage,
+                                                                recv_neighbor_counts[my_queue_idx],
+                                                                send_r, test_f, test_x, test_v, claimed);
+                num_wait++;
+            }
+        } else {
+            std::vector<int> waitsome_idxs(recv_request_map.size(), 0);
+            while (num_wait < recv_request_map.size()) {
+                int count;
+                MPI_Waitsome(recv_r[dep].size(), recv_r[dep].data(), &count, waitsome_idxs.data(), MPI_STATUSES_IGNORE);
+
+                for (int i = 0; i < count; i++) {
+                    int idx = waitsome_idxs[i];
+                    assert(idx >= 0 && idx < recv_request_map.size());
+                    assert(recv_request_map.count(idx));
+                    auto [recv_zoid_num, zoid_num] = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep].at(idx)
+                            : stencilMD->recv_request_idx_to_zoid_next_dt[dep].at(idx);
+
+                    auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                            : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+
+                    int my_queue_idx = zoid_to_my_queue_idx.at(zoid_num);
+
+                    cilk_spawn unpack_other_wrapper_pipelined<curr_dt>(starting_timestep, dep, zoid,
+                                                                    recv_zoid_num,
+                                                                    start_t, end_t, pipeline_stage,
+                                                                    recv_neighbor_counts[my_queue_idx],
+                                                                    send_r, test_f, test_x, test_v, claimed);
+                    num_wait++;
+                }
+            }
         }
     }
 
@@ -2643,19 +2711,6 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc
 
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
                               : stencilMD->my_queues_many_cuts_next_dt;
-
-    std::unordered_map<int, int> zoid_to_my_queue_idx;
-
-    // std::vector<std::atomic<int>> recv_neighbor_counts(my_queues[dep].size());
-    for (int j = 0; j < my_queues[dep].size(); j++) {
-        int zoid_num = my_queues[dep][j].num;
-        /*
-        int num_recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[zoid_num].size()
-                                         : stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
-        recv_neighbor_counts[j] = num_recv_neighbors;
-        */
-        zoid_to_my_queue_idx[zoid_num] = j;
-    }
 
     cilk_scope {
         if (dep < NUM_DEPS - 1) {
@@ -2688,40 +2743,80 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc
 
         int nrecv_zoid_to_zoid = stencilMD->nrecv_zoid_to_zoid[curr_dt_idx][pipeline_stage][dep];
 
-        while (num_wait < recv_request_map.size()) {
-            int idx;
-            MPI_Waitany(recv_r[dep].size(), recv_r[dep].data(), &idx, MPI_STATUSES_IGNORE);
+        constexpr bool USE_WAIT_ANY = false;
 
-            if (idx == MPI_UNDEFINED) {
-                assert(false);
+        if (USE_WAIT_ANY) {
+            while (num_wait < recv_request_map.size()) {
+                int idx;
+                MPI_Waitany(recv_r[dep].size(), recv_r[dep].data(), &idx, MPI_STATUSES_IGNORE);
+
+                if (idx == MPI_UNDEFINED) {
+                    assert(false);
+                }
+
+                assert(recv_request_map.count(idx));
+                auto [recv_zoid_num, zoid_num] = recv_request_map.at(idx);
+
+                if (idx >= nrecv_zoid_to_zoid) {
+                    int proc = recv_zoid_num;
+                    int send_dep = zoid_num;
+
+                    cilk_spawn unpack_data_pipelined_proc_to_proc<curr_dt>(starting_timestep, dep,
+                                                                proc, send_dep,
+                                                                start_t, end_t, pipeline_stage, recv_neighbor_counters,
+                                                                send_r,
+                                                                test_f, test_x, test_v,
+                                                                claimed);
+
+                } else {
+                    auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                                        : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+
+                    cilk_spawn unpack_other_wrapper_pipelined_only_next_dep<curr_dt>(starting_timestep, dep, zoid,
+                                                                                    recv_zoid_num,
+                                                                                    start_t, end_t, pipeline_stage,
+                                                                                    recv_neighbor_counters[zoid_num],
+                                                                                    send_r, test_f, test_x, test_v, claimed);
+                }
+
+                num_wait++;
             }
+        } else {
+            std::vector<int> waitsome_idxs(recv_request_map.size(), 0);
+            while (num_wait < recv_request_map.size()) {
+                int count;
+                MPI_Waitsome(recv_r[dep].size(), recv_r[dep].data(), &count, waitsome_idxs.data(), MPI_STATUSES_IGNORE);
 
-            assert(recv_request_map.count(idx));
-            auto [recv_zoid_num, zoid_num] = recv_request_map.at(idx);
+                for (int i = 0; i < count; i++) {
+                    int idx = waitsome_idxs[i];
+                    assert(idx >= 0 && idx < recv_request_map.size());
+                    assert(recv_request_map.count(idx));
+                    auto [recv_zoid_num, zoid_num] = recv_request_map.at(idx);
 
-            if (idx >= nrecv_zoid_to_zoid) {
-                int proc = recv_zoid_num;
-                int send_dep = zoid_num;
+                    if (idx >= nrecv_zoid_to_zoid) {
+                        int proc = recv_zoid_num;
+                        int send_dep = zoid_num;
 
-                cilk_spawn unpack_data_pipelined_proc_to_proc<curr_dt>(starting_timestep, dep,
-                                                              proc, send_dep,
-                                                              start_t, end_t, pipeline_stage, recv_neighbor_counters,
-                                                              send_r,
-                                                              test_f, test_x, test_v,
-                                                              claimed);
+                        cilk_spawn unpack_data_pipelined_proc_to_proc<curr_dt>(starting_timestep, dep,
+                                                                    proc, send_dep,
+                                                                    start_t, end_t, pipeline_stage, recv_neighbor_counters,
+                                                                    send_r,
+                                                                    test_f, test_x, test_v,
+                                                                    claimed);
 
-            } else {
-                auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
-                                     : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+                    } else {
+                        auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                                            : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
 
-                cilk_spawn unpack_other_wrapper_pipelined_only_next_dep<curr_dt>(starting_timestep, dep, zoid,
-                                                                                 recv_zoid_num,
-                                                                                 start_t, end_t, pipeline_stage,
-                                                                                 recv_neighbor_counters[zoid_num],
-                                                                                 send_r, test_f, test_x, test_v, claimed);
+                        cilk_spawn unpack_other_wrapper_pipelined_only_next_dep<curr_dt>(starting_timestep, dep, zoid,
+                                                                                        recv_zoid_num,
+                                                                                        start_t, end_t, pipeline_stage,
+                                                                                        recv_neighbor_counters[zoid_num],
+                                                                                        send_r, test_f, test_x, test_v, claimed);
+                    }
+                    num_wait++;
+                }
             }
-
-            num_wait++;
         }
     }
 
@@ -3013,7 +3108,6 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc(int st
     std::vector<MPI_Request> recv_r[NUM_DEPS];
     std::vector<MPI_Request> recv_r2[NUM_DEPS];
 
-    // TODO: Fix
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         recv_r[dep].resize(stencilMD->recv_request_idx_to_zoid_with_proc_to_proc[curr_dt_idx][0][dep].size(), MPI_REQUEST_NULL);
         recv_r2[dep].resize(stencilMD->recv_request_idx_to_zoid_with_proc_to_proc[curr_dt_idx][1][dep].size(), MPI_REQUEST_NULL);
