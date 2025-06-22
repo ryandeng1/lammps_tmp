@@ -55,6 +55,12 @@ class Verlet : public Integrate {
                                                        double** test_f, double** test_x, double** test_v);
 
   template <bool curr_dt>
+  void run_stencil_md_zoid_many_cuts_no_comm_pipelined_only_next_dep(int starting_timestep, int dep, queue_info& zoid,
+                                                                     int start_t, int end_t, int pipeline_stage,
+                                                                     std::vector<std::vector<MPI_Request>>& send_r,
+                                                                     double** test_f, double** test_x, double** test_v);
+
+  template <bool curr_dt>
   void run_stencil_md_zoid_many_cuts_no_comm_new_comm(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
                                                       std::vector<MPI_Request>* send_r,
                                                       double** test_f, double** test_x, double** test_v);
@@ -74,6 +80,13 @@ class Verlet : public Integrate {
                                      std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
+  void unpack_self_wrapper_pipelined_only_next_dep(int starting_timestep, int dep, queue_info& zoid,
+                                                   int start_t, int end_t, int pipeline_stage, std::atomic<int>& counter,
+                                                   std::vector<std::vector<MPI_Request>>& send_r,
+                                                   double** test_f, double** test_x, double** test_v,
+                                                   std::vector<std::atomic_flag>& claimed);
+
+  template <bool curr_dt>
   void unpack_other_wrapper(int starting_timestep, int dep, queue_info& zoid,
                             int recv_zoid_num,
                             int start_t, int end_t, std::atomic<int>& counter,
@@ -88,6 +101,27 @@ class Verlet : public Integrate {
                                       std::vector<MPI_Request>* send_r,
                                       double** test_f, double** test_x, double** test_v,
                                       std::vector<std::atomic_flag>& claimed);
+
+  template <bool curr_dt>
+  void unpack_other_wrapper_pipelined_only_next_dep(int starting_timestep, int dep, queue_info& zoid,
+                                                    int recv_zoid_num,
+                                                    int start_t, int end_t, int pipeline_stage, std::atomic<int>& counter,
+                                                    std::vector<std::vector<MPI_Request>>& send_r,
+                                                    double** test_f, double** test_x, double** test_v,
+                                                    std::vector<std::atomic_flag>& claimed);
+
+  template <bool curr_dt>
+  void unpack_data_pipelined_proc_to_proc_helper(int starting_timestep, int dep, queue_info& zoid,
+                                                 int start_t, int end_t, int pipeline_stage,
+                                                 std::vector<std::vector<MPI_Request>>& send_r,
+                                                 double** test_f, double** test_x, double** test_v);
+  template <bool curr_dt>
+  void unpack_data_pipelined_proc_to_proc(int starting_timestep, int dep,
+                                          int proc, int send_dep,
+                                          int start_t, int end_t, int pipeline_stage, std::vector<std::atomic<int>>& counter,
+                                          std::vector<std::vector<MPI_Request>>& send_r,
+                                          double** test_f, double** test_x, double** test_v,
+                                          std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
   void run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
@@ -123,21 +157,24 @@ class Verlet : public Integrate {
                                                          std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
-  void run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep(int starting_timestep, int dep, int pipeline_stage,
-                                                                       int start_t, int end_t,
-                                                                       double **test_f, double **test_x, double **test_v,
-                                                                       std::vector<MPI_Request>* send_r,
-                                                                       std::vector<MPI_Request>* recv_r,
-                                                                       std::vector<MPI_Request>& send_proc_to_proc,
-                                                                       std::vector<std::atomic_flag>& claimed);
+  void run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc(int starting_timestep, int dep, int pipeline_stage,
+                                                                           int start_t, int end_t,
+                                                                           double **test_f, double **test_x, double **test_v,
+                                                                           std::vector<std::atomic<int>>& recv_neighbor_counts,
+                                                                           std::vector<std::vector<MPI_Request>>& send_r,
+                                                                           std::vector<MPI_Request>& send_r_proc_to_proc,
+                                                                           std::vector<MPI_Request>* recv_r,
+                                                                           std::vector<std::atomic_flag>& claimed);
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_waitany_pipelined(int starting_timestep, double** test_f, double** test_x, double** test_v,
                                                   std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
 
   template <bool curr_dt>
-  void run_stencil_md_many_cuts_waitany_pipelined_only_next_dep(int starting_timestep, double** test_f, double** test_x, double** test_v,
-                                                                std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
+  void run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc(int starting_timestep, double** test_f, double** test_x, double** test_v,
+                                                                    std::vector<std::vector<MPI_Request>>* send_r,
+                                                                    std::vector<std::vector<MPI_Request>>* send_r_proc_to_proc,
+                                                                    std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_new_comm(int starting_timestep, double** test_f, double** test_x, double** test_v);

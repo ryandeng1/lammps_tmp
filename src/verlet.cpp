@@ -13,52 +13,43 @@
 
 #include "verlet.h"
 
-#include "accelerator_kokkos.h"
 #include "accelerator_omp.h"
 #include "angle.h"
 #include "atom.h"
 #include "atom_vec.h"
 #include "bond.h"
-#include "citeme.h"
 #include "comm.h"
 #include "dihedral.h"
 #include "error.h"
 #include "fix.h"
 #include "force.h"
-#include "group.h"
 #include "improper.h"
 #include "info.h"
-#include "input.h"
 #include "kspace.h"
-#include "lmppython.h"
 #include "modify.h"
 #include "neighbor.h"
 #include "output.h"
 #include "stencil_md_utils.h"
 #include "timer.h"
-#include "universe.h"
 #include "update.h"
-#include "variable.h"
 #include "version.h"
 
 #include <mpi.h>
 #include <cmath>
 #include <cstring>
 #include <map>
-#include <future>
 #include <algorithm>
 #include "pair_lj_cut.h"
 
 #include "stencil_md.h"
 
-#include <fstream>
 #include <iostream>
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
+#include <mpi_proto.h>
 #include <unordered_map>
 #include <sstream>
 #include <cilk/opadd_reducer.h>
-#include <iomanip>
 #include <sys/time.h>
 
 using namespace LAMMPS_NS;
@@ -1079,32 +1070,23 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     stencilMD->INIT_SEND_RECV_BUFFERS_MANY_CUTS();
 
-    /*
-    stencilMD->CONSTRUCT_SEND_PROC_TO_PROC_OFFSETS_PIPELINED<true>();
-    stencilMD->CONSTRUCT_SEND_PROC_TO_PROC_OFFSETS_PIPELINED<false>();
-
-    stencilMD->CONSTRUCT_RECV_PROC_TO_PROC_OFFSETS_PIPELINED<true>();
-    stencilMD->CONSTRUCT_RECV_PROC_TO_PROC_OFFSETS_PIPELINED<false>();
-    */
-
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES<true>();
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES<false>();
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<true>();
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES<false>();
 
-    /*
-    stencilMD->CONSTRUCT_NEW_RECV_FORCE_IDXS_FLATTENED<true>();
-    stencilMD->CONSTRUCT_NEW_RECV_FORCE_IDXS_FLATTENED<false>();
-    stencilMD->CONSTRUCT_NEW_RECV_VEL_IDXS_FLATTENED<true>();
-    stencilMD->CONSTRUCT_NEW_RECV_VEL_IDXS_FLATTENED<false>();
-    stencilMD->CONSTRUCT_NEW_RECV_POS_IDXS_FLATTENED<true>();
-    stencilMD->CONSTRUCT_NEW_RECV_POS_IDXS_FLATTENED<false>();
-    */
-
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES_PIPELINED<true>();
     stencilMD->CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES_PIPELINED<false>();
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES_PIPELINED<true>();
     stencilMD->CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES_PIPELINED<false>();
+
+    stencilMD->CONSTRUCT_SEND_PROC_TO_PROC_OFFSETS_PIPELINED<true>();
+    stencilMD->CONSTRUCT_SEND_PROC_TO_PROC_OFFSETS_PIPELINED<false>();
+    stencilMD->CONSTRUCT_RECV_PROC_TO_PROC_OFFSETS_PIPELINED<true>();
+    stencilMD->CONSTRUCT_RECV_PROC_TO_PROC_OFFSETS_PIPELINED<false>();
+
+    stencilMD->CONSTRUCT_RECV_PROC_TO_PROC_AND_ZOID_TO_ZOID_RECEIVE_REQUEST_IDXS<true>();
+    stencilMD->CONSTRUCT_RECV_PROC_TO_PROC_AND_ZOID_TO_ZOID_RECEIVE_REQUEST_IDXS<false>();
 
     stencilMD->GET_SEND_STATISTICS<true>();
 
@@ -1345,6 +1327,7 @@ void Verlet::run(int n) {
     double* test_f[test_num_timesteps];
     double* test_x[test_num_timesteps];
     double* test_v[test_num_timesteps];
+
     double* send_f;
     double* send_x;
     double* send_v;
@@ -1979,10 +1962,6 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
             int timestep_to_compare_against = curr_dt ? starting_timestep + t
                     : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
 
-            stencilMD->TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
-                                                                test_v[timestep_to_compare_against],
-                                                                zoid, t);
-
             stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
                                                                   test_f[timestep_to_compare_against],
                                                                   zoid, t);
@@ -1991,6 +1970,9 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
                                                                 test_x[timestep_to_compare_against],
                                                                 zoid, t);
 
+            stencilMD->TEST_AGAINST_LAMMPS_VEL_DOUBLE_BUFFERING(curr_dt, timestep_to_compare_against,
+                                                                test_v[timestep_to_compare_against],
+                                                                zoid, t);
         }
 
         stencilMD->NVE_INITIAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t);
@@ -2097,6 +2079,22 @@ void Verlet::run_stencil_md_zoid_many_cuts_no_comm_pipelined(int starting_timest
 
 
     stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_PIPELINED<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
+}
+
+// Assume no comm needed
+template <bool curr_dt>
+void Verlet::run_stencil_md_zoid_many_cuts_no_comm_pipelined_only_next_dep(int starting_timestep, int dep, queue_info& zoid,
+                                                                           int start_t, int end_t, int pipeline_stage,
+                                                                           std::vector<std::vector<MPI_Request>>& send_r,
+                                                                           double** test_f, double** test_x, double** test_v) {
+    int zoid_num = zoid.num;
+    int num_neighbors_receive_self = stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY_PIPELINED<curr_dt>(zoid, start_t, end_t, pipeline_stage);
+
+    run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid,
+                                           start_t - 1, end_t - 1,
+                                           test_f, test_x, test_v);
+
+    stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
 }
 
 // Assume no comm needed
@@ -2213,6 +2211,28 @@ void Verlet::unpack_self_wrapper_pipelined(int starting_timestep, int dep, queue
 }
 
 template <bool curr_dt>
+void Verlet::unpack_self_wrapper_pipelined_only_next_dep(int starting_timestep, int dep, queue_info& zoid,
+                                                         int start_t, int end_t, int pipeline_stage,
+                                                         std::atomic<int>& counter,
+                                                         std::vector<std::vector<MPI_Request>>& send_r,
+                                                         double** test_f, double** test_x, double** test_v,
+                                                         std::vector<std::atomic_flag>& claimed) {
+
+    int num_neighbors_receive_self = stencilMD->UNPACK_DATA_MANY_CUTS_ZOID_SELF_ONLY_PIPELINED<curr_dt>(zoid, start_t, end_t, pipeline_stage);
+    counter -= num_neighbors_receive_self;
+    if (counter == 0) {
+        if (!claimed[zoid.num].test(std::memory_order_relaxed)) {
+            if (!claimed[zoid.num].test_and_set(std::memory_order_relaxed)) {
+                stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage);
+                run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
+                                                       test_f, test_x, test_v);
+                stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
+            }
+        }
+    }
+}
+
+template <bool curr_dt>
 void Verlet::unpack_other_wrapper(int starting_timestep, int dep, queue_info& zoid,
                                   int recv_zoid_num,
                                   int start_t, int end_t, std::atomic<int>& counter,
@@ -2289,6 +2309,101 @@ void Verlet::unpack_other_wrapper_pipelined(int starting_timestep, int dep, queu
             }
         }
     }
+}
+
+template <bool curr_dt>
+void Verlet::unpack_other_wrapper_pipelined_only_next_dep(int starting_timestep, int dep, queue_info& zoid,
+                                                          int recv_zoid_num,
+                                                          int start_t, int end_t, int pipeline_stage, std::atomic<int>& counter,
+                                                          std::vector<std::vector<MPI_Request>>& send_r,
+                                                          double** test_f, double** test_x, double** test_v,
+                                                          std::vector<std::atomic_flag>& claimed) {
+
+    stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, recv_zoid_num, start_t, end_t, pipeline_stage);
+    counter--;
+    if (counter == 0) {
+        if (!claimed[zoid.num].test(std::memory_order_relaxed)) {
+            if (!claimed[zoid.num].test_and_set(std::memory_order_relaxed)) {
+                stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage);
+                run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
+                                                       test_f, test_x, test_v);
+                stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
+            }
+        }
+    }
+}
+
+template <bool curr_dt>
+void Verlet::unpack_data_pipelined_proc_to_proc_helper(int starting_timestep, int dep, queue_info& zoid,
+                                                       int start_t, int end_t, int pipeline_stage,
+                                                       std::vector<std::vector<MPI_Request>>& send_r,
+                                                       double** test_f, double** test_x, double** test_v) {
+    stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage);
+    run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
+                                           test_f, test_x, test_v);
+    stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
+}
+
+
+template <bool curr_dt>
+void Verlet::unpack_data_pipelined_proc_to_proc(int starting_timestep, int dep,
+                                                int proc, int send_dep,
+                                                int start_t, int end_t, int pipeline_stage, std::vector<std::atomic<int>>& counters,
+                                                std::vector<std::vector<MPI_Request>>& send_r,
+                                                double** test_f, double** test_x, double** test_v,
+                                                std::vector<std::atomic_flag>& claimed) {
+
+    constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
+    auto& lst_zoids_from_proc = stencilMD->recv_zoids_from_proc[curr_dt_idx][pipeline_stage][send_dep][proc];
+    for (auto& lst_info : lst_zoids_from_proc) {
+        int zoid_num = lst_info[0];
+        int zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[zoid_num] : stencilMD->zoid_num_to_dep_next_dt[zoid_num];
+        int recv_zoid_num = lst_info[1];
+        int find_idx = lst_info[2];
+        auto &zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                             : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+        stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED_PROC_TO_PROC<curr_dt>(zoid,
+                                                                                 send_dep,
+                                                                                 proc,
+                                                                                 recv_zoid_num,
+                                                                                 find_idx,
+                                                                                 start_t,
+                                                                                 end_t,
+                                                                                 pipeline_stage);
+        counters[zoid_num]--;
+        if (zoid_dep == dep) {
+            if (counters[zoid_num] == 0) {
+                if (!claimed[zoid_num].test(std::memory_order_relaxed)) {
+                    if (!claimed[zoid_num].test_and_set(std::memory_order_relaxed)) {
+                        cilk_spawn unpack_data_pipelined_proc_to_proc_helper<curr_dt>(starting_timestep,
+                                                                                      dep,
+                                                                                      zoid,
+                                                                                      start_t,
+                                                                                      end_t,
+                                                                                      pipeline_stage,
+                                                                                      send_r,
+                                                                                      test_f,
+                                                                                      test_x,
+                                                                                      test_v);
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+    if (counter == 0) {
+        if (!claimed[zoid.num].test(std::memory_order_relaxed)) {
+            if (!claimed[zoid.num].test_and_set(std::memory_order_relaxed)) {
+                stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage);
+                run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_t - 1, end_t - 1,
+                                                       test_f, test_x, test_v);
+                stencilMD->PACK_AND_SEND_DATA_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_t, end_t, pipeline_stage, send_r[zoid.num]);
+            }
+        }
+    }
+    */
 }
 
 template <bool curr_dt>
@@ -2515,90 +2630,107 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper(int starting_time
 }
 
 template <bool curr_dt>
-void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep(int starting_timestep, int dep, int pipeline_stage,
-                                                                             int start_t, int end_t,
-                                                                             double **test_f, double **test_x, double **test_v,
-                                                                             std::vector<MPI_Request>* send_r,
-                                                                             std::vector<MPI_Request>* recv_r,
-                                                                             std::vector<MPI_Request>& send_proc_to_proc,
-                                                                             std::vector<std::atomic_flag>& claimed) {
+void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc(int starting_timestep, int dep, int pipeline_stage,
+                                                               int start_t, int end_t,
+                                                               double **test_f, double **test_x, double **test_v,
+                                                               std::vector<std::atomic<int>>& recv_neighbor_counters,
+                                                               std::vector<std::vector<MPI_Request>>& send_r,
+                                                               std::vector<MPI_Request>& send_r_proc_to_proc,
+                                                               std::vector<MPI_Request>* recv_r,
+                                                               std::vector<std::atomic_flag>& claimed) {
+
+    constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
+    auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
+                              : stencilMD->my_queues_many_cuts_next_dt;
+
+    std::unordered_map<int, int> zoid_to_my_queue_idx;
+
+    // std::vector<std::atomic<int>> recv_neighbor_counts(my_queues[dep].size());
+    for (int j = 0; j < my_queues[dep].size(); j++) {
+        int zoid_num = my_queues[dep][j].num;
+        /*
+        int num_recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[zoid_num].size()
+                                         : stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
+        recv_neighbor_counts[j] = num_recv_neighbors;
+        */
+        zoid_to_my_queue_idx[zoid_num] = j;
+    }
+
     cilk_scope {
-        constexpr int MAX_NEIGHBORS = 26;
-
-        auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
-        : stencilMD->my_queues_many_cuts_next_dt;
-
-        std::vector<std::atomic<int>> recv_neighbor_counts(my_queues[dep].size());
-        std::unordered_map<int, int> zoid_to_my_queue_idx;
-
-        for (int j = 0; j < my_queues[dep].size(); j++) {
-            int zoid_num = my_queues[dep][j].num;
-            int num_recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[zoid_num].size()
-                                             : stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
-            recv_neighbor_counts[j] = num_recv_neighbors;
-            zoid_to_my_queue_idx[zoid_num] = j;
-        }
-
         if (dep < NUM_DEPS - 1) {
             for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                 auto &zoid = my_queues[dep + 1][j];
-                int zoid_num = zoid.num;
-                cilk_spawn
-                stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY_PIPELINED_ONLY_NEXT_DEP<curr_dt>(dep + 1,
-                                                                                              zoid_num,
-                                                                                              pipeline_stage,
-                                                                                              recv_r[dep + 1]);
-                cilk_spawn
-                stencilMD->RECEIVE_DATA_PROC_TO_PROC_WAITANY_PIPELINED<curr_dt>(dep + 1, pipeline_stage,
-                                                                                recv_r[dep + 1]);
+                cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_WAITANY_PIPELINED_ONLY_NEXT_DEP<curr_dt>(dep + 1, zoid.num, pipeline_stage,
+                                                                                                         recv_r[dep + 1]);
             }
+
+            cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_PIPELINED<curr_dt>(pipeline_stage, dep + 1, recv_r[dep + 1]);
         }
 
         for (int j = 0; j < my_queues[dep].size(); j++) {
-            auto &zoid = my_queues[dep][j];
+            auto& zoid = my_queues[dep][j];
+
             if (zoid.no_comm_needed) {
-                cilk_spawn run_stencil_md_zoid_many_cuts_no_comm_pipelined<curr_dt>(
+                cilk_spawn run_stencil_md_zoid_many_cuts_no_comm_pipelined_only_next_dep<curr_dt>(
                     starting_timestep, dep, zoid, start_t, end_t, pipeline_stage,
                     send_r, test_f, test_x, test_v);
             } else {
-                cilk_spawn unpack_self_wrapper_pipelined<curr_dt>(starting_timestep, dep, zoid,
-                                                                  start_t, end_t, pipeline_stage,
-                                                                  recv_neighbor_counts[j],
-                                                                  send_r, test_f, test_x, test_v, claimed);
+                cilk_spawn unpack_self_wrapper_pipelined_only_next_dep<curr_dt>(starting_timestep, dep, zoid,
+                                                                                start_t, end_t, pipeline_stage,
+                                                                                recv_neighbor_counters[zoid.num],
+                                                                                send_r, test_f, test_x, test_v, claimed);
             }
         }
 
         int num_wait = 0;
-        auto& recv_request_map = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep]
-        : stencilMD->recv_request_idx_to_zoid_next_dt[dep];
+        auto& recv_request_map = stencilMD->recv_request_idx_to_zoid_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep];
+
+        int nrecv_zoid_to_zoid = stencilMD->nrecv_zoid_to_zoid[curr_dt_idx][pipeline_stage][dep];
 
         while (num_wait < recv_request_map.size()) {
             int idx;
             MPI_Waitany(recv_r[dep].size(), recv_r[dep].data(), &idx, MPI_STATUSES_IGNORE);
 
-            auto [recv_zoid_num, zoid_num] = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep].at(idx)
-                                                     : stencilMD->recv_request_idx_to_zoid_next_dt[dep].at(idx);
+            if (idx == MPI_UNDEFINED) {
+                assert(false);
+            }
 
-            auto &zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
-                                 : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+            assert(recv_request_map.count(idx));
+            auto [recv_zoid_num, zoid_num] = recv_request_map.at(idx);
 
-            int my_queue_idx = zoid_to_my_queue_idx.at(zoid_num);
+            if (idx >= nrecv_zoid_to_zoid) {
+                int proc = recv_zoid_num;
+                int send_dep = zoid_num;
 
-            cilk_spawn unpack_other_wrapper_pipelined<curr_dt>(starting_timestep, dep, zoid,
-                                                               recv_zoid_num,
-                                                               start_t, end_t, pipeline_stage,
-                                                               recv_neighbor_counts[my_queue_idx],
-                                                               send_r, test_f, test_x, test_v, claimed);
+                cilk_spawn unpack_data_pipelined_proc_to_proc<curr_dt>(starting_timestep, dep,
+                                                              proc, send_dep,
+                                                              start_t, end_t, pipeline_stage, recv_neighbor_counters,
+                                                              send_r,
+                                                              test_f, test_x, test_v,
+                                                              claimed);
+
+            } else {
+                auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num]
+                                     : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+
+                cilk_spawn unpack_other_wrapper_pipelined_only_next_dep<curr_dt>(starting_timestep, dep, zoid,
+                                                                                 recv_zoid_num,
+                                                                                 start_t, end_t, pipeline_stage,
+                                                                                 recv_neighbor_counters[zoid_num],
+                                                                                 send_r, test_f, test_x, test_v, claimed);
+            }
+
             num_wait++;
-        }
-
-        for (int j = 0; j < my_queues[dep].size(); j++) {
-            int zoid_num = my_queues[dep][j].num;
-            claimed[zoid_num].clear();
         }
     }
 
-    stencilMD->SEND_DATA_PROC_TO_PROC_PIPELINED<curr_dt>(dep, start_t, end_t, pipeline_stage, send_r);
+    cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC_PIPELINED<curr_dt>(pipeline_stage, dep, send_r_proc_to_proc);
+
+    for (int j = 0; j < my_queues[dep].size(); j++) {
+        int zoid_num = my_queues[dep][j].num;
+        claimed[zoid_num].clear();
+    }
 }
 
 template <bool curr_dt>
@@ -2836,30 +2968,46 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined(int starting_timestep, d
 }
 
 template <bool curr_dt>
-void Verlet::run_stencil_md_many_cuts_waitany_pipelined_only_next_dep(int starting_timestep, double **test_f, double **test_x, double **test_v,
-                                                                      std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2) {
-    constexpr int MAX_NEIGHBORS = 26;
+void Verlet::run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc(int starting_timestep, double **test_f, double **test_x, double **test_v,
+                                                                          std::vector<std::vector<MPI_Request>>* send_r,
+                                                                          std::vector<std::vector<MPI_Request>>* send_r_proc_to_proc,
+                                                                          std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2) {
+    constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
                               : stencilMD->my_queues_many_cuts_next_dt;
 
-    std::vector<MPI_Request> send_r[stencilMD->NUM_ZOIDS_MANY_CUTS];
-    std::vector<MPI_Request> send_r2[stencilMD->NUM_ZOIDS_MANY_CUTS];
+    std::vector<std::atomic<int>> recv_neighbors_counters(stencilMD->NUM_ZOIDS_MANY_CUTS);
+    std::vector<std::atomic<int>> recv_neighbors_counters2(stencilMD->NUM_ZOIDS_MANY_CUTS);
 
-    std::vector<MPI_Request> send_r_proc_to_proc[NUM_DEPS];
-    std::vector<MPI_Request> send_r_proc_to_proc2[NUM_DEPS];
-    if (curr_dt) {
-        send_r_proc_to_proc[0].resize(stencilMD->send_dep_to_procs[0][0][1].size() + stencilMD->send_dep_to_procs[0][0][2].size());
-        send_r_proc_to_proc[1].resize(stencilMD->send_dep_to_procs[0][1][3].size());
+    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+        for (int j = 0; j < my_queues[dep].size(); j++) {
+            int zoid_num = my_queues[dep][j].num;
+            assert(zoid_num % comm->nprocs == comm->me);
+            send_r[0][zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc_only_next_dep[curr_dt_idx][zoid_num], MPI_REQUEST_NULL);
+            send_r[1][zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc_only_next_dep[curr_dt_idx][zoid_num], MPI_REQUEST_NULL);
+        }
+    }
 
-        send_r_proc_to_proc2[0].resize(stencilMD->send_dep_to_procs[1][0][1].size() + stencilMD->send_dep_to_procs[1][0][2].size());
-        send_r_proc_to_proc2[1].resize(stencilMD->send_dep_to_procs[1][1][3].size());
-    } else {
-        send_r_proc_to_proc[0].resize(stencilMD->send_dep_to_procs_next_dt[0][0][1].size() + stencilMD->send_dep_to_procs[0][0][2].size());
-        send_r_proc_to_proc[1].resize(stencilMD->send_dep_to_procs_next_dt[0][1][3].size());
+    for (int dep = 1; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < my_queues[dep].size(); j++) {
+            int zoid_num = my_queues[dep][j].num;
+            assert(zoid_num % comm->nprocs == comm->me);
+            recv_neighbors_counters[zoid_num] = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[zoid_num].size()
+                : stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
+            recv_neighbors_counters2[zoid_num] = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[zoid_num].size()
+                : stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
+        }
+    }
 
-        send_r_proc_to_proc2[0].resize(stencilMD->send_dep_to_procs_next_dt[1][0][1].size() + stencilMD->send_dep_to_procs_next_dt[1][0][2].size());
-        send_r_proc_to_proc2[1].resize(stencilMD->send_dep_to_procs_next_dt[1][1][3].size());
+    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
+        if (curr_dt) {
+            send_r_proc_to_proc[0][dep].resize(stencilMD->send_dep_to_procs[curr_dt_idx][0][dep].size(), MPI_REQUEST_NULL);
+            send_r_proc_to_proc[1][dep].resize(stencilMD->send_dep_to_procs[curr_dt_idx][1][dep].size(), MPI_REQUEST_NULL);
+        } else {
+            send_r_proc_to_proc[0][dep].resize(stencilMD->send_dep_to_procs[curr_dt_idx][0][dep].size(), MPI_REQUEST_NULL);
+            send_r_proc_to_proc[1][dep].resize(stencilMD->send_dep_to_procs[curr_dt_idx][1][dep].size(), MPI_REQUEST_NULL);
+        }
     }
 
     std::vector<MPI_Request> recv_r[NUM_DEPS];
@@ -2867,83 +3015,82 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_only_next_dep(int starti
 
     // TODO: Fix
     for (int dep = 1; dep < NUM_DEPS; dep++) {
-        if (curr_dt) {
-            recv_r[dep].resize(stencilMD->recv_request_idx_to_zoid[dep].size(), MPI_REQUEST_NULL);
-            recv_r2[dep].resize(stencilMD->recv_request_idx_to_zoid[dep].size(), MPI_REQUEST_NULL);
-        } else {
-            recv_r[dep].resize(stencilMD->recv_request_idx_to_zoid_next_dt[dep].size(), MPI_REQUEST_NULL);
-            recv_r2[dep].resize(stencilMD->recv_request_idx_to_zoid_next_dt[dep].size(), MPI_REQUEST_NULL);
-        }
+        recv_r[dep].resize(stencilMD->recv_request_idx_to_zoid_with_proc_to_proc[curr_dt_idx][0][dep].size(), MPI_REQUEST_NULL);
+        recv_r2[dep].resize(stencilMD->recv_request_idx_to_zoid_with_proc_to_proc[curr_dt_idx][1][dep].size(), MPI_REQUEST_NULL);
     }
+
+    run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc<curr_dt>(starting_timestep, 0, 0,
+                                                                                 start_t[0], end_t[0],
+                                                                                 test_f, test_x, test_v,
+                                                                                 recv_neighbors_counters,
+                                                                                 send_r[0], send_r_proc_to_proc[0][0], recv_r,
+                                                                                 claimed);
+
+    cilk_scope {
+        cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc<curr_dt>(starting_timestep, 0, 1,
+                                                                                                start_t[1], end_t[1],
+                                                                                                test_f, test_x, test_v,
+                                                                                                recv_neighbors_counters2,
+                                                                                                send_r[1], send_r_proc_to_proc[1][0], recv_r2,
+                                                                                                claimed2);
+
+        run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc<curr_dt>(starting_timestep, 1, 0,
+                                                                                     start_t[0], end_t[0],
+                                                                                     test_f, test_x, test_v,
+                                                                                     recv_neighbors_counters,
+                                                                                     send_r[0], send_r_proc_to_proc[0][1], recv_r,
+                                                                                     claimed);
+    }
+
+    cilk_scope {
+        cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc<curr_dt>(starting_timestep, 1, 1,
+        start_t[1], end_t[1],
+        test_f, test_x, test_v,
+        recv_neighbors_counters2,
+        send_r[1], send_r_proc_to_proc[1][1], recv_r2,
+        claimed2);
+
+        run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc<curr_dt>(starting_timestep, 2, 0,
+        start_t[0], end_t[0],
+        test_f, test_x, test_v,
+        recv_neighbors_counters,
+        send_r[0], send_r_proc_to_proc[0][2], recv_r,
+        claimed);
+    }
+
+    cilk_scope {
+        cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc<curr_dt>(starting_timestep, 2, 1,
+        start_t[1], end_t[1],
+        test_f, test_x, test_v,
+        recv_neighbors_counters2,
+        send_r[1], send_r_proc_to_proc[1][2], recv_r2,
+        claimed2);
+
+        run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc<curr_dt>(starting_timestep, 3, 0,
+        start_t[0], end_t[0],
+        test_f, test_x, test_v,
+        recv_neighbors_counters,
+        send_r[0], send_r_proc_to_proc[0][3], recv_r,
+        claimed);
+    }
+
+    run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc<curr_dt>(starting_timestep, 3, 1,
+                                                                                 start_t[1], end_t[1],
+                                                                                 test_f, test_x, test_v,
+                                                                                 recv_neighbors_counters2,
+                                                                                 send_r[1], send_r_proc_to_proc[1][3], recv_r2,
+                                                                                 claimed2);
 
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
         for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
-            assert(zoid_num % comm->nprocs == comm->me);
-            if (curr_dt) {
-                send_r[zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc[zoid_num], MPI_REQUEST_NULL);
-                send_r2[zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc[zoid_num], MPI_REQUEST_NULL);
-            } else {
-                send_r[zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc_next_dt[zoid_num], MPI_REQUEST_NULL);
-                send_r2[zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc_next_dt[zoid_num], MPI_REQUEST_NULL);
-            }
-        }
-    }
-
-    run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep<curr_dt>(starting_timestep, 0, 0, start_t[0], end_t[0],
-                                                                             test_f, test_x, test_v, send_r, recv_r, send_r_proc_to_proc[0], claimed);
-
-    cilk_scope {
-        cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep<curr_dt>(starting_timestep, 0, 1,
-        start_t[1], end_t[1],
-        test_f, test_x, test_v,
-        send_r2, recv_r2, send_r_proc_to_proc2[0], claimed2);
-
-        run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep<curr_dt>(starting_timestep, 1, 0,
-        start_t[0], end_t[0],
-        test_f, test_x, test_v,
-        send_r, recv_r, send_r_proc_to_proc[1], claimed);
-    }
-
-    cilk_scope {
-        cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep<curr_dt>(starting_timestep, 1, 1,
-        start_t[1], end_t[1],
-        test_f, test_x, test_v,
-        send_r2, recv_r2, send_r_proc_to_proc2[1], claimed2);
-
-        run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep<curr_dt>(starting_timestep, 2, 0,
-        start_t[0], end_t[0],
-        test_f, test_x, test_v,
-        send_r, recv_r, send_r_proc_to_proc[2], claimed);
-    }
-
-    cilk_scope {
-        cilk_spawn run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep<curr_dt>(starting_timestep, 2, 1,
-        start_t[1], end_t[1],
-        test_f, test_x, test_v,
-        send_r2, recv_r2, send_r_proc_to_proc2[2], claimed2);
-
-        run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep<curr_dt>(starting_timestep, 3, 0,
-        start_t[0], end_t[0],
-        test_f, test_x, test_v,
-        send_r, recv_r, send_r_proc_to_proc[3], claimed);
-    }
-
-    run_stencil_md_many_cuts_waitany_pipelined_helper_only_next_dep<curr_dt>(starting_timestep, 3, 1,
-                                                               start_t[1], end_t[1],
-                                                               test_f, test_x, test_v,
-                                                               send_r2, recv_r2, send_r_proc_to_proc2[3], claimed2);
-
-    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-        for (int j = 0; j < my_queues[dep].size(); j++) {
-            int zoid_num = my_queues[dep][j].num;
-            MPI_Waitall(send_r[zoid_num].size(), send_r[zoid_num].data(), MPI_STATUSES_IGNORE);
-            MPI_Waitall(send_r2[zoid_num].size(), send_r2[zoid_num].data(), MPI_STATUSES_IGNORE);
+            MPI_Waitall(send_r[0][zoid_num].size(), send_r[0][zoid_num].data(), MPI_STATUSES_IGNORE);
+            MPI_Waitall(send_r[1][zoid_num].size(), send_r[1][zoid_num].data(), MPI_STATUSES_IGNORE);
         }
 
         if (dep < 2) {
-            MPI_Waitall(send_r_proc_to_proc[dep].size(), send_r_proc_to_proc[dep].data(), MPI_STATUSES_IGNORE);
-            MPI_Waitall(send_r_proc_to_proc2[dep].size(), send_r_proc_to_proc2[dep].data(), MPI_STATUSES_IGNORE);
+            MPI_Waitall(send_r_proc_to_proc[0][dep].size(), send_r_proc_to_proc[0][dep].data(), MPI_STATUSES_IGNORE);
+            MPI_Waitall(send_r_proc_to_proc[1][dep].size(), send_r_proc_to_proc[1][dep].data(), MPI_STATUSES_IGNORE);
         }
     }
 }
@@ -3289,9 +3436,23 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
 
 void Verlet::run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                                 std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2) {
+
+
+    std::vector<std::vector<MPI_Request>> send_r[NUM_PIPELINE_STAGES];
+    std::vector<std::vector<MPI_Request>> send_r_proc_to_proc[NUM_PIPELINE_STAGES];
+
+    send_r[0].resize(stencilMD->NUM_ZOIDS_MANY_CUTS); send_r[1].resize(stencilMD->NUM_ZOIDS_MANY_CUTS);
+    send_r_proc_to_proc[0].resize(NUM_DEPS); send_r_proc_to_proc[1].resize(NUM_DEPS);
+
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
-        run_stencil_md_many_cuts_waitany_pipelined<true>(t, test_f, test_x, test_v, claimed, claimed2);
-        run_stencil_md_many_cuts_waitany_pipelined<false>(t, test_f, test_x, test_v, claimed, claimed2);
+        // run_stencil_md_many_cuts_waitany_pipelined<true>(t, test_f, test_x, test_v, claimed, claimed2);
+        // run_stencil_md_many_cuts_waitany_pipelined<false>(t, test_f, test_x, test_v, claimed, claimed2);
+        run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc<true>(t, test_f, test_x, test_v,
+                                                                           send_r, send_r_proc_to_proc,
+                                                                           claimed, claimed2);
+        run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc<false>(t, test_f, test_x, test_v,
+                                                                            send_r, send_r_proc_to_proc,
+                                                                            claimed, claimed2);
     }
 }
 
