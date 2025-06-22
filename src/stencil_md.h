@@ -7065,11 +7065,11 @@ public:
 
         const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][pipeline_stage][send_dep];
 
-        for (int i = 0; i < procs_to_send_to.size(); i++) {
+        cilk_for (int i = 0; i < procs_to_send_to.size(); i++) {
             PACK_DATA_PROC_TO_PROC_HELPER<curr_dt>(zoid, pipeline_stage, send_dep, procs_to_send_to[i]);
         }
 
-        for (int i = 0; i < send_neighbors.size(); i++) {
+        cilk_for (int i = 0; i < send_neighbors.size(); i++) {
             int send_zoid_num = send_neighbors[i];
             int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
                 : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
