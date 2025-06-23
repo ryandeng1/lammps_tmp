@@ -2743,7 +2743,7 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc
 
         int nrecv_zoid_to_zoid = stencilMD->nrecv_zoid_to_zoid[curr_dt_idx][pipeline_stage][dep];
 
-        constexpr bool USE_WAIT_ANY = false;
+        constexpr bool USE_WAIT_ANY = true;
 
         if (USE_WAIT_ANY) {
             while (num_wait < recv_request_map.size()) {
