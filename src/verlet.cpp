@@ -2640,7 +2640,7 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper(int starting_time
         auto& recv_request_map = curr_dt ? stencilMD->recv_request_idx_to_zoid[dep]
                 : stencilMD->recv_request_idx_to_zoid_next_dt[dep];
 
-        constexpr bool USE_WAIT_ANY = false;
+        constexpr bool USE_WAIT_ANY = true;
 
         if (USE_WAIT_ANY) {
             while (num_wait < recv_request_map.size()) {
