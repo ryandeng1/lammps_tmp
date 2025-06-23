@@ -2750,10 +2750,6 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc
                 int idx;
                 MPI_Waitany(recv_r[dep].size(), recv_r[dep].data(), &idx, MPI_STATUSES_IGNORE);
 
-                if (idx == MPI_UNDEFINED) {
-                    assert(false);
-                }
-
                 assert(recv_request_map.count(idx));
                 auto [recv_zoid_num, zoid_num] = recv_request_map.at(idx);
 
@@ -3532,36 +3528,44 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
 void Verlet::run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                                 std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2) {
 
+    constexpr bool WITH_PROC_TO_PROC = false;
 
-    std::vector<std::vector<MPI_Request>> send_r[NUM_PIPELINE_STAGES] = {
-        std::vector<std::vector<MPI_Request>>(stencilMD->NUM_ZOIDS_MANY_CUTS),
-        std::vector<std::vector<MPI_Request>>(stencilMD->NUM_ZOIDS_MANY_CUTS)
-    };
+    if (WITH_PROC_TO_PROC) {
+        std::vector<std::vector<MPI_Request>> send_r[NUM_PIPELINE_STAGES] = {
+            std::vector<std::vector<MPI_Request>>(stencilMD->NUM_ZOIDS_MANY_CUTS),
+            std::vector<std::vector<MPI_Request>>(stencilMD->NUM_ZOIDS_MANY_CUTS)
+        };
 
-    std::vector<std::vector<MPI_Request>> send_r_proc_to_proc[NUM_PIPELINE_STAGES] = {
-        std::vector<std::vector<MPI_Request>>(NUM_DEPS),
-        std::vector<std::vector<MPI_Request>>(NUM_DEPS)
-    };
+        std::vector<std::vector<MPI_Request>> send_r_proc_to_proc[NUM_PIPELINE_STAGES] = {
+            std::vector<std::vector<MPI_Request>>(NUM_DEPS),
+            std::vector<std::vector<MPI_Request>>(NUM_DEPS)
+        };
 
-    // send_r[0].resize(stencilMD->NUM_ZOIDS_MANY_CUTS); send_r[1].resize(stencilMD->NUM_ZOIDS_MANY_CUTS);
-    // send_r_proc_to_proc[0].resize(NUM_DEPS); send_r_proc_to_proc[1].resize(NUM_DEPS);
+        // send_r[0].resize(stencilMD->NUM_ZOIDS_MANY_CUTS); send_r[1].resize(stencilMD->NUM_ZOIDS_MANY_CUTS);
+        // send_r_proc_to_proc[0].resize(NUM_DEPS); send_r_proc_to_proc[1].resize(NUM_DEPS);
 
-    std::vector<std::atomic<int>> recv_neighbor_counters[NUM_PIPELINE_STAGES] = {
-        std::vector<std::atomic<int>>(stencilMD->NUM_ZOIDS_MANY_CUTS),
-        std::vector<std::atomic<int>>(stencilMD->NUM_ZOIDS_MANY_CUTS)
-    };
+        std::vector<std::atomic<int>> recv_neighbor_counters[NUM_PIPELINE_STAGES] = {
+            std::vector<std::atomic<int>>(stencilMD->NUM_ZOIDS_MANY_CUTS),
+            std::vector<std::atomic<int>>(stencilMD->NUM_ZOIDS_MANY_CUTS)
+        };
 
-    for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
-        // run_stencil_md_many_cuts_waitany_pipelined<true>(t, test_f, test_x, test_v, claimed, claimed2);
-        // run_stencil_md_many_cuts_waitany_pipelined<false>(t, test_f, test_x, test_v, claimed, claimed2);
-        run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc<true>(t, test_f, test_x, test_v,
-                                                                           send_r, send_r_proc_to_proc,
-                                                                           recv_neighbor_counters,
-                                                                           claimed, claimed2);
-        run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc<false>(t, test_f, test_x, test_v,
+        for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
+            // run_stencil_md_many_cuts_waitany_pipelined<true>(t, test_f, test_x, test_v, claimed, claimed2);
+            // run_stencil_md_many_cuts_waitany_pipelined<false>(t, test_f, test_x, test_v, claimed, claimed2);
+            run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc<true>(t, test_f, test_x, test_v,
                                                                             send_r, send_r_proc_to_proc,
                                                                             recv_neighbor_counters,
                                                                             claimed, claimed2);
+            run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc<false>(t, test_f, test_x, test_v,
+                                                                                send_r, send_r_proc_to_proc,
+                                                                                recv_neighbor_counters,
+                                                                                claimed, claimed2);
+        }
+    } else {
+        for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
+            run_stencil_md_many_cuts_waitany_pipelined<true>(t, test_f, test_x, test_v, claimed, claimed2);
+            run_stencil_md_many_cuts_waitany_pipelined<false>(t, test_f, test_x, test_v, claimed, claimed2);
+        }
     }
 }
 
