@@ -1862,7 +1862,7 @@ void Verlet::run(int n) {
         duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
     }
 
-    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+    double throughput = n * 1.0 / (duration * 1.0 / 1e6);
 
     int64_t total_duration_stencil_md = 0;
     MPI_Allreduce(&duration, &total_duration_stencil_md, 1, MPI_INT64_T, MPI_SUM, world);
@@ -1870,7 +1870,10 @@ void Verlet::run(int n) {
     MPI_Barrier(world);
 
     std::stringstream output_stream;
-    output_stream << "me: " << comm->me << " stencil md total just running the thing: " << duration << " microseconds. " << " unpack duration? " << unpack_duration << " total duration: " << total_duration_stencil_md << std::endl;
+    output_stream << "me: " << comm->me 
+    << " stencil md total just running the thing: " << duration 
+    << " throughput (timesteps/s) : " << throughput
+    << " microseconds. " << " total duration: " << total_duration_stencil_md << std::endl;
     std::cout << output_stream.str();
 
     if (comm->me == 0) {
@@ -2743,7 +2746,7 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc
 
         int nrecv_zoid_to_zoid = stencilMD->nrecv_zoid_to_zoid[curr_dt_idx][pipeline_stage][dep];
 
-        constexpr bool USE_WAIT_ANY = true;
+        constexpr bool USE_WAIT_ANY = false;
 
         if (USE_WAIT_ANY) {
             while (num_wait < recv_request_map.size()) {
@@ -2816,12 +2819,12 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc
         }
     }
 
-    cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC_PIPELINED<curr_dt>(pipeline_stage, dep, send_r_proc_to_proc);
-
     for (int j = 0; j < my_queues[dep].size(); j++) {
         int zoid_num = my_queues[dep][j].num;
         claimed[zoid_num].clear();
     }
+
+    cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC_PIPELINED<curr_dt>(pipeline_stage, dep, send_r_proc_to_proc);
 }
 
 template <bool curr_dt>
@@ -3528,7 +3531,7 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
 void Verlet::run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                                 std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2) {
 
-    constexpr bool WITH_PROC_TO_PROC = false;
+    constexpr bool WITH_PROC_TO_PROC = true;
 
     if (WITH_PROC_TO_PROC) {
         std::vector<std::vector<MPI_Request>> send_r[NUM_PIPELINE_STAGES] = {
