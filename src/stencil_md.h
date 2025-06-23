@@ -2700,25 +2700,40 @@ public:
                         auto& zoids_recv_from_proc = recv_zoids_from_proc[curr_dt_idx][p][send_dep][proc];
 
                         if (zoids_recv_from_proc.size() > 0 && deps_seen[proc].find({send_dep, dep}) == deps_seen[proc].end()) {
-                            recv_request_idx_to_zoid_with_proc_to_proc[curr_dt_idx][p][dep][recv_request_idx] = {proc, send_dep};
-                            recv_request_idx++;
+                            bool does_dep_recv_zoids = false;
+                            std::vector<int> zoids_my_dep_recv;
 
-                            dep_to_recv_proc_to_proc[curr_dt_idx][p][dep].emplace_back(send_dep, proc);
-                            int nrecv_from_proc = 0;
-                            // auto& lst_zoids_from_proc = recv_zoids_from_proc[curr_dt_idx][p][send_dep][proc];
                             for (auto& lst_info : zoids_recv_from_proc) {
                                 int recv_zoid_num = lst_info[0];
-                                int send_zoid_num = lst_info[1];
-                                int find_idx = lst_info[2];
-                                nrecv_from_proc += recv_proc_zoid_sizes[curr_dt_idx][p][recv_zoid_num][find_idx];
+                                int recv_zoid_dep = curr_dt ? zoid_num_to_dep[recv_zoid_num] : zoid_num_to_dep_next_dt[recv_zoid_num];
+                                if (recv_zoid_dep == dep) {
+                                    does_dep_recv_zoids = true;
+                                    zoids_my_dep_recv.push_back(recv_zoid_num);
+                                }
                             }
-                            dep_to_recv_proc_to_proc_sizes[curr_dt_idx][p][dep].push_back(nrecv_from_proc);
+
+                            if (does_dep_recv_zoids) {
+                                recv_request_idx_to_zoid_with_proc_to_proc[curr_dt_idx][p][dep][recv_request_idx] = {proc, send_dep};
+                                recv_request_idx++;
+
+                                dep_to_recv_proc_to_proc[curr_dt_idx][p][dep].emplace_back(send_dep, proc);
+                                int nrecv_from_proc = 0;
+                                // auto& lst_zoids_from_proc = recv_zoids_from_proc[curr_dt_idx][p][send_dep][proc];
+                                for (auto& lst_info : zoids_recv_from_proc) {
+                                    int recv_zoid_num = lst_info[0];
+                                    int send_zoid_num = lst_info[1];
+                                    int find_idx = lst_info[2];
+                                    nrecv_from_proc += recv_proc_zoid_sizes[curr_dt_idx][p][recv_zoid_num][find_idx];
+                                }
+                                dep_to_recv_proc_to_proc_sizes[curr_dt_idx][p][dep].push_back(nrecv_from_proc);
+
+                                for (auto& info : zoids_recv_from_proc) {
+                                    int zoid_dep = curr_dt ? zoid_num_to_dep[info[0]] : zoid_num_to_dep_next_dt[info[0]];
+                                    deps_seen[proc].insert({send_dep, zoid_dep});
+                                }
+                            }
                         }
 
-                        for (auto& info : zoids_recv_from_proc) {
-                            int zoid_dep = curr_dt ? zoid_num_to_dep[info[0]] : zoid_num_to_dep_next_dt[info[0]];
-                            deps_seen[proc].insert({send_dep, zoid_dep});
-                        }
                     }
                 }
 
@@ -7159,6 +7174,10 @@ public:
 
                 assert(send_request_idx != -1);
 
+                // std::stringstream s1;
+                // s1 << "curr_dt: " << curr_dt << " SEND. proc: " << comm->me << " to: " << proc << " pipeline stage: " << pipeline_stage << " count: " << total_nsend << " tag: " << mpi_tag << " send dep: " << send_dep << std::endl;
+                // std::cout << s1.str();
+
                 MPI_Isend(buf, total_nsend, MPI_DOUBLE,
                           proc, mpi_tag,
                           proc_to_proc_pipelined_comms[pipeline_stage][send_dep], &r[send_request_idx]);
@@ -7389,6 +7408,11 @@ public:
             int recv_request_idx = request_arr_idx;
 
             total_recv_procs++;
+
+            // std::stringstream s1;
+            // s1 << "curr_dt: " << curr_dt << " RECEIVE. proc: " << proc << " to: " << comm->me << " pipeline stage: " << pipeline_stage 
+            // << " count: " << nrecv_from_proc << " tag: " << mpi_tag << " recv dep: " << dep << std::endl;
+            // std::cout << s1.str();
 
             MPI_Irecv(buf_recv_proc_to_proc[pipeline_stage][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
                         proc, mpi_tag,

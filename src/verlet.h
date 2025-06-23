@@ -181,6 +181,7 @@ class Verlet : public Integrate {
   void run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc(int starting_timestep, double** test_f, double** test_x, double** test_v,
                                                                     std::vector<std::vector<MPI_Request>>* send_r,
                                                                     std::vector<std::vector<MPI_Request>>* send_r_proc_to_proc,
+                                                                    std::vector<std::atomic<int>>* recv_neighbor_counters,
                                                                     std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
 
   template <bool curr_dt>
