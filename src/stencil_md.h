@@ -1013,8 +1013,8 @@ public:
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
     static constexpr int NUM_CUTS_X = 4;
-    static constexpr int NUM_CUTS_Y = 4;
-    static constexpr int NUM_CUTS_Z = 4;
+    static constexpr int NUM_CUTS_Y = 6;
+    static constexpr int NUM_CUTS_Z = 6;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
     static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
@@ -7193,7 +7193,7 @@ public:
 
     static constexpr int NUM_STREAMS = 24;
     // 64 VCIs so 1 per comm
-    static constexpr int NUM_COMMS = 8;
+    static constexpr int NUM_COMMS = 32;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
     MPI_Comm stream_comm;
