@@ -1091,8 +1091,8 @@ public:
     double*** buf_recv_zoid_to_zoid[NUM_PIPELINE_STAGES];
     int** nrecv_buf_recv_zoid_to_zoid[NUM_PIPELINE_STAGES];
 
-    std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_VCI_IDX;
-    std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT;
+    std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_VCI_IDX[2];
+    // std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT;
 
     std::vector<int> zoid_to_stream_num;
     std::vector<int> zoid_to_stream_num_next_dt;
@@ -3426,14 +3426,6 @@ public:
             auto& zoid = zoid_num_to_zoid_many_cuts_next_dt[i];
             for (int j = 0; j < NUM_ZOIDS_MANY_CUTS; j++) {
                 auto& other_zoid = zoid_num_to_zoid_many_cuts_next_dt[j];
-                /*
-                if (zoid_to_dep_next_dt[zoid.num] + 1 == zoid_to_dep_next_dt[other_zoid.num]) {
-                    if (zoid_many_cuts_is_neighbor(zoid.where, other_zoid.where)) {
-                        send_to_neighbors_many_cuts_next_dt[i].push_back(j);
-                        recv_from_neighbors_many_cuts_next_dt[j].push_back(i);
-                    }
-                }
-                */
                 if (zoid_to_dep_next_dt[zoid.num] < zoid_to_dep_next_dt[other_zoid.num]) {
                     if (zoid_many_cuts_is_neighbor_all_deps_next_dt(zoid.where, other_zoid.where)) {
                         send_to_neighbors_many_cuts_next_dt[i].push_back(j);
@@ -3460,112 +3452,6 @@ public:
                       recv_from_neighbors_many_cuts_next_dt[i].end(), std::greater<int>());
         }
 
-        /*
-        recv_from_neighbors_not_my_proc_idxs.resize(NUM_ZOIDS_MANY_CUTS);
-        for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
-            if (i % comm->nprocs != comm->me) {
-                continue;
-            }
-
-            auto& recv_neighbors = recv_from_neighbors_many_cuts[i];
-            for (int j = 0; j < recv_neighbors.size(); j++) {
-                if (recv_neighbors[j] % comm->nprocs != comm->me) {
-                    recv_from_neighbors_not_my_proc_idxs[i].push_back(j);
-                }
-            }
-        }
-
-        recv_from_neighbors_not_my_proc_idxs_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
-        for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
-            if (i % comm->nprocs != comm->me) {
-                continue;
-            }
-
-            auto& recv_neighbors = recv_from_neighbors_many_cuts_next_dt[i];
-            for (int j = 0; j < recv_neighbors.size(); j++) {
-                if (recv_neighbors[j] % comm->nprocs != comm->me) {
-                    recv_from_neighbors_not_my_proc_idxs_next_dt[i].push_back(j);
-                }
-            }
-        }
-
-        send_to_neighbors_not_my_proc_idxs.resize(NUM_ZOIDS_MANY_CUTS);
-        send_to_neighbors_num_not_in_proc.resize(NUM_ZOIDS_MANY_CUTS);
-
-        for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
-            if (i % comm->nprocs != comm->me) {
-                continue;
-            }
-
-            int idx = 0;
-            auto& send_neighbors = send_to_neighbors_many_cuts[i];
-            for (int j = 0; j < send_neighbors.size(); j++) {
-                if (send_neighbors[j] % comm->nprocs != comm->me) {
-                    send_to_neighbors_not_my_proc_idxs[i].push_back(idx++);
-                } else {
-                    send_to_neighbors_not_my_proc_idxs[i].push_back(-1);
-                }
-            }
-
-            send_to_neighbors_num_not_in_proc[i] = idx;
-        }
-
-        send_to_neighbors_not_my_proc_idxs_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
-        send_to_neighbors_num_not_in_proc_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
-
-        for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
-            if (i % comm->nprocs != comm->me) {
-                continue;
-            }
-
-            int idx = 0;
-            auto& send_neighbors = send_to_neighbors_many_cuts_next_dt[i];
-            for (int j = 0; j < send_neighbors.size(); j++) {
-                if (send_neighbors[j] % comm->nprocs != comm->me) {
-                    send_to_neighbors_not_my_proc_idxs_next_dt[i].push_back(idx++);
-                } else {
-                    send_to_neighbors_not_my_proc_idxs_next_dt[i].push_back(-1);
-                }
-            }
-
-            send_to_neighbors_num_not_in_proc_next_dt[i] = idx;
-        }
-        */
-
-        /*
-        for (int dep = 1; dep < NUM_DEPS; dep++) {
-            int comm_idx = 0;
-            for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
-                auto& zoid = my_queues_many_cuts[dep][j];
-                int zoid_num = zoid.num;
-                auto& recv_neighbors = recv_from_neighbors_many_cuts[zoid_num];
-                for (int i = 0; i < recv_neighbors.size(); i++) {
-                    int recv_zoid_num = recv_neighbors[i];
-                    if (recv_zoid_num % comm->nprocs != comm->me) {
-                        ZOID_TO_ZOID_TO_VCI_IDX[{recv_zoid_num, zoid_num}] = (comm_idx) % NUM_COMMS;
-                        comm_idx++;
-                    }
-                }
-            }
-        }
-
-        for (int dep = 1; dep < NUM_DEPS; dep++) {
-            int comm_idx = 0;
-            for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
-                auto& zoid = my_queues_many_cuts_next_dt[dep][j];
-                int zoid_num = zoid.num;
-                auto& recv_neighbors = recv_from_neighbors_many_cuts_next_dt[zoid_num];
-                for (int i = 0; i < recv_neighbors.size(); i++) {
-                    int recv_zoid_num = recv_neighbors[i];
-                    if (recv_zoid_num % comm->nprocs != comm->me) {
-                        ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{recv_zoid_num, zoid_num}] = (comm_idx) % NUM_COMMS;
-                        comm_idx++;
-                    }
-                }
-            }
-        }
-        */
-
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
             int comm_idx = 0;
             for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
@@ -3575,7 +3461,7 @@ public:
                 for (int i = 0; i < send_neighbors.size(); i++) {
                     int send_zoid_num = send_neighbors[i];
                     if (send_zoid_num % comm->nprocs != comm->me) {
-                        ZOID_TO_ZOID_TO_VCI_IDX[{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
+                        ZOID_TO_ZOID_TO_VCI_IDX[1][{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
                         // comm_idx++;
                     }
                 }
@@ -3592,7 +3478,8 @@ public:
                 for (int i = 0; i < send_neighbors.size(); i++) {
                     int send_zoid_num = send_neighbors[i];
                     if (send_zoid_num % comm->nprocs != comm->me) {
-                        ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
+                        ZOID_TO_ZOID_TO_VCI_IDX[0][{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
+                        // ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
                         // comm_idx++;
                     }
                 }
@@ -3638,7 +3525,7 @@ public:
         std::vector<int> my_zoids_dst;
         std::vector<int> my_zoids_comm_idx;
 
-        for (auto& [k, v] : ZOID_TO_ZOID_TO_VCI_IDX) {
+        for (auto& [k, v] : ZOID_TO_ZOID_TO_VCI_IDX[1]) {
             my_zoids_src.push_back(k.first);
             my_zoids_dst.push_back(k.second);
             my_zoids_comm_idx.push_back(v);
@@ -3680,14 +3567,15 @@ public:
             int src = all_src[i];
             int dst = all_dst[i];
             int comm_idx = all_comm_idx[i];
-            ZOID_TO_ZOID_TO_VCI_IDX[{src, dst}] = comm_idx;
+            ZOID_TO_ZOID_TO_VCI_IDX[1][{src, dst}] = comm_idx;
         }
 
         std::vector<int> my_zoids_src_next_dt;
         std::vector<int> my_zoids_dst_next_dt;
         std::vector<int> my_zoids_comm_idx_next_dt;
 
-        for (auto& [k, v] : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT) {
+        // for (auto& [k, v] : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT) {
+        for (auto& [k, v] : ZOID_TO_ZOID_TO_VCI_IDX[0]) {
             my_zoids_src_next_dt.push_back(k.first);
             my_zoids_dst_next_dt.push_back(k.second);
             my_zoids_comm_idx_next_dt.push_back(v);
@@ -3730,7 +3618,8 @@ public:
             int src = all_src_next_dt[i];
             int dst = all_dst_next_dt[i];
             int comm_idx = all_comm_idx_next_dt[i];
-            ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{src, dst}] = comm_idx;
+            ZOID_TO_ZOID_TO_VCI_IDX[0][{src, dst}] = comm_idx;
+            // ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{src, dst}] = comm_idx;
         }
 
         // determine if comm or no comm needed
@@ -7885,7 +7774,7 @@ public:
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 r.emplace_back();
 
-                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num});
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[1].at({zoid_num, send_zoid_num});
 
                 if (false && USE_STREAMS) {
                     int send_stream_idx = zoid_to_stream_num.at(zoid_num);
@@ -7906,6 +7795,7 @@ public:
 
     template <bool curr_dt>
     void PACK_AND_SEND_DATA_ZOID_TO_ZOID(queue_info& zoid, int dep, int start_t, int end_t, std::vector<MPI_Request>& r) {
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
 
@@ -7957,8 +7847,9 @@ public:
                                       &r[send_request_idx]);
                     MPIX_Stream_progress(all_streams[send_stream_idx]);
                 } else {
-                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
-                                           : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
                     MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                               send_zoid_num % comm->nprocs, mpi_tag,
                               all_comms[comm_idx], &r[send_request_idx]);
@@ -7970,6 +7861,7 @@ public:
     // pack all zoids, but only send to next dep
     template <bool curr_dt>
     void PACK_AND_SEND_DATA_ZOID_TO_ZOID_REVISED(queue_info& zoid, int dep, int start_t, int end_t, std::vector<MPI_Request>& r) {
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         if (dep == NUM_DEPS - 1) {
             return;
         }
@@ -8035,8 +7927,9 @@ public:
                                       &r[send_request_idx]);
                     // MPIX_Stream_progress(all_streams[send_stream_idx]);
                 } else {
-                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
-                                           : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
                               send_zoid_num % comm->nprocs, mpi_tag,
                               all_comms[comm_idx], &r[send_request_idx]);
@@ -8098,6 +7991,8 @@ public:
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
 
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
         int zoid_num = zoid.num;
 
         auto& send_request_idxs = curr_dt ? send_to_neighbors_not_my_proc_idxs[zoid_num]
@@ -8150,8 +8045,9 @@ public:
                                       &r[send_request_idx]);
                     // MPIX_Stream_progress(all_streams[send_stream_idx]);
                 } else {
-                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
-                                           : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
                     MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                               send_zoid_num % comm->nprocs, mpi_tag,
                               all_comms[comm_idx], &r[send_request_idx]);
@@ -8163,6 +8059,7 @@ public:
     template <bool curr_dt>
     void SEND_DATA_ZOID_TO_ZOID_TO_DEP_REVISED_PIPELINED(queue_info& zoid, int send_dep,
                                                          int start_t, int end_t, int pipeline_stage, std::vector<MPI_Request>& r) {
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
 
@@ -8208,8 +8105,9 @@ public:
 
                 assert(send_request_idx != -1);
 
-                int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
-                                       : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
                           all_comms[comm_idx], &r[send_request_idx]);
@@ -8226,6 +8124,7 @@ public:
 
         auto& send_request_idxs = curr_dt ? send_to_neighbors_not_my_proc_idxs[zoid.num]
                                           : send_to_neighbors_not_my_proc_idxs_next_dt[zoid.num];
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         int zoid_num = zoid.num;
 
@@ -8276,8 +8175,9 @@ public:
 
                 assert(send_request_idx != -1);
 
-                int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
-                                       : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
                 MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
                           all_comms[comm_idx], &r[send_request_idx]);
@@ -8382,8 +8282,9 @@ public:
             if (send_zoid_dep == send_dep + 1 && zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 assert(send_request_idx != -1);
-                int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
-                    : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
                 MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
                           send_zoid_num % comm->nprocs, mpi_tag,
                           all_comms[comm_idx], &r[send_request_idx]);
@@ -8473,7 +8374,9 @@ public:
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[r.size() - 1]);
                 } else {
-                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num});
+                    assert(ZOID_TO_ZOID_TO_VCI_IDX[1].count({recv_zoid_num, zoid_num}));
+                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[1].at({recv_zoid_num, zoid_num});
+                    // int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num});
                     MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                               recv_zoid_num % comm->nprocs, mpi_tag,
                               all_comms[comm_idx], &r[r.size() - 1]);
@@ -8484,6 +8387,7 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_ZOID_TO_ZOID_WAITANY(int dep, int zoid_num, std::vector<MPI_Request>& r) {
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
@@ -8530,8 +8434,9 @@ public:
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[recv_request_idx]);
                 } else {
-                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num})
-                                           : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
+                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
+                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
                     MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                               recv_zoid_num % comm->nprocs, mpi_tag,
                               all_comms[comm_idx], &r[recv_request_idx]);
@@ -8546,6 +8451,8 @@ public:
 
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                                        : recv_from_neighbors_many_cuts_next_dt[zoid_num];
+
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -8582,8 +8489,9 @@ public:
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[recv_request_idx]);
                 } else {
-                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num})
-                                           : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
+                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
+                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
                     MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                               recv_zoid_num % comm->nprocs, mpi_tag,
                               all_comms[comm_idx], &r[recv_request_idx]);
@@ -8625,8 +8533,9 @@ public:
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
                 assert(recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].count({recv_zoid_num, zoid_num}));
                 int recv_request_idx = recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].at({recv_zoid_num, zoid_num});
-                int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num})
-                    : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
                           all_comms[comm_idx], &r[recv_request_idx]);
@@ -8677,6 +8586,8 @@ public:
     void RECEIVE_DATA_ZOID_TO_ZOID(int zoid_num, std::vector<MPI_Request>& r) {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                 : recv_from_neighbors_many_cuts_next_dt[zoid_num];
 
@@ -8710,8 +8621,9 @@ public:
                                       stream_comm, send_stream_idx, recv_stream_idx,
                                       &r[r.size() - 1]);
                 } else {
-                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num})
-                                           : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
+                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
+                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
 
                     MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                               recv_zoid_num % comm->nprocs, mpi_tag,
@@ -8762,8 +8674,9 @@ public:
                     int mpi_tag = get_mpi_tag_many_cuts(zoid.num, recv_zoid_num);
                     assert(recv_request_zoid_pair_to_idx[curr_dt_idx][dep].count({recv_zoid_num, zoid.num}));
                     int recv_request_idx = recv_request_zoid_pair_to_idx[curr_dt_idx][dep].at({recv_zoid_num, zoid.num});
-                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid.num}) 
-                        : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid.num});
+                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid.num}));
+                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid.num});
+                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid.num})  : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid.num});
                     MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
                           all_comms[comm_idx], &recv_r[recv_request_idx]);
@@ -8794,6 +8707,7 @@ public:
     template <bool curr_dt>
     void RECEIVE_DATA_ZOID_TO_ZOID_PIPELINED(int zoid_num, std::vector<MPI_Request>& r, int start_t, int end_t,
                                              int pipeline_stage) {
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
@@ -8824,8 +8738,9 @@ public:
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
                 */
-                int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num})
-                        : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
 
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                           recv_zoid_num % comm->nprocs, mpi_tag,
