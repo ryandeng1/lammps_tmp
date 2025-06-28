@@ -3462,10 +3462,10 @@ public:
                     int send_zoid_num = send_neighbors[i];
                     if (send_zoid_num % comm->nprocs != comm->me) {
                         ZOID_TO_ZOID_TO_VCI_IDX[1][{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
-                        // comm_idx++;
+                        comm_idx++;
                     }
                 }
-                comm_idx++;
+                // comm_idx++;
             }
         }
 
@@ -3480,10 +3480,10 @@ public:
                     if (send_zoid_num % comm->nprocs != comm->me) {
                         ZOID_TO_ZOID_TO_VCI_IDX[0][{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
                         // ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT[{zoid_num, send_zoid_num}] = (comm_idx) % NUM_COMMS;
-                        // comm_idx++;
+                        comm_idx++;
                     }
                 }
-                comm_idx++;
+                // comm_idx++;
             }
         }
 
@@ -3563,11 +3563,20 @@ public:
         MPI_Allgatherv(my_zoids_comm_idx.data(), counts[comm->me], MPI_INT, all_comm_idx.data(),
                        counts.data(), displacements.data(), MPI_INT, world);
 
+        std::vector<int> comm_counts(NUM_COMMS, 0);
+
         for (int i = 0; i < all_src.size(); i++) {
             int src = all_src[i];
             int dst = all_dst[i];
             int comm_idx = all_comm_idx[i];
             ZOID_TO_ZOID_TO_VCI_IDX[1][{src, dst}] = comm_idx;
+            comm_counts[comm_idx]++;
+        }
+
+        if (comm->me == 0) {
+            for (int i = 0; i < NUM_COMMS; i++) {
+                std::cout << "comm: " << i << " num comms: " << comm_counts[i] << std::endl;
+            }
         }
 
         std::vector<int> my_zoids_src_next_dt;
