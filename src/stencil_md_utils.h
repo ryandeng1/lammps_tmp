@@ -45,19 +45,19 @@ constexpr int BOND_FENE = 0;
 constexpr int LJ = 1;
 constexpr int DPD = 2;
 
-constexpr int EXPERIMENT = DPD;
+constexpr int EXPERIMENT = BOND_FENE;
 
 constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 8;
 // constexpr double ADDITIONAL_CUTOFF = 0.4001;
-// constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
-constexpr double ADDITIONAL_CUTOFF = 0.3 + 1e-10;
+constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
+// constexpr double ADDITIONAL_CUTOFF = 0.3 + 1e-10;
 
-// constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
-constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
+constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
+// constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
 
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
@@ -79,6 +79,10 @@ constexpr bool LAMMPS_USE_CILK = false;
 
 constexpr bool USE_BOND = true;
 
+constexpr bool USE_PIPELINE = false;
+constexpr int DEFAULT_PIPELINE_STAGE = 0;
+constexpr int default_start_t = 1;
+constexpr int default_end_t = NUM_TIMESTEPS_IN_PARALLEL + 1;
 constexpr int NUM_PIPELINE_STAGES = 2;
 constexpr int start_t[NUM_PIPELINE_STAGES] = {1, NUM_TIMESTEPS_IN_PARALLEL / 2 + 1};
 constexpr int end_t[NUM_PIPELINE_STAGES] = {NUM_TIMESTEPS_IN_PARALLEL / 2 + 1, NUM_TIMESTEPS_IN_PARALLEL + 1};

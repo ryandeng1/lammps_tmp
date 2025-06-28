@@ -145,13 +145,6 @@ class Verlet : public Integrate {
   void run_stencil_md_many_cuts_helper(int starting_timestep, double** test_f, double** test_x, double** test_v);
 
   template <bool curr_dt>
-  void run_stencil_md_many_cuts_waitany_loop(int dep, std::vector<MPI_Request>& recv_r);
-
-  template <bool curr_dt>
-  void run_stencil_md_many_cuts_waitany_spawn_wait_loop(int starting_timestep, double** test_f, double** test_x, double** test_v,
-                                                        std::vector<std::atomic_flag>& claimed);
-
-  template <bool curr_dt>
   void run_stencil_md_many_cuts_waitany(int starting_timestep, double** test_f, double** test_x, double** test_v,
                                         std::vector<std::atomic_flag>& claimed);
 
@@ -192,6 +185,16 @@ class Verlet : public Integrate {
 
   void run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                           std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
+
+  template <bool curr_dt>
+  void run_stencil_md_many_cuts_waitany_with_proc_to_proc(int starting_timestep,
+    double** test_f, double** test_x, double** test_v,
+    std::vector<std::atomic<int>>& recv_neighbor_counters,
+    std::vector<std::vector<MPI_Request>>& send_r,
+    std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+    std::vector<std::vector<MPI_Request>>& recv_r,
+    std::vector<std::vector<MPI_Request>>& recv_r_proc_to_proc,
+    std::vector<std::atomic_flag>& claimed);
 
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic
