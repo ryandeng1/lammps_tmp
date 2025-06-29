@@ -1758,6 +1758,7 @@ public:
         */
         
         // METHOD 5: Torus-aware block decomposition with dependency balance
+        /*
         {
             Assignment torus_assignment;
             torus_assignment.method_name = "Torus Block (Dep-Balanced)";
@@ -1838,6 +1839,7 @@ public:
             
             assignments.push_back(torus_assignment);
         }
+        */
         
         /*
         // METHOD 6: Checkerboard pattern (exploiting odd/even communication)
