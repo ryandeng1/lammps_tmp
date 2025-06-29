@@ -77,6 +77,7 @@ static spinlock m;
 static constexpr bool TIME_STENCILMD_STATES = false;
 static constexpr bool TIME_LAMMPS_STATES = false;
 constexpr int64_t MICROSECOND_FACTOR = 1000000;
+constexpr int NUM_RECV_NEIGHBORS[NUM_DEPS] = {0, 2, 8, 26};
 
 /* ---------------------------------------------------------------------- */
 
@@ -2858,30 +2859,9 @@ void Verlet::run_stencil_md_many_cuts_waitany_with_proc_to_proc(int starting_tim
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
-            int num_recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[zoid_num].size()
-                : stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid_num].size();
-            recv_neighbor_counters[zoid_num] = num_recv_neighbors;
+            recv_neighbor_counters[zoid_num] = NUM_RECV_NEIGHBORS[dep];
         }
     }
-
-    /*
-    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-        for (int j = 0; j < my_queues[dep].size(); j++) {
-            int zoid_num = my_queues[dep][j].num;
-            assert(zoid_num % comm->nprocs == comm->me);
-            send_r[zoid_num].resize(stencilMD->send_to_neighbors_num_not_in_proc_only_next_dep[curr_dt_idx][zoid_num], MPI_REQUEST_NULL);
-        }
-    }
-
-    for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-        send_r_proc_to_proc[dep].resize(stencilMD->send_dep_to_procs[curr_dt_idx][DEFAULT_PIPELINE_STAGE][dep].size(), MPI_REQUEST_NULL);
-    }
-
-    for (int dep = 1; dep < NUM_DEPS; dep++) {
-        recv_r[dep].resize(stencilMD->recv_request_idx_to_zoid_pair[curr_dt_idx][dep].size(), MPI_REQUEST_NULL);
-        recv_r_proc_to_proc[dep].resize(stencilMD->recv_request_idx_to_proc_pair[curr_dt_idx][dep].size(), MPI_REQUEST_NULL);
-    }
-    */
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < my_queues[dep].size(); j++) {
@@ -2896,12 +2876,6 @@ void Verlet::run_stencil_md_many_cuts_waitany_with_proc_to_proc(int starting_tim
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         cilk_scope {
-            /*
-            if (dep < NUM_DEPS - 1) {
-                cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID<curr_dt>(dep + 1, recv_r[dep + 1], recv_r_proc_to_proc[dep + 1]);
-            }
-            */
-            
             cilk_spawn [&]() {
                 int num_wait_zoid_to_zoid = 0;
                 auto& recv_request_map_zoid_to_zoid = stencilMD->recv_request_idx_to_zoid_pair[curr_dt_idx][dep];
