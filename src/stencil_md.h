@@ -2251,6 +2251,7 @@ public:
         */
         
         // METHOD 8: Nested Torus (multi-scale optimization)
+        /*
         {
             Assignment nested_torus_assignment;
             nested_torus_assignment.method_name = "Nested Torus";
@@ -2425,6 +2426,7 @@ public:
             
             assignments.push_back(nested_torus_assignment);
         }
+        */
 
         // METHOD 9: Dependency-aware assignment with min-cost flow
         /*
