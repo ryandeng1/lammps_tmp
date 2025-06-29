@@ -1650,6 +1650,9 @@ public:
         }
     }
 
+    // START CLAUDE CODE
+    // Optimized INIT_ZOIDS_NUMBERING with multi-start approach for balanced assignment
+
     // Optimized INIT_ZOIDS_NUMBERING with multi-start approach for balanced assignment
 
     void INIT_ZOIDS_NUMBERING_BALANCED() {
@@ -1726,8 +1729,8 @@ public:
             assignments.push_back(morton_assignment);
         }
         
-        /*
         // METHOD 2: Hilbert curve
+        /*
         {
             Assignment hilbert_assignment;
             hilbert_assignment.method_name = "Hilbert Curve";
@@ -1752,149 +1755,47 @@ public:
             
             assignments.push_back(hilbert_assignment);
         }
-        
-        // METHOD 3: Slice decomposition (contiguous slices in X, Y, or Z)
-        for (int dim = 0; dim < 3; dim++) {
-            Assignment slice_assignment;
-            slice_assignment.method_name = "Slice-" + std::string(1, 'X' + dim);
-            
-            std::vector<std::array<int, 3>> all_zoids;
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        all_zoids.push_back({x, y, z});
-                    }
-                }
-            }
-            
-            // Sort by the chosen dimension
-            std::sort(all_zoids.begin(), all_zoids.end(), [dim](const auto& a, const auto& b) {
-                if (a[dim] != b[dim]) return a[dim] < b[dim];
-                if (a[(dim+1)%3] != b[(dim+1)%3]) return a[(dim+1)%3] < b[(dim+1)%3];
-                return a[(dim+2)%3] < b[(dim+2)%3];
-            });
-            
-            for (int i = 0; i < all_zoids.size(); i++) {
-                int proc = i / zoids_per_proc;
-                slice_assignment.proc_to_zoids[proc].push_back(all_zoids[i]);
-                slice_assignment.zoid_to_proc[all_zoids[i]] = proc;
-            }
-            
-            assignments.push_back(slice_assignment);
-        }
-        
-        // METHOD 4: Random balanced assignment
-        {
-            Assignment random_assignment;
-            random_assignment.method_name = "Random";
-            
-            std::vector<std::array<int, 3>> all_zoids;
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        all_zoids.push_back({x, y, z});
-                    }
-                }
-            }
-            
-            // Random shuffle with fixed seed for reproducibility
-            std::mt19937 rng(42);
-            std::shuffle(all_zoids.begin(), all_zoids.end(), rng);
-            
-            for (int i = 0; i < all_zoids.size(); i++) {
-                int proc = i / zoids_per_proc;
-                random_assignment.proc_to_zoids[proc].push_back(all_zoids[i]);
-                random_assignment.zoid_to_proc[all_zoids[i]] = proc;
-            }
-            
-            assignments.push_back(random_assignment);
-        }
-        
-        // METHOD 5: Dependency-aware assignment with min-cost flow
-        {
-            Assignment depaware_assignment;
-            depaware_assignment.method_name = "Dependency-Aware MinCost";
-            
-            // Start with dependency level 0 zoids
-            std::vector<std::array<int, 3>> dep0_zoids;
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        if (x % 2 == 1 && y % 2 == 1 && z % 2 == 1) {
-                            dep0_zoids.push_back({x, y, z});
-                        }
-                    }
-                }
-            }
-            
-            // Use K-means++ for initial dep0 assignment
-            std::vector<std::array<double, 3>> centroids(comm->nprocs);
-            initializeKMeansPlusPlus(dep0_zoids, centroids);
-            
-            // Assign dep0 zoids to nearest centroid
-            std::vector<std::vector<int>> cluster_members(comm->nprocs);
-            for (int i = 0; i < dep0_zoids.size(); i++) {
-                int best_cluster = 0;
-                double min_dist = std::numeric_limits<double>::infinity();
-                
-                for (int c = 0; c < comm->nprocs; c++) {
-                    double dist = euclideanDistance(dep0_zoids[i], centroids[c]);
-                    if (dist < min_dist) {
-                        min_dist = dist;
-                        best_cluster = c;
-                    }
-                }
-                cluster_members[best_cluster].push_back(i);
-            }
-            
-            // Balance clusters
-            balanceKMeansClusters(cluster_members, dep0_zoids, centroids);
-            
-            // Assign balanced clusters
-            for (int c = 0; c < comm->nprocs; c++) {
-                for (int idx : cluster_members[c]) {
-                    depaware_assignment.proc_to_zoids[c].push_back(dep0_zoids[idx]);
-                    depaware_assignment.zoid_to_proc[dep0_zoids[idx]] = c;
-                }
-            }
-            
-            // Process other dependency levels with min-cost flow
-            for (int dep = 1; dep < 4; dep++) {
-                std::vector<std::array<int, 3>> unclaimed_zoids;
-                
-                for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                    for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                        for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                            std::array<int, 3> zoid = {x, y, z};
-                            int zoid_dep = (x % 2 == 0) + (y % 2 == 0) + (z % 2 == 0);
-                            
-                            if (zoid_dep == dep && depaware_assignment.zoid_to_proc.find(zoid) == depaware_assignment.zoid_to_proc.end()) {
-                                unclaimed_zoids.push_back(zoid);
-                            }
-                        }
-                    }
-                }
-                
-                assignWithMinCostFlow(unclaimed_zoids, depaware_assignment.proc_to_zoids, 
-                                    depaware_assignment.zoid_to_proc, tmp_send_neighbors, 
-                                    tmp_recv_neighbors, zoids_per_proc);
-            }
-            
-            assignments.push_back(depaware_assignment);
-        }
         */
-
-        // METHOD 5: Torus-aware block decomposition
+        
+        // METHOD 5: Torus-aware block decomposition with dependency balance
         {
             Assignment torus_assignment;
-            torus_assignment.method_name = "Torus Block";
+            torus_assignment.method_name = "Torus Block (Dep-Balanced)";
             
             // Find optimal block dimensions that respect periodicity
             int best_px, best_py, best_pz;
             findOptimalTorusDecomposition(NUM_ZOIDS_X, NUM_ZOIDS_Y, NUM_ZOIDS_Z, 
                                         comm->nprocs, best_px, best_py, best_pz);
             
-            // Assign blocks to processors
+            // First, calculate how many zoids of each dependency level exist
+            std::vector<int> dep_counts(4, 0);
+            for (int x = 0; x < NUM_ZOIDS_X; x++) {
+                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
+                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
+                        int dep = (x % 2 == 0) + (y % 2 == 0) + (z % 2 == 0);
+                        dep_counts[dep]++;
+                    }
+                }
+            }
+            
+            // Calculate target per processor for each dependency level
+            std::vector<int> dep_per_proc(4);
+            for (int dep = 0; dep < 4; dep++) {
+                dep_per_proc[dep] = dep_counts[dep] / comm->nprocs;
+            }
+            
+            if (comm->me == 0) {
+                std::cout << "Dependency distribution targets per processor:" << std::endl;
+                for (int dep = 0; dep < 4; dep++) {
+                    std::cout << "  Dep " << dep << ": " << dep_per_proc[dep] 
+                            << " zoids (total: " << dep_counts[dep] << ")" << std::endl;
+                }
+            }
+            
+            // Create initial block assignment
+            std::vector<std::vector<std::array<int, 3>>> block_zoids(comm->nprocs);
+            std::vector<std::vector<int>> proc_dep_counts(comm->nprocs, std::vector<int>(4, 0));
+            
             int proc = 0;
             for (int bx = 0; bx < best_px; bx++) {
                 for (int by = 0; by < best_py; by++) {
@@ -1907,17 +1808,31 @@ public:
                         int z_start = (bz * NUM_ZOIDS_Z) / best_pz;
                         int z_end = ((bz + 1) * NUM_ZOIDS_Z) / best_pz;
                         
-                        // Assign all zoids in this block to processor
+                        // Collect zoids in this block
                         for (int x = x_start; x < x_end; x++) {
                             for (int y = y_start; y < y_end; y++) {
                                 for (int z = z_start; z < z_end; z++) {
-                                    torus_assignment.proc_to_zoids[proc].push_back({x, y, z});
-                                    torus_assignment.zoid_to_proc[{x, y, z}] = proc;
+                                    block_zoids[proc].push_back({x, y, z});
+                                    int dep = (x % 2 == 0) + (y % 2 == 0) + (z % 2 == 0);
+                                    proc_dep_counts[proc][dep]++;
                                 }
                             }
                         }
                         proc++;
                     }
+                }
+            }
+            
+            // Now rebalance to ensure each processor has correct dependency distribution
+            // Use min-cost flow for this
+            rebalanceDependencyLevels(block_zoids, proc_dep_counts, dep_per_proc,
+                                    tmp_send_neighbors, tmp_recv_neighbors);
+            
+            // Assign to final structure
+            for (int p = 0; p < comm->nprocs; p++) {
+                for (const auto& zoid : block_zoids[p]) {
+                    torus_assignment.proc_to_zoids[p].push_back(zoid);
+                    torus_assignment.zoid_to_proc[zoid] = p;
                 }
             }
             
@@ -1975,8 +1890,8 @@ public:
         }
         */
         
-        // METHOD 7: Communication graph clustering
         /*
+        // METHOD 7: Communication graph clustering
         {
             Assignment graph_cluster_assignment;
             graph_cluster_assignment.method_name = "Graph Clustering";
@@ -2051,6 +1966,290 @@ public:
         }
         */
 
+        // METHOD 7: Communication graph clustering
+        /*
+        {
+            Assignment graph_cluster_assignment;
+            graph_cluster_assignment.method_name = "Graph Clustering";
+            
+            // Build adjacency list representation
+            std::vector<std::array<int, 3>> all_zoids;
+            std::map<std::array<int, 3>, int> zoid_to_idx;
+            
+            for (int x = 0; x < NUM_ZOIDS_X; x++) {
+                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
+                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
+                        all_zoids.push_back({x, y, z});
+                        zoid_to_idx[{x, y, z}] = all_zoids.size() - 1;
+                    }
+                }
+            }
+            
+            // Build graph with bidirectional edges (considering both send and receive)
+            std::vector<std::vector<int>> adj_list(all_zoids.size());
+            
+            for (const auto& [sender, receivers] : tmp_send_neighbors) {
+                // Check if sender exists in our zoid list
+                if (zoid_to_idx.find(sender) == zoid_to_idx.end()) continue;
+                int sender_idx = zoid_to_idx[sender];
+                
+                for (const auto& receiver : receivers) {
+                    // Check if receiver exists in our zoid list
+                    if (zoid_to_idx.find(receiver) == zoid_to_idx.end()) continue;
+                    int receiver_idx = zoid_to_idx[receiver];
+                    
+                    adj_list[sender_idx].push_back(receiver_idx);
+                    adj_list[receiver_idx].push_back(sender_idx); // Bidirectional
+                }
+            }
+            
+            // Use BFS-based clustering
+            std::vector<bool> assigned(all_zoids.size(), false);
+            std::vector<std::vector<int>> clusters;
+            
+            // Start from each unassigned zoid and grow a cluster
+            for (int start = 0; start < all_zoids.size(); start++) {
+                if (!assigned[start] && clusters.size() < comm->nprocs) {
+                    std::vector<int> cluster;
+                    std::queue<int> q;
+                    q.push(start);
+                    assigned[start] = true;
+                    
+                    // Grow cluster using BFS until reaching target size
+                    while (!q.empty() && cluster.size() < zoids_per_proc) {
+                        int curr = q.front();
+                        q.pop();
+                        cluster.push_back(curr);
+                        
+                        // Add unassigned neighbors
+                        for (int neighbor : adj_list[curr]) {
+                            if (!assigned[neighbor] && cluster.size() < zoids_per_proc) {
+                                assigned[neighbor] = true;
+                                q.push(neighbor);
+                            }
+                        }
+                    }
+                    
+                    // If cluster is too small, try to grow it more
+                    if (cluster.size() < zoids_per_proc) {
+                        // Find nearest unassigned zoids
+                        for (int i = 0; i < all_zoids.size() && cluster.size() < zoids_per_proc; i++) {
+                            if (!assigned[i]) {
+                                cluster.push_back(i);
+                                assigned[i] = true;
+                            }
+                        }
+                    }
+                    
+                    clusters.push_back(cluster);
+                }
+            }
+            
+            // Handle any remaining unassigned zoids
+            std::vector<int> unassigned_zoids;
+            for (int i = 0; i < all_zoids.size(); i++) {
+                if (!assigned[i]) {
+                    unassigned_zoids.push_back(i);
+                }
+            }
+            
+            // Distribute unassigned zoids to clusters that need more
+            int idx = 0;
+            for (int c = 0; c < clusters.size(); c++) {
+                while (clusters[c].size() < zoids_per_proc && idx < unassigned_zoids.size()) {
+                    clusters[c].push_back(unassigned_zoids[idx++]);
+                }
+            }
+            
+            // Ensure we have exactly nprocs clusters with correct sizes
+            while (clusters.size() < comm->nprocs) {
+                clusters.push_back(std::vector<int>());
+            }
+            
+            // Balance cluster sizes
+            for (int c = 0; c < comm->nprocs; c++) {
+                // Take from oversized clusters
+                while (clusters[c].size() > zoids_per_proc) {
+                    int zoid_idx = clusters[c].back();
+                    clusters[c].pop_back();
+                    
+                    // Find cluster that needs more
+                    for (int c2 = 0; c2 < comm->nprocs; c2++) {
+                        if (clusters[c2].size() < zoids_per_proc) {
+                            clusters[c2].push_back(zoid_idx);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Assign clusters to processors
+            for (int p = 0; p < comm->nprocs && p < clusters.size(); p++) {
+                for (int idx : clusters[p]) {
+                    if (idx >= 0 && idx < all_zoids.size()) {
+                        graph_cluster_assignment.proc_to_zoids[p].push_back(all_zoids[idx]);
+                        graph_cluster_assignment.zoid_to_proc[all_zoids[idx]] = p;
+                    }
+                }
+            }
+            
+            // Final check: ensure all processors have correct number of zoids
+            for (int p = 0; p < comm->nprocs; p++) {
+                int current = graph_cluster_assignment.proc_to_zoids[p].size();
+                if (current < zoids_per_proc) {
+                    // Find processors with extra zoids
+                    for (int p2 = 0; p2 < comm->nprocs && current < zoids_per_proc; p2++) {
+                        if (graph_cluster_assignment.proc_to_zoids[p2].size() > zoids_per_proc) {
+                            auto zoid = graph_cluster_assignment.proc_to_zoids[p2].back();
+                            graph_cluster_assignment.proc_to_zoids[p2].pop_back();
+                            graph_cluster_assignment.proc_to_zoids[p].push_back(zoid);
+                            graph_cluster_assignment.zoid_to_proc[zoid] = p;
+                            current++;
+                        }
+                    }
+                }
+            }
+        
+            assignments.push_back(graph_cluster_assignment);
+        }
+        */
+
+        // METHOD 7: Communication graph clustering (DETERMINISTIC)
+        /*
+        {
+            Assignment graph_cluster_assignment;
+            graph_cluster_assignment.method_name = "Graph Clustering";
+            
+            // Build adjacency list representation
+            std::vector<std::array<int, 3>> all_zoids;
+            std::map<std::array<int, 3>, int> zoid_to_idx;
+            
+            // DETERMINISTIC: Always process zoids in same order
+            for (int x = 0; x < NUM_ZOIDS_X; x++) {
+                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
+                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
+                        all_zoids.push_back({x, y, z});
+                        zoid_to_idx[{x, y, z}] = all_zoids.size() - 1;
+                    }
+                }
+            }
+            
+            // Build graph with bidirectional edges
+            std::vector<std::set<int>> adj_list(all_zoids.size()); // Use set for deterministic ordering
+            
+            // Process edges in deterministic order
+            std::vector<std::pair<std::array<int, 3>, std::set<std::array<int, 3>>>> sorted_edges(
+                tmp_send_neighbors.begin(), tmp_send_neighbors.end());
+            std::sort(sorted_edges.begin(), sorted_edges.end());
+            
+            for (const auto& [sender, receivers] : sorted_edges) {
+                if (zoid_to_idx.find(sender) == zoid_to_idx.end()) continue;
+                int sender_idx = zoid_to_idx[sender];
+                
+                for (const auto& receiver : receivers) {
+                    if (zoid_to_idx.find(receiver) == zoid_to_idx.end()) continue;
+                    int receiver_idx = zoid_to_idx[receiver];
+                    
+                    adj_list[sender_idx].insert(receiver_idx);
+                    adj_list[receiver_idx].insert(sender_idx); // Bidirectional
+                }
+            }
+            
+            // Initialize clusters for each processor
+            std::vector<std::vector<int>> clusters(comm->nprocs);
+            std::vector<bool> assigned(all_zoids.size(), false);
+            
+            // Use DETERMINISTIC BFS-based clustering
+            int next_start = 0;
+            
+            for (int c = 0; c < comm->nprocs; c++) {
+                // Find next unassigned zoid
+                while (next_start < all_zoids.size() && assigned[next_start]) {
+                    next_start++;
+                }
+                
+                if (next_start >= all_zoids.size()) {
+                    // No more unassigned zoids to start clusters
+                    break;
+                }
+                
+                // Start BFS from this zoid
+                std::queue<int> q;
+                q.push(next_start);
+                assigned[next_start] = true;
+                
+                // Grow cluster using BFS until reaching target size
+                while (!q.empty() && clusters[c].size() < zoids_per_proc) {
+                    int curr = q.front();
+                    q.pop();
+                    clusters[c].push_back(curr);
+                    
+                    // Add unassigned neighbors in deterministic order (set is sorted)
+                    for (int neighbor : adj_list[curr]) {
+                        if (!assigned[neighbor] && clusters[c].size() < zoids_per_proc) {
+                            assigned[neighbor] = true;
+                            q.push(neighbor);
+                        }
+                    }
+                }
+            }
+            
+            // Fill remaining slots for each cluster
+            next_start = 0;
+            for (int c = 0; c < comm->nprocs; c++) {
+                while (clusters[c].size() < zoids_per_proc) {
+                    // Find next unassigned zoid
+                    while (next_start < all_zoids.size() && assigned[next_start]) {
+                        next_start++;
+                    }
+                    
+                    if (next_start < all_zoids.size()) {
+                        clusters[c].push_back(next_start);
+                        assigned[next_start] = true;
+                    } else {
+                        // Need to steal from another cluster
+                        bool found = false;
+                        for (int c2 = 0; c2 < comm->nprocs && !found; c2++) {
+                            if (c2 != c && clusters[c2].size() > zoids_per_proc) {
+                                int zoid_idx = clusters[c2].back();
+                                clusters[c2].pop_back();
+                                clusters[c].push_back(zoid_idx);
+                                found = true;
+                            }
+                        }
+                        if (!found) {
+                            // This should not happen if NUM_ZOIDS_MANY_CUTS % nprocs == 0
+                            std::cerr << "Error: Cannot balance clusters properly!" << std::endl;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Verify all clusters have correct size before assignment
+            for (int p = 0; p < comm->nprocs; p++) {
+                if (clusters[p].size() != zoids_per_proc) {
+                    std::cerr << "Warning: Cluster " << p << " has " << clusters[p].size() 
+                            << " zoids instead of " << zoids_per_proc << std::endl;
+                }
+            }
+            
+            // Assign clusters to processors
+            for (int p = 0; p < comm->nprocs; p++) {
+                for (int idx : clusters[p]) {
+                    if (idx >= 0 && idx < all_zoids.size()) {
+                        graph_cluster_assignment.proc_to_zoids[p].push_back(all_zoids[idx]);
+                        graph_cluster_assignment.zoid_to_proc[all_zoids[idx]] = p;
+                    } else {
+                        std::cerr << "Error: Invalid zoid index " << idx << " for processor " << p << std::endl;
+                    }
+                }
+            }
+            
+            assignments.push_back(graph_cluster_assignment);
+        }
+        */
+        
         // METHOD 8: Nested Torus (multi-scale optimization)
         {
             Assignment nested_torus_assignment;
@@ -2226,6 +2425,228 @@ public:
             
             assignments.push_back(nested_torus_assignment);
         }
+
+        // METHOD 9: Dependency-aware assignment with min-cost flow
+        /*
+        {
+            Assignment depaware_assignment;
+            depaware_assignment.method_name = "Dependency-Aware MinCost";
+            
+            // Start with dependency level 0 zoids
+            std::vector<std::array<int, 3>> dep0_zoids;
+            for (int x = 0; x < NUM_ZOIDS_X; x++) {
+                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
+                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
+                        if (x % 2 == 1 && y % 2 == 1 && z % 2 == 1) {
+                            dep0_zoids.push_back({x, y, z});
+                        }
+                    }
+                }
+            }
+            
+            // Simple round-robin assignment for dep0 zoids if K-means fails
+            if (dep0_zoids.size() > 0) {
+                int dep0_per_proc = dep0_zoids.size() / comm->nprocs;
+                
+                // Sort by Morton code for spatial locality
+                std::sort(dep0_zoids.begin(), dep0_zoids.end(), [&](const auto& a, const auto& b) {
+                    return morton3D(a[0], a[1], a[2]) < morton3D(b[0], b[1], b[2]);
+                });
+                
+                // Assign dep0 zoids evenly
+                for (int i = 0; i < dep0_zoids.size(); i++) {
+                    int proc = i / dep0_per_proc;
+                    if (proc >= comm->nprocs) proc = comm->nprocs - 1;
+                    depaware_assignment.proc_to_zoids[proc].push_back(dep0_zoids[i]);
+                    depaware_assignment.zoid_to_proc[dep0_zoids[i]] = proc;
+                }
+            }
+            
+            // Process other dependency levels with min-cost flow
+            for (int dep = 1; dep < 4; dep++) {
+                std::vector<std::array<int, 3>> unclaimed_zoids;
+                
+                for (int x = 0; x < NUM_ZOIDS_X; x++) {
+                    for (int y = 0; y < NUM_ZOIDS_Y; y++) {
+                        for (int z = 0; z < NUM_ZOIDS_Z; z++) {
+                            std::array<int, 3> zoid = {x, y, z};
+                            int zoid_dep = (x % 2 == 0) + (y % 2 == 0) + (z % 2 == 0);
+                            
+                            if (zoid_dep == dep && depaware_assignment.zoid_to_proc.find(zoid) == depaware_assignment.zoid_to_proc.end()) {
+                                unclaimed_zoids.push_back(zoid);
+                            }
+                        }
+                    }
+                }
+                
+                if (unclaimed_zoids.empty()) continue;
+                
+                // Safe assignment with min-cost flow
+                int M = unclaimed_zoids.size();
+                int N = comm->nprocs;
+                
+                // Calculate remaining capacity for each processor
+                std::vector<int> proc_remaining_capacity(N);
+                for (int p = 0; p < N; p++) {
+                    proc_remaining_capacity[p] = zoids_per_proc - depaware_assignment.proc_to_zoids[p].size();
+                }
+                
+                // Build min-cost flow graph
+                int source = M + N;
+                int sink = M + N + 1;
+                MinCostFlow mcf(M + N + 2);
+                
+                // Source to zoid nodes
+                for (int i = 0; i < M; i++) {
+                    mcf.addEdge(source, i, 1, 0);
+                }
+                
+                // Zoid nodes to processor nodes with communication-based costs
+                for (int i = 0; i < M; i++) {
+                    auto& zoid = unclaimed_zoids[i];
+                    
+                    for (int p = 0; p < N; p++) {
+                        if (proc_remaining_capacity[p] > 0) {
+                            // Calculate normalized cost
+                            double communication_benefit = 0.0;
+                            double communication_penalty = 0.0;
+                            int total_neighbors = 0;
+                            
+                            // Check incoming edges safely
+                            if (tmp_recv_neighbors.find(zoid) != tmp_recv_neighbors.end()) {
+                                for (const auto& sender : tmp_recv_neighbors.at(zoid)) {
+                                    if (depaware_assignment.zoid_to_proc.find(sender) != depaware_assignment.zoid_to_proc.end()) {
+                                        total_neighbors++;
+                                        if (depaware_assignment.zoid_to_proc.at(sender) == p) {
+                                            communication_benefit += 1.0;
+                                        } else {
+                                            communication_penalty += 1.0;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Check outgoing edges safely
+                            if (tmp_send_neighbors.find(zoid) != tmp_send_neighbors.end()) {
+                                for (const auto& receiver : tmp_send_neighbors.at(zoid)) {
+                                    if (depaware_assignment.zoid_to_proc.find(receiver) != depaware_assignment.zoid_to_proc.end()) {
+                                        total_neighbors++;
+                                        if (depaware_assignment.zoid_to_proc.at(receiver) == p) {
+                                            communication_benefit += 1.0;
+                                        } else {
+                                            communication_penalty += 1.0;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Calculate cost
+                            const double COMM_WEIGHT = 100.0;
+                            double comm_cost = 0.0;
+                            if (total_neighbors > 0) {
+                                double remote_fraction = communication_penalty / total_neighbors;
+                                double local_fraction = communication_benefit / total_neighbors;
+                                comm_cost = COMM_WEIGHT * (remote_fraction - local_fraction);
+                            }
+                            
+                            // Spatial locality cost
+                            double spatial_cost = 0.0;
+                            if (!depaware_assignment.proc_to_zoids[p].empty()) {
+                                auto proc_centroid = calculateProcessorCentroid(depaware_assignment.proc_to_zoids[p]);
+                                double dist = euclideanDistance(zoid, proc_centroid);
+                                double max_dist = std::sqrt(NUM_ZOIDS_X*NUM_ZOIDS_X + 
+                                                        NUM_ZOIDS_Y*NUM_ZOIDS_Y + 
+                                                        NUM_ZOIDS_Z*NUM_ZOIDS_Z);
+                                const double SPATIAL_WEIGHT = 20.0;
+                                spatial_cost = SPATIAL_WEIGHT * (dist / max_dist);
+                            }
+                            
+                            // Load balancing hint
+                            const double LOAD_WEIGHT = 5.0;
+                            double current_fill = (double)depaware_assignment.proc_to_zoids[p].size() / zoids_per_proc;
+                            double load_cost = LOAD_WEIGHT * current_fill;
+                            
+                            int total_cost = static_cast<int>(comm_cost + spatial_cost + load_cost);
+                            mcf.addEdge(i, M + p, 1, total_cost);
+                        }
+                    }
+                }
+                
+                // Processor nodes to sink with exact capacity
+                for (int p = 0; p < N; p++) {
+                    if (proc_remaining_capacity[p] > 0) {
+                        mcf.addEdge(M + p, sink, proc_remaining_capacity[p], 0);
+                    }
+                }
+                
+                // Run min-cost flow
+                int flowCost = 0;
+                int flowAchieved = mcf.minCostFlow(source, sink, M, flowCost);
+                
+                if (flowAchieved < M) {
+                    // Fallback: assign remaining zoids greedily
+                    std::vector<bool> assigned(M, false);
+                    
+                    // First check flow results
+                    for (int i = 0; i < M; i++) {
+                        for (auto& edge : mcf.graph[i]) {
+                            if (edge.to >= M && edge.to < M + N && edge.cap == 0) {
+                                int proc = edge.to - M;
+                                depaware_assignment.proc_to_zoids[proc].push_back(unclaimed_zoids[i]);
+                                depaware_assignment.zoid_to_proc[unclaimed_zoids[i]] = proc;
+                                assigned[i] = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Assign any remaining zoids
+                    for (int i = 0; i < M; i++) {
+                        if (!assigned[i]) {
+                            // Find processor with space
+                            for (int p = 0; p < N; p++) {
+                                if (depaware_assignment.proc_to_zoids[p].size() < zoids_per_proc) {
+                                    depaware_assignment.proc_to_zoids[p].push_back(unclaimed_zoids[i]);
+                                    depaware_assignment.zoid_to_proc[unclaimed_zoids[i]] = p;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Extract all assignments from flow
+                    for (int i = 0; i < M; i++) {
+                        for (auto& edge : mcf.graph[i]) {
+                            if (edge.to >= M && edge.to < M + N && edge.cap == 0) {
+                                int proc = edge.to - M;
+                                depaware_assignment.proc_to_zoids[proc].push_back(unclaimed_zoids[i]);
+                                depaware_assignment.zoid_to_proc[unclaimed_zoids[i]] = proc;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Final balance check and adjustment
+            for (int p = 0; p < comm->nprocs; p++) {
+                while (depaware_assignment.proc_to_zoids[p].size() < zoids_per_proc) {
+                    // Find a processor with extra zoids
+                    for (int p2 = 0; p2 < comm->nprocs; p2++) {
+                        if (depaware_assignment.proc_to_zoids[p2].size() > zoids_per_proc) {
+                            auto zoid = depaware_assignment.proc_to_zoids[p2].back();
+                            depaware_assignment.proc_to_zoids[p2].pop_back();
+                            depaware_assignment.proc_to_zoids[p].push_back(zoid);
+                            depaware_assignment.zoid_to_proc[zoid] = p;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            assignments.push_back(depaware_assignment);
+        }
+        */
         
         // Optimize each initial assignment with iterative refinement
         for (auto& assignment : assignments) {
@@ -2291,150 +2712,129 @@ public:
         }
     }
 
-    // Helper function: Hilbert curve in 3D
-    uint64_t hilbert3D(int x, int y, int z, int n) {
-        // Simplified 3D Hilbert curve implementation
-        // For production, use a proper 3D Hilbert library
-        uint64_t d = 0;
-        for (int s = n/2; s > 0; s /= 2) {
-            int rx = (x & s) > 0;
-            int ry = (y & s) > 0;
-            int rz = (z & s) > 0;
-            d += s * s * s * ((3 * rx) ^ (rx * ry) ^ (rx * ry * rz));
-            
-            // Rotate
-            if (rx == 0) {
-                if (ry == 0) {
-                    std::swap(x, z);
-                }
-            }
-        }
-        return d;
-    }
-
-    // Helper function: Balance assignment with minimal disruption
-    void balanceWithMinimalDisruption(
-        std::map<int, std::vector<std::array<int, 3>>>& proc_to_zoids,
-        std::map<std::array<int, 3>, int>& zoid_to_proc,
-        const std::map<std::array<int, 3>, std::set<std::array<int, 3>>>& send_neighbors,
-        const std::map<std::array<int, 3>, std::set<std::array<int, 3>>>& recv_neighbors,
-        int target_per_proc) {
+    // Helper function: Find optimal torus decomposition
+    void findOptimalTorusDecomposition(int nx, int ny, int nz, int nprocs,
+                                    int& px, int& py, int& pz) {
+        // Find factorization of nprocs that minimizes surface-to-volume ratio
+        int best_surface = INT_MAX;
         
-        // Identify overloaded and underloaded processors
-        std::vector<int> overloaded, underloaded;
-        std::vector<int> excess(proc_to_zoids.size());
-        
-        for (int p = 0; p < proc_to_zoids.size(); p++) {
-            int current = proc_to_zoids[p].size();
-            excess[p] = current - target_per_proc;
-            
-            if (excess[p] > 0) {
-                overloaded.push_back(p);
-            } else if (excess[p] < 0) {
-                underloaded.push_back(p);
-            }
-        }
-        
-        // Move zoids from overloaded to underloaded processors
-        for (int from_proc : overloaded) {
-            while (excess[from_proc] > 0 && !underloaded.empty()) {
-                // Find best zoid to move (minimizes communication disruption)
-                int best_zoid_idx = -1;
-                int best_to_proc = -1;
-                int min_disruption = INT_MAX;
-                
-                // Evaluate each zoid in the overloaded processor
-                for (int i = 0; i < proc_to_zoids[from_proc].size(); i++) {
-                    const auto& zoid = proc_to_zoids[from_proc][i];
-                    
-                    // Try each underloaded processor
-                    for (int to_proc : underloaded) {
-                        if (excess[to_proc] >= 0) continue;
+        for (int i = 1; i <= nprocs; i++) {
+            if (nprocs % i == 0) {
+                int remaining = nprocs / i;
+                for (int j = 1; j <= remaining; j++) {
+                    if (remaining % j == 0) {
+                        int k = remaining / j;
                         
-                        // Calculate disruption: how many communications would cross processors
-                        int disruption = 0;
-                        
-                        // Check sends from this zoid
-                        if (send_neighbors.find(zoid) != send_neighbors.end()) {
-                            for (const auto& receiver : send_neighbors.at(zoid)) {
-                                if (zoid_to_proc.find(receiver) != zoid_to_proc.end()) {
-                                    int recv_proc = zoid_to_proc[receiver];
-                                    // Currently local, would become remote
-                                    if (recv_proc == from_proc) disruption++;
-                                    // Currently remote, would become local
-                                    if (recv_proc == to_proc) disruption--;
-                                }
+                        // Check if this decomposition divides evenly
+                        if (nx % i == 0 && ny % j == 0 && nz % k == 0) {
+                            // Calculate surface area (communication volume)
+                            // In a torus, each block has 6 faces
+                            int block_x = nx / i;
+                            int block_y = ny / j;
+                            int block_z = nz / k;
+                            
+                            int surface = 2 * (block_y * block_z + block_x * block_z + block_x * block_y);
+                            
+                            if (surface < best_surface) {
+                                best_surface = surface;
+                                px = i; py = j; pz = k;
                             }
                         }
-                        
-                        // Check receives to this zoid
-                        if (recv_neighbors.find(zoid) != recv_neighbors.end()) {
-                            for (const auto& sender : recv_neighbors.at(zoid)) {
-                                if (zoid_to_proc.find(sender) != zoid_to_proc.end()) {
-                                    int send_proc = zoid_to_proc[sender];
-                                    // Currently local, would become remote
-                                    if (send_proc == from_proc) disruption++;
-                                    // Currently remote, would become local
-                                    if (send_proc == to_proc) disruption--;
-                                }
-                            }
-                        }
-                        
-                        if (disruption < min_disruption) {
-                            min_disruption = disruption;
-                            best_zoid_idx = i;
-                            best_to_proc = to_proc;
-                        }
-                    }
-                }
-                
-                // Move the best zoid
-                if (best_zoid_idx >= 0 && best_to_proc >= 0) {
-                    auto zoid = proc_to_zoids[from_proc][best_zoid_idx];
-                    
-                    // Remove from source processor
-                    proc_to_zoids[from_proc].erase(
-                        proc_to_zoids[from_proc].begin() + best_zoid_idx);
-                    
-                    // Add to destination processor
-                    proc_to_zoids[best_to_proc].push_back(zoid);
-                    zoid_to_proc[zoid] = best_to_proc;
-                    
-                    // Update excess counts
-                    excess[from_proc]--;
-                    excess[best_to_proc]++;
-                    
-                    // Remove processor from underloaded list if it's now balanced
-                    if (excess[best_to_proc] == 0) {
-                        underloaded.erase(
-                            std::remove(underloaded.begin(), underloaded.end(), best_to_proc),
-                            underloaded.end());
-                    }
-                } else {
-                    // No good move found, force move the first zoid
-                    auto zoid = proc_to_zoids[from_proc][0];
-                    int to_proc = underloaded[0];
-                    
-                    proc_to_zoids[from_proc].erase(proc_to_zoids[from_proc].begin());
-                    proc_to_zoids[to_proc].push_back(zoid);
-                    zoid_to_proc[zoid] = to_proc;
-                    
-                    excess[from_proc]--;
-                    excess[to_proc]++;
-                    
-                    if (excess[to_proc] == 0) {
-                        underloaded.erase(underloaded.begin());
                     }
                 }
             }
         }
         
-        // Verify perfect balance
-        for (int p = 0; p < proc_to_zoids.size(); p++) {
-            assert(proc_to_zoids[p].size() == target_per_proc);
+        // If no perfect decomposition found, use approximate
+        if (best_surface == INT_MAX) {
+            // Simple factorization
+            px = 1; py = 1; pz = nprocs;
+            for (int i = 2; i <= std::cbrt(nprocs); i++) {
+                if (nprocs % i == 0) {
+                    px = i;
+                    int remaining = nprocs / i;
+                    for (int j = i; j <= std::sqrt(remaining); j++) {
+                        if (remaining % j == 0) {
+                            py = j;
+                            pz = remaining / j;
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 
+    // Helper function: Adjust cluster count
+    void adjustClusterCount(std::vector<std::vector<int>>& clusters, 
+                        int target_clusters, int target_size) {
+        // Merge smallest clusters until we have the right number
+        while (clusters.size() > target_clusters) {
+            // Find two smallest clusters
+            int min1 = 0, min2 = 1;
+            if (clusters[1].size() < clusters[0].size()) {
+                min1 = 1; min2 = 0;
+            }
+            
+            for (int i = 2; i < clusters.size(); i++) {
+                if (clusters[i].size() < clusters[min1].size()) {
+                    min2 = min1;
+                    min1 = i;
+                } else if (clusters[i].size() < clusters[min2].size()) {
+                    min2 = i;
+                }
+            }
+            
+            // Merge min1 into min2
+            clusters[min2].insert(clusters[min2].end(), 
+                                clusters[min1].begin(), 
+                                clusters[min1].end());
+            clusters.erase(clusters.begin() + min1);
+        }
+        
+        // Split largest clusters if needed
+        while (clusters.size() < target_clusters) {
+            // Find largest cluster
+            int max_idx = 0;
+            for (int i = 1; i < clusters.size(); i++) {
+                if (clusters[i].size() > clusters[max_idx].size()) {
+                    max_idx = i;
+                }
+            }
+            
+            // Split it in half
+            std::vector<int> new_cluster;
+            int split_point = clusters[max_idx].size() / 2;
+            new_cluster.insert(new_cluster.end(),
+                            clusters[max_idx].begin() + split_point,
+                            clusters[max_idx].end());
+            clusters[max_idx].resize(split_point);
+            clusters.push_back(new_cluster);
+        }
+        
+        // Balance cluster sizes
+        while (true) {
+            int min_idx = -1, max_idx = -1;
+            int min_size = INT_MAX, max_size = 0;
+            
+            for (int i = 0; i < clusters.size(); i++) {
+                if (clusters[i].size() < min_size) {
+                    min_size = clusters[i].size();
+                    min_idx = i;
+                }
+                if (clusters[i].size() > max_size) {
+                    max_size = clusters[i].size();
+                    max_idx = i;
+                }
+            }
+            
+            if (max_size - min_size <= 1) break; // Balanced enough
+            
+            // Move one element from max to min
+            clusters[min_idx].push_back(clusters[max_idx].back());
+            clusters[max_idx].pop_back();
+        }
+    }
 
     // Helper function: K-means++ initialization
     void initializeKMeansPlusPlus(const std::vector<std::array<int, 3>>& points,
@@ -2781,130 +3181,325 @@ public:
         return std::sqrt(dx*dx + dy*dy + dz*dz);
     }
 
-    // Helper function: Find optimal torus decomposition
-    void findOptimalTorusDecomposition(int nx, int ny, int nz, int nprocs,
-                                    int& px, int& py, int& pz) {
-        // Find factorization of nprocs that minimizes surface-to-volume ratio
-        int best_surface = INT_MAX;
+    // Helper function: Rebalance dependency levels across processors
+    void rebalanceDependencyLevels(
+        std::vector<std::vector<std::array<int, 3>>>& proc_zoids,
+        std::vector<std::vector<int>>& proc_dep_counts,
+        const std::vector<int>& target_dep_per_proc,
+        const std::map<std::array<int, 3>, std::set<std::array<int, 3>>>& send_neighbors,
+        const std::map<std::array<int, 3>, std::set<std::array<int, 3>>>& recv_neighbors) {
         
-        for (int i = 1; i <= nprocs; i++) {
-            if (nprocs % i == 0) {
-                int remaining = nprocs / i;
-                for (int j = 1; j <= remaining; j++) {
-                    if (remaining % j == 0) {
-                        int k = remaining / j;
-                        
-                        // Check if this decomposition divides evenly
-                        if (nx % i == 0 && ny % j == 0 && nz % k == 0) {
-                            // Calculate surface area (communication volume)
-                            // In a torus, each block has 6 faces
-                            int block_x = nx / i;
-                            int block_y = ny / j;
-                            int block_z = nz / k;
-                            
-                            int surface = 2 * (block_y * block_z + block_x * block_z + block_x * block_y);
-                            
-                            if (surface < best_surface) {
-                                best_surface = surface;
-                                px = i; py = j; pz = k;
-                            }
-                        }
+        int nprocs = proc_zoids.size();
+        
+        // For each dependency level, balance across processors
+        for (int dep = 0; dep < 4; dep++) {
+            bool balanced = false;
+            int iterations = 0;
+            const int MAX_ITERATIONS = 10000;
+            
+            while (!balanced && iterations < MAX_ITERATIONS) {
+                balanced = true;
+                iterations++;
+                
+                // Find processors with excess and deficit for this dependency level
+                std::vector<int> excess_procs, deficit_procs;
+                
+                for (int p = 0; p < nprocs; p++) {
+                    int diff = proc_dep_counts[p][dep] - target_dep_per_proc[dep];
+                    if (diff > 0) {
+                        excess_procs.push_back(p);
+                    } else if (diff < 0) {
+                        deficit_procs.push_back(p);
                     }
                 }
-            }
-        }
-        
-        // If no perfect decomposition found, use approximate
-        if (best_surface == INT_MAX) {
-            // Simple factorization
-            px = 1; py = 1; pz = nprocs;
-            for (int i = 2; i <= std::cbrt(nprocs); i++) {
-                if (nprocs % i == 0) {
-                    px = i;
-                    int remaining = nprocs / i;
-                    for (int j = i; j <= std::sqrt(remaining); j++) {
-                        if (remaining % j == 0) {
-                            py = j;
-                            pz = remaining / j;
+                
+                if (excess_procs.empty() || deficit_procs.empty()) {
+                    continue; // This dependency level is balanced
+                }
+                
+                // Try to move zoids from excess to deficit processors
+                for (int from_proc : excess_procs) {
+                    if (proc_dep_counts[from_proc][dep] <= target_dep_per_proc[dep]) {
+                        continue;
+                    }
+                    
+                    for (int to_proc : deficit_procs) {
+                        if (proc_dep_counts[to_proc][dep] >= target_dep_per_proc[dep]) {
+                            continue;
+                        }
+                        
+                        // Find best zoid to swap
+                        int best_from_idx = -1;
+                        int best_to_idx = -1;
+                        int min_disruption = INT_MAX;
+                        
+                        // Look for zoids to swap
+                        for (int i = 0; i < proc_zoids[from_proc].size(); i++) {
+                            const auto& from_zoid = proc_zoids[from_proc][i];
+                            int from_dep = (from_zoid[0] % 2 == 0) + 
+                                        (from_zoid[1] % 2 == 0) + 
+                                        (from_zoid[2] % 2 == 0);
+                            
+                            if (from_dep != dep) continue; // Only move zoids of target dependency
+                            
+                            // Find a zoid to swap with (different dependency level)
+                            for (int j = 0; j < proc_zoids[to_proc].size(); j++) {
+                                const auto& to_zoid = proc_zoids[to_proc][j];
+                                int to_dep = (to_zoid[0] % 2 == 0) + 
+                                            (to_zoid[1] % 2 == 0) + 
+                                            (to_zoid[2] % 2 == 0);
+                                
+                                if (to_dep == dep) continue; // Don't swap same dependency
+                                
+                                // Check if this swap would help balance other dependency levels
+                                if (proc_dep_counts[from_proc][to_dep] >= target_dep_per_proc[to_dep] &&
+                                    proc_dep_counts[to_proc][to_dep] <= target_dep_per_proc[to_dep]) {
+                                    continue; // Would make other dependency worse
+                                }
+                                
+                                // Calculate communication disruption
+                                int disruption = calculateSwapDisruption(
+                                    from_zoid, to_zoid, from_proc, to_proc,
+                                    proc_zoids, send_neighbors, recv_neighbors);
+                                
+                                if (disruption < min_disruption) {
+                                    min_disruption = disruption;
+                                    best_from_idx = i;
+                                    best_to_idx = j;
+                                }
+                            }
+                        }
+                        
+                        // Perform the swap if found
+                        if (best_from_idx >= 0 && best_to_idx >= 0) {
+                            auto from_zoid = proc_zoids[from_proc][best_from_idx];
+                            auto to_zoid = proc_zoids[to_proc][best_to_idx];
+                            
+                            int from_dep = (from_zoid[0] % 2 == 0) + 
+                                        (from_zoid[1] % 2 == 0) + 
+                                        (from_zoid[2] % 2 == 0);
+                            int to_dep = (to_zoid[0] % 2 == 0) + 
+                                        (to_zoid[1] % 2 == 0) + 
+                                        (to_zoid[2] % 2 == 0);
+                            
+                            // Swap
+                            proc_zoids[from_proc][best_from_idx] = to_zoid;
+                            proc_zoids[to_proc][best_to_idx] = from_zoid;
+                            
+                            // Update counts
+                            proc_dep_counts[from_proc][from_dep]--;
+                            proc_dep_counts[from_proc][to_dep]++;
+                            proc_dep_counts[to_proc][to_dep]--;
+                            proc_dep_counts[to_proc][from_dep]++;
+                            
+                            balanced = false;
                             break;
                         }
                     }
+                    if (!balanced) break;
                 }
+            }
+        }
+        
+        // Verify dependency balance
+        if (comm->me == 0) {
+            std::cout << "\nDependency balance after rebalancing:" << std::endl;
+            for (int p = 0; p < nprocs; p++) {
+                std::cout << "Proc " << p << ": ";
+                for (int dep = 0; dep < 4; dep++) {
+                    std::cout << "dep" << dep << "=" << proc_dep_counts[p][dep] << " ";
+                }
+                std::cout << std::endl;
             }
         }
     }
 
-    // Helper function: Adjust cluster count
-    void adjustClusterCount(std::vector<std::vector<int>>& clusters, 
-                        int target_clusters, int target_size) {
-        // Merge smallest clusters until we have the right number
-        while (clusters.size() > target_clusters) {
-            // Find two smallest clusters
-            int min1 = 0, min2 = 1;
-            if (clusters[1].size() < clusters[0].size()) {
-                min1 = 1; min2 = 0;
+    // Helper function: Calculate disruption from swapping two zoids
+    int calculateSwapDisruption(
+        const std::array<int, 3>& zoid1,
+        const std::array<int, 3>& zoid2,
+        int proc1, int proc2,
+        const std::vector<std::vector<std::array<int, 3>>>& proc_zoids,
+        const std::map<std::array<int, 3>, std::set<std::array<int, 3>>>& send_neighbors,
+        const std::map<std::array<int, 3>, std::set<std::array<int, 3>>>& recv_neighbors) {
+        
+        int disruption = 0;
+        
+        // Build quick lookup for zoid->processor
+        std::map<std::array<int, 3>, int> zoid_to_proc;
+        for (int p = 0; p < proc_zoids.size(); p++) {
+            for (const auto& z : proc_zoids[p]) {
+                zoid_to_proc[z] = p;
             }
-            
-            for (int i = 2; i < clusters.size(); i++) {
-                if (clusters[i].size() < clusters[min1].size()) {
-                    min2 = min1;
-                    min1 = i;
-                } else if (clusters[i].size() < clusters[min2].size()) {
-                    min2 = i;
-                }
-            }
-            
-            // Merge min1 into min2
-            clusters[min2].insert(clusters[min2].end(), 
-                                clusters[min1].begin(), 
-                                clusters[min1].end());
-            clusters.erase(clusters.begin() + min1);
         }
         
-        // Split largest clusters if needed
-        while (clusters.size() < target_clusters) {
-            // Find largest cluster
-            int max_idx = 0;
-            for (int i = 1; i < clusters.size(); i++) {
-                if (clusters[i].size() > clusters[max_idx].size()) {
-                    max_idx = i;
+        // Calculate disruption for zoid1 moving from proc1 to proc2
+        if (send_neighbors.find(zoid1) != send_neighbors.end()) {
+            for (const auto& neighbor : send_neighbors.at(zoid1)) {
+                if (zoid_to_proc.find(neighbor) != zoid_to_proc.end()) {
+                    int neighbor_proc = zoid_to_proc[neighbor];
+                    if (neighbor_proc == proc1) disruption++; // Local becomes remote
+                    if (neighbor_proc == proc2) disruption--; // Remote becomes local
                 }
             }
-            
-            // Split it in half
-            std::vector<int> new_cluster;
-            int split_point = clusters[max_idx].size() / 2;
-            new_cluster.insert(new_cluster.end(),
-                            clusters[max_idx].begin() + split_point,
-                            clusters[max_idx].end());
-            clusters[max_idx].resize(split_point);
-            clusters.push_back(new_cluster);
         }
         
-        // Balance cluster sizes
-        while (true) {
-            int min_idx = -1, max_idx = -1;
-            int min_size = INT_MAX, max_size = 0;
-            
-            for (int i = 0; i < clusters.size(); i++) {
-                if (clusters[i].size() < min_size) {
-                    min_size = clusters[i].size();
-                    min_idx = i;
-                }
-                if (clusters[i].size() > max_size) {
-                    max_size = clusters[i].size();
-                    max_idx = i;
+        if (recv_neighbors.find(zoid1) != recv_neighbors.end()) {
+            for (const auto& neighbor : recv_neighbors.at(zoid1)) {
+                if (zoid_to_proc.find(neighbor) != zoid_to_proc.end()) {
+                    int neighbor_proc = zoid_to_proc[neighbor];
+                    if (neighbor_proc == proc1) disruption++; // Local becomes remote
+                    if (neighbor_proc == proc2) disruption--; // Remote becomes local
                 }
             }
-            
-            if (max_size - min_size <= 1) break; // Balanced enough
-            
-            // Move one element from max to min
-            clusters[min_idx].push_back(clusters[max_idx].back());
-            clusters[max_idx].pop_back();
         }
+        
+        // Calculate disruption for zoid2 moving from proc2 to proc1
+        if (send_neighbors.find(zoid2) != send_neighbors.end()) {
+            for (const auto& neighbor : send_neighbors.at(zoid2)) {
+                if (zoid_to_proc.find(neighbor) != zoid_to_proc.end()) {
+                    int neighbor_proc = zoid_to_proc[neighbor];
+                    if (neighbor_proc == proc2) disruption++; // Local becomes remote
+                    if (neighbor_proc == proc1) disruption--; // Remote becomes local
+                }
+            }
+        }
+        
+        if (recv_neighbors.find(zoid2) != recv_neighbors.end()) {
+            for (const auto& neighbor : recv_neighbors.at(zoid2)) {
+                if (zoid_to_proc.find(neighbor) != zoid_to_proc.end()) {
+                    int neighbor_proc = zoid_to_proc[neighbor];
+                    if (neighbor_proc == proc2) disruption++; // Local becomes remote
+                    if (neighbor_proc == proc1) disruption--; // Remote becomes local
+                }
+            }
+        }
+        
+        return disruption;
     }
 
+    // Helper function: Balance assignment with minimal disruption
+    void balanceWithMinimalDisruption(
+        std::map<int, std::vector<std::array<int, 3>>>& proc_to_zoids,
+        std::map<std::array<int, 3>, int>& zoid_to_proc,
+        const std::map<std::array<int, 3>, std::set<std::array<int, 3>>>& send_neighbors,
+        const std::map<std::array<int, 3>, std::set<std::array<int, 3>>>& recv_neighbors,
+        int target_per_proc) {
+        
+        // Identify overloaded and underloaded processors
+        std::vector<int> overloaded, underloaded;
+        std::vector<int> excess(proc_to_zoids.size());
+        
+        for (int p = 0; p < proc_to_zoids.size(); p++) {
+            int current = proc_to_zoids[p].size();
+            excess[p] = current - target_per_proc;
+            
+            if (excess[p] > 0) {
+                overloaded.push_back(p);
+            } else if (excess[p] < 0) {
+                underloaded.push_back(p);
+            }
+        }
+        
+        // Move zoids from overloaded to underloaded processors
+        for (int from_proc : overloaded) {
+            while (excess[from_proc] > 0 && !underloaded.empty()) {
+                // Find best zoid to move (minimizes communication disruption)
+                int best_zoid_idx = -1;
+                int best_to_proc = -1;
+                int min_disruption = INT_MAX;
+                
+                // Evaluate each zoid in the overloaded processor
+                for (int i = 0; i < proc_to_zoids[from_proc].size(); i++) {
+                    const auto& zoid = proc_to_zoids[from_proc][i];
+                    
+                    // Try each underloaded processor
+                    for (int to_proc : underloaded) {
+                        if (excess[to_proc] >= 0) continue;
+                        
+                        // Calculate disruption: how many communications would cross processors
+                        int disruption = 0;
+                        
+                        // Check sends from this zoid
+                        if (send_neighbors.find(zoid) != send_neighbors.end()) {
+                            for (const auto& receiver : send_neighbors.at(zoid)) {
+                                if (zoid_to_proc.find(receiver) != zoid_to_proc.end()) {
+                                    int recv_proc = zoid_to_proc[receiver];
+                                    // Currently local, would become remote
+                                    if (recv_proc == from_proc) disruption++;
+                                    // Currently remote, would become local
+                                    if (recv_proc == to_proc) disruption--;
+                                }
+                            }
+                        }
+                        
+                        // Check receives to this zoid
+                        if (recv_neighbors.find(zoid) != recv_neighbors.end()) {
+                            for (const auto& sender : recv_neighbors.at(zoid)) {
+                                if (zoid_to_proc.find(sender) != zoid_to_proc.end()) {
+                                    int send_proc = zoid_to_proc[sender];
+                                    // Currently local, would become remote
+                                    if (send_proc == from_proc) disruption++;
+                                    // Currently remote, would become local
+                                    if (send_proc == to_proc) disruption--;
+                                }
+                            }
+                        }
+                        
+                        if (disruption < min_disruption) {
+                            min_disruption = disruption;
+                            best_zoid_idx = i;
+                            best_to_proc = to_proc;
+                        }
+                    }
+                }
+                
+                // Move the best zoid
+                if (best_zoid_idx >= 0 && best_to_proc >= 0) {
+                    auto zoid = proc_to_zoids[from_proc][best_zoid_idx];
+                    
+                    // Remove from source processor
+                    proc_to_zoids[from_proc].erase(
+                        proc_to_zoids[from_proc].begin() + best_zoid_idx);
+                    
+                    // Add to destination processor
+                    proc_to_zoids[best_to_proc].push_back(zoid);
+                    zoid_to_proc[zoid] = best_to_proc;
+                    
+                    // Update excess counts
+                    excess[from_proc]--;
+                    excess[best_to_proc]++;
+                    
+                    // Remove processor from underloaded list if it's now balanced
+                    if (excess[best_to_proc] == 0) {
+                        underloaded.erase(
+                            std::remove(underloaded.begin(), underloaded.end(), best_to_proc),
+                            underloaded.end());
+                    }
+                } else {
+                    // No good move found, force move the first zoid
+                    auto zoid = proc_to_zoids[from_proc][0];
+                    int to_proc = underloaded[0];
+                    
+                    proc_to_zoids[from_proc].erase(proc_to_zoids[from_proc].begin());
+                    proc_to_zoids[to_proc].push_back(zoid);
+                    zoid_to_proc[zoid] = to_proc;
+                    
+                    excess[from_proc]--;
+                    excess[to_proc]++;
+                    
+                    if (excess[to_proc] == 0) {
+                        underloaded.erase(underloaded.begin());
+                    }
+                }
+            }
+        }
+        
+        // Verify perfect balance
+        for (int p = 0; p < proc_to_zoids.size(); p++) {
+            assert(proc_to_zoids[p].size() == target_per_proc);
+        }
+    }
 
     // Print statistics for balanced assignment
     void printBalancedAssignmentStats(
@@ -2924,6 +3519,43 @@ public:
                 std::cout << " [ERROR: IMBALANCED!]";
             }
             std::cout << std::endl;
+        }
+        
+        // Per-dependency-level distribution
+        std::cout << "\nPer-dependency-level distribution:" << std::endl;
+        std::vector<std::vector<int>> proc_dep_count(proc_to_zoids.size(), std::vector<int>(4, 0));
+        std::vector<int> total_dep_count(4, 0);
+        
+        for (int p = 0; p < proc_to_zoids.size(); p++) {
+            for (const auto& zoid : proc_to_zoids.at(p)) {
+                int zoid_dep = (zoid[0] % 2 == 0) + (zoid[1] % 2 == 0) + (zoid[2] % 2 == 0);
+                proc_dep_count[p][zoid_dep]++;
+                total_dep_count[zoid_dep]++;
+            }
+        }
+        
+        // Print expected vs actual
+        for (int dep = 0; dep < 4; dep++) {
+            int expected_per_proc = total_dep_count[dep] / proc_to_zoids.size();
+            std::cout << "  Dep " << dep << " (total=" << total_dep_count[dep] 
+                    << ", expected=" << expected_per_proc << "/proc): ";
+            
+            int min_count = INT_MAX, max_count = 0;
+            for (int p = 0; p < proc_to_zoids.size(); p++) {
+                min_count = std::min(min_count, proc_dep_count[p][dep]);
+                max_count = std::max(max_count, proc_dep_count[p][dep]);
+            }
+            
+            if (max_count - min_count <= 1) {
+                std::cout << "BALANCED (" << min_count << "-" << max_count << ")" << std::endl;
+            } else {
+                std::cout << "IMBALANCED (range " << min_count << "-" << max_count << ")" << std::endl;
+                // Show distribution
+                for (int p = 0; p < proc_to_zoids.size(); p++) {
+                    std::cout << "    P" << p << "=" << proc_dep_count[p][dep] << " ";
+                }
+                std::cout << std::endl;
+            }
         }
         
         // Communication analysis
@@ -3005,6 +3637,8 @@ public:
         }
     }
 
+
+    // END CLAUDE CODE
     void INIT_ZOID_DATA_MANY_CUTS() {
         std::map<int, std::pair<int, int>> zoid_num_to_coord;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -3452,8 +4086,8 @@ public:
                       recv_from_neighbors_many_cuts_next_dt[i].end(), std::greater<int>());
         }
 
+        int comm_idx = 0;
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-            int comm_idx = 0;
             for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
                 auto& zoid = my_queues_many_cuts[dep][j];
                 int zoid_num = zoid.num;
@@ -3469,8 +4103,9 @@ public:
             }
         }
 
+        // int comm_idx = 0;
+        comm_idx = 0;
         for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-            int comm_idx = 0;
             for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
                 auto& zoid = my_queues_many_cuts_next_dt[dep][j];
                 int zoid_num = zoid.num;
