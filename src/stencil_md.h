@@ -2720,7 +2720,7 @@ public:
 
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 if (counts_per_proc[dep][proc] != expected_count_at_proc) {
-                    std::cout << BOLDRED << "ERROR IN BALANCING. dep: " << dep << " PROC: " << proc << " EXPECTED: " << expected_count_at_proc << RESET_COLOR << std::endl;
+                    std::cout << BOLDRED << "ERROR IN BALANCING. dep: " << dep << " PROC: " << proc << " GOT: " << counts_per_proc[dep][proc] << " EXPECTED: " << expected_count_at_proc << RESET_COLOR << std::endl;
                     MPI_Abort(world, 0);
                 }
             }
@@ -12067,7 +12067,7 @@ public:
         int chunk_size = MODIFY_GRAINSIZE;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > 4096 && (dep == 0 || dep == 3)) {
+        if (nlocal > 4096) {
             /*
             auto& segment_idxs = zoid.local_idxs_per_timestep_segment_idxs[timestep];
             auto& segment_sizes = zoid.local_idxs_per_timestep_segment_sizes[timestep];
@@ -12140,7 +12140,7 @@ public:
             }
             */
 
-            #pragma cilk grainsize 512
+            #pragma cilk grainsize 1024
             cilk_for(int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -12271,8 +12271,8 @@ public:
         auto& bond_list = zoid.bond_list_modified[timestep];
         int nbonds = bond_list.size();
 
-        if (nbonds > 4096 && (dep == 0 || dep == 3)) {
-            #pragma cilk grainsize 512
+        if (nbonds > 4096) {
+            #pragma cilk grainsize 1024
             cilk_for (int i = 0; i < nbonds; i++) {
                 auto& tup = bond_list[i];
                 int i1 = std::get<0>(tup);
