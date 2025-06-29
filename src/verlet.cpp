@@ -1875,9 +1875,9 @@ void Verlet::run(int n) {
 
     std::stringstream output_stream;
     output_stream << "me: " << comm->me 
-    << " stencil md total just running the thing: " << duration 
+    << " stencil md total just running the thing: " << duration << " microseconds. "
     << " throughput (timesteps/s) : " << throughput
-    << " microseconds. " << " total duration: " << total_duration_stencil_md << std::endl;
+    << " total duration: " << total_duration_stencil_md << std::endl;
     std::cout << output_stream.str();
 
     if (comm->me == 0) {

@@ -2685,6 +2685,11 @@ public:
         std::map<int, std::vector<std::array<int, 3>>> proc_to_zoids = best_assignment->proc_to_zoids;
         std::map<std::array<int, 3>, int> zoid_to_proc = best_assignment->zoid_to_proc;
         
+        std::vector<int> counts_per_proc[NUM_DEPS];
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            counts_per_proc[dep].resize(comm->nprocs, 0);
+        }
+
         // Final numbering assignment
         for (int proc = 0; proc < comm->nprocs; proc++) {
             auto& zoids = proc_to_zoids[proc];
@@ -2700,11 +2705,32 @@ public:
             
             for (int i = 0; i < zoids.size(); i++) {
                 zoid_where_to_num[zoids[i]] = i * comm->nprocs + proc;
+                int dep = (zoids[i][0] % 2 == 0) + (zoids[i][1] % 2 == 0) + (zoids[i][2] % 2 == 0);
+                counts_per_proc[dep][proc]++;
             }
         }
-        
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            int expected_count_at_proc;
+            if (dep == 0 || dep == 3) {
+                expected_count_at_proc = (NUM_ZOIDS_MANY_CUTS / comm->nprocs) / 8;
+            } else {
+                expected_count_at_proc = ((NUM_ZOIDS_MANY_CUTS / comm->nprocs) / 8) * 3;
+            }
+
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                if (counts_per_proc[dep][proc] != expected_count_at_proc) {
+                    std::cout << BOLDRED << "ERROR IN BALANCING. dep: " << dep << " PROC: " << proc << " EXPECTED: " << expected_count_at_proc << RESET_COLOR << std::endl;
+                    MPI_Abort(world, 0);
+                }
+            }
+        }
+
+        MPI_Barrier(world);
+
         // Print detailed statistics
         if (comm->me == 0) {
+            std::cout << BOLDGREEN << "FOUND BALANCED ASSIGNMENT" << RESET_COLOR << std::endl;
             printBalancedAssignmentStats(proc_to_zoids, zoid_to_proc, tmp_send_neighbors, zoids_per_proc);
             
             // Also print comparison of all methods
