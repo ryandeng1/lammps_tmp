@@ -2890,11 +2890,17 @@ void Verlet::run_stencil_md_many_cuts_waitany_with_proc_to_proc(int starting_tim
         }
     }
 
+    for (int dep = 1; dep < NUM_DEPS; dep++) {
+        cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID<curr_dt>(dep, recv_r[dep], recv_r_proc_to_proc[dep]);
+    }
+
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         cilk_scope {
+            /*
             if (dep < NUM_DEPS - 1) {
                 cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID<curr_dt>(dep + 1, recv_r[dep + 1], recv_r_proc_to_proc[dep + 1]);
             }
+            */
             
             cilk_spawn [&]() {
                 int num_wait_zoid_to_zoid = 0;
