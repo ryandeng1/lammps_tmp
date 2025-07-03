@@ -32,6 +32,7 @@
 #include <cilk/opadd_reducer.h>
 #include <atomic>
 #include <limits>
+// This is from MPICH??
 #include <mpi_proto.h>
 #include <numeric>
 #include <sstream>
@@ -1013,8 +1014,8 @@ public:
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
     static constexpr int NUM_CUTS_X = 4;
-    static constexpr int NUM_CUTS_Y = 6;
-    static constexpr int NUM_CUTS_Z = 6;
+    static constexpr int NUM_CUTS_Y = 4;
+    static constexpr int NUM_CUTS_Z = 4;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
     static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
@@ -1094,8 +1095,7 @@ public:
     std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_VCI_IDX[2];
     // std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT;
 
-    std::vector<int> zoid_to_stream_num;
-    std::vector<int> zoid_to_stream_num_next_dt;
+    std::vector<int> zoid_to_stream_num[2];
 
     std::vector<std::vector<int>> send_zoid_to_zoid_sizes;
     std::vector<std::vector<int>> send_zoid_to_zoid_sizes_next_dt;
@@ -1728,929 +1728,6 @@ public:
             
             assignments.push_back(morton_assignment);
         }
-        
-        // METHOD 2: Hilbert curve
-        /*
-        {
-            Assignment hilbert_assignment;
-            hilbert_assignment.method_name = "Hilbert Curve";
-            
-            std::vector<std::pair<uint64_t, std::array<int, 3>>> hilbert_zoids;
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        uint64_t hilbert_code = hilbert3D(x, y, z, std::max({NUM_ZOIDS_X, NUM_ZOIDS_Y, NUM_ZOIDS_Z}));
-                        hilbert_zoids.push_back({hilbert_code, {x, y, z}});
-                    }
-                }
-            }
-            
-            std::sort(hilbert_zoids.begin(), hilbert_zoids.end());
-            
-            for (int i = 0; i < hilbert_zoids.size(); i++) {
-                int proc = i / zoids_per_proc;
-                hilbert_assignment.proc_to_zoids[proc].push_back(hilbert_zoids[i].second);
-                hilbert_assignment.zoid_to_proc[hilbert_zoids[i].second] = proc;
-            }
-            
-            assignments.push_back(hilbert_assignment);
-        }
-        */
-        
-        // METHOD 5: Torus-aware block decomposition with dependency balance
-        /*
-        {
-            Assignment torus_assignment;
-            torus_assignment.method_name = "Torus Block (Dep-Balanced)";
-            
-            // Find optimal block dimensions that respect periodicity
-            int best_px, best_py, best_pz;
-            findOptimalTorusDecomposition(NUM_ZOIDS_X, NUM_ZOIDS_Y, NUM_ZOIDS_Z, 
-                                        comm->nprocs, best_px, best_py, best_pz);
-            
-            // First, calculate how many zoids of each dependency level exist
-            std::vector<int> dep_counts(4, 0);
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        int dep = (x % 2 == 0) + (y % 2 == 0) + (z % 2 == 0);
-                        dep_counts[dep]++;
-                    }
-                }
-            }
-            
-            // Calculate target per processor for each dependency level
-            std::vector<int> dep_per_proc(4);
-            for (int dep = 0; dep < 4; dep++) {
-                dep_per_proc[dep] = dep_counts[dep] / comm->nprocs;
-            }
-            
-            if (comm->me == 0) {
-                std::cout << "Dependency distribution targets per processor:" << std::endl;
-                for (int dep = 0; dep < 4; dep++) {
-                    std::cout << "  Dep " << dep << ": " << dep_per_proc[dep] 
-                            << " zoids (total: " << dep_counts[dep] << ")" << std::endl;
-                }
-            }
-            
-            // Create initial block assignment
-            std::vector<std::vector<std::array<int, 3>>> block_zoids(comm->nprocs);
-            std::vector<std::vector<int>> proc_dep_counts(comm->nprocs, std::vector<int>(4, 0));
-            
-            int proc = 0;
-            for (int bx = 0; bx < best_px; bx++) {
-                for (int by = 0; by < best_py; by++) {
-                    for (int bz = 0; bz < best_pz; bz++) {
-                        // Calculate block boundaries
-                        int x_start = (bx * NUM_ZOIDS_X) / best_px;
-                        int x_end = ((bx + 1) * NUM_ZOIDS_X) / best_px;
-                        int y_start = (by * NUM_ZOIDS_Y) / best_py;
-                        int y_end = ((by + 1) * NUM_ZOIDS_Y) / best_py;
-                        int z_start = (bz * NUM_ZOIDS_Z) / best_pz;
-                        int z_end = ((bz + 1) * NUM_ZOIDS_Z) / best_pz;
-                        
-                        // Collect zoids in this block
-                        for (int x = x_start; x < x_end; x++) {
-                            for (int y = y_start; y < y_end; y++) {
-                                for (int z = z_start; z < z_end; z++) {
-                                    block_zoids[proc].push_back({x, y, z});
-                                    int dep = (x % 2 == 0) + (y % 2 == 0) + (z % 2 == 0);
-                                    proc_dep_counts[proc][dep]++;
-                                }
-                            }
-                        }
-                        proc++;
-                    }
-                }
-            }
-            
-            // Now rebalance to ensure each processor has correct dependency distribution
-            // Use min-cost flow for this
-            rebalanceDependencyLevels(block_zoids, proc_dep_counts, dep_per_proc,
-                                    tmp_send_neighbors, tmp_recv_neighbors);
-            
-            // Assign to final structure
-            for (int p = 0; p < comm->nprocs; p++) {
-                for (const auto& zoid : block_zoids[p]) {
-                    torus_assignment.proc_to_zoids[p].push_back(zoid);
-                    torus_assignment.zoid_to_proc[zoid] = p;
-                }
-            }
-            
-            assignments.push_back(torus_assignment);
-        }
-        */
-        
-        /*
-        // METHOD 6: Checkerboard pattern (exploiting odd/even communication)
-        {
-            Assignment checkerboard_assignment;
-            checkerboard_assignment.method_name = "Checkerboard";
-            
-            // Since odd coordinates send to even, group by parity patterns
-            std::map<int, std::vector<std::array<int, 3>>> parity_groups;
-            
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        // Create 8 groups based on parity of x,y,z
-                        int parity = (x % 2) + 2 * (y % 2) + 4 * (z % 2);
-                        parity_groups[parity].push_back({x, y, z});
-                    }
-                }
-            }
-            
-            // Distribute parity groups to processors to minimize cross-group communication
-            std::vector<std::array<int, 3>> ordered_zoids;
-            
-            // First add all even parity (receivers)
-            for (int p = 0; p < 8; p++) {
-                if (__builtin_popcount(p) % 2 == 0) { // Even number of 1s
-                    for (auto& zoid : parity_groups[p]) {
-                        ordered_zoids.push_back(zoid);
-                    }
-                }
-            }
-            
-            // Then add odd parity (senders)
-            for (int p = 0; p < 8; p++) {
-                if (__builtin_popcount(p) % 2 == 1) { // Odd number of 1s
-                    for (auto& zoid : parity_groups[p]) {
-                        ordered_zoids.push_back(zoid);
-                    }
-                }
-            }
-            
-            // Assign to processors
-            for (int i = 0; i < ordered_zoids.size(); i++) {
-                int proc = i / zoids_per_proc;
-                checkerboard_assignment.proc_to_zoids[proc].push_back(ordered_zoids[i]);
-                checkerboard_assignment.zoid_to_proc[ordered_zoids[i]] = proc;
-            }
-            
-            assignments.push_back(checkerboard_assignment);
-        }
-        */
-        
-        /*
-        // METHOD 7: Communication graph clustering
-        {
-            Assignment graph_cluster_assignment;
-            graph_cluster_assignment.method_name = "Graph Clustering";
-            
-            // Build adjacency list representation
-            std::vector<std::array<int, 3>> all_zoids;
-            std::map<std::array<int, 3>, int> zoid_to_idx;
-            
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        all_zoids.push_back({x, y, z});
-                        zoid_to_idx[{x, y, z}] = all_zoids.size() - 1;
-                    }
-                }
-            }
-            
-            // Build graph with bidirectional edges (considering both send and receive)
-            std::vector<std::vector<int>> adj_list(all_zoids.size());
-            
-            for (const auto& [sender, receivers] : tmp_send_neighbors) {
-                int sender_idx = zoid_to_idx[sender];
-                for (const auto& receiver : receivers) {
-                    int receiver_idx = zoid_to_idx[receiver];
-                    adj_list[sender_idx].push_back(receiver_idx);
-                    adj_list[receiver_idx].push_back(sender_idx); // Bidirectional
-                }
-            }
-            
-            // Use BFS-based clustering
-            std::vector<bool> assigned(all_zoids.size(), false);
-            std::vector<std::vector<int>> clusters;
-            
-            for (int start = 0; start < all_zoids.size(); start++) {
-                if (!assigned[start]) {
-                    std::vector<int> cluster;
-                    std::queue<int> q;
-                    q.push(start);
-                    assigned[start] = true;
-                    
-                    // Grow cluster using BFS until reaching target size
-                    while (!q.empty() && cluster.size() < zoids_per_proc) {
-                        int curr = q.front();
-                        q.pop();
-                        cluster.push_back(curr);
-                        
-                        // Add unassigned neighbors
-                        for (int neighbor : adj_list[curr]) {
-                            if (!assigned[neighbor] && cluster.size() < zoids_per_proc) {
-                                assigned[neighbor] = true;
-                                q.push(neighbor);
-                            }
-                        }
-                    }
-                    
-                    clusters.push_back(cluster);
-                }
-            }
-            
-            // Merge small clusters or split large ones to get exactly nprocs clusters
-            adjustClusterCount(clusters, comm->nprocs, zoids_per_proc);
-            
-            // Assign clusters to processors
-            for (int p = 0; p < clusters.size() && p < comm->nprocs; p++) {
-                for (int idx : clusters[p]) {
-                    graph_cluster_assignment.proc_to_zoids[p].push_back(all_zoids[idx]);
-                    graph_cluster_assignment.zoid_to_proc[all_zoids[idx]] = p;
-                }
-            }
-            
-            assignments.push_back(graph_cluster_assignment);
-        }
-        */
-
-        // METHOD 7: Communication graph clustering
-        /*
-        {
-            Assignment graph_cluster_assignment;
-            graph_cluster_assignment.method_name = "Graph Clustering";
-            
-            // Build adjacency list representation
-            std::vector<std::array<int, 3>> all_zoids;
-            std::map<std::array<int, 3>, int> zoid_to_idx;
-            
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        all_zoids.push_back({x, y, z});
-                        zoid_to_idx[{x, y, z}] = all_zoids.size() - 1;
-                    }
-                }
-            }
-            
-            // Build graph with bidirectional edges (considering both send and receive)
-            std::vector<std::vector<int>> adj_list(all_zoids.size());
-            
-            for (const auto& [sender, receivers] : tmp_send_neighbors) {
-                // Check if sender exists in our zoid list
-                if (zoid_to_idx.find(sender) == zoid_to_idx.end()) continue;
-                int sender_idx = zoid_to_idx[sender];
-                
-                for (const auto& receiver : receivers) {
-                    // Check if receiver exists in our zoid list
-                    if (zoid_to_idx.find(receiver) == zoid_to_idx.end()) continue;
-                    int receiver_idx = zoid_to_idx[receiver];
-                    
-                    adj_list[sender_idx].push_back(receiver_idx);
-                    adj_list[receiver_idx].push_back(sender_idx); // Bidirectional
-                }
-            }
-            
-            // Use BFS-based clustering
-            std::vector<bool> assigned(all_zoids.size(), false);
-            std::vector<std::vector<int>> clusters;
-            
-            // Start from each unassigned zoid and grow a cluster
-            for (int start = 0; start < all_zoids.size(); start++) {
-                if (!assigned[start] && clusters.size() < comm->nprocs) {
-                    std::vector<int> cluster;
-                    std::queue<int> q;
-                    q.push(start);
-                    assigned[start] = true;
-                    
-                    // Grow cluster using BFS until reaching target size
-                    while (!q.empty() && cluster.size() < zoids_per_proc) {
-                        int curr = q.front();
-                        q.pop();
-                        cluster.push_back(curr);
-                        
-                        // Add unassigned neighbors
-                        for (int neighbor : adj_list[curr]) {
-                            if (!assigned[neighbor] && cluster.size() < zoids_per_proc) {
-                                assigned[neighbor] = true;
-                                q.push(neighbor);
-                            }
-                        }
-                    }
-                    
-                    // If cluster is too small, try to grow it more
-                    if (cluster.size() < zoids_per_proc) {
-                        // Find nearest unassigned zoids
-                        for (int i = 0; i < all_zoids.size() && cluster.size() < zoids_per_proc; i++) {
-                            if (!assigned[i]) {
-                                cluster.push_back(i);
-                                assigned[i] = true;
-                            }
-                        }
-                    }
-                    
-                    clusters.push_back(cluster);
-                }
-            }
-            
-            // Handle any remaining unassigned zoids
-            std::vector<int> unassigned_zoids;
-            for (int i = 0; i < all_zoids.size(); i++) {
-                if (!assigned[i]) {
-                    unassigned_zoids.push_back(i);
-                }
-            }
-            
-            // Distribute unassigned zoids to clusters that need more
-            int idx = 0;
-            for (int c = 0; c < clusters.size(); c++) {
-                while (clusters[c].size() < zoids_per_proc && idx < unassigned_zoids.size()) {
-                    clusters[c].push_back(unassigned_zoids[idx++]);
-                }
-            }
-            
-            // Ensure we have exactly nprocs clusters with correct sizes
-            while (clusters.size() < comm->nprocs) {
-                clusters.push_back(std::vector<int>());
-            }
-            
-            // Balance cluster sizes
-            for (int c = 0; c < comm->nprocs; c++) {
-                // Take from oversized clusters
-                while (clusters[c].size() > zoids_per_proc) {
-                    int zoid_idx = clusters[c].back();
-                    clusters[c].pop_back();
-                    
-                    // Find cluster that needs more
-                    for (int c2 = 0; c2 < comm->nprocs; c2++) {
-                        if (clusters[c2].size() < zoids_per_proc) {
-                            clusters[c2].push_back(zoid_idx);
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            // Assign clusters to processors
-            for (int p = 0; p < comm->nprocs && p < clusters.size(); p++) {
-                for (int idx : clusters[p]) {
-                    if (idx >= 0 && idx < all_zoids.size()) {
-                        graph_cluster_assignment.proc_to_zoids[p].push_back(all_zoids[idx]);
-                        graph_cluster_assignment.zoid_to_proc[all_zoids[idx]] = p;
-                    }
-                }
-            }
-            
-            // Final check: ensure all processors have correct number of zoids
-            for (int p = 0; p < comm->nprocs; p++) {
-                int current = graph_cluster_assignment.proc_to_zoids[p].size();
-                if (current < zoids_per_proc) {
-                    // Find processors with extra zoids
-                    for (int p2 = 0; p2 < comm->nprocs && current < zoids_per_proc; p2++) {
-                        if (graph_cluster_assignment.proc_to_zoids[p2].size() > zoids_per_proc) {
-                            auto zoid = graph_cluster_assignment.proc_to_zoids[p2].back();
-                            graph_cluster_assignment.proc_to_zoids[p2].pop_back();
-                            graph_cluster_assignment.proc_to_zoids[p].push_back(zoid);
-                            graph_cluster_assignment.zoid_to_proc[zoid] = p;
-                            current++;
-                        }
-                    }
-                }
-            }
-        
-            assignments.push_back(graph_cluster_assignment);
-        }
-        */
-
-        // METHOD 7: Communication graph clustering (DETERMINISTIC)
-        /*
-        {
-            Assignment graph_cluster_assignment;
-            graph_cluster_assignment.method_name = "Graph Clustering";
-            
-            // Build adjacency list representation
-            std::vector<std::array<int, 3>> all_zoids;
-            std::map<std::array<int, 3>, int> zoid_to_idx;
-            
-            // DETERMINISTIC: Always process zoids in same order
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        all_zoids.push_back({x, y, z});
-                        zoid_to_idx[{x, y, z}] = all_zoids.size() - 1;
-                    }
-                }
-            }
-            
-            // Build graph with bidirectional edges
-            std::vector<std::set<int>> adj_list(all_zoids.size()); // Use set for deterministic ordering
-            
-            // Process edges in deterministic order
-            std::vector<std::pair<std::array<int, 3>, std::set<std::array<int, 3>>>> sorted_edges(
-                tmp_send_neighbors.begin(), tmp_send_neighbors.end());
-            std::sort(sorted_edges.begin(), sorted_edges.end());
-            
-            for (const auto& [sender, receivers] : sorted_edges) {
-                if (zoid_to_idx.find(sender) == zoid_to_idx.end()) continue;
-                int sender_idx = zoid_to_idx[sender];
-                
-                for (const auto& receiver : receivers) {
-                    if (zoid_to_idx.find(receiver) == zoid_to_idx.end()) continue;
-                    int receiver_idx = zoid_to_idx[receiver];
-                    
-                    adj_list[sender_idx].insert(receiver_idx);
-                    adj_list[receiver_idx].insert(sender_idx); // Bidirectional
-                }
-            }
-            
-            // Initialize clusters for each processor
-            std::vector<std::vector<int>> clusters(comm->nprocs);
-            std::vector<bool> assigned(all_zoids.size(), false);
-            
-            // Use DETERMINISTIC BFS-based clustering
-            int next_start = 0;
-            
-            for (int c = 0; c < comm->nprocs; c++) {
-                // Find next unassigned zoid
-                while (next_start < all_zoids.size() && assigned[next_start]) {
-                    next_start++;
-                }
-                
-                if (next_start >= all_zoids.size()) {
-                    // No more unassigned zoids to start clusters
-                    break;
-                }
-                
-                // Start BFS from this zoid
-                std::queue<int> q;
-                q.push(next_start);
-                assigned[next_start] = true;
-                
-                // Grow cluster using BFS until reaching target size
-                while (!q.empty() && clusters[c].size() < zoids_per_proc) {
-                    int curr = q.front();
-                    q.pop();
-                    clusters[c].push_back(curr);
-                    
-                    // Add unassigned neighbors in deterministic order (set is sorted)
-                    for (int neighbor : adj_list[curr]) {
-                        if (!assigned[neighbor] && clusters[c].size() < zoids_per_proc) {
-                            assigned[neighbor] = true;
-                            q.push(neighbor);
-                        }
-                    }
-                }
-            }
-            
-            // Fill remaining slots for each cluster
-            next_start = 0;
-            for (int c = 0; c < comm->nprocs; c++) {
-                while (clusters[c].size() < zoids_per_proc) {
-                    // Find next unassigned zoid
-                    while (next_start < all_zoids.size() && assigned[next_start]) {
-                        next_start++;
-                    }
-                    
-                    if (next_start < all_zoids.size()) {
-                        clusters[c].push_back(next_start);
-                        assigned[next_start] = true;
-                    } else {
-                        // Need to steal from another cluster
-                        bool found = false;
-                        for (int c2 = 0; c2 < comm->nprocs && !found; c2++) {
-                            if (c2 != c && clusters[c2].size() > zoids_per_proc) {
-                                int zoid_idx = clusters[c2].back();
-                                clusters[c2].pop_back();
-                                clusters[c].push_back(zoid_idx);
-                                found = true;
-                            }
-                        }
-                        if (!found) {
-                            // This should not happen if NUM_ZOIDS_MANY_CUTS % nprocs == 0
-                            std::cerr << "Error: Cannot balance clusters properly!" << std::endl;
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            // Verify all clusters have correct size before assignment
-            for (int p = 0; p < comm->nprocs; p++) {
-                if (clusters[p].size() != zoids_per_proc) {
-                    std::cerr << "Warning: Cluster " << p << " has " << clusters[p].size() 
-                            << " zoids instead of " << zoids_per_proc << std::endl;
-                }
-            }
-            
-            // Assign clusters to processors
-            for (int p = 0; p < comm->nprocs; p++) {
-                for (int idx : clusters[p]) {
-                    if (idx >= 0 && idx < all_zoids.size()) {
-                        graph_cluster_assignment.proc_to_zoids[p].push_back(all_zoids[idx]);
-                        graph_cluster_assignment.zoid_to_proc[all_zoids[idx]] = p;
-                    } else {
-                        std::cerr << "Error: Invalid zoid index " << idx << " for processor " << p << std::endl;
-                    }
-                }
-            }
-            
-            assignments.push_back(graph_cluster_assignment);
-        }
-        */
-        
-        // METHOD 8: Nested Torus (multi-scale optimization)
-        /*
-        {
-            Assignment nested_torus_assignment;
-            nested_torus_assignment.method_name = "Nested Torus";
-            
-            // Level 1: Find optimal coarse decomposition
-            int coarse_px, coarse_py, coarse_pz;
-            findOptimalTorusDecomposition(NUM_ZOIDS_X, NUM_ZOIDS_Y, NUM_ZOIDS_Z,
-                                        comm->nprocs, coarse_px, coarse_py, coarse_pz);
-            
-            if (comm->me == 0) {
-                std::cout << "Nested Torus using " << coarse_px << "x" << coarse_py 
-                        << "x" << coarse_pz << " decomposition" << std::endl;
-            }
-            
-            // Level 2: Assign coarse blocks with awareness of odd/even patterns
-            struct CoarseBlock {
-                int bx, by, bz;  // Block indices
-                int proc;        // Assigned processor
-                std::vector<std::array<int, 3>> zoids;
-                int odd_count;   // Number of odd-coordinate zoids (senders)
-                int even_count;  // Number of even-coordinate zoids (receivers)
-            };
-            
-            std::vector<CoarseBlock> coarse_blocks;
-            
-            // Create coarse blocks and analyze their communication patterns
-            for (int bx = 0; bx < coarse_px; bx++) {
-                for (int by = 0; by < coarse_py; by++) {
-                    for (int bz = 0; bz < coarse_pz; bz++) {
-                        CoarseBlock block;
-                        block.bx = bx; block.by = by; block.bz = bz;
-                        block.odd_count = 0;
-                        block.even_count = 0;
-                        
-                        // Calculate block boundaries
-                        int x_start = (bx * NUM_ZOIDS_X) / coarse_px;
-                        int x_end = ((bx + 1) * NUM_ZOIDS_X) / coarse_px;
-                        int y_start = (by * NUM_ZOIDS_Y) / coarse_py;
-                        int y_end = ((by + 1) * NUM_ZOIDS_Y) / coarse_py;
-                        int z_start = (bz * NUM_ZOIDS_Z) / coarse_pz;
-                        int z_end = ((bz + 1) * NUM_ZOIDS_Z) / coarse_pz;
-                        
-                        // Collect zoids in this block
-                        for (int x = x_start; x < x_end; x++) {
-                            for (int y = y_start; y < y_end; y++) {
-                                for (int z = z_start; z < z_end; z++) {
-                                    block.zoids.push_back({x, y, z});
-                                    
-                                    // Count odd/even for communication analysis
-                                    int parity = (x % 2) + (y % 2) + (z % 2);
-                                    if (parity % 2 == 1) {
-                                        block.odd_count++;  // This zoid sends
-                                    } else {
-                                        block.even_count++; // This zoid receives
-                                    }
-                                }
-                            }
-                        }
-                        
-                        coarse_blocks.push_back(block);
-                    }
-                }
-            }
-            
-            // Level 3: Smart assignment of blocks to processors
-            // Goal: Balance load while keeping communicating blocks together
-            
-            // Build block adjacency graph (which blocks communicate)
-            std::map<std::pair<int, int>, int> block_communication;
-            
-            for (int i = 0; i < coarse_blocks.size(); i++) {
-                for (const auto& zoid : coarse_blocks[i].zoids) {
-                    if (tmp_send_neighbors.find(zoid) != tmp_send_neighbors.end()) {
-                        for (const auto& neighbor : tmp_send_neighbors[zoid]) {
-                            // Find which block the neighbor is in
-                            int nb_bx = (neighbor[0] * coarse_px) / NUM_ZOIDS_X;
-                            int nb_by = (neighbor[1] * coarse_py) / NUM_ZOIDS_Y;
-                            int nb_bz = (neighbor[2] * coarse_pz) / NUM_ZOIDS_Z;
-                            
-                            // Find block index
-                            int j = nb_bx * (coarse_py * coarse_pz) + nb_by * coarse_pz + nb_bz;
-                            
-                            if (i != j) {
-                                block_communication[{std::min(i,j), std::max(i,j)}]++;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Use graph partitioning on blocks
-            // For now, use a greedy approach that groups heavily communicating blocks
-            std::vector<bool> block_assigned(coarse_blocks.size(), false);
-            std::vector<std::vector<int>> proc_blocks(comm->nprocs);
-            std::vector<int> proc_zoid_count(comm->nprocs, 0);
-            
-            // Start with blocks that have high internal communication
-            std::vector<std::pair<int, int>> block_internal_comm;
-            for (int i = 0; i < coarse_blocks.size(); i++) {
-                // Count internal odd->even communications
-                int internal = std::min(coarse_blocks[i].odd_count, 
-                                    coarse_blocks[i].even_count);
-                block_internal_comm.push_back({internal, i});
-            }
-            
-            // Sort by internal communication (descending)
-            std::sort(block_internal_comm.begin(), block_internal_comm.end(),
-                    std::greater<std::pair<int,int>>());
-            
-            // Assign blocks using a balanced greedy approach
-            for (const auto& [internal, block_idx] : block_internal_comm) {
-                if (block_assigned[block_idx]) continue;
-                
-                // Find processor with least load that this block communicates with
-                int best_proc = -1;
-                int best_score = INT_MIN;
-                
-                for (int p = 0; p < comm->nprocs; p++) {
-                    if (proc_zoid_count[p] + coarse_blocks[block_idx].zoids.size() <= 
-                        zoids_per_proc + 1) { // Allow slight overload temporarily
-                        
-                        // Calculate communication score with this processor
-                        int comm_score = 0;
-                        for (int assigned_block : proc_blocks[p]) {
-                            auto key = std::make_pair(std::min(block_idx, assigned_block),
-                                                    std::max(block_idx, assigned_block));
-                            if (block_communication.find(key) != block_communication.end()) {
-                                comm_score += block_communication[key];
-                            }
-                        }
-                        
-                        // Prefer processors with space and high communication
-                        int load_penalty = proc_zoid_count[p];
-                        int score = comm_score - load_penalty / 10;
-                        
-                        if (score > best_score) {
-                            best_score = score;
-                            best_proc = p;
-                        }
-                    }
-                }
-                
-                // Assign to best processor (or least loaded if no communication)
-                if (best_proc == -1) {
-                    best_proc = std::min_element(proc_zoid_count.begin(), 
-                                            proc_zoid_count.end()) - 
-                            proc_zoid_count.begin();
-                }
-                
-                proc_blocks[best_proc].push_back(block_idx);
-                proc_zoid_count[best_proc] += coarse_blocks[block_idx].zoids.size();
-                block_assigned[block_idx] = true;
-                coarse_blocks[block_idx].proc = best_proc;
-            }
-            
-            // Level 4: Fine-grained load balancing
-            // Move individual zoids between processors to achieve perfect balance
-            
-            // First, assign all zoids based on block assignment
-            for (const auto& block : coarse_blocks) {
-                for (const auto& zoid : block.zoids) {
-                    nested_torus_assignment.proc_to_zoids[block.proc].push_back(zoid);
-                    nested_torus_assignment.zoid_to_proc[zoid] = block.proc;
-                }
-            }
-            
-            // Now balance by moving zoids between processors
-            balanceWithMinimalDisruption(nested_torus_assignment.proc_to_zoids,
-                                        nested_torus_assignment.zoid_to_proc,
-                                        tmp_send_neighbors, tmp_recv_neighbors,
-                                        zoids_per_proc);
-            
-            assignments.push_back(nested_torus_assignment);
-        }
-        */
-
-        // METHOD 9: Dependency-aware assignment with min-cost flow
-        /*
-        {
-            Assignment depaware_assignment;
-            depaware_assignment.method_name = "Dependency-Aware MinCost";
-            
-            // Start with dependency level 0 zoids
-            std::vector<std::array<int, 3>> dep0_zoids;
-            for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                    for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                        if (x % 2 == 1 && y % 2 == 1 && z % 2 == 1) {
-                            dep0_zoids.push_back({x, y, z});
-                        }
-                    }
-                }
-            }
-            
-            // Simple round-robin assignment for dep0 zoids if K-means fails
-            if (dep0_zoids.size() > 0) {
-                int dep0_per_proc = dep0_zoids.size() / comm->nprocs;
-                
-                // Sort by Morton code for spatial locality
-                std::sort(dep0_zoids.begin(), dep0_zoids.end(), [&](const auto& a, const auto& b) {
-                    return morton3D(a[0], a[1], a[2]) < morton3D(b[0], b[1], b[2]);
-                });
-                
-                // Assign dep0 zoids evenly
-                for (int i = 0; i < dep0_zoids.size(); i++) {
-                    int proc = i / dep0_per_proc;
-                    if (proc >= comm->nprocs) proc = comm->nprocs - 1;
-                    depaware_assignment.proc_to_zoids[proc].push_back(dep0_zoids[i]);
-                    depaware_assignment.zoid_to_proc[dep0_zoids[i]] = proc;
-                }
-            }
-            
-            // Process other dependency levels with min-cost flow
-            for (int dep = 1; dep < 4; dep++) {
-                std::vector<std::array<int, 3>> unclaimed_zoids;
-                
-                for (int x = 0; x < NUM_ZOIDS_X; x++) {
-                    for (int y = 0; y < NUM_ZOIDS_Y; y++) {
-                        for (int z = 0; z < NUM_ZOIDS_Z; z++) {
-                            std::array<int, 3> zoid = {x, y, z};
-                            int zoid_dep = (x % 2 == 0) + (y % 2 == 0) + (z % 2 == 0);
-                            
-                            if (zoid_dep == dep && depaware_assignment.zoid_to_proc.find(zoid) == depaware_assignment.zoid_to_proc.end()) {
-                                unclaimed_zoids.push_back(zoid);
-                            }
-                        }
-                    }
-                }
-                
-                if (unclaimed_zoids.empty()) continue;
-                
-                // Safe assignment with min-cost flow
-                int M = unclaimed_zoids.size();
-                int N = comm->nprocs;
-                
-                // Calculate remaining capacity for each processor
-                std::vector<int> proc_remaining_capacity(N);
-                for (int p = 0; p < N; p++) {
-                    proc_remaining_capacity[p] = zoids_per_proc - depaware_assignment.proc_to_zoids[p].size();
-                }
-                
-                // Build min-cost flow graph
-                int source = M + N;
-                int sink = M + N + 1;
-                MinCostFlow mcf(M + N + 2);
-                
-                // Source to zoid nodes
-                for (int i = 0; i < M; i++) {
-                    mcf.addEdge(source, i, 1, 0);
-                }
-                
-                // Zoid nodes to processor nodes with communication-based costs
-                for (int i = 0; i < M; i++) {
-                    auto& zoid = unclaimed_zoids[i];
-                    
-                    for (int p = 0; p < N; p++) {
-                        if (proc_remaining_capacity[p] > 0) {
-                            // Calculate normalized cost
-                            double communication_benefit = 0.0;
-                            double communication_penalty = 0.0;
-                            int total_neighbors = 0;
-                            
-                            // Check incoming edges safely
-                            if (tmp_recv_neighbors.find(zoid) != tmp_recv_neighbors.end()) {
-                                for (const auto& sender : tmp_recv_neighbors.at(zoid)) {
-                                    if (depaware_assignment.zoid_to_proc.find(sender) != depaware_assignment.zoid_to_proc.end()) {
-                                        total_neighbors++;
-                                        if (depaware_assignment.zoid_to_proc.at(sender) == p) {
-                                            communication_benefit += 1.0;
-                                        } else {
-                                            communication_penalty += 1.0;
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // Check outgoing edges safely
-                            if (tmp_send_neighbors.find(zoid) != tmp_send_neighbors.end()) {
-                                for (const auto& receiver : tmp_send_neighbors.at(zoid)) {
-                                    if (depaware_assignment.zoid_to_proc.find(receiver) != depaware_assignment.zoid_to_proc.end()) {
-                                        total_neighbors++;
-                                        if (depaware_assignment.zoid_to_proc.at(receiver) == p) {
-                                            communication_benefit += 1.0;
-                                        } else {
-                                            communication_penalty += 1.0;
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // Calculate cost
-                            const double COMM_WEIGHT = 100.0;
-                            double comm_cost = 0.0;
-                            if (total_neighbors > 0) {
-                                double remote_fraction = communication_penalty / total_neighbors;
-                                double local_fraction = communication_benefit / total_neighbors;
-                                comm_cost = COMM_WEIGHT * (remote_fraction - local_fraction);
-                            }
-                            
-                            // Spatial locality cost
-                            double spatial_cost = 0.0;
-                            if (!depaware_assignment.proc_to_zoids[p].empty()) {
-                                auto proc_centroid = calculateProcessorCentroid(depaware_assignment.proc_to_zoids[p]);
-                                double dist = euclideanDistance(zoid, proc_centroid);
-                                double max_dist = std::sqrt(NUM_ZOIDS_X*NUM_ZOIDS_X + 
-                                                        NUM_ZOIDS_Y*NUM_ZOIDS_Y + 
-                                                        NUM_ZOIDS_Z*NUM_ZOIDS_Z);
-                                const double SPATIAL_WEIGHT = 20.0;
-                                spatial_cost = SPATIAL_WEIGHT * (dist / max_dist);
-                            }
-                            
-                            // Load balancing hint
-                            const double LOAD_WEIGHT = 5.0;
-                            double current_fill = (double)depaware_assignment.proc_to_zoids[p].size() / zoids_per_proc;
-                            double load_cost = LOAD_WEIGHT * current_fill;
-                            
-                            int total_cost = static_cast<int>(comm_cost + spatial_cost + load_cost);
-                            mcf.addEdge(i, M + p, 1, total_cost);
-                        }
-                    }
-                }
-                
-                // Processor nodes to sink with exact capacity
-                for (int p = 0; p < N; p++) {
-                    if (proc_remaining_capacity[p] > 0) {
-                        mcf.addEdge(M + p, sink, proc_remaining_capacity[p], 0);
-                    }
-                }
-                
-                // Run min-cost flow
-                int flowCost = 0;
-                int flowAchieved = mcf.minCostFlow(source, sink, M, flowCost);
-                
-                if (flowAchieved < M) {
-                    // Fallback: assign remaining zoids greedily
-                    std::vector<bool> assigned(M, false);
-                    
-                    // First check flow results
-                    for (int i = 0; i < M; i++) {
-                        for (auto& edge : mcf.graph[i]) {
-                            if (edge.to >= M && edge.to < M + N && edge.cap == 0) {
-                                int proc = edge.to - M;
-                                depaware_assignment.proc_to_zoids[proc].push_back(unclaimed_zoids[i]);
-                                depaware_assignment.zoid_to_proc[unclaimed_zoids[i]] = proc;
-                                assigned[i] = true;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // Assign any remaining zoids
-                    for (int i = 0; i < M; i++) {
-                        if (!assigned[i]) {
-                            // Find processor with space
-                            for (int p = 0; p < N; p++) {
-                                if (depaware_assignment.proc_to_zoids[p].size() < zoids_per_proc) {
-                                    depaware_assignment.proc_to_zoids[p].push_back(unclaimed_zoids[i]);
-                                    depaware_assignment.zoid_to_proc[unclaimed_zoids[i]] = p;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Extract all assignments from flow
-                    for (int i = 0; i < M; i++) {
-                        for (auto& edge : mcf.graph[i]) {
-                            if (edge.to >= M && edge.to < M + N && edge.cap == 0) {
-                                int proc = edge.to - M;
-                                depaware_assignment.proc_to_zoids[proc].push_back(unclaimed_zoids[i]);
-                                depaware_assignment.zoid_to_proc[unclaimed_zoids[i]] = proc;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Final balance check and adjustment
-            for (int p = 0; p < comm->nprocs; p++) {
-                while (depaware_assignment.proc_to_zoids[p].size() < zoids_per_proc) {
-                    // Find a processor with extra zoids
-                    for (int p2 = 0; p2 < comm->nprocs; p2++) {
-                        if (depaware_assignment.proc_to_zoids[p2].size() > zoids_per_proc) {
-                            auto zoid = depaware_assignment.proc_to_zoids[p2].back();
-                            depaware_assignment.proc_to_zoids[p2].pop_back();
-                            depaware_assignment.proc_to_zoids[p].push_back(zoid);
-                            depaware_assignment.zoid_to_proc[zoid] = p;
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            assignments.push_back(depaware_assignment);
-        }
-        */
         
         // Optimize each initial assignment with iterative refinement
         for (auto& assignment : assignments) {
@@ -4153,36 +3230,34 @@ public:
         }
 
         if (USE_STREAMS) {
-            zoid_to_stream_num.resize(NUM_ZOIDS_MANY_CUTS);
+            zoid_to_stream_num[1].resize(NUM_ZOIDS_MANY_CUTS);
+            int stream_idx = 0;
             for (int dep = 0; dep < NUM_DEPS; dep++) {
-                int stream_idx = 0;
                 for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
                     auto& zoid = my_queues_many_cuts[dep][j];
                     int zoid_num = zoid.num;
-                    zoid_to_stream_num[zoid_num] = stream_idx;
+                    zoid_to_stream_num[1][zoid_num] = stream_idx;
                     assert(stream_idx < NUM_STREAMS);
                     stream_idx++;
                 }
             }
 
-            zoid_to_stream_num_next_dt.resize(NUM_ZOIDS_MANY_CUTS);
+            zoid_to_stream_num[0].resize(NUM_ZOIDS_MANY_CUTS);
+            stream_idx = 0;
             for (int dep = 0; dep < NUM_DEPS; dep++) {
-                int stream_idx = 0;
                 for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
                     auto& zoid = my_queues_many_cuts_next_dt[dep][j];
                     int zoid_num = zoid.num;
-                    zoid_to_stream_num_next_dt[zoid_num] = stream_idx;
+                    zoid_to_stream_num[0][zoid_num] = stream_idx;
                     assert(stream_idx < NUM_STREAMS);
                     stream_idx++;
                 }
             }
-            MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num.data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
-            MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num_next_dt.data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
+            MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num[1].data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
+            MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num[0].data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
             for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
-                if (zoid_to_stream_num[i] >= NUM_STREAMS) {
-                    std::cout << "ERROR. zoid: " << i << " stream: " << zoid_to_stream_num[i] << std::endl;
-                }
-                assert(zoid_to_stream_num[i] >= 0 && zoid_to_stream_num[i] < NUM_STREAMS);
+                assert(zoid_to_stream_num[1][i] >= 0 && zoid_to_stream_num[1][i] < NUM_STREAMS);
+                assert(zoid_to_stream_num[0][i] >= 0 && zoid_to_stream_num[0][i] < NUM_STREAMS);
             }
         }
 
@@ -4545,109 +3620,6 @@ public:
             }
         }
     }
-
-    /*
-    template <bool curr_dt>
-    void INIT_ZOID_STREAM_DATA() {
-        std::map<std::pair<int, int>, int> dep_to_dep_to_count;
-        auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
-
-        auto get_dep_curr_dt = [](const queue_info& zoid) {
-            return (zoid.where[0] % 2 == 0) + (zoid.where[1] % 2 == 0) + (zoid.where[2] % 2 == 0);
-        };
-
-        auto get_dep_next_dt = [](const queue_info& zoid) {
-            return (zoid.where[0] % 2 == 1) + (zoid.where[1] % 2 == 1) + (zoid.where[2] % 2 == 1);
-        };
-
-        std::map<std::pair<int, int>, int> comm_to_stream_num;
-
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            int stream_idx = 0;
-            for (int j = 0; j < queues[dep].size(); j++) {
-                const auto& zoid = queues[dep][j];
-                const auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
-                for (int neigh : recv_neighbors) {
-                    if (neigh % comm->nprocs != comm->me) {
-                        comm_to_stream_num[{neigh, zoid.num}] = stream_idx++;
-                    }
-                }
-            }
-        }
-
-        std::vector<int> my_zoids_src;
-        std::vector<int> my_zoids_dst;
-        std::vector<int> my_zoids_stream_num;
-
-        for (auto& [k, v] : comm_to_stream_num) {
-            my_zoids_src.push_back(k.first);
-            my_zoids_dst.push_back(k.second);
-            my_zoids_stream_num.push_back(v);
-        }
-
-        std::vector<int> counts(comm->nprocs, 0);
-        std::vector<int> displacements(comm->nprocs, 0);
-
-        int my_count = my_zoids_src.size();
-        MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, world);
-
-        int total_size = 0;
-        for (int proc = 0; proc < comm->nprocs; proc++) {
-            total_size += counts[proc];
-        }
-
-        displacements[0] = 0;
-        for (int proc = 1; proc < comm->nprocs; proc++) {
-            displacements[proc] = displacements[proc - 1] + counts[proc - 1];
-        }
-
-        std::vector<int> all_src;
-        std::vector<int> all_dst;
-        std::vector<int> all_comm_idx;
-        all_src.resize(total_size);
-        all_dst.resize(total_size);
-        all_comm_idx.resize(total_size);
-
-        MPI_Allgatherv(my_zoids_src.data(), counts[comm->me], MPI_INT, all_src.data(),
-                       counts.data(), displacements.data(), MPI_INT, world);
-
-        MPI_Allgatherv(my_zoids_dst.data(), counts[comm->me], MPI_INT, all_dst.data(),
-                       counts.data(), displacements.data(), MPI_INT, world);
-
-        MPI_Allgatherv(my_zoids_stream_num.data(), counts[comm->me], MPI_INT, all_comm_idx.data(),
-                       counts.data(), displacements.data(), MPI_INT, world);
-
-        for (int i = 0; i < all_src.size(); i++) {
-            int src = all_src[i];
-            int dst = all_dst[i];
-            int comm_idx = all_comm_idx[i];
-            ZOID_TO_ZOID_TO_STREAM_NUM[{src, dst}] = comm_idx;
-        }
-
-        MPI_Barrier(world);
-
-        if (comm->me == 0) {
-            for (int dep = 0; dep < NUM_DEPS; dep++) {
-                int total_nrecv_neighbors = 0;
-                for (int j = 0; j < queues[dep].size(); j++) {
-                    auto& zoid = queues[dep][j];
-                    auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
-                    for (auto& neigh : recv_neighbors) {
-                        if (neigh % comm->nprocs != comm->me) {
-                            total_nrecv_neighbors++;
-                        }
-                    }
-                }
-            }
-
-            for (auto& [k, v] : ZOID_TO_ZOID_TO_STREAM_NUM) {
-                std::cout << BOLDYELLOW << "zoid: " << k.first << " to zoid: " << k.second << " stream num: " << v << RESET_COLOR << std::endl;
-            }
-
-            // assert(false);
-        }
-    }
-    */
 
     template <bool curr_dt>
     void INIT_DEP_PROC_RECV_ZOID_DATA() {
@@ -7721,10 +6693,6 @@ public:
                     recv_proc_zoid_offsets[curr_dt_idx][pipeline_stage][neigh][find_idx] = offsets_per_proc[send_zoid_proc];
                     recv_proc_zoid_sizes[curr_dt_idx][pipeline_stage][neigh][find_idx] = nrecv_from_send_zoid;
 
-                    if (neigh == 36 && send_zoid.num == 406) {
-                        std::cout << "RECEIVER SIDE offset: " << offsets_per_proc[send_zoid_proc] << " size: " << nrecv_from_send_zoid << std::endl;
-                    }
-
                     int zoid_dep = curr_dt ? zoid_num_to_dep[neigh] : zoid_num_to_dep_next_dt[neigh];
 
                     if (nrecv_from_send_zoid > 0) {
@@ -7754,25 +6722,26 @@ public:
        }
     }
 
-    static constexpr int NUM_STREAMS = 24;
+    static constexpr int NUM_STREAMS = 16;
     // 64 VCIs so 1 per comm
     static constexpr int NUM_COMMS = 16;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
+    MPI_Comm stream_comms[NUM_STREAMS];
     MPI_Comm stream_comm;
 
     MPI_Comm proc_to_proc_pipelined_comms[NUM_PIPELINE_STAGES][NUM_DEPS];
 
-    static constexpr bool USE_STREAMS = false;
+    static constexpr bool USE_STREAMS = true;
 
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
         if (USE_STREAMS) {
             for (int i = 0; i < NUM_STREAMS; i++) {
                 MPIX_Stream_create(MPI_INFO_NULL, &all_streams[i]);
+                MPIX_Stream_comm_create(world, all_streams[i], &stream_comms[i]);
             }
-
             auto res = MPIX_Stream_comm_create_multiplex(world, NUM_STREAMS, all_streams, &stream_comm);
-            assert(res == MPI_SUCCESS);
+            // assert(res == MPI_SUCCESS);
         }
 
         constexpr int INITIAL_SIZE = 1024;
@@ -7970,11 +6939,6 @@ public:
                     auto pair = std::make_pair(send_zoid.num, proc);
                     send_proc_zoid_offsets[curr_dt_idx][pipeline_stage][pair] = offsets_per_proc[proc];
                     send_proc_zoid_sizes[curr_dt_idx][pipeline_stage][pair] = nsend;
-
-                    if (!curr_dt && send_zoid_num == 406 && proc == 4) {
-                        std::cout << "SENDER SIDE offset: " << offsets_per_proc[proc] << " size: " << nsend << std::endl;
-                    }
-
                     offsets_per_proc[proc] += nsend;
                 }
             }
@@ -8450,19 +7414,9 @@ public:
 
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[1].at({zoid_num, send_zoid_num});
 
-                if (false && USE_STREAMS) {
-                    int send_stream_idx = zoid_to_stream_num.at(zoid_num);
-                    int recv_stream_idx = zoid_to_stream_num.at(send_zoid_num);
-                    MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
-                                      send_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[r.size() - 1]);
-                    // MPIX_Stream_progress(all_streams[send_stream_idx]);
-                } else {
-                    MPI_Isend(buf, buf_idx, MPI_DOUBLE,
-                              send_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[r.size() - 1]);
-                }
+                MPI_Isend(buf, buf_idx, MPI_DOUBLE,
+                            send_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[r.size() - 1]);
             }
         }
     }
@@ -8505,29 +7459,12 @@ public:
 
                 assert(send_request_idx != -1);
 
-                if (USE_STREAMS) {
-                    int send_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
-                    int recv_stream_idx = curr_dt ? zoid_to_stream_num[send_zoid_num] : zoid_to_stream_num_next_dt[send_zoid_num];
-
-                    // int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({zoid_num, send_zoid_num});;
-                    // int recv_stream_idx = send_stream_idx;
-
-                    // int send_stream_idx = 0;
-                    // int recv_stream_idx = 0;
-
-                    MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
-                                      send_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[send_request_idx]);
-                    MPIX_Stream_progress(all_streams[send_stream_idx]);
-                } else {
-                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
-                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
-                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
-                    MPI_Isend(buf, buf_idx, MPI_DOUBLE,
-                              send_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[send_request_idx]);
-                }
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                MPI_Isend(buf, buf_idx, MPI_DOUBLE,
+                            send_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[send_request_idx]);
             }
         }
     }
@@ -8592,72 +7529,14 @@ public:
 
                 assert(send_request_idx != -1);
 
-                if (USE_STREAMS) {
-                    int send_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
-                    int recv_stream_idx = curr_dt ? zoid_to_stream_num[send_zoid_num] : zoid_to_stream_num_next_dt[send_zoid_num];
-                    MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
-                                      send_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[send_request_idx]);
-                    // MPIX_Stream_progress(all_streams[send_stream_idx]);
-                } else {
-                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
-                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
-                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
-                    MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
-                              send_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[send_request_idx]);
-                }
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
+                            send_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[send_request_idx]);
             }
         }
-
-        // cilk_for (int i = 0; i < send_neighbors.size(); i++) {
-        /*
-        cilk_for (int i = 0; i < send_neighbors.size(); i++) {
-            int send_zoid_num = send_neighbors[i];
-            int nsend = curr_dt ? send_zoid_to_zoid_sizes[zoid_num][i] : send_zoid_to_zoid_sizes_next_dt[zoid_num][i];
-            int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
-            int send_request_idx = send_request_idxs[i];
-            int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
-
-            if (send_zoid_num % comm->nprocs == comm->me) {
-                continue;
-            }
-
-            if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid.num][i]) {
-                assert(false);
-                GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, DEFAULT_PIPELINE_STAGE);
-            }
-
-            auto* buf = buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i];
-
-            int buf_idx = PACK_DATA_MANY_CUTS_HELPER<curr_dt>(zoid, buf, i, send_zoid_num, start_t, end_t);
-
-            assert(buf_idx == zoid_ndoubles_send);
-
-            if (send_zoid_dep == dep + 1 && buf_idx > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
-                int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
-
-                assert(send_request_idx != -1);
-
-                if (USE_STREAMS) {
-                    int send_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
-                    int recv_stream_idx = curr_dt ? zoid_to_stream_num_next_dt[send_zoid_num] : zoid_to_stream_num_next_dt[send_zoid_num];
-                    MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
-                                      send_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[send_request_idx]);
-                    MPIX_Stream_progress(all_streams[send_stream_idx]);
-                } else {
-                    int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num})
-                                           : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
-                    MPI_Isend(buf, buf_idx, MPI_DOUBLE,
-                              send_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[send_request_idx]);
-                }
-            }
-        }
-        */
     }
 
     template <bool curr_dt>
@@ -8710,22 +7589,12 @@ public:
 
                 assert(send_request_idx != -1);
 
-                if (USE_STREAMS) {
-                    int send_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
-                    int recv_stream_idx = curr_dt ? zoid_to_stream_num[send_zoid_num] : zoid_to_stream_num_next_dt[send_zoid_num];
-                    MPIX_Stream_isend(buf, buf_idx, MPI_DOUBLE,
-                                      send_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[send_request_idx]);
-                    // MPIX_Stream_progress(all_streams[send_stream_idx]);
-                } else {
-                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
-                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
-                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
-                    MPI_Isend(buf, buf_idx, MPI_DOUBLE,
-                              send_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[send_request_idx]);
-                }
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
+                MPI_Isend(buf, buf_idx, MPI_DOUBLE,
+                            send_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[send_request_idx]);
             }
         }
     }
@@ -8958,11 +7827,17 @@ public:
                 assert(send_request_idx != -1);
                 assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
-                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({zoid_num, send_zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({zoid_num, send_zoid_num});
-                MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
-                          send_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[comm_idx], &r[send_request_idx]);
-          }
+                if (USE_STREAMS) {
+                    int src_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
+                    int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][send_zoid_num];
+                    MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, stream_comm,
+                        src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                } else {
+                    MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
+                            send_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[send_request_idx]);
+                }
+            }
         }
     }
 
@@ -9012,6 +7887,106 @@ public:
         }
     }
 
+    template <bool curr_dt>
+    void PACK_DATA_WITH_PROC_TO_PROC(queue_info& zoid, int send_dep, int start_timestep, int end_timestep, int pipeline_stage, std::vector<std::atomic<int>>& zoid_counters) {
+
+        assert(pipeline_stage == DEFAULT_PIPELINE_STAGE);
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+            : send_to_neighbors_many_cuts_next_dt[zoid.num];
+
+        auto& send_request_idxs = send_to_neighbors_not_my_proc_idxs_only_next_dep[curr_dt_idx][zoid.num];
+
+        int zoid_num = zoid.num;
+
+        const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][pipeline_stage][send_dep];
+
+        cilk_scope {
+            for (int i = 0; i < procs_to_send_to.size(); i++) {
+                cilk_spawn PACK_DATA_PROC_TO_PROC_HELPER<curr_dt>(zoid, pipeline_stage, send_dep, procs_to_send_to[i]);
+            }
+
+            for (int i = 0; i < send_neighbors.size(); i++) {
+                int send_zoid_num = send_neighbors[i];
+                int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
+                    : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
+                int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+                int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+
+                if (send_zoid_num % comm->nprocs == comm->me) {
+                    cilk_spawn [&]() {
+                        auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num] : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+                        auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[send_zoid_num] : recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
+                        auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), zoid_num);
+                        assert(find_it != recv_neighbors.end());
+                        int find_idx = std::distance(recv_neighbors.begin(), find_it);
+                        assert(recv_neighbors[find_idx] == zoid_num);
+                        UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, i, start_timestep, end_timestep, pipeline_stage);
+                        zoid_counters[send_zoid_num]--;
+                    }();
+                    continue;
+                }
+
+                if (send_zoid_dep != send_dep + 1) {
+                    continue;
+                }
+
+                if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[pipeline_stage][zoid.num][i]) {
+                    assert(false);
+                    GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
+                }
+
+                auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
+
+                cilk_spawn PACK_DATA_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage);
+            }
+        }
+    }
+
+    template <bool curr_dt>
+    void SEND_DATA_ZOID_TO_ZOID(queue_info& zoid, int send_dep, int pipeline_stage, std::vector<MPI_Request>& r) {
+        assert(USE_STREAMS);
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+            : send_to_neighbors_many_cuts_next_dt[zoid.num];
+
+        auto& send_request_idxs = send_to_neighbors_not_my_proc_idxs_only_next_dep[curr_dt_idx][zoid.num];
+
+        int zoid_num = zoid.num;
+        int src_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
+
+        std::vector<int> proc_counts(comm->nprocs, 0);
+
+        for (int i = 0; i < send_neighbors.size(); i++) {
+            int send_zoid_num = send_neighbors[i];
+            int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
+                : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
+            int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+            int send_request_idx = send_request_idxs[i];
+            int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+            if (send_zoid_num % comm->nprocs == comm->me) {
+                continue;
+            }
+
+            if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[pipeline_stage][zoid.num][i]) {
+                assert(false);
+                GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
+            }
+
+            auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
+            if (send_zoid_dep == send_dep + 1 && zoid_ndoubles_send > 0 && (send_zoid_num % comm->nprocs != comm->me))  {
+                proc_counts[send_zoid_num % comm->nprocs]++;
+                int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
+                assert(send_request_idx != -1);
+                int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][send_zoid_num];
+                MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, stream_comm,
+                    src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+            }
+        }
+    }
+
     void RECEIVE_DATA_ZOID_TO_ZOID_SETUP(int zoid_num, std::vector<MPI_Request>& r) {
         auto& queues = queues_many_cuts;
 
@@ -9039,22 +8014,11 @@ public:
                 r.emplace_back();
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
 
-                if (false && USE_STREAMS) {
-                    int send_stream_idx = zoid_to_stream_num.at(recv_zoid_num);
-                    int recv_stream_idx = zoid_to_stream_num.at(zoid_num);
-
-                    MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                                      recv_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[r.size() - 1]);
-                } else {
-                    assert(ZOID_TO_ZOID_TO_VCI_IDX[1].count({recv_zoid_num, zoid_num}));
-                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[1].at({recv_zoid_num, zoid_num});
-                    // int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num});
-                    MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                              recv_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[r.size() - 1]);
-                }
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[1].count({recv_zoid_num, zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[1].at({recv_zoid_num, zoid_num});
+                MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
+                            recv_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[r.size() - 1]);
             }
         }
     }
@@ -9094,27 +8058,12 @@ public:
 
                 int recv_request_idx = curr_dt ? recv_request_zoid_to_idx[dep].at({recv_zoid_num, zoid_num})
                                                : recv_request_zoid_to_idx_next_dt[dep].at({recv_zoid_num, zoid_num});
-                if (USE_STREAMS) {
-                    int send_stream_idx = curr_dt ? zoid_to_stream_num[recv_zoid_num] : zoid_to_stream_num_next_dt[recv_zoid_num];
-                    int recv_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
-
-                    // int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({recv_zoid_num, zoid_num});;
-                    // int recv_stream_idx = send_stream_idx;
-                    // int send_stream_idx = 0;
-                    // int recv_stream_idx = 0;
-
-                    MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                                      recv_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[recv_request_idx]);
-                } else {
-                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
-                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
-                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
-                    MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                              recv_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[recv_request_idx]);
-                }
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
+                MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
+                            recv_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[recv_request_idx]);
             }
         }
     }
@@ -9149,27 +8098,12 @@ public:
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
                 int recv_request_idx = curr_dt ? recv_request_zoid_to_idx[dep].at({recv_zoid_num, zoid_num})
                                                : recv_request_zoid_to_idx_next_dt[dep].at({recv_zoid_num, zoid_num});
-                if (USE_STREAMS) {
-                    int send_stream_idx = curr_dt ? zoid_to_stream_num[recv_zoid_num] : zoid_to_stream_num_next_dt[recv_zoid_num];
-                    int recv_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
-
-                    // int send_stream_idx = curr_dt ? ZOID_TO_ZOID_TO_STREAM_NUM.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_STREAM_NUM_NEXT_DT.at({recv_zoid_num, zoid_num});;
-                    // int recv_stream_idx = send_stream_idx;
-                    // int send_stream_idx = 0;
-                    // int recv_stream_idx = 0;
-
-                    MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                                      recv_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[recv_request_idx]);
-                } else {
-                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
-                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
-                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
-                    MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                              recv_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[recv_request_idx]);
-                }
+                assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+                int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
+                // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
+                MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
+                            recv_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[recv_request_idx]);
             }
         }
     }
@@ -9210,9 +8144,24 @@ public:
                 assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
                 // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
-                MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                          recv_zoid_num % comm->nprocs, mpi_tag,
-                          all_comms[comm_idx], &r[recv_request_idx]);
+                if (USE_STREAMS) {
+                    int src_stream_idx = zoid_to_stream_num[curr_dt_idx][recv_zoid_num];
+                    int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
+                    /*
+                    MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs,
+                    mpi_tag, stream_comm, src_stream_idx, dst_stream_idx, &r[recv_request_idx]);
+                    */
+                    MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
+                        stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
+                    /*
+                    MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs,
+                    mpi_tag, stream_comm, src_stream_idx, dst_stream_idx, &r[recv_request_idx]);
+                    */
+                } else {
+                    MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
+                            recv_zoid_num % comm->nprocs, mpi_tag,
+                            all_comms[comm_idx], &r[recv_request_idx]);
+                }
             }
         }
     }
@@ -9244,26 +8193,25 @@ public:
 
             total_recv_procs++;
 
-            // std::stringstream s1;
-            // s1 << "curr_dt: " << curr_dt << " RECEIVE. proc: " << proc << " to: " << comm->me << " pipeline stage: " << pipeline_stage 
-            // << " count: " << nrecv_from_proc << " tag: " << mpi_tag << " recv dep: " << dep << std::endl;
-            // std::cout << s1.str();
-
             MPI_Irecv(buf_recv_proc_to_proc[pipeline_stage][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
                         proc, mpi_tag,
                         proc_to_proc_pipelined_comms[pipeline_stage][send_dep], &r[request_arr_idx++]);
-            
         }
     }
 
     template <bool curr_dt>
-    void RECEIVE_DATA_ZOID_TO_ZOID(int zoid_num, std::vector<MPI_Request>& r) {
+    int RECEIVE_DATA_ZOID_TO_ZOID(int dep, queue_info& zoid, int pipeline_stage, std::vector<MPI_Request>& r) {
+        assert(USE_STREAMS);
+        int zoid_num = zoid.num;
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
-
+        auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num] : recv_from_neighbors_many_cuts_next_dt[zoid_num];
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
-        auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
-                : recv_from_neighbors_many_cuts_next_dt[zoid_num];
+        int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
+
+        std::vector<int> proc_counts(comm->nprocs, 0);
+
+        int num_recv_neighbors = 0;
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -9271,40 +8219,60 @@ public:
                 continue;
             }
 
-            int recv_size = curr_dt ? recv_zoid_to_zoid_sizes[zoid_num][i]
-                    : recv_zoid_to_zoid_sizes_next_dt[zoid_num][i];
+            int recv_zoid_dep = curr_dt ? zoid_num_to_dep[recv_zoid_num] : zoid_num_to_dep_next_dt[recv_zoid_num];
 
-            auto* buf = buf_recv_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i];
+            if (recv_zoid_dep != dep - 1) {
+                continue;
+            }
+
+            int recv_size = curr_dt ? recv_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
+                : recv_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
+
+            auto* buf = buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][i];
 
             int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? recv_size * (3 + 1) : recv_size * 3;
-            if (total_doubles_recv_from_zoid > nrecv_buf_recv_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i]) {
+            if (total_doubles_recv_from_zoid > nrecv_buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][i]) {
                 assert(false);
-                GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, i, total_doubles_recv_from_zoid, DEFAULT_PIPELINE_STAGE);
+                GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, i, total_doubles_recv_from_zoid, pipeline_stage);
             }
 
             if (total_doubles_recv_from_zoid > 0) {
-                r.emplace_back();
+                proc_counts[recv_zoid_num % comm->nprocs]++;
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
-
-                if (USE_STREAMS) {
-                    int send_stream_idx = curr_dt ? zoid_to_stream_num[recv_zoid_num] : zoid_to_stream_num_next_dt[recv_zoid_num];
-                    int recv_stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
-
-                    MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                                      recv_zoid_num % comm->nprocs, mpi_tag,
-                                      stream_comm, send_stream_idx, recv_stream_idx,
-                                      &r[r.size() - 1]);
-                } else {
-                    assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
-                    int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
-                    // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
-
-                    MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                              recv_zoid_num % comm->nprocs, mpi_tag,
-                              all_comms[comm_idx], &r[r.size() - 1]);
-                }
+                assert(recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].count({recv_zoid_num, zoid_num}));
+                int recv_request_idx = recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].at({recv_zoid_num, zoid_num});
+                int src_stream_idx = zoid_to_stream_num[curr_dt_idx][recv_zoid_num];
+                MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
+                    stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
+                UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, recv_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
+                num_recv_neighbors++;
             }
         }
+
+        return num_recv_neighbors;
+    }
+
+    std::atomic<bool> done; 
+
+    void MPIX_START_PROGRESS_THREAD() {
+        while (true) {
+            if (done) {
+                break;
+            }
+            for (int i = 0; i < NUM_STREAMS; i++) {
+                MPIX_Stream_progress(all_streams[i]);
+            }
+            #ifdef __SSE__
+                            __builtin_ia32_pause();
+            #endif
+            #ifdef __aarch64__
+                            __builtin_arm_yield();
+            #endif
+        }
+    }
+
+    void MPIX_STOP_PROGRESS_THREAD() {
+        done = true;
     }
 
     template <bool curr_dt>
@@ -9357,6 +8325,31 @@ public:
                 }
             }
         }
+
+        auto& lst_recv = dep_to_recv_proc_pairs[curr_dt_idx][dep];
+        auto& lst_recv_sizes = dep_to_recv_proc_pairs_sizes[curr_dt_idx][dep];
+
+        for (int i = 0; i < lst_recv.size(); i++) {
+            auto& [send_dep, proc] = lst_recv[i];
+            int size = lst_recv_sizes[i];
+            int nrecv_from_proc = DEBUG_SEND_RECV_DATA ? size * (3 + 1) : size * 3;
+            assert(proc != comm->me && nrecv_from_proc > 0);
+            int mpi_tag = get_mpi_tag_many_cuts(comm->me, proc);
+            assert(recv_request_proc_pair_to_idx[curr_dt_idx][dep].count({proc, send_dep}));
+
+            int recv_proc_to_proc_idx = recv_request_proc_pair_to_idx[curr_dt_idx][dep][{proc, send_dep}];
+            assert(recv_proc_to_proc_idx == i);
+            MPI_Irecv(buf_recv_proc_to_proc[DEFAULT_PIPELINE_STAGE][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
+                        proc, mpi_tag,
+                        proc_to_proc_pipelined_comms[DEFAULT_PIPELINE_STAGE][send_dep], 
+                        &recv_r_proc_to_proc[recv_proc_to_proc_idx]);
+        }
+    }
+
+    template <bool curr_dt>
+    void RECEIVE_DATA_PROC_TO_PROC(int dep, std::vector<MPI_Request>& recv_r_proc_to_proc) {
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         auto& lst_recv = dep_to_recv_proc_pairs[curr_dt_idx][dep];
         auto& lst_recv_sizes = dep_to_recv_proc_pairs_sizes[curr_dt_idx][dep];
@@ -10847,10 +9840,6 @@ public:
         int num_wait = 0;
         while (num_wait < not_my_proc_idxs.size()) {
             int idx;
-            if (USE_STREAMS) {
-                int stream_idx = curr_dt ? zoid_to_stream_num[zoid_num] : zoid_to_stream_num_next_dt[zoid_num];
-                // MPIX_Stream_progress(all_streams[stream_idx]);
-            }
             MPI_Waitany(r.size(), r.data(), &idx, MPI_STATUS_IGNORE);
 
             int recv_neighbor_idx = not_my_proc_idxs[idx];
