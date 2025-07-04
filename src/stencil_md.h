@@ -8241,20 +8241,10 @@ public:
                 assert(recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].count({recv_zoid_num, zoid_num}));
                 int recv_request_idx = recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].at({recv_zoid_num, zoid_num});
                 int src_stream_idx = zoid_to_stream_num[curr_dt_idx][recv_zoid_num];
-                if (comm->me < 8) {
-                    std::stringstream s1;
-                    s1 << BOLDYELLOW << "me: " << comm->me << " dep: " << dep << " before recv from: " << recv_zoid_num << RESET_COLOR << std::endl;
-                    std::cout << s1.str();
-                }
                 MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
                     stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
                 UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, recv_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
                 num_recv_neighbors++;
-                if (comm->me < 8) {
-                    std::stringstream s1;
-                    s1 << BOLDYELLOW << "me: " << comm->me << " dep: " << dep << " after recv from: " << recv_zoid_num << RESET_COLOR << std::endl;
-                    std::cout << s1.str();
-                }
             }
         }
 
