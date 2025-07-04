@@ -3185,7 +3185,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 // hack recv data zoid to zoid
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
-                    cilk_spawn run_stencil_md_receive_zoid_to_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, 
+                    run_stencil_md_receive_zoid_to_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, 
                         test_f, test_x, test_v,
                         zoid_recv_neighbor_counters, dep_counters,
                         send_r_zoid_to_zoid, send_r_proc_to_proc,
