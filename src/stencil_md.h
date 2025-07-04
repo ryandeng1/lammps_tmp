@@ -186,6 +186,18 @@ static int get_mpi_tag_many_cuts(int dst, int src) {
 
 namespace LAMMPS_NS {
 
+class MPI_Request_Manager {
+    public:
+        std::vector<std::vector<MPI_Request>> requests;
+        std::mutex m;
+    
+    MPI_Request_Manager(int size1, int size2) : requests(size1) {
+        for (int i = 0; i < size1; i++) {
+            requests[i].resize(size2, MPI_REQUEST_NULL);
+        }
+    }
+};
+
 class StencilMD : protected Pointers {
 public:
     StencilMD(class LAMMPS *lmp) : Pointers(lmp) {}
@@ -6727,7 +6739,6 @@ public:
     static constexpr int NUM_COMMS = 16;
     std::vector<MPI_Comm> all_comms;
     MPIX_Stream all_streams[NUM_STREAMS];
-    MPI_Comm stream_comms[NUM_STREAMS];
     MPI_Comm stream_comm;
 
     MPI_Comm proc_to_proc_pipelined_comms[NUM_PIPELINE_STAGES][NUM_DEPS];
@@ -6738,10 +6749,8 @@ public:
         if (USE_STREAMS) {
             for (int i = 0; i < NUM_STREAMS; i++) {
                 MPIX_Stream_create(MPI_INFO_NULL, &all_streams[i]);
-                MPIX_Stream_comm_create(world, all_streams[i], &stream_comms[i]);
             }
             auto res = MPIX_Stream_comm_create_multiplex(world, NUM_STREAMS, all_streams, &stream_comm);
-            // assert(res == MPI_SUCCESS);
         }
 
         constexpr int INITIAL_SIZE = 1024;
@@ -8252,14 +8261,19 @@ public:
     }
 
     std::atomic<bool> done; 
+    std::mutex m;
 
-    void MPIX_START_PROGRESS_THREAD() {
+    void MPIX_START_PROGRESS_THREAD(MPI_Request_Manager* manager) {
         while (true) {
             if (done) {
                 break;
             }
             for (int i = 0; i < NUM_STREAMS; i++) {
                 MPIX_Stream_progress(all_streams[i]);
+            }
+            for (int i = 0; i < manager->requests.size(); i++) {
+                int unused_flag;
+                MPI_Testall(manager->requests[i].size(), manager->requests[i].data(), &unused_flag, MPI_STATUSES_IGNORE);
             }
             #ifdef __SSE__
                             __builtin_ia32_pause();

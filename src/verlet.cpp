@@ -3223,7 +3223,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             MPI_Waitall(send_r_zoid_to_zoid[zoid_num].size(), send_r_zoid_to_zoid[zoid_num].data(), MPI_STATUSES_IGNORE);
         }
         if (dep < 2) {
-            MPI_Waitall(send_r_proc_to_proc[dep].size(), send_r_proc_to_proc[dep].data(), MPI_STATUSES_IGNORE);
+            // MPI_Waitall(send_r_proc_to_proc[dep].size(), send_r_proc_to_proc[dep].data(), MPI_STATUSES_IGNORE);
         }
     }
 }
@@ -3454,7 +3454,8 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
     std::vector<std::atomic<int>> zoid_recv_neighbor_counters(stencilMD->NUM_ZOIDS_MANY_CUTS);
     std::vector<std::atomic<int>> dep_counters(NUM_DEPS);
     std::vector<std::vector<MPI_Request>> send_r_zoid_to_zoid(stencilMD->NUM_ZOIDS_MANY_CUTS);
-    std::vector<std::vector<MPI_Request>> send_r_proc_to_proc(NUM_DEPS);
+    // std::vector<std::vector<MPI_Request>> send_r_proc_to_proc(NUM_DEPS);
+    MPI_Request_Manager* request_manager =  new MPI_Request_Manager(NUM_DEPS, comm->nprocs);
     std::vector<std::vector<MPI_Request>> recv_r_zoid_to_zoid(NUM_DEPS);
     std::vector<std::vector<MPI_Request>> recv_r_proc_to_proc(NUM_DEPS);
 
@@ -3470,12 +3471,12 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
             int zoid_num = stencilMD->my_queues_many_cuts[dep][j].num;
             send_r_zoid_to_zoid[zoid_num].resize(MAX_NEIGHBORS, MPI_REQUEST_NULL);
         }
-        send_r_proc_to_proc[dep].resize(comm->nprocs, MPI_REQUEST_NULL);
+        // send_r_proc_to_proc[dep].resize(comm->nprocs, MPI_REQUEST_NULL);
         recv_r_zoid_to_zoid[dep].resize(max_zoids_per_dep * MAX_NEIGHBORS, MPI_REQUEST_NULL);
         recv_r_proc_to_proc[dep].resize(comm->nprocs, MPI_REQUEST_NULL);
     }
 
-    cilk_spawn stencilMD->MPIX_START_PROGRESS_THREAD();
+    cilk_spawn stencilMD->MPIX_START_PROGRESS_THREAD(request_manager);
 
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
         // run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
@@ -3492,12 +3493,13 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
         //     recv_r, recv_r_proc_to_proc, claimed);
         run_stencil_md_many_cuts_proc_to_proc<true>(t, test_f, test_x, test_v,
             zoid_recv_neighbor_counters, dep_counters,
-            send_r_zoid_to_zoid, send_r_proc_to_proc,
+            // send_r_zoid_to_zoid, send_r_proc_to_proc,
+            send_r_zoid_to_zoid, request_manager->requests,
             recv_r_zoid_to_zoid, recv_r_proc_to_proc,
             claimed, dep_claimed);
         run_stencil_md_many_cuts_proc_to_proc<false>(t, test_f, test_x, test_v,
             zoid_recv_neighbor_counters, dep_counters,
-            send_r_zoid_to_zoid, send_r_proc_to_proc,
+            send_r_zoid_to_zoid, request_manager->requests,
             recv_r_zoid_to_zoid, recv_r_proc_to_proc,
             claimed, dep_claimed);
     }
