@@ -3169,8 +3169,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                             }
                         } else {
                             std::cout << BOLDRED << "ERROR. curr_dt: " << curr_dt
-                            << " me: " << comm->me << " dep: " << dep
-                            << " counter: " << zoid_recv_neighbor_counters[zoid.num]
+                            << " me: " << comm->me << " dep: " << dep_ << " zoid: " << zoid_.num
+                            << " counter: " << zoid_recv_neighbor_counters[zoid_.num]
                             << " num recv neighbors zoid to zoid: " << num_recv_neighbors
                             << RESET_COLOR << std::endl;
                         }
