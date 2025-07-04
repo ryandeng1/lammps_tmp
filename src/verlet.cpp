@@ -2445,7 +2445,7 @@ void Verlet::unpack_data_proc_to_proc(int starting_timestep, int dep,
                                                                             pipeline_stage);
             auto& zoid_counter = zoid_recv_neighbor_counters[zoid_num];
             auto& claimed = zoid_claimed[zoid_num];
-            zoid_counter.fetch_sub(1, std::memory_order_relaxed);
+            zoid_counter--;
             if (zoid_counter == 0 && !claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
                 cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, start_timestep, end_timestep,
                     zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
@@ -3168,7 +3168,11 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                                     test_f, test_x, test_v, dep_claimed);
                             }
                         } else {
-                            std::cout << BOLDRED << "me: " << comm->me << " dep: " << dep << " counter: " << zoid_recv_neighbor_counters[zoid.num] << RESET_COLOR << std::endl;
+                            std::cout << BOLDRED << "ERROR. curr_dt: " << curr_dt
+                            << " me: " << comm->me << " dep: " << dep
+                            << " counter: " << zoid_recv_neighbor_counters[zoid.num]
+                            << " num recv neighbors zoid to zoid: " << num_recv_neighbors
+                            << RESET_COLOR << std::endl;
                         }
                     }();
                 }
