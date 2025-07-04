@@ -119,7 +119,6 @@ int main(int argc, char **argv)
 
             int nworkers = __cilkrts_get_nworkers();
 
-            // assume each process gets 1 progress thread
 
             auto* cpusets = new cpu_set_t[nworkers];
             constexpr int NUM_CORES_PER_SOCKET = 24;
@@ -132,10 +131,19 @@ int main(int argc, char **argv)
             int rank_within_node = rank % num_processes_per_node;
 
             int start;
-            if (rank_within_node >= num_processes_per_socket) {
-                start = (rank_within_node - num_processes_per_socket) * (nworkers + 1) + NUM_CORES_PER_SOCKET;
+            if (USE_STREAMS) {
+              if (rank_within_node >= num_processes_per_socket) {
+                  start = (rank_within_node - num_processes_per_socket) * (nworkers) + NUM_CORES_PER_SOCKET;
+              } else {
+                  start = rank_within_node * (nworkers);
+              }
             } else {
-                start = rank_within_node * (nworkers + 1);
+              // assume each process gets 1 progress thread if not using streams
+              if (rank_within_node >= num_processes_per_socket) {
+                  start = (rank_within_node - num_processes_per_socket) * (nworkers + 1) + NUM_CORES_PER_SOCKET;
+              } else {
+                  start = rank_within_node * (nworkers + 1);
+              }
             }
 
             std::stringstream workers_str;
