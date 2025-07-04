@@ -6722,7 +6722,7 @@ public:
        }
     }
 
-    static constexpr int NUM_STREAMS = 16;
+    static constexpr int NUM_STREAMS = 8;
     // 64 VCIs so 1 per comm
     static constexpr int NUM_COMMS = 16;
     std::vector<MPI_Comm> all_comms;
@@ -8153,10 +8153,6 @@ public:
                     */
                     MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
                         stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
-                    /*
-                    MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs,
-                    mpi_tag, stream_comm, src_stream_idx, dst_stream_idx, &r[recv_request_idx]);
-                    */
                 } else {
                     MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                             recv_zoid_num % comm->nprocs, mpi_tag,
