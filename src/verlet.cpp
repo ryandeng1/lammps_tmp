@@ -3505,6 +3505,7 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
     }
 
     stencilMD->MPIX_STOP_PROGRESS_THREAD();
+    delete request_manager;
 }
 
 void Verlet::run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
