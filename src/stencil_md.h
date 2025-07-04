@@ -7915,16 +7915,19 @@ public:
                 int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
 
                 if (send_zoid_num % comm->nprocs == comm->me) {
-                    cilk_spawn [this](std::vector<std::atomic<int>>& zoid_counters, int zoid_num, int send_zoid_num) {
+                    cilk_spawn [this](queue_info& zoid, int send_idx,
+                        std::vector<std::atomic<int>>& zoid_counters, int zoid_num, int send_zoid_num,
+                        int start_timestep, int end_timestep, int pipeline_stage) {
                         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num] : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
                         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[send_zoid_num] : recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
                         auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), zoid_num);
                         assert(find_it != recv_neighbors.end());
                         int find_idx = std::distance(recv_neighbors.begin(), find_it);
                         assert(recv_neighbors[find_idx] == zoid_num);
-                        UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, i, start_timestep, end_timestep, pipeline_stage);
+                        // UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, i, start_timestep, end_timestep, pipeline_stage);
+                        UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, send_idx, start_timestep, end_timestep, pipeline_stage);
                         zoid_counters[send_zoid_num]--;
-                    }(zoid_counters, zoid_num, send_zoid_num);
+                    }(zoid, i, zoid_counters, zoid_num, send_zoid_num, start_timestep, end_timestep, pipeline_stage);
                     continue;
                 }
 
