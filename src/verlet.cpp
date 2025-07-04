@@ -3086,11 +3086,13 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
                 test_f, test_x, test_v, dep_claimed);
         }
     } else {
+        /*
         std::cout << BOLDRED << "ERROR. curr_dt: " << curr_dt
         << " me: " << comm->me << " dep: " << dep << " zoid: " << zoid.num
         << " counter: " << zoid_recv_neighbor_counters[zoid.num]
         << " num recv neighbors zoid to zoid: " << num_recv_neighbors
         << RESET_COLOR << std::endl;
+        */
     }
 }
 
@@ -3152,15 +3154,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         int num_wait_idxs;
                         MPI_Waitsome(total_num_wait_proc_to_proc, recv_r_proc_to_proc[dep].data(), &num_wait_idxs, wait_idxs.data(), MPI_STATUSES_IGNORE);
 
-                        if (num_wait_idxs < 0 || num_wait_idxs > total_num_wait_proc_to_proc) {
-                            std::stringstream s1;
-                            s1 << BOLDRED << "me: " << comm->me << " proc to proc dep: " << dep << " num_wait: " << num_wait_idxs
-                            << " num wait so far: " << num_wait_proc_to_proc 
-                            << " total: " << total_num_wait_proc_to_proc
-                            << RESET_COLOR << std::endl;
-                            std::cout << s1.str();
-                        }
-
                         for (int i = 0; i < num_wait_idxs; i++) {
                             int idx = wait_idxs[i];
 
@@ -3180,6 +3173,12 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         }
 
                         num_wait_proc_to_proc += num_wait_idxs;
+                    }
+
+                    if (comm->me < 8) {
+                        std::stringstream s1;
+                        s1 << "me: " << comm->me << " done with proc to proc for dep: " << dep << std::endl;
+                        std::cout << s1.str();
                     }
                 }
 
