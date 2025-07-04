@@ -2422,7 +2422,8 @@ void Verlet::unpack_data_proc_to_proc_wrapper(int starting_timestep, int dep,
                                     std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
                                     double** test_f, double** test_x, double** test_v,
                                     std::vector<std::atomic_flag>& zoid_claimed,
-                                    std::vector<std::atomic_flag>& dep_claimed) {
+                                    std::vector<std::atomic_flag>& dep_claimed,
+                                    MPI_Request_Manager* request_manager) {
 
     constexpr int curr_dt_idx = static_cast<int>(curr_dt);
     int zoid_num = zoid.num;
@@ -2441,7 +2442,7 @@ void Verlet::unpack_data_proc_to_proc_wrapper(int starting_timestep, int dep,
         cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, start_timestep, end_timestep,
             zoid_recv_neighbor_counters, dep_counters, 
             send_r_zoid_to_zoid, send_r_proc_to_proc,
-            test_f, test_x, test_v, dep_claimed);
+            test_f, test_x, test_v, dep_claimed, request_manager);
     }
 }
 
@@ -2455,7 +2456,8 @@ void Verlet::unpack_data_proc_to_proc(int starting_timestep, int dep,
                                     std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
                                     double** test_f, double** test_x, double** test_v,
                                     std::vector<std::atomic_flag>& zoid_claimed,
-                                    std::vector<std::atomic_flag>& dep_claimed) {
+                                    std::vector<std::atomic_flag>& dep_claimed,
+                                    MPI_Request_Manager* request_manager) {
 
     constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -2473,7 +2475,7 @@ void Verlet::unpack_data_proc_to_proc(int starting_timestep, int dep,
             zoid_recv_neighbor_counters, dep_counters,
             send_r_zoid_to_zoid, send_r_proc_to_proc,
             test_f, test_x, test_v,
-            zoid_claimed, dep_claimed);
+            zoid_claimed, dep_claimed, request_manager);
     }
 }
 
@@ -2486,7 +2488,8 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
                                     std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
                                     std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
                                     double** test_f, double** test_x, double** test_v,
-                                    std::vector<std::atomic_flag>& dep_claimed) {
+                                    std::vector<std::atomic_flag>& dep_claimed,
+                                    MPI_Request_Manager* request_manager) {
 
     stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE);
 
@@ -2499,7 +2502,7 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
 
     dep_counters[dep]--;
     if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
-        cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC_PIPELINED<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep]);
+        cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], request_manager);
     }
 }
 
@@ -3096,7 +3099,8 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
                                                     std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
                                                     std::vector<std::vector<MPI_Request>>& recv_r_zoid_to_zoid, 
                                                     std::vector<std::atomic_flag>& zoid_claimed,
-                                                    std::vector<std::atomic_flag>& dep_claimed) {
+                                                    std::vector<std::atomic_flag>& dep_claimed,
+                                                    MPI_Request_Manager* request_manager) {
 
     if (comm->me < 8) {
         std::stringstream s1;
@@ -3115,7 +3119,7 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
         if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
             cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
                 zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                test_f, test_x, test_v, dep_claimed);
+                test_f, test_x, test_v, dep_claimed, request_manager);
         }
     } else {
         /*
@@ -3137,7 +3141,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                                                     std::vector<std::vector<MPI_Request>>& recv_r_zoid_to_zoid, 
                                                     std::vector<std::vector<MPI_Request>>& recv_r_proc_to_proc, 
                                                     std::vector<std::atomic_flag>& zoid_claimed,
-                                                    std::vector<std::atomic_flag>& dep_claimed) {
+                                                    std::vector<std::atomic_flag>& dep_claimed,
+                                                    MPI_Request_Manager* request_manager) {
 
     constexpr int curr_dt_idx = static_cast<int>(curr_dt);
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts : stencilMD->my_queues_many_cuts_next_dt;
@@ -3169,7 +3174,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     auto& zoid = my_queues[dep][j];
                     cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
                         zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                        test_f, test_x, test_v, dep_claimed);
+                        test_f, test_x, test_v, dep_claimed, request_manager);
                 }
             } else {
                 if (dep > 1) {
@@ -3201,7 +3206,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                                                                     send_r_zoid_to_zoid,
                                                                     send_r_proc_to_proc,
                                                                     test_f, test_x, test_v,
-                                                                    zoid_claimed, dep_claimed);
+                                                                    zoid_claimed, dep_claimed, request_manager);
                         }
 
                         num_wait_proc_to_proc += num_wait_idxs;
@@ -3221,7 +3226,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         test_f, test_x, test_v,
                         zoid_recv_neighbor_counters, dep_counters,
                         send_r_zoid_to_zoid, send_r_proc_to_proc,
-                        recv_r_zoid_to_zoid, zoid_claimed, dep_claimed
+                        recv_r_zoid_to_zoid, zoid_claimed, dep_claimed,
+                        request_manager
                     );
                 }
             }
@@ -3507,12 +3513,12 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
             // send_r_zoid_to_zoid, send_r_proc_to_proc,
             send_r_zoid_to_zoid, request_manager->requests,
             recv_r_zoid_to_zoid, recv_r_proc_to_proc,
-            claimed, dep_claimed);
+            claimed, dep_claimed, request_manager);
         run_stencil_md_many_cuts_proc_to_proc<false>(t, test_f, test_x, test_v,
             zoid_recv_neighbor_counters, dep_counters,
             send_r_zoid_to_zoid, request_manager->requests,
             recv_r_zoid_to_zoid, recv_r_proc_to_proc,
-            claimed, dep_claimed);
+            claimed, dep_claimed, request_manager);
     }
 
     stencilMD->MPIX_STOP_PROGRESS_THREAD();

@@ -7883,13 +7883,53 @@ public:
 
                 assert(send_request_idx != -1);
 
-                // std::stringstream s1;
-                // s1 << "curr_dt: " << curr_dt << " SEND. proc: " << comm->me << " to: " << proc << " pipeline stage: " << pipeline_stage << " count: " << total_nsend << " tag: " << mpi_tag << " send dep: " << send_dep << std::endl;
-                // std::cout << s1.str();
-
                 MPI_Isend(buf, total_nsend, MPI_DOUBLE,
                           proc, mpi_tag,
                           proc_to_proc_pipelined_comms[pipeline_stage][send_dep], &r[send_request_idx]);
+
+                total_num_procs++;
+            }
+        }
+    }
+
+    template <bool curr_dt>
+    void SEND_DATA_PROC_TO_PROC(int pipeline_stage, int send_dep,
+                                std::vector<MPI_Request>& r, MPI_Request_Manager* manager) {
+
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
+        const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][pipeline_stage][send_dep];
+
+        auto& queue = curr_dt ? my_queues_many_cuts[send_dep] : my_queues_many_cuts_next_dt[send_dep];
+
+        int total_num_procs = 0;
+
+        for (int p = 0; p < procs_to_send_to.size(); p++) {
+            int proc = procs_to_send_to[p];
+            assert(proc != comm->me);
+            int total_nsend = 0;
+            for (int j = 0; j < queue.size(); j++) {
+                auto& zoid = queue[j];
+                auto pair = std::make_pair(zoid.num, proc);
+                int size = send_proc_zoid_sizes[curr_dt_idx][pipeline_stage][pair];
+                total_nsend += size;
+            }
+
+            total_nsend = DEBUG_SEND_RECV_DATA ? total_nsend * (3 + 1) : total_nsend * 3;
+
+            auto *buf = buf_send_proc_to_proc[pipeline_stage][send_dep][proc];
+
+            if (total_nsend > 0)  {
+                int mpi_tag = get_mpi_tag_many_cuts(proc, comm->me);
+                int send_request_idx = p;
+
+                assert(send_request_idx != -1);
+
+                manager->m.lock();
+                MPI_Isend(buf, total_nsend, MPI_DOUBLE,
+                          proc, mpi_tag,
+                          proc_to_proc_pipelined_comms[pipeline_stage][send_dep], &r[send_request_idx]);
+                manager->m.unlock();
 
                 total_num_procs++;
             }
@@ -8283,10 +8323,15 @@ public:
             for (int i = 0; i < NUM_STREAMS; i++) {
                 MPIX_Stream_progress(all_streams[i]);
             }
-            for (int i = 0; i < manager->requests.size(); i++) {
-                int unused_flag;
-                MPI_Testall(manager->requests[i].size(), manager->requests[i].data(), &unused_flag, MPI_STATUSES_IGNORE);
+
+            if (manager->m.try_lock()) {
+                for (int i = 0; i < manager->requests.size(); i++) {
+                    int unused_flag;
+                    MPI_Testall(manager->requests[i].size(), manager->requests[i].data(), &unused_flag, MPI_STATUSES_IGNORE);
+                }
+                manager->m.unlock();
             }
+
             #ifdef __SSE__
                             __builtin_ia32_pause();
             #endif
