@@ -7947,7 +7947,7 @@ public:
                     int find_idx = std::distance(recv_neighbors.begin(), find_it);
                     assert(recv_neighbors[find_idx] == zoid_num);
                     // UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, i, start_timestep, end_timestep, pipeline_stage);
-                    UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, send_idx, start_timestep, end_timestep, pipeline_stage);
+                    UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, i, start_timestep, end_timestep, pipeline_stage);
                     zoid_counters[send_zoid_num]--;
                     continue;
                 }
