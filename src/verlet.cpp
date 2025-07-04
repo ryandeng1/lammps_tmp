@@ -3076,7 +3076,17 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
                                                     std::vector<std::atomic_flag>& zoid_claimed,
                                                     std::vector<std::atomic_flag>& dep_claimed) {
 
+    if (comm->me < 8) {
+        std::stringstream s1;
+        s1 << BOLDGREEN << "me: " << comm->me << " dep: " << dep << " before recv data zoid to zoid. " << RESET_COLOR << std::endl;
+        std::cout << s1.str();
+    }
     int num_recv_neighbors = stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(dep, zoid, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid[dep]);
+    if (comm->me < 8) {
+        std::stringstream s1;
+        s1 << BOLDGREEN << "me: " << comm->me << " dep: " << dep << " after recv data zoid to zoid. " << RESET_COLOR << std::endl;
+        std::cout << s1.str();
+    }
     zoid_recv_neighbor_counters[zoid.num] -= num_recv_neighbors;
     auto& claimed = zoid_claimed[zoid.num];
     if (zoid_recv_neighbor_counters[zoid.num] == 0) {
