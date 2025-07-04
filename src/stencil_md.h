@@ -8326,8 +8326,13 @@ public:
 
             if (manager->m.try_lock()) {
                 for (int i = 0; i < manager->requests.size(); i++) {
-                    int unused_flag;
-                    MPI_Testall(manager->requests[i].size(), manager->requests[i].data(), &unused_flag, MPI_STATUSES_IGNORE);
+                    for (int j = 0; j < manager->requests[i].size(); j++) {
+                        if (manager->requests[i][j] != MPI_REQUEST_NULL) {
+                            int unused_flag;
+                            // MPI_Testall(manager->requests[i].size(), manager->requests[i].data(), &unused_flag, MPI_STATUSES_IGNORE);
+                            MPI_Test(&manager->requests[i][j], &unused_flag, MPI_STATUS_IGNORE);
+                        }
+                    }
                 }
                 manager->m.unlock();
             }
@@ -8339,6 +8344,8 @@ public:
                             __builtin_arm_yield();
             #endif
         }
+
+        delete manager;
     }
 
     void MPIX_STOP_PROGRESS_THREAD() {
