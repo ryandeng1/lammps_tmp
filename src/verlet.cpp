@@ -3157,13 +3157,13 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 // hack recv data zoid to zoid
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
-                    cilk_spawn [&]() {
-                        int num_recv_neighbors = stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(dep, zoid, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid[dep]);
-                        zoid_recv_neighbor_counters[zoid.num] -= num_recv_neighbors;
-                        auto& claimed = zoid_claimed[zoid.num];
-                        if (zoid_recv_neighbor_counters[zoid.num] == 0) {
+                    cilk_spawn [&](int dep_, queue_info& zoid_) {
+                        int num_recv_neighbors = stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(dep_, zoid_, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid[dep_]);
+                        zoid_recv_neighbor_counters[zoid_.num] -= num_recv_neighbors;
+                        auto& claimed = zoid_claimed[zoid_.num];
+                        if (zoid_recv_neighbor_counters[zoid_.num] == 0) {
                             if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
-                                cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
+                                cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep_, zoid_, default_start_t, default_end_t,
                                     zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
                                     test_f, test_x, test_v, dep_claimed);
                             }
@@ -3174,7 +3174,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                             << " num recv neighbors zoid to zoid: " << num_recv_neighbors
                             << RESET_COLOR << std::endl;
                         }
-                    }();
+                    }(dep, zoid);
                 }
             }
         }
