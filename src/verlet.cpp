@@ -3066,6 +3066,35 @@ void Verlet::run_stencil_md_many_cuts_waitany_with_proc_to_proc(int starting_tim
 }
 
 template <bool curr_dt>
+void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, int dep, queue_info& zoid,
+                                                    double **test_f, double **test_x, double **test_v,
+                                                    std::vector<std::atomic<int>>& zoid_recv_neighbor_counters,
+                                                    std::vector<std::atomic<int>>& dep_counters,
+                                                    std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
+                                                    std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+                                                    std::vector<std::vector<MPI_Request>>& recv_r_zoid_to_zoid, 
+                                                    std::vector<std::atomic_flag>& zoid_claimed,
+                                                    std::vector<std::atomic_flag>& dep_claimed) {
+
+    int num_recv_neighbors = stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(dep, zoid, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid[dep]);
+    zoid_recv_neighbor_counters[zoid.num] -= num_recv_neighbors;
+    auto& claimed = zoid_claimed[zoid.num];
+    if (zoid_recv_neighbor_counters[zoid.num] == 0) {
+        if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
+            cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
+                zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
+                test_f, test_x, test_v, dep_claimed);
+        }
+    } else {
+        std::cout << BOLDRED << "ERROR. curr_dt: " << curr_dt
+        << " me: " << comm->me << " dep: " << dep << " zoid: " << zoid.num
+        << " counter: " << zoid_recv_neighbor_counters[zoid.num]
+        << " num recv neighbors zoid to zoid: " << num_recv_neighbors
+        << RESET_COLOR << std::endl;
+    }
+}
+
+template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double **test_f, double **test_x, double **test_v,
                                                     std::vector<std::atomic<int>>& zoid_recv_neighbor_counters,
                                                     std::vector<std::atomic<int>>& dep_counters,
@@ -3157,24 +3186,12 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 // hack recv data zoid to zoid
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
-                    cilk_spawn [&](int dep_, queue_info& zoid_) {
-                        int num_recv_neighbors = stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(dep_, zoid_, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid[dep_]);
-                        zoid_recv_neighbor_counters[zoid_.num] -= num_recv_neighbors;
-                        auto& claimed = zoid_claimed[zoid_.num];
-                        if (zoid_recv_neighbor_counters[zoid_.num] == 0) {
-                            if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
-                                cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep_, zoid_, default_start_t, default_end_t,
-                                    zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                                    test_f, test_x, test_v, dep_claimed);
-                            }
-                        } else {
-                            std::cout << BOLDRED << "ERROR. curr_dt: " << curr_dt
-                            << " me: " << comm->me << " dep: " << dep_ << " zoid: " << zoid_.num
-                            << " counter: " << zoid_recv_neighbor_counters[zoid_.num]
-                            << " num recv neighbors zoid to zoid: " << num_recv_neighbors
-                            << RESET_COLOR << std::endl;
-                        }
-                    }(dep, zoid);
+                    cilk_spawn run_stencil_md_receive_zoid_to_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, 
+                        test_f, test_x, test_v,
+                        zoid_recv_neighbor_counters, dep_counters,
+                        send_r_zoid_to_zoid, send_r_proc_to_proc,
+                        recv_r_zoid_to_zoid, zoid_claimed, dep_claimed
+                    );
                 }
             }
         }
