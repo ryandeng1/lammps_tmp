@@ -19,6 +19,7 @@
 #include "pthread.h"
 #include <cilk/cilk_api.h>
 #include <sstream>
+#include "stencil_md_utils.h"
 // #include "CLI11.hpp"
 // #include "stencil_md_config.hpp"
 
