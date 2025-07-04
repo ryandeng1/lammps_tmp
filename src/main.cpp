@@ -19,7 +19,6 @@
 #include "pthread.h"
 #include <cilk/cilk_api.h>
 #include <sstream>
-#include "stencil_md_utils.h"
 // #include "CLI11.hpp"
 // #include "stencil_md_config.hpp"
 
@@ -132,6 +131,7 @@ int main(int argc, char **argv)
             int rank_within_node = rank % num_processes_per_node;
 
             int start;
+            constexpr bool USE_STREAMS = true;
             if (USE_STREAMS) {
               if (rank_within_node >= num_processes_per_socket) {
                   start = (rank_within_node - num_processes_per_socket) * (nworkers) + NUM_CORES_PER_SOCKET;
