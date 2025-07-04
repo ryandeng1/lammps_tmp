@@ -2498,7 +2498,7 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
 
     stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, zoid_counters);
 
-    cilk_spawn stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num]);
+    stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num]);
 
     dep_counters[dep]--;
     if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
