@@ -63,20 +63,6 @@ void FixNVEOMP::initial_integrate(int /* vflag */)
   } else {
     const double * const mass = atom->mass;
     const int * const type = atom->type;
-    if (LAMMPS_USE_CILK) {
-        cilk_for (int i = 0; i < nlocal; i++) {
-            if (mask[i] & groupbit) {
-                const double dtfm = dtf / mass[type[i]];
-                v[i].x += dtfm * f[i].x;
-                v[i].y += dtfm * f[i].y;
-                v[i].z += dtfm * f[i].z;
-                x[i].x += dtv * v[i].x;
-                x[i].y += dtv * v[i].y;
-                x[i].z += dtv * v[i].z;
-            }
-        }
-        return;
-    }
 #if defined (_OPENMP)
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif
@@ -180,18 +166,6 @@ void FixNVEOMP::final_integrate()
   } else {
     const double * const mass = atom->mass;
     const int * const type = atom->type;
-    if (LAMMPS_USE_CILK) {
-        cilk_for (int i = 0; i < nlocal; i++) {
-            if (mask[i] & groupbit) {
-                const double dtfm = dtf / mass[type[i]];
-                v[i].x += dtfm * f[i].x;
-                v[i].y += dtfm * f[i].y;
-                v[i].z += dtfm * f[i].z;
-            }
-        }
-
-        return;
-    }
 #if defined (_OPENMP)
 #pragma omp parallel for LMP_DEFAULT_NONE schedule(static)
 #endif

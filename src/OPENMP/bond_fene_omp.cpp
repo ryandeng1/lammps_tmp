@@ -58,53 +58,6 @@ void BondFENEOMP::compute(int eflag, int vflag)
   const int nthreads = comm->nthreads;
   const int inum = neighbor->nbondlist;
 
-  if (LAMMPS_USE_CILK) {
-      cilk_for(int tid = 0; tid < nthreads; tid++) {
-          const int idelta = 1 + inum / nthreads;
-          int ifrom = tid * idelta;
-          int ito = ((ifrom + idelta) > inum) ? inum : ifrom + idelta;
-
-          ThrData *thr = fix->get_thr(tid);
-          thr->timer(Timer::START);
-          ev_setup_thr(eflag, vflag, nall, eatom, vatom, nullptr, thr);
-
-          if (inum > 0) {
-              if (evflag) {
-                  if (eflag) {
-                      if (force->newton_bond) eval<1,1,1>(ifrom, ito, thr);
-                      else eval<1,1,0>(ifrom, ito, thr);
-                  } else {
-                      if (force->newton_bond) eval<1,0,1>(ifrom, ito, thr);
-                      else eval<1,0,0>(ifrom, ito, thr);
-                  }
-              } else {
-                  if (force->newton_bond) eval<0,0,1>(ifrom, ito, thr);
-                  else eval<0,0,0>(ifrom, ito, thr);
-              }
-          }
-          thr->timer(Timer::BOND);
-      }
-
-      if (comm->nthreads == 1) {
-          return;
-      }
-
-      double* f = &(atom->f[0][0]);
-      int nvals = nall * 3;
-
-      constexpr int CHUNK_SIZE = 512;
-
-      cilk_for (int i = 0; i < nvals; i += CHUNK_SIZE) {
-          for (int n = 1; n < comm->nthreads; n++) {
-              for (int j = i; j < nvals && j < i + CHUNK_SIZE; j++) {
-                  f[j] += f[n * nvals + j];
-              }
-          }
-      }
-
-      return;
-  }
-
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(eflag,vflag)
 #endif

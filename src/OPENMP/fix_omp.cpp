@@ -125,12 +125,6 @@ FixOMP::FixOMP(LAMMPS *lmp, int narg, char **arg)
 
   thr = new ThrData *[nthreads];
   _nthr = nthreads;
-  if (LAMMPS_USE_CILK) {
-    for (int tid = 0; tid < nthreads; tid++) {
-        auto t = new Timer(lmp);
-        thr[tid] = new ThrData(tid, t);
-    }
-  } else {
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(lmp)
 #endif
@@ -139,7 +133,6 @@ FixOMP::FixOMP(LAMMPS *lmp, int narg, char **arg)
           auto t = new Timer(lmp);
           thr[tid] = new ThrData(tid, t);
       }
-  }
 }
 
 FixOMP::FixOMP(LAMMPS *lmp, Modify * modify_, int narg, char **arg) : FixOMP(lmp, narg, arg) {}
@@ -190,12 +183,6 @@ void FixOMP::init()
 
     thr = new ThrData *[nthreads];
     _nthr = nthreads;
-    if (LAMMPS_USE_CILK) {
-        for (int tid = 0; tid < nthreads; tid++) {
-            auto t = new Timer(lmp);
-            thr[tid] = new ThrData(tid,t);
-        }
-    } else {
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE
 #endif
@@ -204,7 +191,6 @@ void FixOMP::init()
             auto t = new Timer(lmp);
             thr[tid] = new ThrData(tid, t);
         }
-    }
   }
 
   // reset per thread timer
@@ -332,15 +318,6 @@ void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_, Neighbor* neighbor_) 
 
         thr = new ThrData *[nthreads];
         _nthr = nthreads;
-
-        if (LAMMPS_USE_CILK) {
-            std::cout << "nthreads: " << nthreads << std::endl;
-            assert(false);
-            for (int tid = 0; tid < nthreads; tid++) {
-                auto t = new Timer(lmp);
-                thr[tid] = new ThrData(tid, t);
-            }
-        } else {
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE
 #endif
@@ -349,7 +326,6 @@ void FixOMP::init_stencil_md(Atom* atom_, Modify* modify_, Neighbor* neighbor_) 
                 auto t = new Timer(lmp);
                 thr[tid] = new ThrData(tid, t);
             }
-        }
     }
 
     // reset per thread timer
@@ -480,16 +456,6 @@ void FixOMP::pre_force(int)
   double *erforce = atom->erforce;
   double *desph = atom->desph;
   double *drho = atom->drho;
-
-  if (LAMMPS_USE_CILK) {
-      cilk_for(int tid = 0; tid < comm->nthreads; tid++) {
-          thr[tid]->check_tid(tid);
-          thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
-      }
-
-      _reduced = false;
-      return;
-  }
 
 #if defined(_OPENMP)
 #pragma omp parallel LMP_DEFAULT_NONE LMP_SHARED(f,torque,erforce,desph,drho)
