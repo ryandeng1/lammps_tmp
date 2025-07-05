@@ -1965,10 +1965,6 @@ void Verlet::run(int n) {
 template <bool curr_dt>
 void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
                                            double** test_f, double** test_x, double** test_v) {
-    std::stringstream s1;
-    s1 << BOLDBLUE << "running zoid: " << zoid.num << " dep: " << dep << RESET_COLOR << std::endl;
-    std::cout << s1.str();
-
     for (int t = start_t; t < end_t; t++) {
         if (TEST_AGAINST_LAMMPS) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t
@@ -3125,18 +3121,8 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
                                                     std::vector<std::atomic_flag>& dep_claimed,
                                                     MPIX_Stream_Manager* stream_manager) {
 
-    if (comm->me < 8) {
-        std::stringstream s1;
-        s1 << BOLDGREEN << "me: " << comm->me << " dep: " << dep << " before recv data zoid: " << zoid.num << " counter: " << zoid_recv_neighbor_counters[zoid.num] << RESET_COLOR << std::endl;
-        std::cout << s1.str();
-    }
     int num_recv_neighbors = stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(dep, zoid, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid[dep], stream_manager);
     zoid_recv_neighbor_counters[zoid.num] -= num_recv_neighbors;
-    if (comm->me < 8) {
-        std::stringstream s1;
-        s1 << BOLDGREEN << "me: " << comm->me << " dep: " << dep << " after recv data zoid: " << zoid.num << " counter: " << zoid_recv_neighbor_counters[zoid.num] << RESET_COLOR << std::endl;
-        std::cout << s1.str();
-    }
     auto& claimed = zoid_claimed[zoid.num];
     if (zoid_recv_neighbor_counters[zoid.num] == 0) {
         if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
@@ -3204,12 +3190,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
                     std::vector<int> wait_idxs(recv_request_map_proc_to_proc.size(), 0);
 
-                    if (comm->me < 8) {
-                        std::stringstream s1;
-                        s1 << "me: " << comm->me << " start proc to proc for dep: " << dep << std::endl;
-                        std::cout << s1.str();
-                    }
-
                     while (num_wait_proc_to_proc < total_num_wait_proc_to_proc) {
                         stream_manager->m[stream_manager->num_streams_zoid_to_zoid + 1].lock();
                         int num_wait_idxs;
@@ -3236,12 +3216,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         }
 
                         num_wait_proc_to_proc += num_wait_idxs;
-                    }
-
-                    if (comm->me < 8) {
-                        std::stringstream s1;
-                        s1 << "me: " << comm->me << " finished proc to proc for dep: " << dep << std::endl;
-                        std::cout << s1.str();
                     }
                 }
 
