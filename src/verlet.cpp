@@ -3081,7 +3081,7 @@ void Verlet::run_stencil_md_many_cuts_waitany_with_proc_to_proc(int starting_tim
         for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
             int num_wait_zoid = stencilMD->send_to_neighbors_num_not_in_proc_only_next_dep[curr_dt_idx][zoid_num];
-            MPI_Waitall(send_r[zoid_num].size(), send_r[zoid_num].data(), MPI_STATUSES_IGNORE);
+            auto res = MPI_Waitall(send_r[zoid_num].size(), send_r[zoid_num].data(), MPI_STATUSES_IGNORE);
         }
         if (dep < 2) {
             int num_wait_dep = stencilMD->send_dep_to_procs[curr_dt_idx][DEFAULT_PIPELINE_STAGE][dep].size();
@@ -3195,7 +3195,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     }
 
                     while (num_wait_proc_to_proc < total_num_wait_proc_to_proc) {
-                        stream_manager->m[stream_manager->num_streams_zoid_to_zoid].lock();
                         stream_manager->m[stream_manager->num_streams_zoid_to_zoid + 1].lock();
                         auto check = std::any_of(recv_r_proc_to_proc[dep].begin(), recv_r_proc_to_proc[dep].end(), [](MPI_Request req) { return req != MPI_REQUEST_NULL; });
                         assert(check);
@@ -3203,7 +3202,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         int res = MPI_Waitsome(total_num_wait_proc_to_proc, recv_r_proc_to_proc[dep].data(), &num_wait_idxs, wait_idxs.data(), MPI_STATUSES_IGNORE);
                         assert(res == MPI_SUCCESS);
                         stream_manager->m[stream_manager->num_streams_zoid_to_zoid + 1].unlock();
-                        stream_manager->m[stream_manager->num_streams_zoid_to_zoid].unlock();
 
                         for (int i = 0; i < num_wait_idxs; i++) {
                             int idx = wait_idxs[i];
@@ -3256,10 +3254,16 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
         for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
+            int stream_idx = stencilMD->zoid_to_stream_num[curr_dt_idx][zoid_num];
+            stream_manager->m[stream_idx].lock();
             MPI_Waitall(send_r_zoid_to_zoid[zoid_num].size(), send_r_zoid_to_zoid[zoid_num].data(), MPI_STATUSES_IGNORE);
+            stream_manager->m[stream_idx].unlock();
         }
         if (dep < 2) {
+            int stream_idx = stream_manager->num_streams_zoid_to_zoid;
+            stream_manager->m[stream_idx].lock();
             MPI_Waitall(send_r_proc_to_proc[dep].size(), send_r_proc_to_proc[dep].data(), MPI_STATUSES_IGNORE);
+            stream_manager->m[stream_idx].unlock();
         }
     }
 }
