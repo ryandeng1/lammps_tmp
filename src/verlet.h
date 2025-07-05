@@ -185,7 +185,7 @@ class Verlet : public Integrate {
                                                   std::vector<std::vector<MPI_Request>>& recv_r_zoid_to_zoid, 
                                                   std::vector<std::atomic_flag>& zoid_claimed,
                                                   std::vector<std::atomic_flag>& dep_claimed,
-                                                  MPI_Request_Manager* request_manager);
+                                                  MPIX_Stream_Manager* request_manager);
 
   template <bool curr_dt>
   void unpack_data_proc_to_proc_wrapper(int starting_timestep, int dep,
@@ -199,7 +199,7 @@ class Verlet : public Integrate {
                                         double** test_f, double** test_x, double** test_v,
                                         std::vector<std::atomic_flag>& zoid_claimed,
                                         std::vector<std::atomic_flag>& dep_claimed,
-                                        MPI_Request_Manager* request_manager);
+                                        MPIX_Stream_Manager* request_manager);
 
   template <bool curr_dt>
   void unpack_data_proc_to_proc(int starting_timestep, int dep,
@@ -212,7 +212,7 @@ class Verlet : public Integrate {
                                 double** test_f, double** test_x, double** test_v,
                                 std::vector<std::atomic_flag>& zoid_claimed,
                                 std::vector<std::atomic_flag>& dep_claimed,
-                                MPI_Request_Manager* request_manager);
+                                MPIX_Stream_Manager* request_manager);
   template <bool curr_dt>
   void run_stencil_md_many_cuts_waitany_with_proc_to_proc(int starting_timestep,
     double** test_f, double** test_x, double** test_v,
@@ -230,7 +230,7 @@ class Verlet : public Integrate {
                                     std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
                                     std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
                                     double** test_f, double** test_x, double** test_v,
-                                    std::vector<std::atomic_flag>& dep_claimed, MPI_Request_Manager* request_manager);
+                                    std::vector<std::atomic_flag>& dep_claimed, MPIX_Stream_Manager* request_manager);
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_proc_to_proc(int starting_timestep,
@@ -242,7 +242,7 @@ class Verlet : public Integrate {
     std::vector<std::vector<MPI_Request>>& recv_r,
     std::vector<std::vector<MPI_Request>>& recv_r_proc_to_proc,
     std::vector<std::atomic_flag>& zoid_claimed,
-    std::vector<std::atomic_flag>& dep_claimed, MPI_Request_Manager* request_manager);
+    std::vector<std::atomic_flag>& dep_claimed, MPIX_Stream_Manager* request_manager);
 
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic

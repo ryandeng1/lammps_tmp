@@ -186,14 +186,34 @@ static int get_mpi_tag_many_cuts(int dst, int src) {
 
 namespace LAMMPS_NS {
 
-class MPI_Request_Manager {
+class MPIX_Stream_Manager {
     public:
-        std::vector<std::vector<MPI_Request>> requests;
-        std::mutex m;
+        std::vector<MPIX_Stream> streams;
+        std::vector<spinlock> m;
+        MPI_Comm stream_comm;
+        int num_streams;
+        int num_streams_zoid_to_zoid;
+        int num_streams_proc_to_proc;
+        std::atomic<bool> done;
     
-    MPI_Request_Manager(int size1, int size2) : requests(size1) {
-        for (int i = 0; i < size1; i++) {
-            requests[i].resize(size2, MPI_REQUEST_NULL);
+    MPIX_Stream_Manager(int num_streams, int num_streams_zoid_to_zoid) : streams(num_streams, MPIX_STREAM_NULL), m(num_streams) {
+        for (int i = 0; i < num_streams; i++) {
+            MPIX_Stream_create(MPI_INFO_NULL, &streams[i]);
+        }
+        MPIX_Stream_comm_create_multiplex(MPI_COMM_WORLD, num_streams, streams.data(), &stream_comm);
+
+        this->num_streams = num_streams;
+        this->num_streams_zoid_to_zoid = num_streams_zoid_to_zoid;
+        this->num_streams_proc_to_proc = num_streams - num_streams_zoid_to_zoid;
+
+        done = false;
+    }
+
+    ~MPIX_Stream_Manager() {
+        MPI_Comm_free(&stream_comm);
+
+        for (int i = 0; i < num_streams; i++) {
+            MPIX_Stream_free(&streams[i]);
         }
     }
 };
@@ -3249,7 +3269,7 @@ public:
                     auto& zoid = my_queues_many_cuts[dep][j];
                     int zoid_num = zoid.num;
                     zoid_to_stream_num[1][zoid_num] = stream_idx;
-                    assert(stream_idx < NUM_STREAMS);
+                    assert(stream_idx < 16);
                     stream_idx++;
                 }
             }
@@ -3261,15 +3281,15 @@ public:
                     auto& zoid = my_queues_many_cuts_next_dt[dep][j];
                     int zoid_num = zoid.num;
                     zoid_to_stream_num[0][zoid_num] = stream_idx;
-                    assert(stream_idx < NUM_STREAMS);
+                    assert(stream_idx < 16);
                     stream_idx++;
                 }
             }
             MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num[1].data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
             MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num[0].data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
             for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
-                assert(zoid_to_stream_num[1][i] >= 0 && zoid_to_stream_num[1][i] < NUM_STREAMS);
-                assert(zoid_to_stream_num[0][i] >= 0 && zoid_to_stream_num[0][i] < NUM_STREAMS);
+                assert(zoid_to_stream_num[1][i] >= 0 && zoid_to_stream_num[1][i] < 16);
+                assert(zoid_to_stream_num[0][i] >= 0 && zoid_to_stream_num[0][i] < 16);
             }
         }
 
@@ -6734,25 +6754,15 @@ public:
        }
     }
 
-    static constexpr int NUM_STREAMS = 8;
     // 64 VCIs so 1 per comm
     static constexpr int NUM_COMMS = 16;
     std::vector<MPI_Comm> all_comms;
-    MPIX_Stream all_streams[NUM_STREAMS];
-    MPI_Comm stream_comm;
 
     MPI_Comm proc_to_proc_pipelined_comms[NUM_PIPELINE_STAGES][NUM_DEPS];
 
     static constexpr bool USE_STREAMS = true;
 
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
-        if (USE_STREAMS) {
-            for (int i = 0; i < NUM_STREAMS; i++) {
-                MPIX_Stream_create(MPI_INFO_NULL, &all_streams[i]);
-            }
-            auto res = MPIX_Stream_comm_create_multiplex(world, NUM_STREAMS, all_streams, &stream_comm);
-        }
-
         constexpr int INITIAL_SIZE = 1024;
 
         all_comms.resize(NUM_COMMS);
@@ -7836,16 +7846,9 @@ public:
                 assert(send_request_idx != -1);
                 assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({zoid_num, send_zoid_num}));
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({zoid_num, send_zoid_num});
-                if (USE_STREAMS) {
-                    int src_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
-                    int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][send_zoid_num];
-                    MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, stream_comm,
-                        src_stream_idx, dst_stream_idx, &r[send_request_idx]);
-                } else {
-                    MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
-                            send_zoid_num % comm->nprocs, mpi_tag,
-                            all_comms[comm_idx], &r[send_request_idx]);
-                }
+                MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE,
+                        send_zoid_num % comm->nprocs, mpi_tag,
+                        all_comms[comm_idx], &r[send_request_idx]);
             }
         }
     }
@@ -7894,7 +7897,7 @@ public:
 
     template <bool curr_dt>
     void SEND_DATA_PROC_TO_PROC(int pipeline_stage, int send_dep,
-                                std::vector<MPI_Request>& r, MPI_Request_Manager* manager) {
+                                std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -7925,12 +7928,20 @@ public:
 
                 assert(send_request_idx != -1);
 
-                manager->m.lock();
-                MPI_Isend(buf, total_nsend, MPI_DOUBLE,
-                          proc, mpi_tag,
-                          proc_to_proc_pipelined_comms[pipeline_stage][send_dep], &r[send_request_idx]);
-                manager->m.unlock();
+                // manager->m.lock();
+                // MPI_Isend(buf, total_nsend, MPI_DOUBLE,
+                //           proc, mpi_tag,
+                //           proc_to_proc_pipelined_comms[pipeline_stage][send_dep], &r[send_request_idx]);
+                // manager->m.unlock();
 
+                int src_stream_idx = manager->num_streams_zoid_to_zoid;
+                int dst_stream_idx = manager->num_streams_zoid_to_zoid + 1;
+
+                manager->m[src_stream_idx].lock();
+                auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                manager->m[src_stream_idx].unlock();
+
+                assert(res == MPI_SUCCESS);
                 total_num_procs++;
             }
         }
@@ -8009,7 +8020,7 @@ public:
     }
 
     template <bool curr_dt>
-    void SEND_DATA_ZOID_TO_ZOID(queue_info& zoid, int send_dep, int pipeline_stage, std::vector<MPI_Request>& r) {
+    void SEND_DATA_ZOID_TO_ZOID(queue_info& zoid, int send_dep, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
         assert(USE_STREAMS);
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -8045,8 +8056,13 @@ public:
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 assert(send_request_idx != -1);
                 int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][send_zoid_num];
-                MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, stream_comm,
+
+                manager->m[src_stream_idx].lock();
+                auto res = MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->stream_comm,
                     src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                manager->m[src_stream_idx].unlock();
+
+                assert(res == MPI_SUCCESS);
             }
         }
     }
@@ -8208,20 +8224,9 @@ public:
                 assert(ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].count({recv_zoid_num, zoid_num}));
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[curr_dt_idx].at({recv_zoid_num, zoid_num});
                 // int comm_idx = curr_dt ? ZOID_TO_ZOID_TO_VCI_IDX.at({recv_zoid_num, zoid_num}) : ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT.at({recv_zoid_num, zoid_num});
-                if (USE_STREAMS) {
-                    int src_stream_idx = zoid_to_stream_num[curr_dt_idx][recv_zoid_num];
-                    int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
-                    /*
-                    MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs,
-                    mpi_tag, stream_comm, src_stream_idx, dst_stream_idx, &r[recv_request_idx]);
-                    */
-                    MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
-                        stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
-                } else {
-                    MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
-                            recv_zoid_num % comm->nprocs, mpi_tag,
-                            all_comms[comm_idx], &r[recv_request_idx]);
-                }
+                MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
+                        recv_zoid_num % comm->nprocs, mpi_tag,
+                        all_comms[comm_idx], &r[recv_request_idx]);
             }
         }
     }
@@ -8260,7 +8265,7 @@ public:
     }
 
     template <bool curr_dt>
-    int RECEIVE_DATA_ZOID_TO_ZOID(int dep, queue_info& zoid, int pipeline_stage, std::vector<MPI_Request>& r) {
+    int RECEIVE_DATA_ZOID_TO_ZOID(int dep, queue_info& zoid, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
         assert(USE_STREAMS);
         int zoid_num = zoid.num;
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
@@ -8303,7 +8308,7 @@ public:
                 int recv_request_idx = recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].at({recv_zoid_num, zoid_num});
                 int src_stream_idx = zoid_to_stream_num[curr_dt_idx][recv_zoid_num];
                 MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
-                    stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
+                    manager->stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
                 UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, recv_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
                 num_recv_neighbors++;
             }
@@ -8312,30 +8317,16 @@ public:
         return num_recv_neighbors;
     }
 
-    std::atomic<bool> done; 
-    std::mutex m;
-
-    void MPIX_START_PROGRESS_THREAD(MPI_Request_Manager* manager) {
+    void MPIX_START_PROGRESS_THREAD(MPIX_Stream_Manager* manager) {
         while (true) {
-            if (done) {
+            if (manager->done) {
                 break;
             }
-            for (int i = 0; i < NUM_STREAMS; i++) {
-                MPIX_Stream_progress(all_streams[i]);
-            }
-
-            if (manager->m.try_lock()) {
-                for (int i = 0; i < manager->requests.size(); i++) {
-                    // MPI_Testall(manager->requests[i].size(), manager->requests[i].data(), &unused_flag, MPI_STATUSES_IGNORE)
-                    for (int j = 0; j < manager->requests[i].size(); j++) {
-                        if (manager->requests[i][j] != MPI_REQUEST_NULL) {
-                            // int unused_flag;
-                            // MPI_Testall(manager->requests[i].size(), manager->requests[i].data(), &unused_flag, MPI_STATUSES_IGNORE);
-                            // MPI_Test(&manager->requests[i][j], &unused_flag, MPI_STATUS_IGNORE);
-                        }
-                    }
+            for (int i = 0; i < manager->num_streams; i++) {
+                if (manager->m[i].try_lock()) {
+                    MPIX_Stream_progress(manager->streams[i]);
+                    manager->m[i].unlock();
                 }
-                manager->m.unlock();
             }
 
             #ifdef __SSE__
@@ -8349,8 +8340,8 @@ public:
         delete manager;
     }
 
-    void MPIX_STOP_PROGRESS_THREAD() {
-        done = true;
+    void MPIX_STOP_PROGRESS_THREAD(MPIX_Stream_Manager* manager) {
+        manager->done = true;
     }
 
     template <bool curr_dt>
@@ -8425,7 +8416,7 @@ public:
     }
 
     template <bool curr_dt>
-    void RECEIVE_DATA_PROC_TO_PROC(int dep, std::vector<MPI_Request>& recv_r_proc_to_proc) {
+    void RECEIVE_DATA_PROC_TO_PROC(int dep, std::vector<MPI_Request>& recv_r_proc_to_proc, MPIX_Stream_Manager* manager) {
         auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -8442,10 +8433,22 @@ public:
 
             int recv_proc_to_proc_idx = recv_request_proc_pair_to_idx[curr_dt_idx][dep][{proc, send_dep}];
             assert(recv_proc_to_proc_idx == i);
-            MPI_Irecv(buf_recv_proc_to_proc[DEFAULT_PIPELINE_STAGE][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
-                        proc, mpi_tag,
-                        proc_to_proc_pipelined_comms[DEFAULT_PIPELINE_STAGE][send_dep], 
-                        &recv_r_proc_to_proc[recv_proc_to_proc_idx]);
+            // MPI_Irecv(buf_recv_proc_to_proc[DEFAULT_PIPELINE_STAGE][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
+            //             proc, mpi_tag,
+            //             proc_to_proc_pipelined_comms[DEFAULT_PIPELINE_STAGE][send_dep], 
+            //             &recv_r_proc_to_proc[recv_proc_to_proc_idx]);
+
+            int src_stream_idx = manager->num_streams_zoid_to_zoid;
+            int dst_stream_idx = manager->num_streams_zoid_to_zoid + 1;
+            manager->m[dst_stream_idx].lock();
+            auto res = MPIX_Stream_irecv(buf_recv_proc_to_proc[DEFAULT_PIPELINE_STAGE][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
+                            proc, mpi_tag,
+                            manager->stream_comm, 
+                            src_stream_idx,
+                            dst_stream_idx,
+                            &recv_r_proc_to_proc[recv_proc_to_proc_idx]);
+            manager->m[dst_stream_idx].unlock();
+            assert(res == MPI_SUCCESS);
         }
     }
 
@@ -10049,7 +10052,7 @@ public:
             }
 
             int buf_idx = PACK_DATA_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf + offset + zoid_ndoubles_send, i, send_zoid_num,
-                                                            start_timestep, end_timestep, pipeline_stage);
+                                                            start_timestep, end_timestep, pipeline_stage, offset + zoid_ndoubles_send);
 
             zoid_ndoubles_send += buf_idx;
         }
@@ -10067,7 +10070,7 @@ public:
     int PACK_DATA_MANY_CUTS_HELPER_PIPELINED(queue_info& zoid, double* buf,
                                              int send_idx, int send_zoid_num,
                                              int start_t, int end_t,
-                                             int pipeline_stage) {
+                                             int pipeline_stage, int buf_offset=0) {
         auto& send_force_idxs = zoid.send_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][send_idx];
         auto& send_pos_idxs = zoid.send_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][0][send_idx];
         auto& send_pos_idxs2 = zoid.send_pos_idxs_double_buffering_flattened_pipelined[pipeline_stage][1][send_idx];
@@ -12105,14 +12108,6 @@ public:
     ~StencilMD() {
         if (ONLY_RUN_LAMMPS) {
             return;
-        }
-
-        if (USE_STREAMS) {
-            MPI_Comm_free(&stream_comm);
-
-            for (int i = 0; i < NUM_STREAMS; i++) {
-                MPIX_Stream_free(&all_streams[i]);
-            }
         }
 
         for (int i = 0; i < NUM_COMMS; i++) {
