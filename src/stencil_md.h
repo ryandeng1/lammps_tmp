@@ -192,19 +192,15 @@ class MPIX_Stream_Manager {
         std::vector<spinlock> m;
         MPI_Comm stream_comm;
         int num_streams;
-        int num_streams_zoid_to_zoid;
-        int num_streams_proc_to_proc;
         std::atomic<bool> done;
     
-    MPIX_Stream_Manager(int num_streams, int num_streams_zoid_to_zoid) : streams(num_streams, MPIX_STREAM_NULL), m(num_streams) {
+    MPIX_Stream_Manager(int num_streams) : streams(num_streams, MPIX_STREAM_NULL), m(num_streams) {
         for (int i = 0; i < num_streams; i++) {
             MPIX_Stream_create(MPI_INFO_NULL, &streams[i]);
         }
         MPIX_Stream_comm_create_multiplex(MPI_COMM_WORLD, num_streams, streams.data(), &stream_comm);
 
         this->num_streams = num_streams;
-        this->num_streams_zoid_to_zoid = num_streams_zoid_to_zoid;
-        this->num_streams_proc_to_proc = num_streams - num_streams_zoid_to_zoid;
 
         done = false;
     }
@@ -3263,25 +3259,23 @@ public:
 
         if (USE_STREAMS) {
             zoid_to_stream_num[1].resize(NUM_ZOIDS_MANY_CUTS);
-            int stream_idx = 0;
             for (int dep = 0; dep < NUM_DEPS; dep++) {
+                int stream_idx = 0;
                 for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
                     auto& zoid = my_queues_many_cuts[dep][j];
                     int zoid_num = zoid.num;
-                    zoid_to_stream_num[1][zoid_num] = stream_idx;
-                    assert(stream_idx < 16);
+                    zoid_to_stream_num[1][zoid_num] = stream_idx % NUM_STREAMS;
                     stream_idx++;
                 }
             }
 
             zoid_to_stream_num[0].resize(NUM_ZOIDS_MANY_CUTS);
-            stream_idx = 0;
             for (int dep = 0; dep < NUM_DEPS; dep++) {
+                int stream_idx = 0;
                 for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
                     auto& zoid = my_queues_many_cuts_next_dt[dep][j];
                     int zoid_num = zoid.num;
-                    zoid_to_stream_num[0][zoid_num] = stream_idx;
-                    assert(stream_idx < 16);
+                    zoid_to_stream_num[0][zoid_num] = stream_idx % NUM_STREAMS;
                     stream_idx++;
                 }
             }
@@ -7934,8 +7928,8 @@ public:
                 //           proc_to_proc_pipelined_comms[pipeline_stage][send_dep], &r[send_request_idx]);
                 // manager->m.unlock();
 
-                int src_stream_idx = manager->num_streams_zoid_to_zoid;
-                int dst_stream_idx = manager->num_streams_zoid_to_zoid + 1;
+                int src_stream_idx = NUM_STREAMS - 2;
+                int dst_stream_idx = NUM_STREAMS - 1;
 
                 manager->m[src_stream_idx].lock();
                 auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
@@ -8436,8 +8430,8 @@ public:
             //             proc_to_proc_pipelined_comms[DEFAULT_PIPELINE_STAGE][send_dep], 
             //             &recv_r_proc_to_proc[recv_proc_to_proc_idx]);
 
-            int src_stream_idx = manager->num_streams_zoid_to_zoid;
-            int dst_stream_idx = manager->num_streams_zoid_to_zoid + 1;
+            int src_stream_idx = NUM_STREAMS - 2;
+            int dst_stream_idx = NUM_STREAMS - 1;
             manager->m[dst_stream_idx].lock();
             auto res = MPIX_Stream_irecv(buf_recv_proc_to_proc[DEFAULT_PIPELINE_STAGE][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
                             proc, mpi_tag,

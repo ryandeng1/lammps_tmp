@@ -3191,11 +3191,11 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     std::vector<int> wait_idxs(recv_request_map_proc_to_proc.size(), 0);
 
                     while (num_wait_proc_to_proc < total_num_wait_proc_to_proc) {
-                        stream_manager->m[stream_manager->num_streams_zoid_to_zoid + 1].lock();
+                        stream_manager->m[NUM_STREAMS - 1].lock();
                         int num_wait_idxs;
                         int res = MPI_Waitsome(total_num_wait_proc_to_proc, recv_r_proc_to_proc[dep].data(), &num_wait_idxs, wait_idxs.data(), MPI_STATUSES_IGNORE);
                         assert(res == MPI_SUCCESS);
-                        stream_manager->m[stream_manager->num_streams_zoid_to_zoid + 1].unlock();
+                        stream_manager->m[NUM_STREAMS - 1].unlock();
 
                         for (int i = 0; i < num_wait_idxs; i++) {
                             int idx = wait_idxs[i];
@@ -3243,7 +3243,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             stream_manager->m[stream_idx].unlock();
         }
         if (dep < 2) {
-            int stream_idx = stream_manager->num_streams_zoid_to_zoid;
+            int stream_idx = NUM_STREAMS - 2;
             stream_manager->m[stream_idx].lock();
             MPI_Waitall(send_r_proc_to_proc[dep].size(), send_r_proc_to_proc[dep].data(), MPI_STATUSES_IGNORE);
             stream_manager->m[stream_idx].unlock();
@@ -3479,9 +3479,7 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
     std::vector<std::vector<MPI_Request>> send_r_zoid_to_zoid(stencilMD->NUM_ZOIDS_MANY_CUTS);
     std::vector<std::vector<MPI_Request>> send_r_proc_to_proc(NUM_DEPS);
 
-    constexpr int num_streams = 16 + 2;
-    constexpr int num_streams_zoid_to_zoid = 16;
-    MPIX_Stream_Manager* stream_manager =  new MPIX_Stream_Manager(num_streams, num_streams_zoid_to_zoid);
+    MPIX_Stream_Manager* stream_manager =  new MPIX_Stream_Manager(NUM_STREAMS);
 
     std::vector<std::vector<MPI_Request>> recv_r_zoid_to_zoid(NUM_DEPS);
     std::vector<std::vector<MPI_Request>> recv_r_proc_to_proc(NUM_DEPS);

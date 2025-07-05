@@ -100,6 +100,7 @@ using IDX_3D = std::array<int, 3>;
 constexpr int MODIFY_GRAINSIZE = 1024;
 
 constexpr bool USE_NEWTON = true;
+constexpr int NUM_STREAMS = 8;
 
 const std::map<IDX_3D, int> zoid_to_num_map = {
         {{LEFT,  LEFT,  LEFT},  0},
