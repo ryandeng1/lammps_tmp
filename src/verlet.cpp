@@ -2435,10 +2435,10 @@ void Verlet::unpack_data_proc_to_proc_wrapper(int starting_timestep, int dep,
                                                                     start_timestep,
                                                                     end_timestep,
                                                                     pipeline_stage);
-    auto& zoid_counter = zoid_recv_neighbor_counters[zoid_num];
+    auto& counter = zoid_recv_neighbor_counters[zoid_num];
     auto& claimed = zoid_claimed[zoid_num];
-    zoid_counter--;
-    if (zoid_counter == 0 && !claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
+    counter--;
+    if (counter == 0 && !claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
         cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, start_timestep, end_timestep,
             zoid_recv_neighbor_counters, dep_counters, 
             send_r_zoid_to_zoid, send_r_proc_to_proc,
@@ -2500,8 +2500,9 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
 
     stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, zoid_recv_neighbor_counters);
 
-    auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
+    stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num], stream_manager);
 
+    auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
     for (int i = 0; i < send_neighbors.size(); i++) {
         int send_zoid_num = send_neighbors[i];
         int send_zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[send_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[send_zoid_num];
@@ -2517,8 +2518,6 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
             }
         }
     }
-
-    stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num], stream_manager);
 
     dep_counters[dep]--;
     if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
@@ -3124,14 +3123,14 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
 
     if (comm->me < 8) {
         std::stringstream s1;
-        s1 << BOLDGREEN << "me: " << comm->me << " dep: " << dep << " before recv data zoid to zoid. counter: " << zoid_recv_neighbor_counters[zoid.num] << RESET_COLOR << std::endl;
+        s1 << BOLDGREEN << "me: " << comm->me << " dep: " << dep << " before recv data zoid: " << zoid.num << " counter: " << zoid_recv_neighbor_counters[zoid.num] << RESET_COLOR << std::endl;
         std::cout << s1.str();
     }
     int num_recv_neighbors = stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(dep, zoid, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid[dep], stream_manager);
     zoid_recv_neighbor_counters[zoid.num] -= num_recv_neighbors;
     if (comm->me < 8) {
         std::stringstream s1;
-        s1 << BOLDGREEN << "me: " << comm->me << " dep: " << dep << " after recv data zoid to zoid. counter: " << zoid_recv_neighbor_counters[zoid.num] << RESET_COLOR << std::endl;
+        s1 << BOLDGREEN << "me: " << comm->me << " dep: " << dep << " after recv data zoid: " << zoid.num << " counter: " << zoid_recv_neighbor_counters[zoid.num] << RESET_COLOR << std::endl;
         std::cout << s1.str();
     }
     auto& claimed = zoid_claimed[zoid.num];
@@ -3142,14 +3141,6 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
                 test_f, test_x, test_v, 
                 zoid_claimed, dep_claimed, stream_manager);
         }
-    } else {
-        /*
-        std::cout << BOLDRED << "ERROR. curr_dt: " << curr_dt
-        << " me: " << comm->me << " dep: " << dep << " zoid: " << zoid.num
-        << " counter: " << zoid_recv_neighbor_counters[zoid.num]
-        << " num recv neighbors zoid to zoid: " << num_recv_neighbors
-        << RESET_COLOR << std::endl;
-        */
     }
 }
 
