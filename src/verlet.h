@@ -226,11 +226,13 @@ class Verlet : public Integrate {
   template <bool curr_dt>
   void stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_info& zoid,
                                     int start_timestep, int end_timestep,
-                                    std::vector<std::atomic<int>>& zoid_counters, std::vector<std::atomic<int>>& dep_counters,
+                                    std::vector<std::atomic<int>>& zoid_recv_neighbor_counters, std::vector<std::atomic<int>>& dep_counters,
                                     std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
                                     std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
                                     double** test_f, double** test_x, double** test_v,
-                                    std::vector<std::atomic_flag>& dep_claimed, MPIX_Stream_Manager* request_manager);
+                                    std::vector<std::atomic_flag>& zoid_claimed,
+                                    std::vector<std::atomic_flag>& dep_claimed,
+                                    MPIX_Stream_Manager* request_manager);
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_proc_to_proc(int starting_timestep,

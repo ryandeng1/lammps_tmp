@@ -8336,8 +8336,6 @@ public:
                             __builtin_arm_yield();
             #endif
         }
-
-        delete manager;
     }
 
     void MPIX_STOP_PROGRESS_THREAD(MPIX_Stream_Manager* manager) {
