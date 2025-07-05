@@ -124,14 +124,19 @@ int main(int argc, char **argv)
             constexpr int NUM_CORES_PER_SOCKET = 24;
             constexpr int NUM_CORES_PER_NODE = 24 * 2;
 
-            int num_processes_per_node = NUM_CORES_PER_NODE / (nworkers + 1);
+            constexpr bool USE_STREAMS = true;
+            int num_processes_per_node;
+            if (USE_STREAMS) {
+              num_processes_per_node = NUM_CORES_PER_NODE / (nworkers);
+            } else {
+              num_processes_per_node = NUM_CORES_PER_NODE / (nworkers + 1);
+            }
             int num_nodes = world_size / num_processes_per_node;
             int num_processes_per_socket = num_processes_per_node / 2;
 
             int rank_within_node = rank % num_processes_per_node;
 
             int start;
-            constexpr bool USE_STREAMS = true;
             if (USE_STREAMS) {
               if (rank_within_node >= num_processes_per_socket) {
                   start = (rank_within_node - num_processes_per_socket) * (nworkers) + NUM_CORES_PER_SOCKET;
