@@ -8301,8 +8301,10 @@ public:
                 assert(recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].count({recv_zoid_num, zoid_num}));
                 int recv_request_idx = recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].at({recv_zoid_num, zoid_num});
                 int src_stream_idx = zoid_to_stream_num[curr_dt_idx][recv_zoid_num];
+                manager->m[dst_stream_idx].lock();
                 MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
                     manager->stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
+                manager->m[dst_stream_idx].unlock();
                 UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, recv_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
                 num_recv_neighbors++;
             }
