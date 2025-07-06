@@ -3259,8 +3259,8 @@ public:
 
         if (USE_STREAMS) {
             zoid_to_stream_num[1].resize(NUM_ZOIDS_MANY_CUTS);
+            int stream_idx = 0;
             for (int dep = 0; dep < NUM_DEPS; dep++) {
-                int stream_idx = 0;
                 for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
                     auto& zoid = my_queues_many_cuts[dep][j];
                     int zoid_num = zoid.num;
@@ -3269,9 +3269,9 @@ public:
                 }
             }
 
+            stream_idx = 0;
             zoid_to_stream_num[0].resize(NUM_ZOIDS_MANY_CUTS);
             for (int dep = 0; dep < NUM_DEPS; dep++) {
-                int stream_idx = 0;
                 for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
                     auto& zoid = my_queues_many_cuts_next_dt[dep][j];
                     int zoid_num = zoid.num;
