@@ -1095,6 +1095,9 @@ public:
     std::map<int, std::pair<int, int>> recv_request_idx_to_zoid_with_proc_to_proc[2][NUM_PIPELINE_STAGES][NUM_DEPS];
     int nrecv_zoid_to_zoid[2][NUM_PIPELINE_STAGES][NUM_DEPS];
 
+    std::vector<std::vector<int>> recv_request_idx_to_zoid_per_zoid[2];
+    std::vector<std::map<int, int>> recv_request_zoid_to_idx_per_zoid[2];
+
     // map from (zoid.num, proc) -> offsets to each process at (dst_dep)
     std::map<std::pair<int, int>, int> send_proc_zoid_offsets[2][NUM_PIPELINE_STAGES];
     std::map<std::pair<int, int>, int> send_proc_zoid_sizes[2][NUM_PIPELINE_STAGES];
@@ -3483,6 +3486,43 @@ public:
             }
 
             std::cout << "total num diff proc: " << total_num_diff_proc << std::endl;
+        }
+    }
+
+    template <bool curr_dt>
+    void CONSTRUCT_PER_ZOID_RECV_REQUEST_IDXS() {
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
+        recv_request_idx_to_zoid_per_zoid[curr_dt_idx].resize(stencilMD->NUM_ZOIDS_MANY_CUTS);
+        recv_request_zoid_to_idx_per_zoid[curr_dt_idx].resize(stencilMD->NUM_ZOIDS_MANY_CUTS);
+
+        constexpr int NUM_NEIGHBORS_PER_DEP[NUM_DEPS] = {0, 2, 4, 6};
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+
+                recv_request_idx_to_zoid_per_zoid[curr_dt_idx].resize(NUM_NEIGHBORS_PER_DEP[dep]);
+
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                int recv_request_idx = 0;
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    int recv_zoid_dep = curr_dt ? zoid_num_to_dep[recv_zoid_num] : zoid_num_to_dep_next_dt[recv_zoid_num];
+                    if (recv_zoid_num % comm->nprocs == comm->me) {
+                        continue;
+                    }
+
+                    if (recv_zoid_dep != dep - 1) {
+                        continue;
+                    }
+
+                    recv_request_idx_to_zoid_per_zoid[curr_dt_idx][zoid.num][recv_request_idx] = recv_zoid_num;
+                    recv_request_zoid_to_idx_per_zoid[curr_dt_idx][zoid.num][recv_zoid_num] = recv_request_idx;
+                    recv_request_idx++;
+                }
+            }
         }
     }
 
@@ -8298,14 +8338,18 @@ public:
             if (total_doubles_recv_from_zoid > 0) {
                 proc_counts[recv_zoid_num % comm->nprocs]++;
                 int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
-                assert(recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].count({recv_zoid_num, zoid_num}));
-                int recv_request_idx = recv_request_zoid_to_idx_with_proc_to_proc[curr_dt_idx][pipeline_stage][dep].at({recv_zoid_num, zoid_num});
+                assert(recv_request_zoid_to_idx_per_zoid[curr_dt_idx][zoid.num].count(recv_zoid_num));
+                int recv_request_idx = recv_request_zoid_to_idx_per_zoid[curr_dt_idx][zoid.num].at(recv_zoid_num);
                 int src_stream_idx = zoid_to_stream_num[curr_dt_idx][recv_zoid_num];
-                manager->m[dst_stream_idx].lock();
+                /*
                 MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
                     manager->stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
+                */
+                manager->m[dst_stream_idx].lock();
+                MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
+                    manager->stream_comm, src_stream_idx, dst_stream_idx, &r[recv_request_idx]);
                 manager->m[dst_stream_idx].unlock();
-                UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, recv_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
+                // UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, recv_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
                 num_recv_neighbors++;
             }
         }
