@@ -1128,7 +1128,8 @@ public:
 
     std::vector<int> zoid_to_stream_num[2];
     std::map<std::pair<int, int>, std::pair<int, int>> zoid_to_zoid_to_stream_num[2];
-    std::map<std::pair<int, int>, std::pair<int, int>> send_dep_proc_to_stream_num[2][NUM_DEPS];
+    std::map<std::pair<int, int>, std::pair<int, int>> receiver_dep_proc_to_stream_num[2][NUM_DEPS];
+    std::map<std::pair<int, int>, std::pair<int, int>> sender_dep_proc_to_stream_num[2];
 
     // map curr_dt -> recv_dep -> stream_num -> vector of zoid pairs
     std::vector<std::vector<std::pair<int, int>>> stream_num_to_zoid_pairs[2][NUM_DEPS];
@@ -3714,6 +3715,7 @@ public:
             std::vector<int> all_send_stream_idxs;
             all_send_dep.resize(total_size);
             all_send_proc.resize(total_size);
+            all_recv_proc.resize(total_size);
             all_send_stream_idxs.resize(total_size);
 
             MPI_Allgatherv(my_send_dep.data(), counts[comm->me], MPI_INT, all_send_dep.data(),
@@ -3848,42 +3850,23 @@ public:
             zoid_to_zoid_to_stream_num[curr_dt_idx][zoid_pair] = {send_stream_num, recv_stream_num};
         }
 
-        for (int dep = 1; dep < NUM_DEPS; dep++) {
-            stream_num_to_zoid_pairs[curr_dt_idx][dep].resize(NUM_STREAMS);
-        }
-
-        for (auto& [zoid_pair, stream_pair]: zoid_to_zoid_to_stream_num[curr_dt_idx]) {
-            int src_zoid_num = zoid_pair.first;
-            int dst_zoid_num = zoid_pair.second;
-            int dst_zoid_dep = curr_dt ? zoid_num_to_dep[dst_zoid_num] : zoid_num_to_dep_next_dt[dst_zoid_num];
-            int dst_stream_num = stream_pair.second;
-            if (dst_zoid_num % comm->nprocs == comm->me) {
-                assert(src_zoid_num % comm->nprocs != comm->me);
-                stream_num_to_zoid_pairs[curr_dt_idx][dst_zoid_dep][dst_stream_num].push_back({src_zoid_num, dst_zoid_num});
-            }
-        }
-
-        for (int dep = 1; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < NUM_STREAMS; j++) {
-                auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][j];
-                for (int i = 0; i < zoid_pairs.size(); i++) {
-                    zoid_pair_to_recv_request_idx_streams[curr_dt_idx][zoid_pairs[i]] = i;
-                }
-            }
-        }
-
         for (auto& [send_tup, send_stream_num] : all_send_dep_proc_to_send_stream_num) {
             auto [send_dep, send_proc, recv_proc] = send_tup;
-            if (send_proc != comm->me) {
-                continue;
-            }
-            bool found = false;
+            bool recv_found = false;
+            bool send_found = false;
             for (auto& [tup, recv_stream_num] : all_send_dep_proc_to_recv_dep_proc_recv_stream_num) {
                 if (send_dep == std::get<0>(tup) && send_proc == std::get<1>(tup) && recv_proc == std::get<3>(tup)) {
-                    int recv_dep = std::get<2>(tup);
-                    send_dep_proc_to_stream_num[curr_dt_idx][recv_dep][{send_dep, recv_proc}] = {send_stream_num, recv_stream_num};
-                    assert(!found);
-                    found = true;
+                    if (recv_proc == comm->me) {
+                        int recv_dep = std::get<2>(tup);
+                        receiver_dep_proc_to_stream_num[curr_dt_idx][recv_dep][{send_dep, send_proc}] = {send_stream_num, recv_stream_num};
+                        assert(!recv_found);
+                        recv_found = true;
+                    }
+
+                    if (send_proc == comm->me) {
+                        assert(!sender_dep_proc_to_stream_num[curr_dt_idx].count({send_dep, recv_proc}));
+                        sender_dep_proc_to_stream_num[curr_dt_idx][{send_dep, recv_proc}] = {send_stream_num, recv_stream_num};
+                    }
                 }
             }
         }
@@ -8377,8 +8360,11 @@ public:
                 //           proc_to_proc_pipelined_comms[pipeline_stage][send_dep], &r[send_request_idx]);
                 // manager->m.unlock();
 
-                int src_stream_idx = NUM_STREAMS - 2;
-                int dst_stream_idx = NUM_STREAMS - 1;
+                // int src_stream_idx = NUM_STREAMS - 2;
+                // int dst_stream_idx = NUM_STREAMS - 1;
+
+                assert(sender_dep_proc_to_stream_num[curr_dt_idx].count({send_dep, proc}));
+                auto [src_stream_idx, dst_stream_idx] = sender_dep_proc_to_stream_num[curr_dt_idx].at({send_dep, proc});
 
                 manager->m[src_stream_idx].lock();
                 auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
@@ -8770,12 +8756,15 @@ public:
     }
 
     template <bool curr_dt>
-    int RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<std::vector<MPI_Request>>& r, MPIX_Stream_Manager* manager) {
+    void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
         assert(USE_STREAMS);
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         int recv_request_idx = 0;
         auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num] ;
+
+        std::set<std::pair<int, int>> s;
+
         for (int i = 0; i < zoid_pairs.size(); i++) {
             auto [recv_zoid_num, zoid_num] = zoid_pairs[i];
             assert(zoid_to_zoid_to_stream_num[curr_dt_idx].count({recv_zoid_num, zoid_num}));
@@ -8792,45 +8781,64 @@ public:
             int recv_size = curr_dt ? recv_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][find_idx]
                 : recv_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][find_idx];
             int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? recv_size * (3 + 1) : recv_size * 3;
-            if (total_doubles_recv_from_zoid > nrecv_buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][i]) {
+            if (total_doubles_recv_from_zoid > nrecv_buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][find_idx]) {
                 assert(false);
-                GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, i, total_doubles_recv_from_zoid, pipeline_stage);
+                GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, find_idx, total_doubles_recv_from_zoid, pipeline_stage);
             }
+
             manager->m[stream_num].lock();
             MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
-                manager->stream_comm, src_stream_idx, stream_num, &r[stream_num][recv_request_idx]);
+                manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
             manager->m[stream_num].unlock();
 
             recv_request_idx++;
+
+            s.insert(zoid_pairs[i]);
+        }
+
+        if (zoid_pairs.size() != s.size()) {
+            std::cout << "DUPLCIATES ERROR. set size: " << s.size() << " zoid pairs size: " << zoid_pairs.size() << std::endl;
+            assert(false);
         }
 
         auto& dep_proc_pairs = stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
         for (int i = 0; i < dep_proc_pairs.size(); i++) {
             auto [send_dep, send_proc] = dep_proc_pairs[i];
             assert(send_proc != comm->me);
-            int size = 0;
+            int size = -1;
 
             auto& lst_proc_send_dep_info = dep_to_recv_proc_to_proc[curr_dt_idx][pipeline_stage][dep];
             for (int j = 0; j < lst_proc_send_dep_info.size(); j++) {
-                auto [send_dep_info, send_proc_info] = lst_proc_send_dep_info[i];
+                auto [send_dep_info, send_proc_info] = lst_proc_send_dep_info[j];
                 if (send_dep_info == send_dep && send_proc_info == send_proc) {
                     size = dep_to_recv_proc_to_proc_sizes[curr_dt_idx][pipeline_stage][dep][j];
                 }
             }
 
-            assert(size != 0);
+            if (size == -1) {
+                std::stringstream s1;
+                s1 << BOLDRED << "me: " << comm->me << " size: " << size << " dep: " << dep
+                << " send dep: " << send_dep << " send proc: " << send_proc << " lst info size?? " << lst_proc_send_dep_info.size()
+                << RESET_COLOR << std::endl;
+                std::cout << s1.str();
+            }
+            assert(size != -1);
 
             int nrecv_from_proc = DEBUG_SEND_RECV_DATA ? size * (3 + 1) : size * 3;
             int mpi_tag = get_mpi_tag_many_cuts(comm->me, send_proc);
             auto* buf = buf_recv_proc_to_proc[pipeline_stage][send_dep][send_proc];
 
-            assert(send_dep_proc_to_stream_num[curr_dt_idx][dep].count({send_dep, send_proc}));
-            auto [src_stream_idx, dst_stream_idx] = send_dep_proc_to_stream_num[curr_dt_idx][dep].at({send_dep, send_proc});
+            assert(receiver_dep_proc_to_stream_num[curr_dt_idx][dep].count({send_dep, send_proc}));
+            auto [src_stream_idx, dst_stream_idx] = receiver_dep_proc_to_stream_num[curr_dt_idx][dep].at({send_dep, send_proc});
+
+            assert(dst_stream_idx == stream_num);
 
             manager->m[stream_num].lock();
             MPIX_Stream_irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag,
-                manager->stream_comm, src_stream_idx, stream_num, &r[stream_num][recv_request_idx]);
+                manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
             manager->m[stream_num].unlock();
+
+            recv_request_idx++;
         }
     }
 
