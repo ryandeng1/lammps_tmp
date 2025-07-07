@@ -1127,6 +1127,13 @@ public:
     // std::map<std::pair<int, int>, int> ZOID_TO_ZOID_TO_VCI_IDX_NEXT_DT;
 
     std::vector<int> zoid_to_stream_num[2];
+    std::map<std::pair<int, int>, std::pair<int, int>> zoid_to_zoid_to_stream_num[2];
+    std::map<std::pair<int, int>, std::pair<int, int>> send_dep_proc_to_stream_num[2][NUM_DEPS];
+
+    // map curr_dt -> recv_dep -> stream_num -> vector of zoid pairs
+    std::vector<std::vector<std::pair<int, int>>> stream_num_to_zoid_pairs[2][NUM_DEPS];
+    std::vector<std::vector<std::pair<int, int>>> stream_num_to_dep_proc_pairs[2][NUM_DEPS];
+    std::map<std::pair<int, int>, int> zoid_pair_to_recv_request_idx_streams[2];
 
     std::vector<std::vector<int>> send_zoid_to_zoid_sizes;
     std::vector<std::vector<int>> send_zoid_to_zoid_sizes_next_dt;
@@ -3260,36 +3267,6 @@ public:
             }
         }
 
-        if (USE_STREAMS) {
-            zoid_to_stream_num[1].resize(NUM_ZOIDS_MANY_CUTS);
-            int stream_idx = 0;
-            for (int dep = 0; dep < NUM_DEPS; dep++) {
-                for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
-                    auto& zoid = my_queues_many_cuts[dep][j];
-                    int zoid_num = zoid.num;
-                    zoid_to_stream_num[1][zoid_num] = stream_idx % NUM_STREAMS;
-                    stream_idx++;
-                }
-            }
-
-            stream_idx = 0;
-            zoid_to_stream_num[0].resize(NUM_ZOIDS_MANY_CUTS);
-            for (int dep = 0; dep < NUM_DEPS; dep++) {
-                for (int j = 0; j < my_queues_many_cuts_next_dt[dep].size(); j++) {
-                    auto& zoid = my_queues_many_cuts_next_dt[dep][j];
-                    int zoid_num = zoid.num;
-                    zoid_to_stream_num[0][zoid_num] = stream_idx % NUM_STREAMS;
-                    stream_idx++;
-                }
-            }
-            MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num[1].data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
-            MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num[0].data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
-            for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
-                assert(zoid_to_stream_num[1][i] >= 0 && zoid_to_stream_num[1][i] < 16);
-                assert(zoid_to_stream_num[0][i] >= 0 && zoid_to_stream_num[0][i] < 16);
-            }
-        }
-
         std::vector<int> my_zoids_src;
         std::vector<int> my_zoids_dst;
         std::vector<int> my_zoids_comm_idx;
@@ -3490,6 +3467,440 @@ public:
     }
 
     template <bool curr_dt>
+    void INIT_MPIX_STREAM_DATA() {
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+
+        zoid_to_stream_num[curr_dt_idx].resize(NUM_ZOIDS_MANY_CUTS);
+        int stream_idx = 0;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                int zoid_num = zoid.num;
+                zoid_to_stream_num[curr_dt_idx][zoid_num] = stream_idx % NUM_STREAMS;
+                stream_idx++;
+            }
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, zoid_to_stream_num[curr_dt_idx].data(), NUM_ZOIDS_MANY_CUTS, MPI_INT, MPI_SUM, world);
+
+        // This is the more recent version that is trying to be implemented.
+        std::map<std::pair<int, int>, int> zoid_to_zoid_to_send_stream_num;
+        std::map<std::pair<int, int>, int> zoid_to_zoid_to_recv_stream_num;
+
+        std::map<std::tuple<int, int, int>, int> send_dep_proc_to_recv_proc_send_stream_num;
+        std::map<std::tuple<int, int, int, int>, int> send_dep_proc_to_recv_dep_proc_recv_stream_num;
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_send(comm->nprocs);
+            std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_recv(comm->nprocs);
+
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid  = my_queues[dep][j];
+                auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] : send_to_neighbors_many_cuts_next_dt[zoid.num];
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+
+                for (int i = 0; i < send_neighbors.size(); i++) {
+                    int send_zoid_num = send_neighbors[i];
+                    if (send_zoid_num % comm->nprocs == comm->me) {
+                        continue;
+                    }
+
+                    int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+                    if (send_zoid_dep != dep + 1) {
+                        continue;
+                    }
+
+                    int send_proc = send_zoid_num % comm->nprocs;
+                    zoid_to_zoid_per_proc_send[send_proc].push_back({zoid.num, send_zoid_num});
+                }
+
+                for (int i = 0; i < recv_neighbors.size(); i++) {
+                    int recv_zoid_num = recv_neighbors[i];
+                    if (recv_zoid_num % comm->nprocs == comm->me) {
+                        continue;
+                    }
+
+                    int recv_zoid_dep = curr_dt ? zoid_num_to_dep[recv_zoid_num] : zoid_num_to_dep_next_dt[recv_zoid_num];
+                    if (recv_zoid_dep != dep - 1) {
+                        continue;
+                    }
+
+                    int recv_proc = recv_zoid_num % comm->nprocs;
+                    zoid_to_zoid_per_proc_recv[recv_proc].push_back({recv_zoid_num, zoid.num});
+                }
+            }
+
+            const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][DEFAULT_PIPELINE_STAGE][dep];
+
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                int send_stream_idx = 0;
+                for (int j = 0; j < zoid_to_zoid_per_proc_send[proc].size(); j++) {
+                    auto pair = zoid_to_zoid_per_proc_send[proc][j];
+                    zoid_to_zoid_to_send_stream_num[pair] = send_stream_idx % NUM_STREAMS;
+                    send_stream_idx++;
+                }
+
+                if (std::find(procs_to_send_to.begin(), procs_to_send_to.end(), proc) != procs_to_send_to.end()) {
+                    auto tup = std::make_tuple(dep, comm->me, proc);
+                    send_dep_proc_to_recv_proc_send_stream_num[tup] = send_stream_idx % NUM_STREAMS;
+                    send_stream_idx++;
+                }
+            }
+
+            const auto& recv_proc_pairs = dep_to_recv_proc_pairs[curr_dt_idx][dep];
+
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                int recv_stream_idx = 0;
+                assert(zoid_to_zoid_per_proc_recv[proc].size() <= NUM_STREAMS);
+                for (int j = 0; j < zoid_to_zoid_per_proc_recv[proc].size(); j++) {
+                    auto pair = zoid_to_zoid_per_proc_recv[proc][j];
+                    zoid_to_zoid_to_recv_stream_num[pair] = recv_stream_idx;
+                    assert(recv_stream_idx < NUM_STREAMS);
+                    recv_stream_idx++;
+                }
+
+                for (auto& [send_dep, send_proc] : recv_proc_pairs) {
+                    if (proc == send_proc) {
+                        auto tup = std::make_tuple(send_dep, proc, dep, comm->me);
+                        assert(!send_dep_proc_to_recv_dep_proc_recv_stream_num.count(tup));
+                        send_dep_proc_to_recv_dep_proc_recv_stream_num[tup] = recv_stream_idx;
+                        recv_stream_idx++;
+                    }
+                }
+            }
+        }
+
+        std::map<std::pair<int, int>, int> all_zoid_to_zoid_to_send_stream_num;
+
+        {
+            std::vector<int> my_zoids_src;
+            std::vector<int> my_zoids_dst;
+            std::vector<int> my_send_stream_idxs;
+
+            for (auto& [k, v] : zoid_to_zoid_to_send_stream_num) {
+                my_zoids_src.push_back(k.first);
+                my_zoids_dst.push_back(k.second);
+                my_send_stream_idxs.push_back(v);
+            }
+
+            std::vector<int> counts(comm->nprocs, 0);
+            std::vector<int> displacements(comm->nprocs, 0);
+
+            int my_count = my_zoids_src.size();
+            MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, world);
+
+            int total_size = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                total_size += counts[proc];
+            }
+
+            displacements[0] = 0;
+            for (int proc = 1; proc < comm->nprocs; proc++) {
+                displacements[proc] = displacements[proc - 1] + counts[proc - 1];
+            }
+
+            std::vector<int> all_src;
+            std::vector<int> all_dst;
+            std::vector<int> all_send_stream_idxs;
+            all_src.resize(total_size);
+            all_dst.resize(total_size);
+            all_send_stream_idxs.resize(total_size);
+
+            MPI_Allgatherv(my_zoids_src.data(), counts[comm->me], MPI_INT, all_src.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_zoids_dst.data(), counts[comm->me], MPI_INT, all_dst.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_send_stream_idxs.data(), counts[comm->me], MPI_INT, all_send_stream_idxs.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            for (int i = 0; i < all_src.size(); i++) {
+                int src = all_src[i];
+                int dst = all_dst[i];
+                int stream_num = all_send_stream_idxs[i];
+                all_zoid_to_zoid_to_send_stream_num[{src, dst}] = stream_num;
+            }
+        }
+
+        std::map<std::pair<int, int>, int> all_zoid_to_zoid_to_recv_stream_num;
+        
+        {
+            std::vector<int> my_zoids_src;
+            std::vector<int> my_zoids_dst;
+            std::vector<int> my_recv_stream_idxs;
+
+            for (auto& [k, v] : zoid_to_zoid_to_recv_stream_num) {
+                my_zoids_src.push_back(k.first);
+                my_zoids_dst.push_back(k.second);
+                my_recv_stream_idxs.push_back(v);
+            }
+
+            std::vector<int> counts(comm->nprocs, 0);
+            std::vector<int> displacements(comm->nprocs, 0);
+
+            int my_count = my_zoids_src.size();
+            MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, world);
+
+            int total_size = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                total_size += counts[proc];
+            }
+
+            displacements[0] = 0;
+            for (int proc = 1; proc < comm->nprocs; proc++) {
+                displacements[proc] = displacements[proc - 1] + counts[proc - 1];
+            }
+
+            std::vector<int> all_src;
+            std::vector<int> all_dst;
+            std::vector<int> all_recv_stream_idxs;
+            all_src.resize(total_size);
+            all_dst.resize(total_size);
+            all_recv_stream_idxs.resize(total_size);
+
+            MPI_Allgatherv(my_zoids_src.data(), counts[comm->me], MPI_INT, all_src.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_zoids_dst.data(), counts[comm->me], MPI_INT, all_dst.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_recv_stream_idxs.data(), counts[comm->me], MPI_INT, all_recv_stream_idxs.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            for (int i = 0; i < all_src.size(); i++) {
+                int src = all_src[i];
+                int dst = all_dst[i];
+                int stream_num = all_recv_stream_idxs[i];
+                all_zoid_to_zoid_to_recv_stream_num[{src, dst}] = stream_num;
+            }
+        }
+        
+        std::map<std::tuple<int, int, int>, int> all_send_dep_proc_to_send_stream_num;
+
+        {
+            std::vector<int> my_send_dep;
+            std::vector<int> my_send_proc;
+            std::vector<int> my_recv_proc;
+            std::vector<int> my_send_stream_idxs;
+
+            for (auto& [tup, v] : send_dep_proc_to_recv_proc_send_stream_num) {
+                my_send_dep.push_back(std::get<0>(tup));
+                my_send_proc.push_back(std::get<1>(tup));
+                my_recv_proc.push_back(std::get<2>(tup));
+                my_send_stream_idxs.push_back(v);
+            }
+
+            std::vector<int> counts(comm->nprocs, 0);
+            std::vector<int> displacements(comm->nprocs, 0);
+
+            int my_count = my_send_dep.size();
+            MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, world);
+
+            int total_size = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                total_size += counts[proc];
+            }
+
+            displacements[0] = 0;
+            for (int proc = 1; proc < comm->nprocs; proc++) {
+                displacements[proc] = displacements[proc - 1] + counts[proc - 1];
+            }
+
+            std::vector<int> all_send_dep;
+            std::vector<int> all_send_proc;
+            std::vector<int> all_recv_proc;
+            std::vector<int> all_send_stream_idxs;
+            all_send_dep.resize(total_size);
+            all_send_proc.resize(total_size);
+            all_send_stream_idxs.resize(total_size);
+
+            MPI_Allgatherv(my_send_dep.data(), counts[comm->me], MPI_INT, all_send_dep.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_send_proc.data(), counts[comm->me], MPI_INT, all_send_proc.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_recv_proc.data(), counts[comm->me], MPI_INT, all_recv_proc.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_send_stream_idxs.data(), counts[comm->me], MPI_INT, all_send_stream_idxs.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            for (int i = 0; i < all_send_stream_idxs.size(); i++) {
+                int send_dep = all_send_dep[i];
+                int send_proc = all_send_proc[i];
+                int recv_proc = all_recv_proc[i];
+                int send_stream_num = all_send_stream_idxs[i];
+                auto tup = std::make_tuple(send_dep, send_proc, recv_proc);
+                assert(!all_send_dep_proc_to_send_stream_num.count(tup));
+                all_send_dep_proc_to_send_stream_num[tup] = send_stream_num;
+            }
+        }
+
+        std::map<std::tuple<int, int, int, int>, int> all_send_dep_proc_to_recv_dep_proc_recv_stream_num;
+
+        {
+            std::vector<int> my_send_dep;
+            std::vector<int> my_send_proc;
+            std::vector<int> my_recv_dep;
+            std::vector<int> my_recv_proc;
+            std::vector<int> my_recv_stream_idxs;
+
+            for (auto& [tup, v] : send_dep_proc_to_recv_dep_proc_recv_stream_num) {
+                my_send_dep.push_back(std::get<0>(tup));
+                my_send_proc.push_back(std::get<1>(tup));
+                my_recv_dep.push_back(std::get<2>(tup));
+                my_recv_proc.push_back(std::get<3>(tup));
+                my_recv_stream_idxs.push_back(v);
+            }
+
+            std::vector<int> counts(comm->nprocs, 0);
+            std::vector<int> displacements(comm->nprocs, 0);
+
+            int my_count = my_send_dep.size();
+            MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, world);
+
+            int total_size = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                total_size += counts[proc];
+            }
+
+            displacements[0] = 0;
+            for (int proc = 1; proc < comm->nprocs; proc++) {
+                displacements[proc] = displacements[proc - 1] + counts[proc - 1];
+            }
+
+            std::vector<int> all_send_dep;
+            std::vector<int> all_send_proc;
+            std::vector<int> all_recv_dep;
+            std::vector<int> all_recv_proc;
+            std::vector<int> all_recv_stream_idxs;
+
+            all_send_dep.resize(total_size);
+            all_send_proc.resize(total_size);
+            all_recv_dep.resize(total_size);
+            all_recv_proc.resize(total_size);
+            all_recv_stream_idxs.resize(total_size);
+
+            MPI_Allgatherv(my_send_dep.data(), counts[comm->me], MPI_INT, all_send_dep.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_send_proc.data(), counts[comm->me], MPI_INT, all_send_proc.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_recv_dep.data(), counts[comm->me], MPI_INT, all_recv_dep.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_recv_proc.data(), counts[comm->me], MPI_INT, all_recv_proc.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            MPI_Allgatherv(my_recv_stream_idxs.data(), counts[comm->me], MPI_INT, all_recv_stream_idxs.data(),
+                        counts.data(), displacements.data(), MPI_INT, world);
+
+            for (int i = 0; i < all_recv_stream_idxs.size(); i++) {
+                int send_dep = all_send_dep[i];
+                int send_proc = all_send_proc[i];
+                int recv_dep = all_recv_dep[i];
+                int recv_proc = all_recv_proc[i];
+                int recv_stream_num = all_recv_stream_idxs[i];
+                auto tup = std::make_tuple(send_dep, send_proc, recv_dep, recv_proc);
+                all_send_dep_proc_to_recv_dep_proc_recv_stream_num[tup] = recv_stream_num;
+            }
+        }
+
+        assert(all_zoid_to_zoid_to_send_stream_num.size() == all_zoid_to_zoid_to_recv_stream_num.size());
+        for (auto& [zoid_pair, send_stream_num] : all_zoid_to_zoid_to_send_stream_num) {
+            assert(all_zoid_to_zoid_to_recv_stream_num.count(zoid_pair));
+            auto recv_stream_num = all_zoid_to_zoid_to_recv_stream_num.at(zoid_pair);
+            zoid_to_zoid_to_stream_num[curr_dt_idx][zoid_pair] = {send_stream_num, recv_stream_num};
+        }
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            stream_num_to_zoid_pairs[curr_dt_idx][dep].resize(NUM_STREAMS);
+        }
+
+        for (auto& [zoid_pair, stream_pair]: zoid_to_zoid_to_stream_num[curr_dt_idx]) {
+            int src_zoid_num = zoid_pair.first;
+            int dst_zoid_num = zoid_pair.second;
+            int dst_zoid_dep = curr_dt ? zoid_num_to_dep[dst_zoid_num] : zoid_num_to_dep_next_dt[dst_zoid_num];
+            int dst_stream_num = stream_pair.second;
+            if (dst_zoid_num % comm->nprocs == comm->me) {
+                assert(src_zoid_num % comm->nprocs != comm->me);
+                stream_num_to_zoid_pairs[curr_dt_idx][dst_zoid_dep][dst_stream_num].push_back({src_zoid_num, dst_zoid_num});
+            }
+        }
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < NUM_STREAMS; j++) {
+                auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][j];
+                for (int i = 0; i < zoid_pairs.size(); i++) {
+                    zoid_pair_to_recv_request_idx_streams[curr_dt_idx][zoid_pairs[i]] = i;
+                }
+            }
+        }
+
+        assert(all_zoid_to_zoid_to_send_stream_num.size() == all_zoid_to_zoid_to_recv_stream_num.size());
+        for (auto& [zoid_pair, send_stream_num] : all_zoid_to_zoid_to_send_stream_num) {
+            assert(all_zoid_to_zoid_to_recv_stream_num.count(zoid_pair));
+            auto recv_stream_num = all_zoid_to_zoid_to_recv_stream_num.at(zoid_pair);
+            zoid_to_zoid_to_stream_num[curr_dt_idx][zoid_pair] = {send_stream_num, recv_stream_num};
+        }
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            stream_num_to_zoid_pairs[curr_dt_idx][dep].resize(NUM_STREAMS);
+        }
+
+        for (auto& [zoid_pair, stream_pair]: zoid_to_zoid_to_stream_num[curr_dt_idx]) {
+            int src_zoid_num = zoid_pair.first;
+            int dst_zoid_num = zoid_pair.second;
+            int dst_zoid_dep = curr_dt ? zoid_num_to_dep[dst_zoid_num] : zoid_num_to_dep_next_dt[dst_zoid_num];
+            int dst_stream_num = stream_pair.second;
+            if (dst_zoid_num % comm->nprocs == comm->me) {
+                assert(src_zoid_num % comm->nprocs != comm->me);
+                stream_num_to_zoid_pairs[curr_dt_idx][dst_zoid_dep][dst_stream_num].push_back({src_zoid_num, dst_zoid_num});
+            }
+        }
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < NUM_STREAMS; j++) {
+                auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][j];
+                for (int i = 0; i < zoid_pairs.size(); i++) {
+                    zoid_pair_to_recv_request_idx_streams[curr_dt_idx][zoid_pairs[i]] = i;
+                }
+            }
+        }
+
+        for (auto& [send_tup, send_stream_num] : all_send_dep_proc_to_send_stream_num) {
+            auto [send_dep, send_proc, recv_proc] = send_tup;
+            if (send_proc != comm->me) {
+                continue;
+            }
+            bool found = false;
+            for (auto& [tup, recv_stream_num] : all_send_dep_proc_to_recv_dep_proc_recv_stream_num) {
+                if (send_dep == std::get<0>(tup) && send_proc == std::get<1>(tup) && recv_proc == std::get<3>(tup)) {
+                    int recv_dep = std::get<2>(tup);
+                    send_dep_proc_to_stream_num[curr_dt_idx][recv_dep][{send_dep, recv_proc}] = {send_stream_num, recv_stream_num};
+                    assert(!found);
+                    found = true;
+                }
+            }
+        }
+
+        for (int dep = 1; dep < NUM_DEPS; dep++) {
+            stream_num_to_dep_proc_pairs[curr_dt_idx][dep].resize(NUM_STREAMS);
+            // for (auto& [dep_proc_pair, stream_pair]: send_dep_proc_to_stream_num[curr_dt_idx][dep]) {
+            for (auto& [tup, recv_stream_num] : all_send_dep_proc_to_recv_dep_proc_recv_stream_num) {
+                auto& [send_dep, send_proc, recv_dep, recv_proc] = tup;
+                if (recv_proc == comm->me && recv_dep == dep) {
+                    stream_num_to_dep_proc_pairs[curr_dt_idx][dep][recv_stream_num].push_back({send_dep, send_proc});
+                }
+            }
+        }
+    }
+
+    template <bool curr_dt>
     void CONSTRUCT_PER_ZOID_RECV_REQUEST_IDXS() {
         auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
@@ -3502,8 +3913,6 @@ public:
         for (int dep = 1; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 auto& zoid = my_queues[dep][j];
-
-                recv_request_idx_to_zoid_per_zoid[curr_dt_idx].resize(NUM_NEIGHBORS_PER_DEP[dep]);
 
                 auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
                 int recv_request_idx = 0;
@@ -3518,7 +3927,7 @@ public:
                         continue;
                     }
 
-                    recv_request_idx_to_zoid_per_zoid[curr_dt_idx][zoid.num][recv_request_idx] = recv_zoid_num;
+                    recv_request_idx_to_zoid_per_zoid[curr_dt_idx][zoid.num].push_back(recv_zoid_num);
                     recv_request_zoid_to_idx_per_zoid[curr_dt_idx][zoid.num][recv_zoid_num] = recv_request_idx;
                     recv_request_idx++;
                 }
@@ -8064,7 +8473,6 @@ public:
         auto& send_request_idxs = send_to_neighbors_not_my_proc_idxs_only_next_dep[curr_dt_idx][zoid.num];
 
         int zoid_num = zoid.num;
-        int src_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
 
         std::vector<int> proc_counts(comm->nprocs, 0);
 
@@ -8089,7 +8497,12 @@ public:
                 proc_counts[send_zoid_num % comm->nprocs]++;
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 assert(send_request_idx != -1);
-                int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][send_zoid_num];
+
+                assert(zoid_to_zoid_to_stream_num[curr_dt_idx].count({zoid_num, send_zoid_num}));
+                auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({zoid_num, send_zoid_num});
+
+                // int src_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
+                // int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][send_zoid_num];
 
                 manager->m[src_stream_idx].lock();
                 auto res = MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->stream_comm,
@@ -8306,7 +8719,6 @@ public:
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num] : recv_from_neighbors_many_cuts_next_dt[zoid_num];
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
-        int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
 
         std::vector<int> proc_counts(comm->nprocs, 0);
 
@@ -8341,20 +8753,85 @@ public:
                 assert(recv_request_zoid_to_idx_per_zoid[curr_dt_idx][zoid.num].count(recv_zoid_num));
                 int recv_request_idx = recv_request_zoid_to_idx_per_zoid[curr_dt_idx][zoid.num].at(recv_zoid_num);
                 int src_stream_idx = zoid_to_stream_num[curr_dt_idx][recv_zoid_num];
-                /*
-                MPIX_Stream_recv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
-                    manager->stream_comm, src_stream_idx, dst_stream_idx, MPI_STATUS_IGNORE);
-                */
+                int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
+
+                assert(zoid_to_zoid_to_stream_num[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+                // auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({recv_zoid_num, zoid_num});
+                // int recv_request_idx = zoid_pair_to_recv_request_idx_streams[curr_dt_idx][{recv_zoid_num, zoid_num}];
                 manager->m[dst_stream_idx].lock();
                 MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
                     manager->stream_comm, src_stream_idx, dst_stream_idx, &r[recv_request_idx]);
                 manager->m[dst_stream_idx].unlock();
-                // UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, recv_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
                 num_recv_neighbors++;
             }
         }
 
         return num_recv_neighbors;
+    }
+
+    template <bool curr_dt>
+    int RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<std::vector<MPI_Request>>& r, MPIX_Stream_Manager* manager) {
+        assert(USE_STREAMS);
+        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+
+        int recv_request_idx = 0;
+        auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num] ;
+        for (int i = 0; i < zoid_pairs.size(); i++) {
+            auto [recv_zoid_num, zoid_num] = zoid_pairs[i];
+            assert(zoid_to_zoid_to_stream_num[curr_dt_idx].count({recv_zoid_num, zoid_num}));
+            auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({recv_zoid_num, zoid_num});
+
+            assert(dst_stream_idx == stream_num);
+
+            int mpi_tag = get_mpi_tag_many_cuts(zoid_num, recv_zoid_num);
+            auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num] : recv_from_neighbors_many_cuts_next_dt[zoid_num];
+            auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), recv_zoid_num);
+            assert(find_it != recv_neighbors.end());
+            int find_idx = std::distance(recv_neighbors.begin(), find_it);
+            auto* buf = buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][find_idx];
+            int recv_size = curr_dt ? recv_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][find_idx]
+                : recv_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][find_idx];
+            int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? recv_size * (3 + 1) : recv_size * 3;
+            if (total_doubles_recv_from_zoid > nrecv_buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][i]) {
+                assert(false);
+                GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, i, total_doubles_recv_from_zoid, pipeline_stage);
+            }
+            manager->m[stream_num].lock();
+            MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
+                manager->stream_comm, src_stream_idx, stream_num, &r[stream_num][recv_request_idx]);
+            manager->m[stream_num].unlock();
+
+            recv_request_idx++;
+        }
+
+        auto& dep_proc_pairs = stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
+        for (int i = 0; i < dep_proc_pairs.size(); i++) {
+            auto [send_dep, send_proc] = dep_proc_pairs[i];
+            assert(send_proc != comm->me);
+            int size = 0;
+
+            auto& lst_proc_send_dep_info = dep_to_recv_proc_to_proc[curr_dt_idx][pipeline_stage][dep];
+            for (int j = 0; j < lst_proc_send_dep_info.size(); j++) {
+                auto [send_dep_info, send_proc_info] = lst_proc_send_dep_info[i];
+                if (send_dep_info == send_dep && send_proc_info == send_proc) {
+                    size = dep_to_recv_proc_to_proc_sizes[curr_dt_idx][pipeline_stage][dep][j];
+                }
+            }
+
+            assert(size != 0);
+
+            int nrecv_from_proc = DEBUG_SEND_RECV_DATA ? size * (3 + 1) : size * 3;
+            int mpi_tag = get_mpi_tag_many_cuts(comm->me, send_proc);
+            auto* buf = buf_recv_proc_to_proc[pipeline_stage][send_dep][send_proc];
+
+            assert(send_dep_proc_to_stream_num[curr_dt_idx][dep].count({send_dep, send_proc}));
+            auto [src_stream_idx, dst_stream_idx] = send_dep_proc_to_stream_num[curr_dt_idx][dep].at({send_dep, send_proc});
+
+            manager->m[stream_num].lock();
+            MPIX_Stream_irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag,
+                manager->stream_comm, src_stream_idx, stream_num, &r[stream_num][recv_request_idx]);
+            manager->m[stream_num].unlock();
+        }
     }
 
     void MPIX_START_PROGRESS_THREAD(MPIX_Stream_Manager* manager) {

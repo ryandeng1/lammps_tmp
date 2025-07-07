@@ -241,7 +241,7 @@ class Verlet : public Integrate {
     std::vector<std::atomic<int>>& dep_counters,
     std::vector<std::vector<MPI_Request>>& send_r,
     std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
-    std::vector<std::vector<MPI_Request>>& recv_r,
+    std::vector<std::vector<std::vector<MPI_Request>>>& recv_r_zoid_to_zoid_streams,
     std::vector<std::vector<MPI_Request>>& recv_r_proc_to_proc,
     std::vector<std::atomic_flag>& zoid_claimed,
     std::vector<std::atomic_flag>& dep_claimed, MPIX_Stream_Manager* request_manager);

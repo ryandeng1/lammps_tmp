@@ -1017,8 +1017,7 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->INIT_ZOID_DATA_MANY_CUTS();
     stencilMD->INIT_MY_ZOIDS();
     stencilMD->INIT_ZOID_MANY_CUTS_NEIGHBORS();
-    // stencilMD->INIT_ZOID_STREAM_DATA<true>();
-    // stencilMD->INIT_ZOID_STREAM_DATA<false>();
+
     stencilMD->SORT_MY_ZOIDS<true>();
     stencilMD->SORT_MY_ZOIDS<false>();
     auto begin = std::chrono::high_resolution_clock::now();
@@ -1094,6 +1093,8 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     stencilMD->CONSTRUCT_PER_ZOID_RECV_REQUEST_IDXS<true>();
     stencilMD->CONSTRUCT_PER_ZOID_RECV_REQUEST_IDXS<false>();
+    stencilMD->INIT_MPIX_STREAM_DATA<true>();
+    stencilMD->INIT_MPIX_STREAM_DATA<false>();
 
     stencilMD->CONSTRUCT_RECV_ZOID_PAIR_AND_PROC_PAIR_IDXS<true>();
     stencilMD->CONSTRUCT_RECV_ZOID_PAIR_AND_PROC_PAIR_IDXS<false>();
@@ -3135,6 +3136,7 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
         int idx;
         stream_manager->m[recv_stream_idx].lock();
         MPI_Waitany(total_num_wait, recv_r_zoid_to_zoid[zoid.num].data(), &idx, MPI_STATUS_IGNORE);
+        stream_manager->m[recv_stream_idx].unlock();
 
         int recv_zoid_num = idx_to_zoid_map[idx];
         cilk_spawn [this](int starting_timestep, int dep, queue_info& zoid, int recv_zoid_num,
@@ -3162,6 +3164,8 @@ void Verlet::run_stencil_md_receive_zoid_to_zoid_wrapper(int starting_timestep, 
             zoid_recv_neighbor_counters, dep_counters,
             send_r_zoid_to_zoid, send_r_proc_to_proc,
             zoid_claimed, dep_claimed, stream_manager);
+        
+        num_wait++;
     }
 }
 
@@ -3171,7 +3175,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                                                     std::vector<std::atomic<int>>& dep_counters,
                                                     std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
                                                     std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
-                                                    std::vector<std::vector<MPI_Request>>& recv_r_zoid_to_zoid, 
+                                                    std::vector<std::vector<std::vector<MPI_Request>>>& recv_r_zoid_to_zoid_streams, 
                                                     std::vector<std::vector<MPI_Request>>& recv_r_proc_to_proc, 
                                                     std::vector<std::atomic_flag>& zoid_claimed,
                                                     std::vector<std::atomic_flag>& dep_claimed,
@@ -3199,15 +3203,21 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             if (dep < NUM_DEPS - 1) {
+                /*
                 cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC<curr_dt>(dep + 1, recv_r_proc_to_proc[dep + 1], stream_manager);
                 for (int j = 0; j < my_queues[dep + 1].size(); j++) {
                     auto& zoid = my_queues[dep + 1][j];
-                    cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID<curr_dt>(dep + 1, zoid,
-                        DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid[zoid.num], stream_manager);
+                    cilk_spawn stencilMD->RECEIVE_DATA_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, zoid,
+                        DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid_streams[dep + 1], stream_manager);
                 }
+                */
             }
             
             if (dep == 0) {
+                for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+                    cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid_streams[stream_num], stream_manager);
+                }
+
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
                     cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
@@ -3216,6 +3226,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         zoid_claimed, dep_claimed, stream_manager);
                 }
             } else {
+                /*
                 if (dep > 1) {
                     int num_wait_proc_to_proc = 0;
                     auto& recv_request_map_proc_to_proc = stencilMD->recv_request_idx_to_proc_pair[curr_dt_idx][dep];
@@ -3254,8 +3265,73 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         num_wait_proc_to_proc += num_wait_idxs;
                     }
                 }
+                */
+
+                // do by stream
+                for (int i = 0; i < NUM_STREAMS; i++) {
+                    cilk_spawn [this](int starting_timestep, int dep, int stream_num, std::vector<std::vector<MPI_Request>>& recv_requests,
+                    std::vector<std::atomic<int>>& zoid_recv_neighbor_counters, std::vector<std::atomic<int>>& dep_counters,
+                    std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
+                    std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+                    double **test_f, double **test_x, double **test_v,
+                    std::vector<std::atomic_flag>& zoid_claimed,
+                    std::vector<std::atomic_flag>& dep_claimed,
+                    MPIX_Stream_Manager* stream_manager) {
+                        auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
+                        auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
+                        int total_num_wait = zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size();
+                        int num_wait = 0;
+
+                        while (num_wait < total_num_wait) {
+                            int idx;
+                            stream_manager->m[stream_num].lock();
+                            MPI_Waitany(total_num_wait, recv_requests[stream_num].data(), &idx, MPI_STATUS_IGNORE);
+                            stream_manager->m[stream_num].unlock();
+
+                            if (idx < zoid_pairs_at_stream.size()) {
+                                auto [src_zoid_num, dst_zoid_num] = zoid_pairs_at_stream[idx];
+                                auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[dst_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[dst_zoid_num];
+                                stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, src_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
+                                zoid_recv_neighbor_counters[zoid.num]--;
+                                auto& claimed = zoid_claimed[zoid.num];
+                                if (zoid_recv_neighbor_counters[zoid.num] == 0
+                                    && !claimed.test(std::memory_order_relaxed)
+                                    && !claimed.test_and_set(std::memory_order_relaxed)) {
+                                        stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
+                                        zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
+                                        test_f, test_x, test_v, 
+                                    zoid_claimed, dep_claimed, stream_manager);
+                                }
+                            } else {
+                                auto& [send_dep, proc] = send_dep_proc_pairs_at_stream[idx];
+                                cilk_spawn unpack_data_proc_to_proc<curr_dt>(starting_timestep, dep,
+                                                                    proc, send_dep,
+                                                                    default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE, 
+                                                                    zoid_recv_neighbor_counters,
+                                                                    dep_counters,
+                                                                    send_r_zoid_to_zoid,
+                                                                    send_r_proc_to_proc,
+                                                                    test_f, test_x, test_v,
+                                                                    zoid_claimed, dep_claimed, stream_manager);
+                            }
+
+                            num_wait++;
+                        }
+                    }(starting_timestep, dep, i, recv_r_zoid_to_zoid_streams[dep],
+                        zoid_recv_neighbor_counters, dep_counters,
+                        send_r_zoid_to_zoid, send_r_proc_to_proc,
+                        test_f, test_x, test_v,
+                        zoid_claimed, dep_claimed, stream_manager);
+
+                    if (dep < NUM_DEPS - 1) {
+                        cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, i, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid_streams[i], stream_manager);
+                    }
+                }
 
                 // hack recv data zoid to zoid
+
+
+                /*
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
                     cilk_spawn run_stencil_md_receive_zoid_to_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, 
@@ -3266,6 +3342,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         stream_manager
                     );
                 }
+                */
             }
         }
     }
@@ -3520,6 +3597,8 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
     std::vector<std::vector<MPI_Request>> recv_r_zoid_to_zoid(stencilMD->NUM_ZOIDS_MANY_CUTS);
     std::vector<std::vector<MPI_Request>> recv_r_proc_to_proc(NUM_DEPS);
 
+    std::vector<std::vector<std::vector<MPI_Request>>> recv_r_zoid_to_zoid_streams(NUM_DEPS);
+
     std::vector<std::atomic_flag> dep_claimed(NUM_DEPS);
 
     int max_zoids_per_dep = (stencilMD->NUM_ZOIDS_MANY_CUTS / 8) * 3 / comm->nprocs;
@@ -3537,8 +3616,12 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
         }
 
         send_r_proc_to_proc[dep].resize(comm->nprocs, MPI_REQUEST_NULL);
-        // recv_r_zoid_to_zoid[dep].resize(max_zoids_per_dep * MAX_NEIGHBORS, MPI_REQUEST_NULL);
         recv_r_proc_to_proc[dep].resize(comm->nprocs, MPI_REQUEST_NULL);
+
+        recv_r_zoid_to_zoid_streams[dep].resize(NUM_STREAMS);
+        for (int i = 0; i < NUM_STREAMS; i++) {
+            recv_r_zoid_to_zoid_streams[dep][i].resize(max_zoids_per_dep * MAX_NEIGHBORS, MPI_REQUEST_NULL);
+        }
     }
 
     cilk_spawn stencilMD->MPIX_START_PROGRESS_THREAD(stream_manager);
@@ -3560,12 +3643,12 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
             zoid_recv_neighbor_counters, dep_counters,
             // send_r_zoid_to_zoid, send_r_proc_to_proc,
             send_r_zoid_to_zoid, send_r_proc_to_proc,
-            recv_r_zoid_to_zoid, recv_r_proc_to_proc,
+            recv_r_zoid_to_zoid_streams, recv_r_proc_to_proc,
             claimed, dep_claimed, stream_manager);
         run_stencil_md_many_cuts_proc_to_proc<false>(t, test_f, test_x, test_v,
             zoid_recv_neighbor_counters, dep_counters,
             send_r_zoid_to_zoid, send_r_proc_to_proc,
-            recv_r_zoid_to_zoid, recv_r_proc_to_proc,
+            recv_r_zoid_to_zoid_streams, recv_r_proc_to_proc,
             claimed, dep_claimed, stream_manager);
     }
 
