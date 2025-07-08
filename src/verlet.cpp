@@ -3220,7 +3220,10 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 }
             } else {
                 // do by stream
-                for (int stream_num = 0; stream_num < NUM_STREAMS / 2; stream_num++) {
+                for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+                    if (stream_num >= 4) {
+                        continue;
+                    }
                     cilk_spawn [this](int starting_timestep, int dep, int stream_num, std::vector<std::vector<std::vector<MPI_Request>>>& recv_requests,
                         std::vector<std::atomic<int>>& zoid_recv_neighbor_counters, std::vector<std::atomic<int>>& dep_counters,
                         std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
