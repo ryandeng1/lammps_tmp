@@ -3541,8 +3541,8 @@ public:
 
             const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][DEFAULT_PIPELINE_STAGE][dep];
 
+            int send_stream_idx = 0;
             for (int proc = 0; proc < comm->nprocs; proc++) {
-                int send_stream_idx = 0;
                 for (int j = 0; j < zoid_to_zoid_per_proc_send[proc].size(); j++) {
                     auto pair = zoid_to_zoid_per_proc_send[proc][j];
                     zoid_to_zoid_to_send_stream_num[pair] = send_stream_idx % NUM_STREAMS;
@@ -3556,14 +3556,23 @@ public:
                 }
             }
 
+            std::map<std::pair<int, int>, std::set<int>> proc_pair_to_streams;
+            std::vector<int> stream_loads(NUM_STREAMS, 0);
+
             const auto& recv_proc_pairs = dep_to_recv_proc_pairs[curr_dt_idx][dep];
 
             for (int proc = 0; proc < comm->nprocs; proc++) {
+                if (proc == comm->me) {
+                    continue;
+                }
+
+                auto proc_pair = std::make_pair(proc, comm->me);
+
                 int recv_stream_idx = 0;
                 assert(zoid_to_zoid_per_proc_recv[proc].size() <= NUM_STREAMS);
                 for (int j = 0; j < zoid_to_zoid_per_proc_recv[proc].size(); j++) {
                     auto pair = zoid_to_zoid_per_proc_recv[proc][j];
-                    zoid_to_zoid_to_recv_stream_num[pair] = recv_stream_idx;
+                    // zoid_to_zoid_to_recv_stream_num[pair] = recv_stream_idx;
                     assert(recv_stream_idx < NUM_STREAMS);
                     recv_stream_idx++;
                 }
@@ -3572,7 +3581,7 @@ public:
                     if (proc == send_proc) {
                         auto tup = std::make_tuple(send_dep, proc, dep, comm->me);
                         assert(!send_dep_proc_to_recv_dep_proc_recv_stream_num.count(tup));
-                        send_dep_proc_to_recv_dep_proc_recv_stream_num[tup] = recv_stream_idx;
+                        // send_dep_proc_to_recv_dep_proc_recv_stream_num[tup] = recv_stream_idx;
                         recv_stream_idx++;
                     }
                 }
@@ -3583,6 +3592,50 @@ public:
                     << " size: " << zoid_to_zoid_per_proc_recv[proc].size() << " overall size: " << recv_stream_idx << RESET_COLOR << std::endl;
                     std::cout << s1.str();
                     MPI_Abort(world, 0);
+                }
+
+                for (int j = 0; j < zoid_to_zoid_per_proc_recv[proc].size(); j++) {
+                    auto pair = zoid_to_zoid_per_proc_recv[proc][j];
+                    int best_stream = -1;
+                    int min_load = INT_MAX;
+                    for (int s = 0; s < NUM_STREAMS; s++) {
+                        // Skip if this stream is already used for this proc 
+                        if (proc_pair_to_streams[proc_pair].count(s) > 0) {
+                            continue;
+                        }
+                        if (stream_loads[s] < min_load) {
+                            min_load = stream_loads[s];
+                            best_stream = s;
+                        }
+                    }
+
+                    assert(best_stream != -1);
+                    zoid_to_zoid_to_recv_stream_num[pair] = best_stream;
+                    stream_loads[best_stream]++;
+                    proc_pair_to_streams[proc_pair].insert(best_stream);
+                }
+
+                for (auto& [send_dep, send_proc] : recv_proc_pairs) {
+                    if (proc == send_proc) {
+                        auto tup = std::make_tuple(send_dep, proc, dep, comm->me);
+                        assert(!send_dep_proc_to_recv_dep_proc_recv_stream_num.count(tup));
+
+                        int best_stream = -1;
+                        int min_load = INT_MAX;
+                        for (int s = 0; s < NUM_STREAMS; s++) {
+                            // Skip if this stream is already used for this proc 
+                            if (proc_pair_to_streams[proc_pair].count(s) > 0) {
+                                continue;
+                            }
+                            if (stream_loads[s] < min_load) {
+                                min_load = stream_loads[s];
+                                best_stream = s;
+                            }
+                        }
+                        send_dep_proc_to_recv_dep_proc_recv_stream_num[tup] = best_stream;
+                        stream_loads[best_stream]++;
+                        proc_pair_to_streams[proc_pair].insert(best_stream);
+                    }
                 }
             }
         }
