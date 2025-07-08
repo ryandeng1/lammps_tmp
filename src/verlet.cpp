@@ -3203,14 +3203,14 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         cilk_scope {
-            if (dep < NUM_DEPS - 1) {
-                for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-                    cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
-                        recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
-                }
-            }
-
             if (dep == 0) {
+                if (dep < NUM_DEPS - 1) {
+                    for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+                        cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
+                            recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
+                    }
+                }
+
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
                     cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
