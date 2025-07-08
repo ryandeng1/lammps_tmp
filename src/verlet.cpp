@@ -3529,7 +3529,7 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
     std::vector<std::vector<MPI_Request>> send_r_zoid_to_zoid(stencilMD->NUM_ZOIDS_MANY_CUTS);
     std::vector<std::vector<MPI_Request>> send_r_proc_to_proc(NUM_DEPS);
 
-    MPIX_Stream_Manager* stream_manager =  new MPIX_Stream_Manager(NUM_STREAMS);
+    MPIX_Stream_Manager* stream_manager =  new MPIX_Stream_Manager(4);
 
     // std::vector<std::vector<MPI_Request>> recv_r_zoid_to_zoid(NUM_DEPS);
     std::vector<std::vector<MPI_Request>> recv_r_zoid_to_zoid(stencilMD->NUM_ZOIDS_MANY_CUTS);

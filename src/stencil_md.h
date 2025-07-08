@@ -199,7 +199,7 @@ class MPIX_Stream_Manager {
     
     MPIX_Stream_Manager(int num_streams) : streams(num_streams, MPIX_STREAM_NULL), m(num_streams) {
         if (USE_STREAMS) {
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < num_streams; i++) {
                 MPIX_Stream_create(MPI_INFO_NULL, &streams[i]);
             }
             MPIX_Stream_comm_create_multiplex(MPI_COMM_WORLD, num_streams, streams.data(), &stream_comm);
@@ -214,7 +214,7 @@ class MPIX_Stream_Manager {
         if (USE_STREAMS) {
             MPI_Comm_free(&stream_comm);
 
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < num_streams; i++) {
                 MPIX_Stream_free(&streams[i]);
             }
         }
