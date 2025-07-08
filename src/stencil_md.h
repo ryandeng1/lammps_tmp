@@ -8802,12 +8802,13 @@ public:
 
             recv_request_idx++;
 
-            s.insert(zoid_pairs[i]);
-        }
-
-        if (zoid_pairs.size() != s.size()) {
-            std::cout << "DUPLCIATES ERROR. set size: " << s.size() << " zoid pairs size: " << zoid_pairs.size() << std::endl;
-            assert(false);
+            auto p = std::make_pair(recv_zoid_num % comm->nprocs, comm->me);
+            if (s.find(p) != s.end()) {
+                std::stringstream s1;
+                s1 << BOLDRED << "1. ERROR me: " << comm->me << " dep: " << dep << " curr_dt: " << curr_dt << " stream: " << stream_num
+                << " procs: " << p.first << " " << p.second << RESET_COLOR << std::endl;
+            }
+            s.insert(p);
         }
 
         auto& dep_proc_pairs = stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
@@ -8847,6 +8848,13 @@ public:
                 manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
             manager->m[stream_num].unlock();
 
+            auto p = std::make_pair(send_proc, comm->me);
+            if (s.find(p) != s.end()) {
+                std::stringstream s1;
+                s1 << BOLDRED << "2. ERROR me: " << comm->me << " dep: " << dep << " curr_dt: " << curr_dt << " stream: " << stream_num
+                << " procs: " << p.first << " " << p.second << RESET_COLOR << std::endl;
+            }
+            s.insert(p);
             recv_request_idx++;
         }
     }
