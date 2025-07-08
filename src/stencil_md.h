@@ -46,7 +46,7 @@
 #define EPSILON 1.0e-10
 
 constexpr bool USE_BREAK = false;
-constexpr bool USE_STREAMS = false;
+constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 8;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
