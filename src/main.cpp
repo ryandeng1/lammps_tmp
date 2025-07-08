@@ -124,7 +124,6 @@ int main(int argc, char **argv)
             constexpr int NUM_CORES_PER_SOCKET = 24;
             constexpr int NUM_CORES_PER_NODE = 24 * 2;
 
-            constexpr bool USE_STREAMS = true;
             int num_processes_per_node;
             if (USE_STREAMS) {
               num_processes_per_node = NUM_CORES_PER_NODE / (nworkers);
