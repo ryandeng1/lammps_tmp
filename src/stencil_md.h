@@ -8762,7 +8762,7 @@ public:
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         int recv_request_idx = 0;
-        auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num] ;
+        auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
 
         std::set<std::pair<int, int>> s;
 

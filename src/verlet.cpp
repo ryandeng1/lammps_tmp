@@ -3216,7 +3216,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             
             if (dep == 0) {
                 for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-                    cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
+                    stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
                         recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
                 }
 
@@ -3228,47 +3228,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         zoid_claimed, dep_claimed, stream_manager);
                 }
             } else {
-                /*
-                if (dep > 1) {
-                    int num_wait_proc_to_proc = 0;
-                    auto& recv_request_map_proc_to_proc = stencilMD->recv_request_idx_to_proc_pair[curr_dt_idx][dep];
-
-                    int total_num_wait_proc_to_proc = recv_request_map_proc_to_proc.size();
-
-                    // assert(recv_request_map_proc_to_proc.size() == recv_r_proc_to_proc[dep].size());
-
-                    std::vector<int> wait_idxs(recv_request_map_proc_to_proc.size(), 0);
-
-                    while (num_wait_proc_to_proc < total_num_wait_proc_to_proc) {
-                        stream_manager->m[NUM_STREAMS - 1].lock();
-                        int num_wait_idxs;
-                        int res = MPI_Waitsome(total_num_wait_proc_to_proc, recv_r_proc_to_proc[dep].data(), &num_wait_idxs, wait_idxs.data(), MPI_STATUSES_IGNORE);
-                        assert(res == MPI_SUCCESS);
-                        stream_manager->m[NUM_STREAMS - 1].unlock();
-
-                        for (int i = 0; i < num_wait_idxs; i++) {
-                            int idx = wait_idxs[i];
-
-                            assert(idx != MPI_UNDEFINED);
-
-                            assert(recv_request_map_proc_to_proc.count(idx));
-                            auto& [proc, send_dep] = recv_request_map_proc_to_proc.at(idx);
-                            cilk_spawn unpack_data_proc_to_proc<curr_dt>(starting_timestep, dep,
-                                                                    proc, send_dep,
-                                                                    default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE, 
-                                                                    zoid_recv_neighbor_counters,
-                                                                    dep_counters,
-                                                                    send_r_zoid_to_zoid,
-                                                                    send_r_proc_to_proc,
-                                                                    test_f, test_x, test_v,
-                                                                    zoid_claimed, dep_claimed, stream_manager);
-                        }
-
-                        num_wait_proc_to_proc += num_wait_idxs;
-                    }
-                }
-                */
-
                 // do by stream
                 for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                     cilk_spawn [this](int starting_timestep, int dep, int stream_num, std::vector<std::vector<std::vector<MPI_Request>>>& recv_requests,
