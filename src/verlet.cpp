@@ -3568,7 +3568,9 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
         }
     }
 
-    cilk_spawn stencilMD->MPIX_START_PROGRESS_THREAD(stream_manager);
+    if (stream_manager->use_streams) {
+        cilk_spawn stencilMD->MPIX_START_PROGRESS_THREAD(stream_manager);
+    }
 
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
         // run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
@@ -3596,8 +3598,10 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
             claimed, dep_claimed, stream_manager);
     }
 
-    stencilMD->MPIX_STOP_PROGRESS_THREAD(stream_manager);
-    cilk_sync;
+    if (stream_manager->use_streams) {
+        stencilMD->MPIX_STOP_PROGRESS_THREAD(stream_manager);
+        cilk_sync;
+    }
 
     delete stream_manager;
 }

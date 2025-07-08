@@ -41,11 +41,12 @@
 #include "assert.h"
 #include <functional>
 #include <random>
+#include <thread>
 
 #define EPSILON 1.0e-10
 
 constexpr bool USE_BREAK = false;
-// constexpr bool NO_LOCKS_BOND = true;
+constexpr bool USE_STREAMS = true;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -194,12 +195,15 @@ class MPIX_Stream_Manager {
         int num_streams;
         std::atomic<bool> done;
         spinlock global_lock;
+        bool use_streams = USE_STREAMS;
     
     MPIX_Stream_Manager(int num_streams) : streams(num_streams, MPIX_STREAM_NULL), m(num_streams) {
-        for (int i = 0; i < num_streams; i++) {
-            MPIX_Stream_create(MPI_INFO_NULL, &streams[i]);
+        if (USE_STREAMS) {
+            for (int i = 0; i < num_streams; i++) {
+                MPIX_Stream_create(MPI_INFO_NULL, &streams[i]);
+            }
+            MPIX_Stream_comm_create_multiplex(MPI_COMM_WORLD, num_streams, streams.data(), &stream_comm);
         }
-        MPIX_Stream_comm_create_multiplex(MPI_COMM_WORLD, num_streams, streams.data(), &stream_comm);
 
         this->num_streams = num_streams;
 
@@ -207,10 +211,12 @@ class MPIX_Stream_Manager {
     }
 
     ~MPIX_Stream_Manager() {
-        MPI_Comm_free(&stream_comm);
+        if (USE_STREAMS) {
+            MPI_Comm_free(&stream_comm);
 
-        for (int i = 0; i < num_streams; i++) {
-            MPIX_Stream_free(&streams[i]);
+            for (int i = 0; i < num_streams; i++) {
+                MPIX_Stream_free(&streams[i]);
+            }
         }
     }
 };
@@ -5255,58 +5261,6 @@ public:
                     zoid.bond_list_modified[t].push_back({idx, p.first, p.second});
                 }
             }
-
-            /*
-            if (NO_LOCKS_BOND) {
-                auto conflict_adj_list = build_conflict_graph(zoid.bond_list_modified[t]);
-                auto bond_colors = greedy_coloring(zoid.bond_list_modified[t].size(), conflict_adj_list);
-                int max_color = 0;
-                if (!bond_colors.empty()) {
-                    auto max_it = std::max_element(bond_colors.begin(), bond_colors.end());
-                    if (max_it != bond_colors.end()) {
-                        max_color = *max_it;
-                    }
-                }
-                int num_colors = (max_color >= 0) ? (max_color + 1) : 0;
-
-                std::vector<std::vector<int>> bond_idxs_by_color(num_colors);
-                if (num_colors > 0) {
-                    for (int bond_idx = 0; bond_idx < zoid.bond_list_modified[t].size(); ++bond_idx) {
-                        int color = bond_colors[bond_idx];
-                        if (color >= 0 && color < num_colors) { // Safety check
-                            bond_idxs_by_color[color].push_back(bond_idx);
-                        } else {
-                            std::cerr << "Warning: Bond " << bond_idx << " has invalid color " << color << std::endl;
-                        }
-                    }
-                }
-
-                std::map<std::tuple<int, int, int>, int> bond_to_color;
-                std::vector<int> color_counts(num_colors, 0);
-                for (int c = 0; c < num_colors; c++) {
-                    color_counts[c] = bond_idxs_by_color[c].size();
-                    for (auto& idx : bond_idxs_by_color[c]) {
-                        // bond_to_color[bond_list[idx]] = c;
-                        bond_to_color[zoid.bond_list_modified[t][idx]] = c;
-                    }
-                }
-
-                std::sort(zoid.bond_list_modified[t].begin(), zoid.bond_list_modified[t].end(),
-                          [&](const auto& bond_a, const auto& bond_b) {
-                    auto color_a = bond_to_color.at(bond_a);
-                    auto color_b = bond_to_color.at(bond_b);
-                    if (color_a < color_b) {
-                        return true;
-                    } else if (color_a > color_b) {
-                        return false;
-                    }
-
-                    return bond_a < bond_b;
-                });
-
-                zoid.bond_list_modified_num_colors[t] = color_counts;
-            }
-            */
         }
     }
 
@@ -7190,12 +7144,11 @@ public:
     }
 
     // 64 VCIs so 1 per comm
-    static constexpr int NUM_COMMS = 16;
+    static constexpr int NUM_COMMS = 8;
     std::vector<MPI_Comm> all_comms;
 
     MPI_Comm proc_to_proc_pipelined_comms[NUM_PIPELINE_STAGES][NUM_DEPS];
 
-    static constexpr bool USE_STREAMS = true;
 
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
         constexpr int INITIAL_SIZE = 1024;
@@ -8375,11 +8328,15 @@ public:
                 assert(sender_dep_proc_to_stream_num[curr_dt_idx].count({send_dep, proc}));
                 auto [src_stream_idx, dst_stream_idx] = sender_dep_proc_to_stream_num[curr_dt_idx].at({send_dep, proc});
 
-                manager->m[src_stream_idx].lock();
-                auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
-                manager->m[src_stream_idx].unlock();
+                if (USE_STREAMS) {
+                    manager->m[src_stream_idx].lock();
+                    auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                    manager->m[src_stream_idx].unlock();
+                    assert(res == MPI_SUCCESS);
+                } else {
+                    MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[src_stream_idx], &r[send_request_idx]);
+                }
 
-                assert(res == MPI_SUCCESS);
                 total_num_procs++;
             }
         }
@@ -8459,7 +8416,6 @@ public:
 
     template <bool curr_dt>
     void SEND_DATA_ZOID_TO_ZOID(queue_info& zoid, int send_dep, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        assert(USE_STREAMS);
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
@@ -8496,15 +8452,16 @@ public:
                 assert(zoid_to_zoid_to_stream_num[curr_dt_idx].count({zoid_num, send_zoid_num}));
                 auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({zoid_num, send_zoid_num});
 
-                // int src_stream_idx = zoid_to_stream_num[curr_dt_idx][zoid_num];
-                // int dst_stream_idx = zoid_to_stream_num[curr_dt_idx][send_zoid_num];
-
-                manager->m[src_stream_idx].lock();
-                auto res = MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->stream_comm,
-                    src_stream_idx, dst_stream_idx, &r[send_request_idx]);
-                manager->m[src_stream_idx].unlock();
-
-                assert(res == MPI_SUCCESS);
+                if (USE_STREAMS) {
+                    manager->m[src_stream_idx].lock();
+                    auto res = MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->stream_comm,
+                        src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                    manager->m[src_stream_idx].unlock();
+                    assert(res == MPI_SUCCESS);
+                } else {
+                    MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
+                        all_comms[src_stream_idx], &r[send_request_idx]);
+                }
             }
         }
     }
@@ -8708,7 +8665,7 @@ public:
 
     template <bool curr_dt>
     int RECEIVE_DATA_ZOID_TO_ZOID(int dep, queue_info& zoid, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        assert(USE_STREAMS);
+        __builtin_unreachable();
         int zoid_num = zoid.num;
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num] : recv_from_neighbors_many_cuts_next_dt[zoid_num];
@@ -8766,13 +8723,10 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        assert(USE_STREAMS);
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         int recv_request_idx = 0;
         auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
-
-        std::set<std::pair<int, int>> s;
 
         for (int i = 0; i < zoid_pairs.size(); i++) {
             auto [recv_zoid_num, zoid_num] = zoid_pairs[i];
@@ -8795,20 +8749,16 @@ public:
                 GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, find_idx, total_doubles_recv_from_zoid, pipeline_stage);
             }
 
-            manager->m[stream_num].lock();
-            MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
-                manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
-            manager->m[stream_num].unlock();
+            if (USE_STREAMS) {
+                manager->m[stream_num].lock();
+                MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
+                    manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
+                manager->m[stream_num].unlock();
+            } else {
+                MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, all_comms[stream_num], &r[recv_request_idx]);
+            }
 
             recv_request_idx++;
-
-            auto p = std::make_pair(recv_zoid_num % comm->nprocs, comm->me);
-            if (s.find(p) != s.end()) {
-                std::stringstream s1;
-                s1 << BOLDRED << "1. ERROR me: " << comm->me << " dep: " << dep << " curr_dt: " << curr_dt << " stream: " << stream_num
-                << " procs: " << p.first << " " << p.second << RESET_COLOR << std::endl;
-            }
-            s.insert(p);
         }
 
         auto& dep_proc_pairs = stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
@@ -8843,18 +8793,15 @@ public:
 
             assert(dst_stream_idx == stream_num);
 
-            manager->m[stream_num].lock();
-            MPIX_Stream_irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag,
-                manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
-            manager->m[stream_num].unlock();
-
-            auto p = std::make_pair(send_proc, comm->me);
-            if (s.find(p) != s.end()) {
-                std::stringstream s1;
-                s1 << BOLDRED << "2. ERROR me: " << comm->me << " dep: " << dep << " curr_dt: " << curr_dt << " stream: " << stream_num
-                << " procs: " << p.first << " " << p.second << RESET_COLOR << std::endl;
+            if (USE_STREAMS) {
+                manager->m[stream_num].lock();
+                MPIX_Stream_irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag,
+                    manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
+                manager->m[stream_num].unlock();
+            } else {
+                MPI_Irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag, all_comms[stream_num], &r[recv_request_idx]);
             }
-            s.insert(p);
+
             recv_request_idx++;
         }
     }
@@ -8864,6 +8811,7 @@ public:
             if (manager->done) {
                 break;
             }
+
             if (manager->global_lock.try_lock()) {
                 for (int i = 0; i < manager->num_streams; i++) {
                     if (manager->m[i].try_lock()) {
@@ -8874,12 +8822,7 @@ public:
                 manager->global_lock.unlock();
             }
 
-            #ifdef __SSE__
-                            __builtin_ia32_pause();
-            #endif
-            #ifdef __aarch64__
-                            __builtin_arm_yield();
-            #endif
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
         }
     }
 
@@ -8955,43 +8898,6 @@ public:
                         proc, mpi_tag,
                         proc_to_proc_pipelined_comms[DEFAULT_PIPELINE_STAGE][send_dep], 
                         &recv_r_proc_to_proc[recv_proc_to_proc_idx]);
-        }
-    }
-
-    template <bool curr_dt>
-    void RECEIVE_DATA_PROC_TO_PROC(int dep, std::vector<MPI_Request>& recv_r_proc_to_proc, MPIX_Stream_Manager* manager) {
-        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
-        constexpr int curr_dt_idx = static_cast<int>(curr_dt);
-
-        auto& lst_recv = dep_to_recv_proc_pairs[curr_dt_idx][dep];
-        auto& lst_recv_sizes = dep_to_recv_proc_pairs_sizes[curr_dt_idx][dep];
-
-        for (int i = 0; i < lst_recv.size(); i++) {
-            auto& [send_dep, proc] = lst_recv[i];
-            int size = lst_recv_sizes[i];
-            int nrecv_from_proc = DEBUG_SEND_RECV_DATA ? size * (3 + 1) : size * 3;
-            assert(proc != comm->me && nrecv_from_proc > 0);
-            int mpi_tag = get_mpi_tag_many_cuts(comm->me, proc);
-            assert(recv_request_proc_pair_to_idx[curr_dt_idx][dep].count({proc, send_dep}));
-
-            int recv_proc_to_proc_idx = recv_request_proc_pair_to_idx[curr_dt_idx][dep][{proc, send_dep}];
-            assert(recv_proc_to_proc_idx == i);
-            // MPI_Irecv(buf_recv_proc_to_proc[DEFAULT_PIPELINE_STAGE][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
-            //             proc, mpi_tag,
-            //             proc_to_proc_pipelined_comms[DEFAULT_PIPELINE_STAGE][send_dep], 
-            //             &recv_r_proc_to_proc[recv_proc_to_proc_idx]);
-
-            int src_stream_idx = NUM_STREAMS - 2;
-            int dst_stream_idx = NUM_STREAMS - 1;
-            manager->m[dst_stream_idx].lock();
-            auto res = MPIX_Stream_irecv(buf_recv_proc_to_proc[DEFAULT_PIPELINE_STAGE][send_dep][proc], nrecv_from_proc, MPI_DOUBLE,
-                            proc, mpi_tag,
-                            manager->stream_comm, 
-                            src_stream_idx,
-                            dst_stream_idx,
-                            &recv_r_proc_to_proc[recv_proc_to_proc_idx]);
-            manager->m[dst_stream_idx].unlock();
-            assert(res == MPI_SUCCESS);
         }
     }
 
