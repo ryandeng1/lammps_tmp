@@ -8334,7 +8334,7 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
                 } else {
-                    MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[src_stream_idx], &r[send_request_idx]);
+                    MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
 
                 total_num_procs++;
@@ -8460,7 +8460,7 @@ public:
                     assert(res == MPI_SUCCESS);
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
-                        all_comms[src_stream_idx], &r[send_request_idx]);
+                        all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
             }
         }
