@@ -3358,16 +3358,14 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
         for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
-            int stream_idx = stencilMD->zoid_to_stream_num[curr_dt_idx][zoid_num];
-            stream_manager->m[stream_idx].lock();
+            stream_manager->global_lock.lock();
             MPI_Waitall(send_r_zoid_to_zoid[zoid_num].size(), send_r_zoid_to_zoid[zoid_num].data(), MPI_STATUSES_IGNORE);
-            stream_manager->m[stream_idx].unlock();
+            stream_manager->global_lock.unlock();
         }
         if (dep < 2) {
-            int stream_idx = NUM_STREAMS - 2;
-            stream_manager->m[stream_idx].lock();
+            stream_manager->global_lock.lock();
             MPI_Waitall(send_r_proc_to_proc[dep].size(), send_r_proc_to_proc[dep].data(), MPI_STATUSES_IGNORE);
-            stream_manager->m[stream_idx].unlock();
+            stream_manager->global_lock.unlock();
         }
     }
 }

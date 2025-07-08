@@ -193,6 +193,7 @@ class MPIX_Stream_Manager {
         MPI_Comm stream_comm;
         int num_streams;
         std::atomic<bool> done;
+        spinlock global_lock;
     
     MPIX_Stream_Manager(int num_streams) : streams(num_streams, MPIX_STREAM_NULL), m(num_streams) {
         for (int i = 0; i < num_streams; i++) {
@@ -8847,11 +8848,14 @@ public:
             if (manager->done) {
                 break;
             }
-            for (int i = 0; i < manager->num_streams; i++) {
-                if (manager->m[i].try_lock()) {
-                    MPIX_Stream_progress(manager->streams[i]);
-                    manager->m[i].unlock();
+            if (manager->global_lock.try_lock()) {
+                for (int i = 0; i < manager->num_streams; i++) {
+                    if (manager->m[i].try_lock()) {
+                        MPIX_Stream_progress(manager->streams[i]);
+                        manager->m[i].unlock();
+                    }
                 }
+                manager->global_lock.unlock();
             }
 
             #ifdef __SSE__
