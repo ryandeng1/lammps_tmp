@@ -196,7 +196,6 @@ class MPIX_Stream_Manager {
         int num_streams;
         std::atomic<bool> done;
         spinlock global_lock;
-        bool use_streams = USE_STREAMS;
     
     MPIX_Stream_Manager(int num_streams) : streams(num_streams, MPIX_STREAM_NULL), m(num_streams) {
         if (USE_STREAMS) {
@@ -215,7 +214,7 @@ class MPIX_Stream_Manager {
         if (USE_STREAMS) {
             MPI_Comm_free(&stream_comm);
 
-            for (int i = 0; i < num_streams; i++) {
+            for (int i = 0; i < 4; i++) {
                 MPIX_Stream_free(&streams[i]);
             }
         }
