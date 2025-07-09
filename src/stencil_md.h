@@ -8822,6 +8822,7 @@ public:
                 s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
                 << " zoid to zoid. " << recv_zoid_num << " to: " << zoid_num << " ndoubles: " << total_doubles_recv_from_zoid
                 << RESET_COLOR << std::endl;
+                std::cout << s1.str();
             }
 
             if (USE_STREAMS) {
@@ -8874,6 +8875,7 @@ public:
                 s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
                 << " proc to proc: " << send_proc << " to: " << comm->me << " ndoubles: " << nrecv_from_proc
                 << RESET_COLOR << std::endl;
+                std::cout << s1.str();
             }
 
             if (USE_STREAMS) {
