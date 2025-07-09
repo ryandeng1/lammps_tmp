@@ -191,18 +191,20 @@ namespace LAMMPS_NS {
 class MPIX_Stream_Manager {
     public:
         std::vector<MPIX_Stream> streams;
+        std::vector<MPI_Comm> comms;
         std::vector<spinlock> m;
         MPI_Comm stream_comm;
         int num_streams;
         std::atomic<bool> done;
         spinlock global_lock;
     
-    MPIX_Stream_Manager(int num_streams) : streams(num_streams, MPIX_STREAM_NULL), m(num_streams) {
+    MPIX_Stream_Manager(int num_streams) : streams(num_streams, MPIX_STREAM_NULL), comms(num_streams, MPI_COMM_NULL), m(num_streams) {
         if (USE_STREAMS) {
             for (int i = 0; i < num_streams; i++) {
                 MPIX_Stream_create(MPI_INFO_NULL, &streams[i]);
+                MPIX_Stream_comm_create(MPI_COMM_WORLD, streams[i], &comms[i]);
             }
-            MPIX_Stream_comm_create_multiplex(MPI_COMM_WORLD, num_streams, streams.data(), &stream_comm);
+            // MPIX_Stream_comm_create_multiplex(MPI_COMM_WORLD, num_streams, streams.data(), &stream_comm);
         }
 
         this->num_streams = num_streams;
@@ -212,9 +214,10 @@ class MPIX_Stream_Manager {
 
     ~MPIX_Stream_Manager() {
         if (USE_STREAMS) {
-            MPI_Comm_free(&stream_comm);
+            // MPI_Comm_free(&stream_comm);
 
             for (int i = 0; i < num_streams; i++) {
+                MPI_Comm_free(&comms[i]);
                 MPIX_Stream_free(&streams[i]);
             }
         }
@@ -8382,9 +8385,13 @@ public:
                 auto [src_stream_idx, dst_stream_idx] = sender_dep_proc_to_stream_num[curr_dt_idx].at({send_dep, proc});
 
                 if (USE_STREAMS) {
-                    manager->m[src_stream_idx].lock();
-                    auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
-                    manager->m[src_stream_idx].unlock();
+                    // manager->m[src_stream_idx].lock();
+                    // auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                    // manager->m[src_stream_idx].unlock();
+                    // assert(res == MPI_SUCCESS);
+                    manager->m[dst_stream_idx].lock();
+                    auto res = MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->comms[dst_stream_idx], &r[send_request_idx]);
+                    manager->m[dst_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
                 } else {
                     MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[dst_stream_idx], &r[send_request_idx]);
@@ -8506,10 +8513,14 @@ public:
                 auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({zoid_num, send_zoid_num});
 
                 if (USE_STREAMS) {
-                    manager->m[src_stream_idx].lock();
-                    auto res = MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->stream_comm,
-                        src_stream_idx, dst_stream_idx, &r[send_request_idx]);
-                    manager->m[src_stream_idx].unlock();
+                    // manager->m[src_stream_idx].lock();
+                    // auto res = MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->stream_comm,
+                    //     src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                    // manager->m[src_stream_idx].unlock();
+                    // assert(res == MPI_SUCCESS);
+                    manager->m[dst_stream_idx].lock();
+                    auto res = MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->comms[dst_stream_idx], &r[send_request_idx]);
+                    manager->m[dst_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
@@ -8804,8 +8815,9 @@ public:
 
             if (USE_STREAMS) {
                 manager->m[stream_num].lock();
-                MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
-                    manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
+                // MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
+                //     manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
+                MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, manager->comms[stream_num], &r[recv_request_idx]);
                 manager->m[stream_num].unlock();
             } else {
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, all_comms[stream_num], &r[recv_request_idx]);
@@ -8848,8 +8860,9 @@ public:
 
             if (USE_STREAMS) {
                 manager->m[stream_num].lock();
-                MPIX_Stream_irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag,
-                    manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
+                // MPIX_Stream_irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag,
+                //     manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
+                MPI_Irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag, manager->comms[stream_num], &r[recv_request_idx]);
                 manager->m[stream_num].unlock();
             } else {
                 MPI_Irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag, all_comms[stream_num], &r[recv_request_idx]);
