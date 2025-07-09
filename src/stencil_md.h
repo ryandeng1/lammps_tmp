@@ -8386,7 +8386,7 @@ public:
 
                 if (USE_STREAMS) {
                     manager->m[src_stream_idx].lock();
-                    auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                    auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag + send_dep, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
                     /*
@@ -8880,7 +8880,7 @@ public:
 
             if (USE_STREAMS) {
                 manager->m[stream_num].lock();
-                MPIX_Stream_irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag,
+                MPIX_Stream_irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag + send_dep,
                     manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
                 // MPI_Irecv(buf, nrecv_from_proc, MPI_DOUBLE, send_proc, mpi_tag, manager->comms[stream_num], &r[recv_request_idx]);
                 manager->m[stream_num].unlock();
