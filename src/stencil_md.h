@@ -8438,11 +8438,11 @@ public:
                 GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
             }
 
-            auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
 
-            cilk_spawn [this](queue_info& zoid, double* buf, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
+            cilk_spawn [this](queue_info& zoid, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
                 int pipeline_stage, MPIX_Stream_Manager* manager, int send_request_idx, std::vector<MPI_Request>& r) {
                 int zoid_num = zoid.num;
+                auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
                 PACK_DATA_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage);
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({zoid_num, send_zoid_num});
@@ -8461,7 +8461,7 @@ public:
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
                         all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
-            }(zoid, buf, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
+            }(zoid, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
         }
 
         for (int i = 0; i < procs_to_send_to.size(); i++) {
