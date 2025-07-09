@@ -8403,7 +8403,8 @@ public:
     }
 
     template <bool curr_dt>
-    void PACK_DATA_WITH_PROC_TO_PROC(queue_info& zoid, int send_dep, int start_timestep, int end_timestep, int pipeline_stage, std::vector<std::atomic<int>>& zoid_counters) {
+    void PACK_DATA_WITH_PROC_TO_PROC(queue_info& zoid, int send_dep, int start_timestep, int end_timestep, int pipeline_stage,
+        MPIX_Stream_Manager* stream_manager, std::vector<MPI_Request>& send_r_zoid_to_zoid) {
 
         assert(pipeline_stage == DEFAULT_PIPELINE_STAGE);
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
@@ -8417,60 +8418,54 @@ public:
 
         const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][pipeline_stage][send_dep];
 
-        cilk_scope {
-            for (int i = 0; i < procs_to_send_to.size(); i++) {
-                cilk_spawn PACK_DATA_PROC_TO_PROC_HELPER<curr_dt>(zoid, pipeline_stage, send_dep, procs_to_send_to[i]);
+        for (int i = 0; i < send_neighbors.size(); i++) {
+            int send_zoid_num = send_neighbors[i];
+            int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
+                : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
+            int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+            int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
+
+            if (send_zoid_num % comm->nprocs == comm->me) {
+                continue;
             }
 
-            for (int i = 0; i < send_neighbors.size(); i++) {
-                int send_zoid_num = send_neighbors[i];
-                int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[pipeline_stage][zoid_num][i]
-                    : send_zoid_to_zoid_sizes_pipelined_next_dt[pipeline_stage][zoid_num][i];
-                int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
-                int send_zoid_dep = curr_dt ? zoid_num_to_dep[send_zoid_num] : zoid_num_to_dep_next_dt[send_zoid_num];
-
-                if (send_zoid_num % comm->nprocs == comm->me) {
-                    /*
-                    cilk_spawn [this](queue_info& zoid, int send_idx,
-                        std::vector<std::atomic<int>>& zoid_counters, int send_zoid_num,
-                        int start_timestep, int end_timestep, int pipeline_stage) {
-                        int zoid_num = zoid.num;
-                        auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num] : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
-                        auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[send_zoid_num] : recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
-                        auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), zoid_num);
-                        assert(find_it != recv_neighbors.end());
-                        int find_idx = std::distance(recv_neighbors.begin(), find_it);
-                        assert(recv_neighbors[find_idx] == zoid_num);
-                        // UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, i, start_timestep, end_timestep, pipeline_stage);
-                        UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, send_idx, start_timestep, end_timestep, pipeline_stage);
-                        zoid_counters[send_zoid_num]--;
-                    }(zoid, i, zoid_counters, send_zoid_num, start_timestep, end_timestep, pipeline_stage);
-                    */
-                    auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num] : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
-                    auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[send_zoid_num] : recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
-                    auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), zoid_num);
-                    assert(find_it != recv_neighbors.end());
-                    int find_idx = std::distance(recv_neighbors.begin(), find_it);
-                    assert(recv_neighbors[find_idx] == zoid_num);
-                    // UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, i, start_timestep, end_timestep, pipeline_stage);
-                    UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(recv_zoid, find_idx, zoid.num, i, start_timestep, end_timestep, pipeline_stage);
-                    zoid_counters[send_zoid_num]--;
-                    continue;
-                }
-
-                if (send_zoid_dep != send_dep + 1) {
-                    continue;
-                }
-
-                if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[pipeline_stage][zoid.num][i]) {
-                    assert(false);
-                    GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
-                }
-
-                auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
-
-                cilk_spawn PACK_DATA_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage);
+            if (send_zoid_dep != send_dep + 1) {
+                continue;
             }
+
+            if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[pipeline_stage][zoid.num][i]) {
+                assert(false);
+                GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
+            }
+
+            auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
+
+            cilk_spawn [this](queue_info& zoid, double* buf, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
+                int pipeline_stage, MPIX_Stream_Manager* manager, int send_request_idx, std::vector<MPI_Request>& r) {
+                int zoid_num = zoid.num;
+                PACK_DATA_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage);
+                int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
+                auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({zoid_num, send_zoid_num});
+
+                if (USE_STREAMS) {
+                    // manager->m[src_stream_idx].lock();
+                    // auto res = MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->stream_comm,
+                    //     src_stream_idx, dst_stream_idx, &r[send_request_idx]);
+                    // manager->m[src_stream_idx].unlock();
+                    // assert(res == MPI_SUCCESS);
+                    manager->m[dst_stream_idx].lock();
+                    auto res = MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->comms[dst_stream_idx], &r[send_request_idx]);
+                    manager->m[dst_stream_idx].unlock();
+                    assert(res == MPI_SUCCESS);
+                } else {
+                    MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
+                        all_comms[dst_stream_idx], &r[send_request_idx]);
+                }
+            }(zoid, buf, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
+        }
+
+        for (int i = 0; i < procs_to_send_to.size(); i++) {
+            PACK_DATA_PROC_TO_PROC_HELPER<curr_dt>(zoid, pipeline_stage, send_dep, procs_to_send_to[i]);
         }
     }
 
