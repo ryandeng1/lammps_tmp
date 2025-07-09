@@ -3544,23 +3544,25 @@ public:
 
             const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][DEFAULT_PIPELINE_STAGE][dep];
 
+            constexpr int NUM_SEND_STREAMS = NUM_STREAMS / 2;
             int send_stream_idx = 0;
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 for (int j = 0; j < zoid_to_zoid_per_proc_send[proc].size(); j++) {
                     auto pair = zoid_to_zoid_per_proc_send[proc][j];
-                    zoid_to_zoid_to_send_stream_num[pair] = send_stream_idx % NUM_STREAMS;
+                    zoid_to_zoid_to_send_stream_num[pair] = (send_stream_idx % NUM_SEND_STREAMS) + NUM_SEND_STREAMS;
                     send_stream_idx++;
                 }
 
                 if (std::find(procs_to_send_to.begin(), procs_to_send_to.end(), proc) != procs_to_send_to.end()) {
                     auto tup = std::make_tuple(dep, comm->me, proc);
-                    send_dep_proc_to_recv_proc_send_stream_num[tup] = send_stream_idx % NUM_STREAMS;
+                    send_dep_proc_to_recv_proc_send_stream_num[tup] = (send_stream_idx % NUM_SEND_STREAMS) + NUM_SEND_STREAMS;
                     send_stream_idx++;
                 }
             }
 
+            constexpr int NUM_RECV_STREAMS = NUM_STREAMS / 2;
             std::map<std::pair<int, int>, std::set<int>> proc_pair_to_streams;
-            std::vector<int> stream_loads(NUM_STREAMS, 0);
+            std::vector<int> stream_loads(NUM_RECV_STREAMS, 0);
 
             const auto& recv_proc_pairs = dep_to_recv_proc_pairs[curr_dt_idx][dep];
 
@@ -3601,7 +3603,7 @@ public:
                     auto pair = zoid_to_zoid_per_proc_recv[proc][j];
                     int best_stream = -1;
                     int min_load = INT_MAX;
-                    for (int s = 0; s < NUM_STREAMS; s++) {
+                    for (int s = 0; s < stream_loads.size(); s++) {
                         // Skip if this stream is already used for this proc 
                         if (proc_pair_to_streams[proc_pair].count(s) > 0) {
                             continue;
@@ -3625,7 +3627,7 @@ public:
 
                         int best_stream = -1;
                         int min_load = INT_MAX;
-                        for (int s = 0; s < NUM_STREAMS; s++) {
+                        for (int s = 0; s < stream_loads.size(); s++) {
                             // Skip if this stream is already used for this proc 
                             if (proc_pair_to_streams[proc_pair].count(s) > 0) {
                                 continue;
@@ -3635,6 +3637,7 @@ public:
                                 best_stream = s;
                             }
                         }
+                        assert(best_stream != -1);
                         send_dep_proc_to_recv_dep_proc_recv_stream_num[tup] = best_stream;
                         stream_loads[best_stream]++;
                         proc_pair_to_streams[proc_pair].insert(best_stream);
