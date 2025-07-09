@@ -3255,7 +3255,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         double **test_f, double **test_x, double **test_v,
                         std::vector<std::atomic_flag>& zoid_claimed,
                         std::vector<std::atomic_flag>& dep_claimed,
-                        MPIX_Stream_Manager* stream_manager) {
+                        MPIX_Stream_Manager* stream_manager) noexcept {
 
                         auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
                         auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
