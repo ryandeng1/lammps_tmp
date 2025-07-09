@@ -8731,6 +8731,7 @@ public:
     template <bool curr_dt>
     int RECEIVE_DATA_ZOID_TO_ZOID(int dep, queue_info& zoid, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
         __builtin_unreachable();
+        /*
         int zoid_num = zoid.num;
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num] : recv_from_neighbors_many_cuts_next_dt[zoid_num];
@@ -8784,6 +8785,8 @@ public:
         }
 
         return num_recv_neighbors;
+        */
+        return -1;
     }
 
     template <bool curr_dt>
@@ -8812,6 +8815,13 @@ public:
             if (total_doubles_recv_from_zoid > nrecv_buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][find_idx]) {
                 assert(false);
                 GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, find_idx, total_doubles_recv_from_zoid, pipeline_stage);
+            }
+
+            if (recv_zoid_num % comm->nprocs == 8 && mpi_tag == 229384) {
+                std::stringstream s1;
+                s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
+                << " zoid to zoid. " << recv_zoid_num << " to: " << zoid_num << " ndoubles: " << total_doubles_recv_from_zoid
+                << RESET_COLOR << std::endl;
             }
 
             if (USE_STREAMS) {
@@ -8858,6 +8868,13 @@ public:
             auto [src_stream_idx, dst_stream_idx] = receiver_dep_proc_to_stream_num[curr_dt_idx][dep].at({send_dep, send_proc});
 
             assert(dst_stream_idx == stream_num);
+
+            if (send_proc == 8 && mpi_tag == 229384) {
+                std::stringstream s1;
+                s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
+                << " proc to proc: " << send_proc << " to: " << comm->me << " ndoubles: " << nrecv_from_proc
+                << RESET_COLOR << std::endl;
+            }
 
             if (USE_STREAMS) {
                 manager->m[stream_num].lock();
