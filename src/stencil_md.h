@@ -8820,13 +8820,13 @@ public:
                 GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, find_idx, total_doubles_recv_from_zoid, pipeline_stage);
             }
 
-            if (recv_zoid_num % comm->nprocs == 8 && mpi_tag == 229384) {
-                std::stringstream s1;
-                s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
-                << " zoid to zoid. " << recv_zoid_num << " to: " << zoid_num << " ndoubles: " << total_doubles_recv_from_zoid
-                << RESET_COLOR << std::endl;
-                std::cout << s1.str();
-            }
+            // if (recv_zoid_num % comm->nprocs == 8 && mpi_tag == 229384) {
+            //     std::stringstream s1;
+            //     s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
+            //     << " zoid to zoid. " << recv_zoid_num << " to: " << zoid_num << " ndoubles: " << total_doubles_recv_from_zoid
+            //     << RESET_COLOR << std::endl;
+            //     std::cout << s1.str();
+            // }
 
             if (USE_STREAMS) {
                 manager->m[stream_num].lock();
@@ -8873,13 +8873,13 @@ public:
 
             assert(dst_stream_idx == stream_num);
 
-            if (send_proc == 8 && mpi_tag == 229384) {
-                std::stringstream s1;
-                s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
-                << " proc to proc: " << send_proc << " to: " << comm->me << " ndoubles: " << nrecv_from_proc
-                << RESET_COLOR << std::endl;
-                std::cout << s1.str();
-            }
+            // if (send_proc == 8 && mpi_tag == 229384) {
+            //     std::stringstream s1;
+            //     s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
+            //     << " proc to proc: " << send_proc << " to: " << comm->me << " ndoubles: " << nrecv_from_proc
+            //     << RESET_COLOR << std::endl;
+            //     std::cout << s1.str();
+            // }
 
             if (USE_STREAMS) {
                 manager->m[stream_num].lock();
