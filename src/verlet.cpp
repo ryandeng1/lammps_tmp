@@ -2504,7 +2504,9 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
                                     std::vector<std::atomic_flag>& dep_claimed,
                                     MPIX_Stream_Manager* stream_manager) {
 
-    stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE);
+    if (dep > 0) {
+        stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE);
+    }
 
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_timestep - 1, end_timestep - 1,
                                         test_f, test_x, test_v);
@@ -2534,7 +2536,7 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
 
     dep_counters[dep]--;
     if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
-        cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
+        stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
     }
 }
 
@@ -3284,7 +3286,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                                 if (zoid_recv_neighbor_counters[zoid.num] == 0
                                     && !claimed.test(std::memory_order_relaxed)
                                     && !claimed.test_and_set(std::memory_order_relaxed)) {
-                                        stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
+                                        cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
                                         zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
                                         test_f, test_x, test_v, 
                                     zoid_claimed, dep_claimed, stream_manager);
