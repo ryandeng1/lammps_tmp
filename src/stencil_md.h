@@ -8909,7 +8909,7 @@ public:
                 manager->global_lock.unlock();
             }
 
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            std::this_thread::sleep_for(std::chrono::nanoseconds(10));
         }
     }
 
