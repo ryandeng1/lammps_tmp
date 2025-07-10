@@ -2511,72 +2511,55 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_timestep - 1, end_timestep - 1,
                                         test_f, test_x, test_v);
 
-    stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
+    cilk_scope {
+        stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
 
-    auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
+        auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
 
-    for (int i = 0; i < send_neighbors.size(); i++) {
-        int send_zoid_num = send_neighbors[i];
-        if (send_zoid_num % comm->nprocs != comm->me) {
-            continue;
-        }
+        for (int i = 0; i < send_neighbors.size(); i++) {
+            int send_zoid_num = send_neighbors[i];
+            if (send_zoid_num % comm->nprocs != comm->me) {
+                continue;
+            }
 
-        cilk_spawn [this](int starting_timestep, int zoid_num, int send_zoid_num, int send_idx,
-            std::vector<std::atomic<int>>& zoid_recv_neighbor_counters, std::vector<std::atomic<int>>& dep_counters,
-            std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
-            std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
-            double** test_f, double** test_x, double** test_v,
-            std::vector<std::atomic_flag>& zoid_claimed,
-            std::vector<std::atomic_flag>& dep_claimed,
-            MPIX_Stream_Manager* stream_manager) {
-            auto& send_zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[send_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
-            int send_zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[send_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[send_zoid_num];
-            auto& recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[send_zoid_num] : stencilMD->recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
-            auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), zoid_num);
-            assert(find_it != recv_neighbors.end());
-            int find_idx = std::distance(recv_neighbors.begin(), find_it);
-            stencilMD->UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(send_zoid, find_idx, zoid_num, send_idx, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
-            zoid_recv_neighbor_counters[send_zoid_num]--;
-            auto& claimed = zoid_claimed[send_zoid_num];
-            if (zoid_recv_neighbor_counters[send_zoid_num] == 0) {
-                if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
-                    stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, send_zoid_dep, send_zoid, default_start_t, default_end_t,
-                        zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                        test_f, test_x, test_v, 
-                        zoid_claimed, dep_claimed, stream_manager);
+            cilk_spawn [this](int starting_timestep, int zoid_num, int send_zoid_num, int send_idx,
+                std::vector<std::atomic<int>>& zoid_recv_neighbor_counters, std::vector<std::atomic<int>>& dep_counters,
+                std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
+                std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+                double** test_f, double** test_x, double** test_v,
+                std::vector<std::atomic_flag>& zoid_claimed,
+                std::vector<std::atomic_flag>& dep_claimed,
+                MPIX_Stream_Manager* stream_manager) {
+                auto& send_zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[send_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+                int send_zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[send_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[send_zoid_num];
+                auto& recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[send_zoid_num] : stencilMD->recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
+                auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), zoid_num);
+                assert(find_it != recv_neighbors.end());
+                int find_idx = std::distance(recv_neighbors.begin(), find_it);
+                stencilMD->UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(send_zoid, find_idx, zoid_num, send_idx, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
+                zoid_recv_neighbor_counters[send_zoid_num]--;
+                auto& claimed = zoid_claimed[send_zoid_num];
+                if (zoid_recv_neighbor_counters[send_zoid_num] == 0) {
+                    if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
+                        stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, send_zoid_dep, send_zoid, default_start_t, default_end_t,
+                            zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
+                            test_f, test_x, test_v, 
+                            zoid_claimed, dep_claimed, stream_manager);
+                    }
                 }
-            }
-        }(starting_timestep, zoid.num, send_zoid_num, i,
-            zoid_recv_neighbor_counters, dep_counters,
-            send_r_zoid_to_zoid, send_r_proc_to_proc,
-            test_f, test_x, test_v,
-            zoid_claimed, dep_claimed, stream_manager);
-    }
-
-    // stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num], stream_manager);
-
-    /*
-    auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
-    for (int i = 0; i < send_neighbors.size(); i++) {
-        int send_zoid_num = send_neighbors[i];
-        int send_zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[send_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[send_zoid_num];
-        if (send_zoid_num % comm->nprocs == comm->me) {
-            auto& send_zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[send_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
-            if (zoid_recv_neighbor_counters[send_zoid_num] == 0
-                && !zoid_claimed[send_zoid_num].test(std::memory_order_relaxed)
-                && !zoid_claimed[send_zoid_num].test_and_set(std::memory_order_relaxed)) {
-                cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, send_zoid_dep, send_zoid, default_start_t, default_end_t,
-                zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                test_f, test_x, test_v, 
+            }(starting_timestep, zoid.num, send_zoid_num, i,
+                zoid_recv_neighbor_counters, dep_counters,
+                send_r_zoid_to_zoid, send_r_proc_to_proc,
+                test_f, test_x, test_v,
                 zoid_claimed, dep_claimed, stream_manager);
-            }
         }
-    }
-    */
 
-    dep_counters[dep]--;
-    if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
-        stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
+        // stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num], stream_manager);
+
+        dep_counters[dep]--;
+        if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
+            stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
+        }
     }
 }
 
