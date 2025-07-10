@@ -47,7 +47,7 @@
 
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
-constexpr int NUM_STREAMS = 8;
+constexpr int NUM_STREAMS = 12;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -196,6 +196,7 @@ class MPIX_Stream_Manager {
         MPI_Comm stream_comm;
         int num_streams;
         std::atomic<bool> done;
+        std::atomic<bool> start;
         spinlock global_lock;
     
     MPIX_Stream_Manager(int num_streams) : streams(num_streams, MPIX_STREAM_NULL), comms(num_streams, MPI_COMM_NULL), m(num_streams) {
@@ -210,6 +211,7 @@ class MPIX_Stream_Manager {
         this->num_streams = num_streams;
 
         done = false;
+        start = false;
     }
 
     ~MPIX_Stream_Manager() {
@@ -3544,23 +3546,24 @@ public:
 
             const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][DEFAULT_PIPELINE_STAGE][dep];
 
-            constexpr int NUM_SEND_STREAMS = NUM_STREAMS / 2;
+            constexpr int NUM_RECV_STREAMS = 8;
+            constexpr int NUM_SEND_STREAMS = 4;
+
             int send_stream_idx = 0;
             for (int proc = 0; proc < comm->nprocs; proc++) {
                 for (int j = 0; j < zoid_to_zoid_per_proc_send[proc].size(); j++) {
                     auto pair = zoid_to_zoid_per_proc_send[proc][j];
-                    zoid_to_zoid_to_send_stream_num[pair] = (send_stream_idx % NUM_SEND_STREAMS) + NUM_SEND_STREAMS;
+                    zoid_to_zoid_to_send_stream_num[pair] = (send_stream_idx % NUM_SEND_STREAMS) + NUM_RECV_STREAMS;
                     send_stream_idx++;
                 }
 
                 if (std::find(procs_to_send_to.begin(), procs_to_send_to.end(), proc) != procs_to_send_to.end()) {
                     auto tup = std::make_tuple(dep, comm->me, proc);
-                    send_dep_proc_to_recv_proc_send_stream_num[tup] = (send_stream_idx % NUM_SEND_STREAMS) + NUM_SEND_STREAMS;
+                    send_dep_proc_to_recv_proc_send_stream_num[tup] = (send_stream_idx % NUM_SEND_STREAMS) + NUM_RECV_STREAMS;
                     send_stream_idx++;
                 }
             }
 
-            constexpr int NUM_RECV_STREAMS = NUM_STREAMS / 2;
             std::map<std::pair<int, int>, std::set<int>> proc_pair_to_streams;
             std::vector<int> stream_loads(NUM_RECV_STREAMS, 0);
 
