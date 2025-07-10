@@ -2510,6 +2510,8 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
 
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_timestep - 1, end_timestep - 1,
                                         test_f, test_x, test_v);
+    
+    std::vector<int> eval_zoids;
 
     cilk_scope {
         stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
@@ -2539,16 +2541,20 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
             if (zoid_recv_neighbor_counters[send_zoid_num] == 0
                 && !claimed.test(std::memory_order_relaxed)
                 && !claimed.test_and_set(std::memory_order_relaxed)) {
-                std::cout << "me: " << comm->me << " something might be wrong here." << std::endl;
-                stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, send_zoid_dep, send_zoid, default_start_t, default_end_t,
-                    zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                    test_f, test_x, test_v, 
-                    zoid_claimed, dep_claimed, stream_manager);
+                eval_zoids.push_back(send_zoid_num);
             }
         }
 
         // stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num], stream_manager);
+    }
 
+    for (int zoid_num : eval_zoids) {
+        int zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[zoid_num] : stencilMD->zoid_num_to_dep_next_dt[zoid_num];
+        auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[zoid_num];
+        cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, zoid_dep, zoid, default_start_t, default_end_t,
+            zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
+            test_f, test_x, test_v, 
+            zoid_claimed, dep_claimed, stream_manager);
     }
 }
 
