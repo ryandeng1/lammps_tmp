@@ -47,7 +47,7 @@
 
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
-constexpr int NUM_STREAMS = 16;
+constexpr int NUM_STREAMS = 12;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -3546,7 +3546,7 @@ public:
 
             const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][DEFAULT_PIPELINE_STAGE][dep];
 
-            constexpr int NUM_RECV_STREAMS = 12;
+            constexpr int NUM_RECV_STREAMS = 8;
             constexpr int NUM_SEND_STREAMS = 4;
 
             int send_stream_idx = 0;
