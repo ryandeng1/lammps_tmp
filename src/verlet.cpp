@@ -3225,7 +3225,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                     auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
                     auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
-                    if (zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size() == 0) {
+                    if (dep < NUM_DEPS - 1 && zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size() == 0) {
                         stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
                             recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
                     } else {
