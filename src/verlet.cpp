@@ -3174,7 +3174,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
     }
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
-        // cilk_scope {
+        cilk_scope {
             if (dep == 0) {
                 if (dep < NUM_DEPS - 1) {
                     for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
@@ -3294,7 +3294,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     }
                 }
             }
-        // }
+        }
     }
 
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
