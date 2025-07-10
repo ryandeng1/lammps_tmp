@@ -2513,41 +2513,38 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
     
     // std::vector<int> eval_zoids;
 
-    cilk_scope {
-        stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
+    stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
 
-        dep_counters[dep]--;
-        if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
-            cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
-        }
-
-        auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
-
-        for (int i = 0; i < send_neighbors.size(); i++) {
-            int send_zoid_num = send_neighbors[i];
-            if (send_zoid_num % comm->nprocs != comm->me) {
-                continue;
-            }
-
-            auto& send_zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[send_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
-            int send_zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[send_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[send_zoid_num];
-            auto& recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[send_zoid_num] : stencilMD->recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
-            auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), zoid.num);
-            assert(find_it != recv_neighbors.end());
-            int find_idx = std::distance(recv_neighbors.begin(), find_it);
-            stencilMD->UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(send_zoid, find_idx, zoid.num, i, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
-            zoid_recv_neighbor_counters[send_zoid_num]--;
-            auto& claimed = zoid_claimed[send_zoid_num];
-            if (zoid_recv_neighbor_counters[send_zoid_num] == 0
-                && !claimed.test(std::memory_order_relaxed)
-                && !claimed.test_and_set(std::memory_order_relaxed)) {
-                // eval_zoids.push_back(send_zoid_num);
-            }
-        }
-
-        // stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num], stream_manager);
+    dep_counters[dep]--;
+    if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
+        stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
     }
 
+    auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
+
+    for (int i = 0; i < send_neighbors.size(); i++) {
+        int send_zoid_num = send_neighbors[i];
+        if (send_zoid_num % comm->nprocs != comm->me) {
+            continue;
+        }
+
+        auto& send_zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[send_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+        int send_zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[send_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[send_zoid_num];
+        auto& recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[send_zoid_num] : stencilMD->recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
+        auto find_it = std::find(recv_neighbors.begin(), recv_neighbors.end(), zoid.num);
+        assert(find_it != recv_neighbors.end());
+        int find_idx = std::distance(recv_neighbors.begin(), find_it);
+        stencilMD->UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(send_zoid, find_idx, zoid.num, i, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
+        zoid_recv_neighbor_counters[send_zoid_num]--;
+        auto& claimed = zoid_claimed[send_zoid_num];
+        if (zoid_recv_neighbor_counters[send_zoid_num] == 0
+            && !claimed.test(std::memory_order_relaxed)
+            && !claimed.test_and_set(std::memory_order_relaxed)) {
+            // eval_zoids.push_back(send_zoid_num);
+        }
+    }
+
+    // stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num], stream_manager);
     /*
     for (int eval_zoid_num : eval_zoids) {
         int eval_zoid_dep = curr_dt ? stencilMD->zoid_num_to_dep[eval_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[eval_zoid_num];
