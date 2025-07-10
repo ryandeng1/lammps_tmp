@@ -1863,6 +1863,10 @@ void Verlet::run(int n) {
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
     run_stencil_md_many_cuts(2 * NUM_TIMESTEPS_IN_PARALLEL, test_f, test_x, test_v, zoid_claimed);
+    MPI_Barrier(world);
+    if (comm->me == 0) {
+        std::cout << "----- END WARMUP -----" << std::endl;
+    }
 
     int64_t duration;
 
