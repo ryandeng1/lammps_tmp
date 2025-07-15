@@ -44,6 +44,7 @@ constexpr int PBC = 3;
 constexpr int BOND_FENE = 0;
 constexpr int LJ = 1;
 constexpr int DPD = 2;
+constexpr int SW = 3;
 
 constexpr int EXPERIMENT = BOND_FENE;
 
@@ -51,19 +52,23 @@ constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 8;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 // constexpr double ADDITIONAL_CUTOFF = 0.4001;
-constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
+// constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
+constexpr double ADDITIONAL_CUTOFF = 1.0 + 1e-10;
 // constexpr double ADDITIONAL_CUTOFF = 0.3 + 1e-10;
 
-constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
+// this is for the potential, used when there is a multi-body potential
+constexpr double CUTOFF = 3.77;
+constexpr double ALLEGRO_CUTOFF_RADIUS = 2 * CUTOFF;
+// constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 // constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
 
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
 
 constexpr bool DEBUG_SEND_RECV_DATA = true;
 
-constexpr bool TEST_AGAINST_LAMMPS = true;
+constexpr bool TEST_AGAINST_LAMMPS = false;
 
 constexpr bool USE_FAKE_COMPUTE_TEMP = true;
 
@@ -74,8 +79,6 @@ constexpr int NUM_WORKERS_PER_THREAD = 512;
 constexpr bool ONLY_RUN_LAMMPS = false;
 
 constexpr bool ONLY_RUN_STENCIL_MD = false;
-
-constexpr bool LAMMPS_USE_CILK = false;
 
 constexpr bool USE_BOND = true;
 
@@ -100,7 +103,6 @@ using IDX_3D = std::array<int, 3>;
 constexpr int MODIFY_GRAINSIZE = 1024;
 
 constexpr bool USE_NEWTON = true;
-constexpr int NUM_STREAMS = 8;
 
 const std::map<IDX_3D, int> zoid_to_num_map = {
         {{LEFT,  LEFT,  LEFT},  0},
@@ -316,6 +318,10 @@ struct queue_info {
   std::vector<int>** send_vel_idxs_double_buffering;
   std::vector<int>** recv_vel_idxs_double_buffering;
   /* end for two timesteps */
+
+  // Many-body potentials
+  std::vector<int>* neigh_short;
+  std::vector<int>* local_and_one_hop_ghost_idxs_per_timestep;
 
   int t0;
   int t1;
