@@ -25,6 +25,7 @@ PairStyle(sw,PairSW);
 namespace LAMMPS_NS {
 
 class PairSW : public Pair {
+ friend class StencilMD;
  public:
   PairSW(class LAMMPS *);
   ~PairSW() override;

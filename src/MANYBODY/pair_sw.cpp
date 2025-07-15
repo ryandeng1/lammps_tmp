@@ -26,6 +26,7 @@
 #include "neigh_list.h"
 #include "neighbor.h"
 #include "potential_file_reader.h"
+#include "stencil_md_utils.h"
 
 #include <cmath>
 #include <cstring>
@@ -263,7 +264,12 @@ void PairSW::init_style()
 
   // need a full neighbor list
 
-  neighbor->add_request(this, NeighConst::REQ_FULL);
+  // Ryan: Make the plumbing easier have LAMMPS build ghost neighbor lists
+  if (!ONLY_RUN_LAMMPS) {
+    neighbor->add_request(this, NeighConst::REQ_FULL | NeighConst::REQ_GHOST);
+  } else {
+    neighbor->add_request(this, NeighConst::REQ_FULL);
+  }
 }
 
 /* ----------------------------------------------------------------------

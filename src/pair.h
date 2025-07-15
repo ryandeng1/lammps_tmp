@@ -34,6 +34,7 @@ class Pair : protected Pointers {
   friend class ThrOMP;
   friend class Info;
   friend class Neighbor;
+  friend class StencilMD;
 
  public:
   static int instance_total;    // # of Pair classes ever instantiated
