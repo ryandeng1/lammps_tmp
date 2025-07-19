@@ -2527,6 +2527,7 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
 
     auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
 
+    /*
     for (int i = 0; i < send_neighbors.size(); i++) {
         int send_zoid_num = send_neighbors[i];
         if (send_zoid_num % comm->nprocs != comm->me) {
@@ -2548,6 +2549,7 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
             // eval_zoids.push_back(send_zoid_num);
         }
     }
+    */
 
     // stencilMD->SEND_DATA_ZOID_TO_ZOID<curr_dt>(zoid, dep, DEFAULT_PIPELINE_STAGE, send_r_zoid_to_zoid[zoid.num], stream_manager);
     /*
@@ -3199,7 +3201,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         zoid_claimed, dep_claimed, stream_manager);
                 }
             } else {
-                /*
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     queue_info& zoid = my_queues[dep][j];
                     cilk_spawn [this](int starting_timestep, int dep, queue_info& zoid, double** test_f, double** test_x, double** test_v,
@@ -3224,7 +3225,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         send_r_zoid_to_zoid, send_r_proc_to_proc,
                         zoid_claimed, dep_claimed, stream_manager);
                 }
-                */
 
                 // do by stream
                 for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
