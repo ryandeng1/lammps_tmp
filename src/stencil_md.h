@@ -5,6 +5,7 @@
 #pragma once
 
 #include "angle.h"
+#include "math_special.h"
 #include "pointers.h"
 #include "bond_fene.h"
 #include "pair_lj_cut.h"
@@ -12047,30 +12048,30 @@ public:
 
         double cutshortsq = pair_tersoff->cutmax * pair_tersoff->cutmax;
 
-        double ters_R = params->bigr;
-        double ters_D = params->bigd;
-        double lam1 = params->lam1;
-        double lam2 = params->lam2;
-        double lam3 = params->lam3;
-        double biga = params->biga;
-        int powermint = params->powermint;
+        double ters_R = params[0].bigr;
+        double ters_D = params[0].bigd;
+        double lam1 = params[0].lam1;
+        double lam2 = params[0].lam2;
+        double lam3 = params[0].lam3;
+        double biga = params[0].biga;
+        int powermint = params[0].powermint;
 
-        double ters_c = params->c * params->c;
-        double ters_d = params->d * params->d;
-        double h = params->h;
-        double beta = params->beta;
-        double gamma = params->gamma;
+        double ters_c = params[0].c * params[0].c;
+        double ters_d = params[0].d * params[0].d;
+        double h = params[0].h;
+        double beta = params[0].beta;
+        double gamma = params[0].gamma;
 
-        double bigr = params->bigr;
-        double bigd = params->bigd;
-        double bigb = params->bigb;
+        double bigr = params[0].bigr;
+        double bigd = params[0].bigd;
+        double bigb = params[0].bigb;
 
-        double c1 = params->c1;
-        double c2 = params->c2;
-        double c3 = params->c3;
-        double c4 = params->c4;
+        double c1 = params[0].c1;
+        double c2 = params[0].c2;
+        double c3 = params[0].c3;
+        double c4 = params[0].c4;
 
-        int powern = params->powern;
+        double powern = params[0].powern;
 
         // loop over full neighbor list of my atoms
 
@@ -12099,9 +12100,8 @@ public:
                 double dely = ytmp - x[j].y;
                 double delz = ztmp - x[j].z;
                 double rsq = delx*delx + dely*dely + delz*delz;
-                if (rsq >= cutshortsq) {
-                    continue;
-                } else {
+
+                if (rsq < cutshortsq) {
                     neighshort[numshort++] = j;
                     assert(numshort <= num_neigh_short);
                 }
@@ -12119,29 +12119,31 @@ public:
 
                 int jtype = map[atom_type[j]];
                 int ijparam = elem3param[itype][jtype][jtype];
+                if (rsq >= params[ijparam].cutsq) continue;
 
                 // repulsive calculation
                 double r = sqrt(rsq);
                 // ters_fc 
-                double tmp_fc;
-                double tmp_fc_d;
+                double ters_fc;
+                double ters_fc_d;
                 if (r < ters_R - ters_D) {
-                    tmp_fc = 1;
-                    tmp_fc_d = 0;
+                    ters_fc = 1;
+                    ters_fc_d = 0;
                 } else if (r > ters_R + ters_D) {
-                    tmp_fc = 0;
-                    tmp_fc_d = 0;
+                    ters_fc = 0;
+                    ters_fc_d = 0;
                 } else {
-                    tmp_fc = 0.5*(1.0 - sin(MathConst::MY_PI2*(r - ters_R)/ters_D));
-                    tmp_fc_d =  -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r - ters_R)/ters_D);
+                    ters_fc = 0.5*(1.0 - sin(MathConst::MY_PI2*(r - ters_R)/ters_D));
+                    ters_fc_d =  -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r - ters_R)/ters_D);
                 }
 
-                double tmp_exp = exp(-lam1 * r);
-                double fpair = -biga * tmp_exp * (tmp_fc_d - tmp_fc * lam1) / r;
+                double repulsive_exp = exp(-lam1 * r);
+                double fpair = -biga * repulsive_exp * (ters_fc_d - ters_fc * lam1) / r;
 
                 fxtmp += delx*fpair;
                 fytmp += dely*fpair;
                 fztmp += delz*fpair;
+
                 spinlocks[j].lock();
                 f[j].x -= delx*fpair;
                 f[j].y -= dely*fpair;
@@ -12162,9 +12164,7 @@ public:
                 }
 
                 double r1 = sqrt(rsq1);
-
                 const double r1inv = 1.0/r1;
-                // scale3
                 dbl3_t_stencil_md r1hat = {r1inv * delr1.x, r1inv * delr1.y, r1inv * delr1.z};
 
                 double fjxtmp = 0;
@@ -12172,6 +12172,7 @@ public:
                 double fjztmp = 0;
                 double zeta_ij = 0;
 
+                // accumulate bondorder zeta for each i-j interaction via loop over k
                 for (int kk = 0; kk < numshort; kk++) {
                     if (jj == kk) continue;
                     int k = neighshort[kk];
@@ -12187,87 +12188,94 @@ public:
                     double r2inv = 1.0/r2;
                     dbl3_t_stencil_md r2hat = {r2inv * delr2.x, r2inv * delr2.y, r2inv * delr2.z};
 
-                    double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
+                    // zeta calculation
+                    {
+                        double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
+                        double arg;
+                        if (powermint == 3) {
+                            double tmp = lam3 * (r1 - r2);
+                            arg = MathSpecial::cube(tmp);
+                        } else {
+                            arg = lam3 * (r1-r2);
+                        }
 
-                    double arg;
-                    if (powermint == 3) {
-                        double tmp = lam3 * (r1 - r2);
-                        arg = tmp * tmp * tmp;
+                        double ex_delr;
+                        if (arg > 69.0776) ex_delr = 1.e30;
+                        else if (arg < -69.0776) ex_delr = 0.0;
+                        else ex_delr = exp(arg);
+
+                        double ters_fc_ik;
+                        if (r2 < ters_R - ters_D) {
+                            ters_fc_ik = 1;
+                        } else if (r2 > ters_R + ters_D) {
+                            ters_fc_ik = 0;
+                        } else {
+                            ters_fc_ik = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
+                        }
+
+                        double hcth = h - costheta;
+                        double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+                        zeta_ij += ters_fc_ik * ters_gijk * ex_delr;
+                    }
+                }
+
+                // force_zeta
+
+                double fforce;
+                double prefactor;
+
+                {
+                    double ters_fc_r1;
+                    double ters_fc_r1_d;
+                    if (r1 < ters_R - ters_D) {
+                        ters_fc_r1 = 1;
+                        ters_fc_r1_d = 0;
+                    } else if (r1 > ters_R + ters_D) {
+                        ters_fc_r1 = 0;
+                        ters_fc_r1_d = 0;
                     } else {
-                        arg = lam3 * (r1-r2);
+                        ters_fc_r1 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r1 - ters_R)/ters_D));
+                        ters_fc_r1_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r1 - ters_R)/ters_D);
                     }
 
-                    double ex_delr;
-                    if (arg > 69.0776) ex_delr = 1.e30;
-                    else if (arg < -69.0776) ex_delr = 0.0;
-                    else ex_delr = exp(arg);
-
-                    double ters_fc_r2;
-                    if (r2 < ters_R - ters_D) {
-                        ters_fc_r2 = 1;
-                    } else if (r2 > ters_R + ters_D) {
-                        ters_fc_r2 = 0;
+                    double fa;
+                    double fa_d;
+                    if (r1 > bigr + bigd) {
+                        fa = 0;
+                        fa_d = 0;
                     } else {
-                        ters_fc_r2 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
+                        fa = -bigb * exp(-lam2 * r1) * ters_fc_r1;
+                        fa_d = bigb * exp(-lam2 * r1) * (lam2 * ters_fc_r1 - ters_fc_r1_d);
                     }
 
-                    double hcth = h - costheta;
-                    double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+                    double bij;
+                    double bij_d;
+                    double ters_bij_tmp = beta * zeta_ij;
+                    if (ters_bij_tmp > c1) {
+                        bij = 1.0 / sqrt(ters_bij_tmp);
+                        bij_d = beta * -0.5*pow(ters_bij_tmp,-1.5);
+                    } else if (ters_bij_tmp > c2) {
+                        bij = (1.0 - pow(ters_bij_tmp, -powern) / (2.0*powern))/sqrt(ters_bij_tmp);
+                        bij_d = beta * (-0.5*pow(ters_bij_tmp,-1.5) *
+                            // error in negligible 2nd term fixed 9/30/2015
+                            // (1.0 - 0.5*(1.0 +  1.0/(2.0*param->powern)) *
+                            (1.0 - (1.0 +  1.0/(2.0*powern)) *
+                            pow(ters_bij_tmp,-powern)));
+                    } else if (ters_bij_tmp < c4) {
+                        bij = 1;
+                        bij_d = 0;
+                    } else if (ters_bij_tmp < c3) {
+                        bij = 1.0 - pow(ters_bij_tmp,powern)/(2.0*powern);
+                        bij_d = -0.5*beta * pow(ters_bij_tmp,powern-1.0);
+                    } else {
+                        double tmp_n = pow(ters_bij_tmp, powern);
+                        bij = pow(1.0 + tmp_n, -1.0/(2.0*powern));
+                        bij_d = -0.5 * pow(1.0+tmp_n, -1.0-(1.0/(2.0*powern)))*tmp_n / zeta_ij;
+                    }
 
-                    zeta_ij += ters_fc_r2 * ters_gijk * ex_delr;
+                    fforce = 0.5 * bij * fa_d;
+                    prefactor = -0.5 * fa * bij_d;
                 }
-
-
-                double ters_fc_r1;
-                double ters_fc_r1_d;
-                if (r1 < ters_R - ters_D) {
-                    ters_fc_r1 = 1;
-                    ters_fc_r1_d = 0;
-                } else if (r1 > ters_R + ters_D) {
-                    ters_fc_r1 = 0;
-                    ters_fc_r1_d = 0;
-                } else {
-                    ters_fc_r1 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r1 - ters_R)/ters_D));
-                    ters_fc_r1_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r1 - ters_R)/ters_D);
-                }
-
-                // force zeta function
-                double fa;
-                double fa_d;
-                if (r1 > bigr + bigd) {
-                    fa = 0;
-                    fa_d = 0;
-                } else {
-                    fa = -bigb * exp(-lam2 * r1) * ters_fc_r1;
-                    fa_d = bigb * exp(-lam2 * r1) * (lam2 * ters_fc_r1 - ters_fc_r1_d);
-                }
-
-                double bij;
-                double bij_d;
-                double ters_bij_tmp = beta * zeta_ij;
-                if (ters_bij_tmp > c1) {
-                    bij = 1.0 / sqrt(ters_bij_tmp);
-                    bij_d = beta * -0.5*pow(ters_bij_tmp,-1.5);
-                } else if (ters_bij_tmp > c2) {
-                    bij = (1.0 - pow(ters_bij_tmp, powern) / (2.0*powern))/sqrt(ters_bij_tmp);
-                    bij_d = beta * (-0.5*pow(ters_bij_tmp,-1.5) *
-                          // error in negligible 2nd term fixed 9/30/2015
-                          // (1.0 - 0.5*(1.0 +  1.0/(2.0*param->powern)) *
-                          (1.0 - (1.0 +  1.0/(2.0*powern)) *
-                           pow(ters_bij_tmp,-powern)));
-                } else if (ters_bij_tmp < c4) {
-                    bij = 1;
-                    bij_d = 0;
-                } else if (ters_bij_tmp < c3) {
-                    bij = 1.0 - pow(ters_bij_tmp,powern)/(2.0*powern);
-                    bij_d = -0.5*beta * pow(ters_bij_tmp,powern-1.0);
-                } else {
-                    double tmp_n = pow(ters_bij_tmp, powern);
-                    bij = pow(1.0 + tmp_n, -1.0/(2.0*powern));
-                    bij_d = -0.5 * pow(1.0+tmp_n, -1.0-(1.0/(2.0*powern)))*tmp_n / zeta_ij;
-                }
-                double fforce = 0.5 * bij * fa_d;
-                double prefactor = -0.5 * fa * bij_d;
 
                 double fpair = fforce * r1inv;
                 double delx = delr1.x * fpair;
@@ -12295,118 +12303,126 @@ public:
                     double r2inv = 1.0/r2;
                     dbl3_t_stencil_md r2hat = {r2inv * delr2.x, r2inv * delr2.y, r2inv * delr2.z};
 
+                    // attractive calculation/ters_zetaterm_d
+                    {
+                        double ters_fc_r2;
+                        double ters_fc_r2_d;
+                        if (r2 < ters_R - ters_D) {
+                            ters_fc_r2 = 1;
+                            ters_fc_r2_d = 0;
+                        } else if (r2 > ters_R + ters_D) {
+                            ters_fc_r2 = 0;
+                            ters_fc_r2_d = 0;
+                        } else {
+                            ters_fc_r2 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
+                            ters_fc_r2_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r2 - ters_R)/ters_D);
+                        }
 
-                    // ters zetaterm d
-                    double ters_fc_r2;
-                    double ters_fc_r2_d;
-                    if (r2 < ters_R - ters_D) {
-                        ters_fc_r2 = 1;
-                        ters_fc_r2_d = 0;
-                    } else if (r2 > ters_R + ters_D) {
-                        ters_fc_r2 = 0;
-                        ters_fc_r2_d = 0;
-                    } else {
-                        ters_fc_r2 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
-                        ters_fc_r2_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r2 - ters_R)/ters_D);
+                        double tmp;
+                        if (powermint == 3) {
+                            tmp = MathSpecial::cube(lam3 * (r1 - r2));
+                        } else {
+                            tmp = lam3 * (r1 - r2);
+                        }
+
+                        double ex_delr;
+                        double ex_delr_d;
+
+                        if (tmp > 69.0776) ex_delr = 1.e30;
+                        else if (tmp < -69.0776) ex_delr = 0.0;
+                        else ex_delr = exp(tmp);
+
+                        if (powermint == 3) {
+                            ex_delr_d = 3.0 * MathSpecial::cube(lam3) * MathSpecial::square(r1 - r2) * ex_delr;
+                        } else {
+                            ex_delr_d = lam3 * ex_delr;
+                        }
+
+                        double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
+                        // ters_gijk
+                        double hcth = h - costheta;
+                        double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+
+                        // ters_gijk_d
+                        double numerator = -2.0 * ters_c * hcth;
+                        double denominator = 1.0 / (ters_d + hcth * hcth);
+                        double ters_gijk_d = gamma * numerator * denominator * denominator;
+
+                        // costheta_d
+                        double costheta_d;
+                        dbl3_t_stencil_md dcosdrj = {-costheta * r1hat.x + r2hat.x, -costheta * r1hat.y + r2hat.y, -costheta * r1hat.z + r2hat.z};
+                        dcosdrj.x *= r1inv;
+                        dcosdrj.y *= r1inv;
+                        dcosdrj.z *= r1inv;
+
+                        dbl3_t_stencil_md dcosdrk = {-costheta * r2hat.x + r1hat.x, -costheta * r2hat.y + r1hat.y, -costheta * r2hat.z + r1hat.z};
+                        dcosdrk.x *= r2inv;
+                        dcosdrk.y *= r2inv;
+                        dcosdrk.z *= r2inv;
+
+                        dbl3_t_stencil_md dcosdri = {dcosdrj.x + dcosdrk.x, dcosdrj.y + dcosdrk.y, dcosdrj.z + dcosdrk.z};
+                        dcosdri.x *= -1.0;
+                        dcosdri.y *= -1.0;
+                        dcosdri.z *= -1.0;
+
+                        double scale1 = -ters_fc_r2_d * ters_gijk * ex_delr;
+                        double scale2 = ters_fc_r2 * ters_gijk_d * ex_delr;
+                        double scale3 = ters_fc_r2 * ters_gijk * ex_delr_d;
+                        double scale4 = -scale3;
+
+                        dbl3_t_stencil_md dri = {scale1 * r2hat.x, scale1 * r2hat.y, scale1 * r2hat.z};
+                        dri.x += scale2 * dcosdri.x;
+                        dri.y += scale2 * dcosdri.y;
+                        dri.z += scale2 * dcosdri.z;
+
+                        dri.x += scale3 * r2hat.x;
+                        dri.y += scale3 * r2hat.y;
+                        dri.z += scale3 * r2hat.z;
+
+                        dri.x += scale4 * r1hat.x;
+                        dri.y += scale4 * r1hat.y;
+                        dri.z += scale4 * r1hat.z;
+
+                        dri.x *= prefactor;
+                        dri.y *= prefactor;
+                        dri.z *= prefactor;
+
+                        dbl3_t_stencil_md drj = {scale2 * dcosdrj.x, scale2 * dcosdrj.y, scale2 * dcosdrj.z};
+                        drj.x += scale3 * r1hat.x;
+                        drj.y += scale3 * r1hat.y;
+                        drj.z += scale3 * r1hat.z;
+
+                        drj.x *= prefactor;
+                        drj.y *= prefactor;
+                        drj.z *= prefactor;
+                        
+                        dbl3_t_stencil_md drk = {-scale1 * r2hat.x, -scale1 * r2hat.y, -scale1 * r2hat.z};
+                        drk.x += scale2 * dcosdrk.x;
+                        drk.y += scale2 * dcosdrk.y;
+                        drk.z += scale2 * dcosdrk.z;
+
+                        drk.x += scale4 * r2hat.x;
+                        drk.y += scale4 * r2hat.y;
+                        drk.z += scale4 * r2hat.z;
+
+                        drk.x *= prefactor;
+                        drk.y *= prefactor;
+                        drk.z *= prefactor;
+
+                        fxtmp += dri.x;
+                        fytmp += dri.y;
+                        fztmp += dri.z;
+
+                        fjxtmp += drj.x;
+                        fjytmp += drj.y;
+                        fjztmp += drj.z;
+
+                        spinlocks[k].lock();
+                        f[k].x += drk.x;
+                        f[k].y += drk.y;
+                        f[k].z += drk.z;
+                        spinlocks[k].unlock();
                     }
-
-                    double tmp = lam3 * (r1 - r2);
-                    if (powermint == 3) {
-                        tmp = tmp * tmp * tmp;
-                    }
-
-                    double ex_delr;
-                    double ex_delr_d;
-
-                    if (tmp > 69.0776) ex_delr = 1.e30;
-                    else if (tmp < -69.0776) ex_delr = 0.0;
-                    else ex_delr = exp(tmp);
-
-                    if (powermint == 3) {
-                        ex_delr_d = 3.0 * lam3 * lam3 * lam3 * (r1 - r2) * (r1 - r2) * ex_delr;
-                    } else {
-                        ex_delr_d = lam3 * ex_delr;
-                    }
-
-                    double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
-                    double hcth = h - costheta;
-                    double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
-
-                    double numerator = -2.0 * ters_c * hcth;
-                    double denominator = 1.0 / (ters_d + hcth * hcth);
-                    double ters_gijk_d = gamma * numerator * denominator * denominator;
-
-                    double costheta_d;
-                    dbl3_t_stencil_md dcosdrj = {-costheta * r1hat.x + r2hat.x, -costheta * r1hat.y + r2hat.y, -costheta * r1hat.z + r2hat.z};
-                    dcosdrj.x *= r1inv;
-                    dcosdrj.y *= r1inv;
-                    dcosdrj.z *= r1inv;
-                    dbl3_t_stencil_md dcosdrk = {-costheta * r2hat.x + r1hat.x, -costheta * r2hat.y + r1hat.y, -costheta * r2hat.z + r1hat.z};
-                    dcosdrk.x *= r2inv;
-                    dcosdrk.y *= r2inv;
-                    dcosdrk.z *= r2inv;
-                    dbl3_t_stencil_md dcosdri = {dcosdrj.x + dcosdrk.x, dcosdrj.y + dcosdrk.y, dcosdrj.z + dcosdrk.z};
-                    dcosdri.x *= -1.0;
-                    dcosdri.y *= -1.0;
-                    dcosdri.z *= -1.0;
-
-                    double scale1 = -ters_fc_r2_d * ters_gijk * ex_delr;
-                    double scale2 = ters_fc_r2 * ters_gijk_d * ex_delr;
-                    double scale3 = ters_fc_r2 * ters_gijk * ex_delr_d;
-                    double scale4 = -scale3;
-                    dbl3_t_stencil_md dri = {scale1 * r2hat.x, scale1 * r2hat.y, scale1 * r2hat.z};
-                    dri.x += scale2 * dcosdri.x;
-                    dri.y += scale2 * dcosdri.y;
-                    dri.z += scale2 * dcosdri.z;
-
-                    dri.x += scale3 * r2hat.x;
-                    dri.y += scale3 * r2hat.y;
-                    dri.z += scale3 * r2hat.z;
-
-                    dri.x += scale4 * r1hat.x;
-                    dri.y += scale4 * r1hat.y;
-                    dri.z += scale4 * r1hat.z;
-
-                    dri.x *= prefactor;
-                    dri.y *= prefactor;
-                    dri.z *= prefactor;
-
-                    dbl3_t_stencil_md drj = {scale2 * dcosdrj.x, scale2 * dcosdrj.y, scale2 * dcosdrj.z};
-                    drj.x += scale3 * r1hat.x;
-                    drj.y += scale3 * r1hat.y;
-                    drj.z += scale3 * r1hat.z;
-
-                    drj.x *= prefactor;
-                    drj.y *= prefactor;
-                    drj.z *= prefactor;
-
-
-                    dbl3_t_stencil_md drk = {-scale1 * r2hat.x, -scale1 * r2hat.y, -scale1 * r2hat.z};
-                    drk.x += scale2 * dcosdrk.x;
-                    drk.y += scale2 * dcosdrk.y;
-                    drk.z += scale2 * dcosdrk.z;
-
-                    drk.x += -scale3 * r2hat.x;
-                    drk.y += -scale3 * r2hat.y;
-                    drk.z += -scale3 * r2hat.z;
-
-                    drk.x *= prefactor;
-                    drk.y *= prefactor;
-                    drk.z *= prefactor;
-
-                    fxtmp += dri.x;
-                    fytmp += dri.y;
-                    fztmp += dri.z;
-
-                    fjxtmp += drj.x;
-                    fjytmp += drj.y;
-                    fjztmp += drj.z;
-
-                    spinlocks[k].lock();
-                    f[k].x += drk.x;
-                    f[k].y += drk.y;
-                    f[k].z += drk.z;
-                    spinlocks[k].unlock();
                 }
 
                 spinlocks[j].lock();
