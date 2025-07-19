@@ -25,6 +25,7 @@ PairStyle(tersoff,PairTersoff);
 namespace LAMMPS_NS {
 
 class PairTersoff : public Pair {
+ friend class StencilMD;
  public:
   PairTersoff(class LAMMPS *);
   ~PairTersoff() override;

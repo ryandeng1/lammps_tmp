@@ -44,6 +44,7 @@
 #include <random>
 #include <thread>
 #include "pair_sw.h"
+#include "pair_tersoff.h"
 
 #define EPSILON 1.0e-10
 
@@ -12017,6 +12018,413 @@ public:
         }
         // if (vflag_fdotr) virial_fdotr_compute();
     }
+
+    void TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
+        auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
+
+        constexpr int shift_flag = 0;
+
+        const auto& neighbor_list = zoid.neighbor_list[timestep];
+        auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
+
+        // const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
+        const auto& local_idxs = zoid.local_and_one_hop_ghost_idxs_per_timestep[timestep];
+        // const auto& is_local_idx = zoid.is_local_per_timestep[timestep];
+        const int nlocal = local_idxs.size();
+
+        const auto& tags = zoid.tag_stencil_md[0];
+        const auto& atom_type = zoid.type_stencil_md[0];
+
+        auto* neighshort = zoid.neigh_short[0].data();
+        
+        int num_neigh_short = zoid.neigh_short[0].capacity();
+
+        PairTersoff* pair_tersoff = (PairTersoff*) force->pair;
+        auto map = pair_tersoff->map;
+        auto elem3param = pair_tersoff->elem3param;
+        auto params = pair_tersoff->params;
+
+        double cutshortsq = pair_tersoff->cutmax * pair_tersoff->cutmax;
+
+        double ters_R = params->bigr;
+        double ters_D = params->bigd;
+        double lam1 = params->lam1;
+        double lam2 = params->lam2;
+        double lam3 = params->lam3;
+        double biga = params->biga;
+        int powermint = params->powermint;
+
+        double ters_c = params->c * params->c;
+        double ters_d = params->d * params->d;
+        double h = params->h;
+        double beta = params->beta;
+        double gamma = params->gamma;
+
+        double bigr = params->bigr;
+        double bigd = params->bigd;
+        double bigb = params->bigb;
+
+        double c1 = params->c1;
+        double c2 = params->c2;
+        double c3 = params->c3;
+        double c4 = params->c4;
+
+        int powern = params->powern;
+
+        // loop over full neighbor list of my atoms
+
+        for (int ii = 0; ii < nlocal; ii++) {
+            int i = local_idxs[ii];
+
+            int itag = tags[i];
+            int itype = map[atom_type[i]];
+            double xtmp = x[i].x;
+            double ytmp = x[i].y;
+            double ztmp = x[i].z;
+            double fxtmp = 0;
+            double fytmp = 0;
+            double fztmp = 0;
+
+            // two-body interactions, skip half of them
+
+            auto& neigh_list = neighbor_list[i];
+            int num_neigh = neigh_list.size();
+
+            int numshort = 0;
+            for (int jj = 0; jj < num_neigh; jj++) {
+                int j = neigh_list[jj];
+                j &= NEIGHMASK;
+                double delx = xtmp - x[j].x;
+                double dely = ytmp - x[j].y;
+                double delz = ztmp - x[j].z;
+                double rsq = delx*delx + dely*dely + delz*delz;
+                if (rsq >= cutshortsq) {
+                    continue;
+                } else {
+                    neighshort[numshort++] = j;
+                    assert(numshort <= num_neigh_short);
+                }
+
+                int jtag = tags[j];
+                if (itag > jtag) {
+                    if ((itag+jtag) % 2 == 0) continue;
+                } else if (itag < jtag) {
+                    if ((itag+jtag) % 2 == 1) continue;
+                } else {
+                    if (x[j].z < ztmp) continue;
+                    if (x[j].z == ztmp && x[j].y < ytmp) continue;
+                    if (x[j].z == ztmp && x[j].y == ytmp && x[j].x < xtmp) continue;
+                }
+
+                int jtype = map[atom_type[j]];
+                int ijparam = elem3param[itype][jtype][jtype];
+
+                // repulsive calculation
+                double r = sqrt(rsq);
+                // ters_fc 
+                double tmp_fc;
+                double tmp_fc_d;
+                if (r < ters_R - ters_D) {
+                    tmp_fc = 1;
+                    tmp_fc_d = 0;
+                } else if (r > ters_R + ters_D) {
+                    tmp_fc = 0;
+                    tmp_fc_d = 0;
+                } else {
+                    tmp_fc = 0.5*(1.0 - sin(MathConst::MY_PI2*(r - ters_R)/ters_D));
+                    tmp_fc_d =  -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r - ters_R)/ters_D);
+                }
+
+                double tmp_exp = exp(-lam1 * r);
+                double fpair = -biga * tmp_exp * (tmp_fc_d - tmp_fc * lam1) / r;
+
+                fxtmp += delx*fpair;
+                fytmp += dely*fpair;
+                fztmp += delz*fpair;
+                spinlocks[j].lock();
+                f[j].x -= delx*fpair;
+                f[j].y -= dely*fpair;
+                f[j].z -= delz*fpair;
+                spinlocks[j].unlock();
+                // if (evflag) ev_tally(i,j,nlocal,newton_pair, evdwl,0.0,fpair,delx,dely,delz);
+            }
+
+            for (int jj = 0; jj < numshort; jj++) {
+                int j = neighshort[jj];
+                int jtype = map[atom_type[j]];
+                int iparam_ij = elem3param[itype][jtype][jtype];
+                dbl3_t_stencil_md delr1 = {x[j].x - xtmp, x[j].y - ytmp, x[j].z - ztmp};
+                double rsq1 = delr1.x*delr1.x + delr1.y*delr1.y + delr1.z*delr1.z;
+
+                if (rsq1 >= params[iparam_ij].cutsq) {
+                    continue;
+                }
+
+                double r1 = sqrt(rsq1);
+
+                const double r1inv = 1.0/r1;
+                // scale3
+                dbl3_t_stencil_md r1hat = {r1inv * delr1.x, r1inv * delr1.y, r1inv * delr1.z};
+
+                double fjxtmp = 0;
+                double fjytmp = 0;
+                double fjztmp = 0;
+                double zeta_ij = 0;
+
+                for (int kk = 0; kk < numshort; kk++) {
+                    if (jj == kk) continue;
+                    int k = neighshort[kk];
+                    int ktype = map[atom_type[k]];
+                    int iparam_ijk = elem3param[itype][jtype][ktype];
+
+                    dbl3_t_stencil_md delr2 = {x[k].x - xtmp, x[k].y - ytmp, x[k].z - ztmp};
+                    double rsq2 = delr2.x*delr2.x + delr2.y*delr2.y + delr2.z*delr2.z;
+
+                    if (rsq2 >= params[iparam_ijk].cutsq) continue;
+
+                    double r2 = sqrt(rsq2);
+                    double r2inv = 1.0/r2;
+                    dbl3_t_stencil_md r2hat = {r2inv * delr2.x, r2inv * delr2.y, r2inv * delr2.z};
+
+                    double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
+
+                    double arg;
+                    if (powermint == 3) {
+                        double tmp = lam3 * (r1 - r2);
+                        arg = tmp * tmp * tmp;
+                    } else {
+                        arg = lam3 * (r1-r2);
+                    }
+
+                    double ex_delr;
+                    if (arg > 69.0776) ex_delr = 1.e30;
+                    else if (arg < -69.0776) ex_delr = 0.0;
+                    else ex_delr = exp(arg);
+
+                    double ters_fc_r2;
+                    if (r2 < ters_R - ters_D) {
+                        ters_fc_r2 = 1;
+                    } else if (r2 > ters_R + ters_D) {
+                        ters_fc_r2 = 0;
+                    } else {
+                        ters_fc_r2 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
+                    }
+
+                    double hcth = h - costheta;
+                    double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+
+                    zeta_ij += ters_fc_r2 * ters_gijk * ex_delr;
+                }
+
+
+                double ters_fc_r1;
+                double ters_fc_r1_d;
+                if (r1 < ters_R - ters_D) {
+                    ters_fc_r1 = 1;
+                    ters_fc_r1_d = 0;
+                } else if (r1 > ters_R + ters_D) {
+                    ters_fc_r1 = 0;
+                    ters_fc_r1_d = 0;
+                } else {
+                    ters_fc_r1 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r1 - ters_R)/ters_D));
+                    ters_fc_r1_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r1 - ters_R)/ters_D);
+                }
+
+                // force zeta function
+                double fa;
+                double fa_d;
+                if (r1 > bigr + bigd) {
+                    fa = 0;
+                    fa_d = 0;
+                } else {
+                    fa = -bigb * exp(-lam2 * r1) * ters_fc_r1;
+                    fa_d = bigb * exp(-lam2 * r1) * (lam2 * ters_fc_r1 - ters_fc_r1_d);
+                }
+
+                double bij;
+                double bij_d;
+                double ters_bij_tmp = beta * zeta_ij;
+                if (ters_bij_tmp > c1) {
+                    bij = 1.0 / sqrt(ters_bij_tmp);
+                    bij_d = beta * -0.5*pow(ters_bij_tmp,-1.5);
+                } else if (ters_bij_tmp > c2) {
+                    bij = (1.0 - pow(ters_bij_tmp, powern) / (2.0*powern))/sqrt(ters_bij_tmp);
+                    bij_d = beta * (-0.5*pow(ters_bij_tmp,-1.5) *
+                          // error in negligible 2nd term fixed 9/30/2015
+                          // (1.0 - 0.5*(1.0 +  1.0/(2.0*param->powern)) *
+                          (1.0 - (1.0 +  1.0/(2.0*powern)) *
+                           pow(ters_bij_tmp,-powern)));
+                } else if (ters_bij_tmp < c4) {
+                    bij = 1;
+                    bij_d = 0;
+                } else if (ters_bij_tmp < c3) {
+                    bij = 1.0 - pow(ters_bij_tmp,powern)/(2.0*powern);
+                    bij_d = -0.5*beta * pow(ters_bij_tmp,powern-1.0);
+                } else {
+                    double tmp_n = pow(ters_bij_tmp, powern);
+                    bij = pow(1.0 + tmp_n, -1.0/(2.0*powern));
+                    bij_d = -0.5 * pow(1.0+tmp_n, -1.0-(1.0/(2.0*powern)))*tmp_n / zeta_ij;
+                }
+                double fforce = 0.5 * bij * fa_d;
+                double prefactor = -0.5 * fa * bij_d;
+
+                double fpair = fforce * r1inv;
+                double delx = delr1.x * fpair;
+                double dely = delr1.y * fpair;
+                double delz = delr1.z * fpair;
+
+                fxtmp += delx;
+                fytmp += dely;
+                fztmp += delz;
+                fjxtmp -= delx;
+                fjytmp -= dely;
+                fjztmp -= delz;
+
+                for (int kk = 0; kk < numshort; kk++) {
+                    if (jj == kk) continue;
+                    int k = neighshort[kk];
+                    int ktype = map[atom_type[k]];
+                    int iparam_ijk = elem3param[itype][jtype][ktype];
+                    dbl3_t_stencil_md delr2 = {x[k].x - xtmp, x[k].y - ytmp, x[k].z - ztmp};
+                    double rsq2 = delr2.x*delr2.x + delr2.y*delr2.y + delr2.z*delr2.z;
+
+                    if (rsq2 >= params[iparam_ijk].cutsq) continue;
+
+                    double r2 = sqrt(rsq2);
+                    double r2inv = 1.0/r2;
+                    dbl3_t_stencil_md r2hat = {r2inv * delr2.x, r2inv * delr2.y, r2inv * delr2.z};
+
+
+                    // ters zetaterm d
+                    double ters_fc_r2;
+                    double ters_fc_r2_d;
+                    if (r2 < ters_R - ters_D) {
+                        ters_fc_r2 = 1;
+                        ters_fc_r2_d = 0;
+                    } else if (r2 > ters_R + ters_D) {
+                        ters_fc_r2 = 0;
+                        ters_fc_r2_d = 0;
+                    } else {
+                        ters_fc_r2 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
+                        ters_fc_r2_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r2 - ters_R)/ters_D);
+                    }
+
+                    double tmp = lam3 * (r1 - r2);
+                    if (powermint == 3) {
+                        tmp = tmp * tmp * tmp;
+                    }
+
+                    double ex_delr;
+                    double ex_delr_d;
+
+                    if (tmp > 69.0776) ex_delr = 1.e30;
+                    else if (tmp < -69.0776) ex_delr = 0.0;
+                    else ex_delr = exp(tmp);
+
+                    if (powermint == 3) {
+                        ex_delr_d = 3.0 * lam3 * lam3 * lam3 * (r1 - r2) * (r1 - r2) * ex_delr;
+                    } else {
+                        ex_delr_d = lam3 * ex_delr;
+                    }
+
+                    double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
+                    double hcth = h - costheta;
+                    double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+
+                    double numerator = -2.0 * ters_c * hcth;
+                    double denominator = 1.0 / (ters_d + hcth * hcth);
+                    double ters_gijk_d = gamma * numerator * denominator * denominator;
+
+                    double costheta_d;
+                    dbl3_t_stencil_md dcosdrj = {-costheta * r1hat.x + r2hat.x, -costheta * r1hat.y + r2hat.y, -costheta * r1hat.z + r2hat.z};
+                    dcosdrj.x *= r1inv;
+                    dcosdrj.y *= r1inv;
+                    dcosdrj.z *= r1inv;
+                    dbl3_t_stencil_md dcosdrk = {-costheta * r2hat.x + r1hat.x, -costheta * r2hat.y + r1hat.y, -costheta * r2hat.z + r1hat.z};
+                    dcosdrk.x *= r2inv;
+                    dcosdrk.y *= r2inv;
+                    dcosdrk.z *= r2inv;
+                    dbl3_t_stencil_md dcosdri = {dcosdrj.x + dcosdrk.x, dcosdrj.y + dcosdrk.y, dcosdrj.z + dcosdrk.z};
+                    dcosdri.x *= -1.0;
+                    dcosdri.y *= -1.0;
+                    dcosdri.z *= -1.0;
+
+                    double scale1 = -ters_fc_r2_d * ters_gijk * ex_delr;
+                    double scale2 = ters_fc_r2 * ters_gijk_d * ex_delr;
+                    double scale3 = ters_fc_r2 * ters_gijk * ex_delr_d;
+                    double scale4 = -scale3;
+                    dbl3_t_stencil_md dri = {scale1 * r2hat.x, scale1 * r2hat.y, scale1 * r2hat.z};
+                    dri.x += scale2 * dcosdri.x;
+                    dri.y += scale2 * dcosdri.y;
+                    dri.z += scale2 * dcosdri.z;
+
+                    dri.x += scale3 * r2hat.x;
+                    dri.y += scale3 * r2hat.y;
+                    dri.z += scale3 * r2hat.z;
+
+                    dri.x += scale4 * r1hat.x;
+                    dri.y += scale4 * r1hat.y;
+                    dri.z += scale4 * r1hat.z;
+
+                    dri.x *= prefactor;
+                    dri.y *= prefactor;
+                    dri.z *= prefactor;
+
+                    dbl3_t_stencil_md drj = {scale2 * dcosdrj.x, scale2 * dcosdrj.y, scale2 * dcosdrj.z};
+                    drj.x += scale3 * r1hat.x;
+                    drj.y += scale3 * r1hat.y;
+                    drj.z += scale3 * r1hat.z;
+
+                    drj.x *= prefactor;
+                    drj.y *= prefactor;
+                    drj.z *= prefactor;
+
+
+                    dbl3_t_stencil_md drk = {-scale1 * r2hat.x, -scale1 * r2hat.y, -scale1 * r2hat.z};
+                    drk.x += scale2 * dcosdrk.x;
+                    drk.y += scale2 * dcosdrk.y;
+                    drk.z += scale2 * dcosdrk.z;
+
+                    drk.x += -scale3 * r2hat.x;
+                    drk.y += -scale3 * r2hat.y;
+                    drk.z += -scale3 * r2hat.z;
+
+                    drk.x *= prefactor;
+                    drk.y *= prefactor;
+                    drk.z *= prefactor;
+
+                    fxtmp += dri.x;
+                    fytmp += dri.y;
+                    fztmp += dri.z;
+
+                    fjxtmp += drj.x;
+                    fjytmp += drj.y;
+                    fjztmp += drj.z;
+
+                    spinlocks[k].lock();
+                    f[k].x += drk.x;
+                    f[k].y += drk.y;
+                    f[k].z += drk.z;
+                    spinlocks[k].unlock();
+                }
+
+                spinlocks[j].lock();
+                f[j].x += fjxtmp;
+                f[j].y += fjytmp;
+                f[j].z += fjztmp;
+                spinlocks[j].unlock();
+            }
+
+            spinlocks[i].lock();
+            f[i].x += fxtmp;
+            f[i].y += fytmp;
+            f[i].z += fztmp;
+            spinlocks[i].unlock();
+        }
+        // if (vflag_fdotr) virial_fdotr_compute();
+    }
+
 
     void BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
