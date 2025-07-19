@@ -6255,8 +6255,10 @@ public:
                     }
                 }
 
-                double dist_to_zoid = distance_to_zoid(domain->prd, zoid.lo[t], zoid.hi[t], atom_pos);
-                borders_zoid = (borders_zoid && dist_to_zoid <= ALLEGRO_SLOPE);
+                if constexpr (EXPERIMENT != SW) {
+                    double dist_to_zoid = distance_to_zoid(domain->prd, zoid.lo[t], zoid.hi[t], atom_pos);
+                    borders_zoid = (borders_zoid && dist_to_zoid <= ALLEGRO_SLOPE);
+                }
 
                 // have to do this check as for later timesteps this might not be the case
                 if (!borders_zoid) {
