@@ -9092,8 +9092,7 @@ public:
             }
 
             if (manager->global_lock.try_lock()) {
-                // for (int i = 0; i < manager->num_streams; i++) {
-                for (int i = 0; i < 4; i++) {
+                for (int i = 0; i < manager->num_streams; i++) {
                     if (manager->m[i].try_lock()) {
                         MPIX_Stream_progress(manager->streams[i]);
                         manager->m[i].unlock();
