@@ -1153,7 +1153,8 @@ void Verlet::setup_stencil_md_many_zoids() {
             } else if constexpr (EXPERIMENT == DPD) {
                 stencilMD->DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             } else if constexpr (EXPERIMENT == SW) {
-                stencilMD->SW_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+                // stencilMD->SW_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+                stencilMD->TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             }
 
             if constexpr (EXPERIMENT == BOND_FENE) {
@@ -2007,7 +2008,8 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
             stencilMD->DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
             stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
         } else if constexpr (EXPERIMENT == SW) {
-            stencilMD->SW_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            // stencilMD->SW_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            stencilMD->TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
             stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
         }
     }
@@ -3577,7 +3579,7 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
     }
 
     if (USE_STREAMS) {
-        cilk_spawn stencilMD->MPIX_START_PROGRESS_THREAD(stream_manager);
+        // cilk_spawn stencilMD->MPIX_START_PROGRESS_THREAD(stream_manager);
     }
 
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
@@ -3607,8 +3609,8 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
     }
 
     if (USE_STREAMS) {
-        stencilMD->MPIX_STOP_PROGRESS_THREAD(stream_manager);
-        cilk_sync;
+        // stencilMD->MPIX_STOP_PROGRESS_THREAD(stream_manager);
+        // cilk_sync;
     }
 
     delete stream_manager;
