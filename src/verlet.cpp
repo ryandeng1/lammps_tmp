@@ -3310,6 +3310,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
                                 for (int idx = 0; idx < total_num_wait; idx++) {
                                     if (MPIX_Request_is_complete(all_requests_at_stream[idx])) {
+                                        requests_completed[idx] = true;
                                         if (idx < zoid_pairs_at_stream.size()) {
                                             auto [src_zoid_num, dst_zoid_num] = zoid_pairs_at_stream[idx];
                                             auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[dst_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[dst_zoid_num];
@@ -3337,8 +3338,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                                                                                 test_f, test_x, test_v,
                                                                                 zoid_claimed, dep_claimed, stream_manager);
                                         }
-
-                                        all_requests_at_stream[idx] = true;
                                     }
                                 }
 
