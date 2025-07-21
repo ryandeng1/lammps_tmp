@@ -3309,7 +3309,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                                 }
 
                                 for (int idx = 0; idx < total_num_wait; idx++) {
-                                    if (MPIX_Request_is_complete(all_requests_at_stream[idx])) {
+                                    if (!requests_completed[idx] && MPIX_Request_is_complete(all_requests_at_stream[idx])) {
+                                        MPI_Request_free(&all_requests_at_stream[idx]);
                                         requests_completed[idx] = true;
                                         if (idx < zoid_pairs_at_stream.size()) {
                                             auto [src_zoid_num, dst_zoid_num] = zoid_pairs_at_stream[idx];
