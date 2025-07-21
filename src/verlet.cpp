@@ -36,6 +36,7 @@
 #include "version.h"
 
 #include <atomic>
+#include <chrono>
 #include <mpi.h>
 #include <cmath>
 #include <cstring>
@@ -3204,10 +3205,10 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             cilk_spawn [this](MPIX_Stream_Manager* manager, std::vector<std::atomic<int>>& recv_neighbor_counters, int dep) {
                 while (true) {
                     bool done = true;
-                    auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts : stencilMD->my_queues_many_cuts_next_dt;
+                    auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts[dep] : stencilMD->my_queues_many_cuts_next_dt[dep];
                     int num_wait = 0;
-                    for (int j = 0; j < my_queues[dep].size(); j++) {
-                        int zoid_num = my_queues[dep][j].num;
+                    for (int j = 0; j < my_queues.size(); j++) {
+                        int zoid_num = my_queues[j].num;
                         if (recv_neighbor_counters[zoid_num] > 0) {
                             done = false;
                             break;
@@ -3227,6 +3228,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         }
                         manager->global_lock.unlock();
                     }
+
+                    std::this_thread::sleep_for(std::chrono::nanoseconds(1));
                 }
             }(stream_manager, zoid_recv_neighbor_counters, dep + 1);
         }
