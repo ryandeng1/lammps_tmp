@@ -3226,7 +3226,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         }
                     }
 
-                    std::this_thread::sleep_for(std::chrono::nanoseconds(1));
+                    // std::this_thread::sleep_for(std::chrono::nanoseconds(1));
                 }
             }(stream_manager, zoid_recv_neighbor_counters, dep + 1);
         }
