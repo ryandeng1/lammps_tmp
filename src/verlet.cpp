@@ -3300,7 +3300,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                             int num_wait = 0;
 
                             auto& all_requests_at_stream = recv_requests[dep][stream_num];
-                            std::vector<bool> requests_completed(all_requests_at_stream.size(), false);
+                            std::vector<bool> requests_completed(total_num_wait, false);
 
                             while (true) {
                                 bool all_true = (std::find(requests_completed.cbegin(), requests_completed.cend(), false) == requests_completed.cend());
