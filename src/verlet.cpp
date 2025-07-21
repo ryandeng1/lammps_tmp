@@ -3201,6 +3201,17 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
     */
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
+        if (dep == 0) {
+            cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+                auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep + 1][stream_num];
+                auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep + 1][stream_num];
+                if (zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size() > 0) {
+                    stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
+                        recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
+                }
+            }
+        }
+
         if (dep < NUM_DEPS - 1) {
             cilk_spawn [this](MPIX_Stream_Manager* manager, std::vector<std::atomic<int>>& recv_neighbor_counters, int dep) {
                 while (true) {
@@ -3233,15 +3244,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
         cilk_scope {
             if (dep == 0) {
-                for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-                    auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep + 1][stream_num];
-                    auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep + 1][stream_num];
-                    if (zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size() > 0) {
-                        cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
-                            recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
-                    }
-                }
-
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
                     cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
