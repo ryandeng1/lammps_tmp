@@ -12305,6 +12305,8 @@ public:
         auto z2r_spline = pair_eam->z2r_spline;
         auto type2z2r = pair_eam->type2z2r;
         auto scale = pair_eam->scale;
+
+        memset(rho, 0, sizeof(double) * zoid.rho_stencil_md[0].size());
         
         // set rho to 0??
         for (int ii = 0; ii < nlocal; ii++) {
