@@ -3182,24 +3182,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
         dep_claimed[dep].clear();
     }
 
-    /*
-    std::atomic<bool> done = false;
-
-    cilk_spawn [this](MPIX_Stream_Manager* manager, std::atomic<bool>& done) {
-        while (!done) {
-            if (manager->global_lock.try_lock()) {
-                for (int i = 0; i < manager->num_streams; i++) {
-                    if (manager->m[i].try_lock()) {
-                        MPIX_Stream_progress(manager->streams[i]);
-                        manager->m[i].unlock();
-                    }
-                }
-                manager->global_lock.unlock();
-            }
-        }
-    }(stream_manager, done);
-    */
-
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep == 0) {
             cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
@@ -3212,6 +3194,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             }
         }
 
+        /*
         if (dep < NUM_DEPS - 1) {
             cilk_spawn [this](MPIX_Stream_Manager* manager, std::vector<std::atomic<int>>& recv_neighbor_counters, int dep) {
                 while (true) {
@@ -3241,8 +3224,9 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 }
             }(stream_manager, zoid_recv_neighbor_counters, dep + 1);
         }
+        */
 
-        cilk_scope {
+        // cilk_scope {
             if (dep == 0) {
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
@@ -3399,7 +3383,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     }
                 }
             }
-        }
+        // }
     }
 
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {

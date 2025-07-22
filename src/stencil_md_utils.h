@@ -45,6 +45,8 @@ constexpr int BOND_FENE = 0;
 constexpr int LJ = 1;
 constexpr int DPD = 2;
 constexpr int SW = 3;
+constexpr int TERSOFF = 4;
+constexpr int EAM = 5;
 
 constexpr int EXPERIMENT = BOND_FENE;
 
@@ -322,6 +324,10 @@ struct queue_info {
   // Many-body potentials
   std::vector<int>* neigh_short;
   std::vector<int>* local_and_one_hop_ghost_idxs_per_timestep;
+
+  // EAM
+  std::vector<double>* rho_stencil_md;
+  std::vector<double>* fp_stencil_md;
 
   int t0;
   int t1;

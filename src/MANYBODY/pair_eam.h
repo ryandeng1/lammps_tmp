@@ -25,6 +25,7 @@ PairStyle(eam,PairEAM);
 namespace LAMMPS_NS {
 
 class PairEAM : public Pair {
+ friend class StencilMD;
  public:
   friend class FixSemiGrandCanonicalMC;    // Alex Stukowski option
 
