@@ -4370,7 +4370,8 @@ public:
                         }
 
                         // double dist_to_zoid = distance_to_zoid(domain->prd, zoid.lo[t], zoid.hi[t], new_pos);
-                        if constexpr (EXPERIMENT != SW) {
+                        constexpr bool IS_MANY_BODY = (EXPERIMENT == SW) || (EXPERIMENT == TERSOFF) || (EXPERIMENT == EAM);
+                        if constexpr (!IS_MANY_BODY) {
                             double dist_to_zoid = distance_to_zoid(domain->prd, zoid.lo[t], zoid.hi[t], new_pos_borders);
                             borders_zoid = (dist_to_zoid <= ALLEGRO_SLOPE);
                         }
@@ -5965,7 +5966,8 @@ public:
                     zoid_hi[dim] = hi;
                 }
 
-                if constexpr (EXPERIMENT != SW) {
+                constexpr bool IS_MANY_BODY = (EXPERIMENT == SW) || (EXPERIMENT == TERSOFF) || (EXPERIMENT == EAM);
+                if constexpr (!IS_MANY_BODY) {
                     double dist_to_zoid = distance_to_zoid(domain->prd, zoid.lo[t], zoid.hi[t], atom_pos);
                     borders_zoid = (borders_zoid && dist_to_zoid <= ALLEGRO_SLOPE);
                 }
@@ -6456,7 +6458,9 @@ public:
                     }
                 }
 
-                if constexpr (EXPERIMENT != SW) {
+                constexpr bool IS_MANY_BODY = (EXPERIMENT == SW) || (EXPERIMENT == TERSOFF) || (EXPERIMENT == EAM);
+
+                if constexpr (!IS_MANY_BODY) {
                     double dist_to_zoid = distance_to_zoid(domain->prd, zoid.lo[t], zoid.hi[t], atom_pos);
                     borders_zoid = (borders_zoid && dist_to_zoid <= ALLEGRO_SLOPE);
                 }
