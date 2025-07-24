@@ -2874,6 +2874,8 @@ public:
                     if constexpr (EXPERIMENT == EAM) {
                         zoid.send_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                         zoid.recv_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        zoid.send_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        zoid.recv_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     }
 
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -2980,6 +2982,8 @@ public:
                     if constexpr (EXPERIMENT == EAM) {
                         zoid.send_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                         zoid.recv_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        zoid.send_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                        zoid.recv_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     }
 
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -5252,6 +5256,9 @@ public:
     // basically create_neighbor_list_sw but half neighbor list
     template <bool newton>
     void CREATE_NEIGHBOR_LIST_HELPER_EAM(queue_info& zoid, std::vector<int>* neighbor_lst, bool print=false) {
+        constexpr int target_tag = 186751;
+        constexpr int target_tag2 = 186751;
+
         // This is a half neighbor list as LAMMPS uses half neighbor lists for EAM
         std::unordered_map<int, int> zoid_tag_to_idx;
         for (int k = 0; k < zoid.tag_stencil_md[0].size(); k++) {
@@ -5281,9 +5288,9 @@ public:
                 std::set<int> neigh_set;
                 neigh_set.insert(neighbor_lst[tag].begin(), neighbor_lst[tag].end());
 
-                if ((tag == 186751) && t == 0 && print) {
+                if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
                     std::stringstream s1;
-                    s1 << BOLDCYAN << "FOUND TAG MAIN LOOP. zoid: " << zoid.num << " tag: " << tag
+                    s1 << BOLDCYAN << "FOUND TAG MAIN LOCAL LOOP. zoid: " << zoid.num << " tag: " << tag
                     << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
                     << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
                     << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
@@ -5309,21 +5316,33 @@ public:
                     int neigh_idx = zoid_tag_to_idx.at(neigh_tag);
                     bool neigh_local = (local_idxs_set.find(neigh_idx) != local_idxs_set.end());
                     std::array<double, 3> neigh_pos = {x[neigh_idx].x, x[neigh_idx].y, x[neigh_idx].z};
-
                     auto [neigh_needs_neighbors, dist_to_boundary] = MANY_BODY_CHECK_IF_ATOM_NEEDS_NEIGHBOR(zoid, zoid.lo[t], zoid.hi[t], neigh_pos);
-                    if (!neigh_needs_neighbors) {
-                        continue;
+
+                    if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
+                        std::stringstream s1;
+                        s1 << BOLDCYAN << "FOUND TAG MAIN LOCAL LOOP. zoid: " << zoid.num << " tag: " << tag << " " << neigh_tag
+                        << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
+                        << " pos: " << neigh_pos[0] << " " << neigh_pos[1] << " " << neigh_pos[2]
+                        << " needs neighbor? " << atom_needs_neighbors
+                        << " neigh local? " << neigh_local
+                        << " neigh needs neighbors? " << neigh_needs_neighbors
+                        << RESET_COLOR << std::endl;
+                        std::cout << s1.str();
                     }
 
+                    // if (!neigh_needs_neighbors) {
+                    //     continue;
+                    // }
+
                     // half neighbor list so tiebreak local-local pairs
-                    if (neigh_local) {
+                    if (neigh_local && neigh_needs_neighbors) {
                         if (x[neigh_idx].z < ztmp) continue;
                         if (x[neigh_idx].z == ztmp) {
                             if (x[neigh_idx].y < ytmp) continue;
                             if (x[neigh_idx].y == ytmp && x[neigh_idx].x < xtmp) continue;
                         }
                     }
-
+                    
                     double delx = xtmp - x[neigh_idx].x;
                     double dely = ytmp - x[neigh_idx].y;
                     double delz = ztmp - x[neigh_idx].z;
@@ -5387,6 +5406,17 @@ public:
 
                 auto [atom_needs_neighbors, dist_to_boundary] = MANY_BODY_CHECK_IF_ATOM_NEEDS_NEIGHBOR(zoid, zoid.lo[t], zoid.hi[t], atom_pos);
 
+                if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
+                    std::stringstream s1;
+                    s1 << BOLDYELLOW << "ONE HOP GHOST FOUND IDX. zoid: " << zoid.num << " tag: " << tag
+                    << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
+                    << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
+                    << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
+                    << " needs neighbor? " << atom_needs_neighbors
+                    << RESET_COLOR << std::endl;
+                    std::cout << s1.str();
+                }
+
                 if (!atom_needs_neighbors) {
                     continue;
                 }
@@ -5400,21 +5430,55 @@ public:
                     int neigh_idx = zoid_tag_to_idx.at(neigh_tag);
                     int neigh_local = (local_idxs_set.find(neigh_idx) != local_idxs_set.end());
                     std::array<double, 3> neigh_pos = {x[neigh_idx].x, x[neigh_idx].y, x[neigh_idx].z};
-
-                    if (neigh_local) {
-                        continue;
-                    }
-
                     auto [neigh_needs_neighbors, dist_to_boundary] = MANY_BODY_CHECK_IF_ATOM_NEEDS_NEIGHBOR(zoid, zoid.lo[t], zoid.hi[t], neigh_pos);
-                    if (!neigh_needs_neighbors) {
+
+                    if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
+                        std::stringstream s1;
+                        s1 << BOLDYELLOW << "ONE HOP GHOST NEIGHBOR. zoid: " << zoid.num << " tag: " << tag << " " << neigh_tag
+                        << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
+                        << " pos: " << neigh_pos[0] << " " << neigh_pos[1] << " " << neigh_pos[2]
+                        << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
+                        << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
+                        << " atom needs neighbor? " << atom_needs_neighbors
+                        << " neigh local? " << neigh_local
+                        << " neigh needs neighbor? " << neigh_needs_neighbors
+                        << " is one hop ghost? " << (one_hop_ghost_neigh_idxs.find(neigh_idx) != one_hop_ghost_neigh_idxs.end())
+                        << RESET_COLOR << std::endl;
+                        std::cout << s1.str();
+                    }
+
+                    // I am a one-hop ghost. Possible cases: I am pointing to local, another one-hop ghost or a two-hop ghost.
+                    // if pointing to a local, then I want to make sure that that local atom has not been evaluated yet.
+
+                    if (neigh_local && !neigh_needs_neighbors) {
                         continue;
                     }
 
-                    if (x[neigh_idx].z < ztmp) continue;
-                    if (x[neigh_idx].z == ztmp) {
-                        if (x[neigh_idx].y < ytmp) continue;
-                        if (x[neigh_idx].y == ytmp && x[neigh_idx].x < xtmp) continue;
+                    // Point to another one-hop ghost, pick one to tiebreak
+                    if (neigh_needs_neighbors && one_hop_ghost_neigh_idxs.find(neigh_idx) != one_hop_ghost_neigh_idxs.end()) {
+                        if (x[neigh_idx].z < ztmp) continue;
+                        if (x[neigh_idx].z == ztmp) {
+                            if (x[neigh_idx].y < ytmp) continue;
+                            if (x[neigh_idx].y == ytmp && x[neigh_idx].x < xtmp) continue;
+                        }
+                    } 
+
+                    /*
+                    // local atom should have atom the local --> ghost edge
+                    if (neigh_local && neigh_needs_neighbors) {
+                        continue;
                     }
+
+                    // This means this atom is close to the boundary, do tiebreaking
+                    if (neigh_needs_neighbors && one_hop_ghost_neigh_idxs.find(neigh_idx) != one_hop_ghost_neigh_idxs.end()) {
+                        // both neighbors are ghost atoms, pick one to tiebreak
+                        if (x[neigh_idx].z < ztmp) continue;
+                        if (x[neigh_idx].z == ztmp) {
+                            if (x[neigh_idx].y < ytmp) continue;
+                            if (x[neigh_idx].y == ytmp && x[neigh_idx].x < xtmp) continue;
+                        }
+                    }
+                    */
                     
                     double delx = xtmp - x[neigh_idx].x;
                     double dely = ytmp - x[neigh_idx].y;
@@ -5516,7 +5580,7 @@ public:
                 if constexpr (EXPERIMENT == SW) {
                     CREATE_NEIGHBOR_LIST_HELPER_SW<newton>(zoid, neighbor_lst);
                 } else if constexpr (EXPERIMENT == EAM) {
-                    CREATE_NEIGHBOR_LIST_HELPER_EAM<newton>(zoid, neighbor_lst);
+                    CREATE_NEIGHBOR_LIST_HELPER_EAM<newton>(zoid, neighbor_lst, true);
                 } else {
                     CREATE_NEIGHBOR_LIST_HELPER<newton>(zoid, neighbor_lst);
                 }
@@ -6463,7 +6527,7 @@ public:
                 auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] :
                                           recv_from_neighbors_many_cuts_next_dt[zoid.num];
 
-                for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
                     zoid_recv_data[zoid.num][t] = new std::vector<int>[recv_neighbors.size()];
                     zoid_recv_data_sizes[zoid.num][t] = new int[recv_neighbors.size()];
 
@@ -6621,13 +6685,26 @@ public:
                 // if i is not in my set, that means someone else evaluated the fp
                 bool keep = (local_and_one_hop_ghost_idxs_set.find(i) == local_and_one_hop_ghost_idxs_set.end());
 
+                // Do not recv data if I am going to evaluate it fully
+                if (!keep) {
+                    continue;
+                }
+
+                auto [needs_neighbor, _ ] = MANY_BODY_CHECK_IF_ATOM_NEEDS_NEIGHBOR(zoid, zoid.lo[t], zoid.hi[t], atom_pos);
+                if (needs_neighbor) {
+                    std::stringstream s1;
+                    s1 << BOLDRED << "idx: " << i << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2] 
+                    << " in local? " << (local_idxs_set.find(i) != local_idxs_set.end())
+                    << RESET_COLOR << std::endl;
+                    std::cout << s1.str();
+                }
+                assert(!needs_neighbor);
+
                 // find zoid that had it previously
                 for (int j = 0; j < recv_neighbors.size(); j++) {
                     auto recv_zoid_num = recv_neighbors[j];
                     auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num] :
                                       zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
-
-                    bool in_neighbor_zoid = true;
 
                     std::array<double, 3> adjusted_atom_pos;
 
@@ -6649,7 +6726,7 @@ public:
                     auto [atom_needs_neighbors, _ ]  = MANY_BODY_CHECK_IF_ATOM_NEEDS_NEIGHBOR(recv_zoid, recv_zoid.lo[t], recv_zoid.hi[t], adjusted_atom_pos);
 
                     if (atom_needs_neighbors) {
-                        zoid.recv_pos_idxs_double_buffering[t][j].push_back(i);
+                        zoid.recv_fp_idxs_double_buffering[t][j].push_back(i);
 
                         int tag = zoid.tag_stencil_md[0][i];
                         if (t % 2 == 0) {
@@ -6658,7 +6735,7 @@ public:
                                     int other_t = tag_to_timestep_even.at(tag);
                                     std::cout << std::setprecision(20)
                                               << "curr_dt: " << curr_dt << " zoid: " << zoid.num
-                                              << "EVEN tag: " << tag << " timestep: " << t << " overlapping recv pos timestep: " << tag_to_timestep_even.at(tag)
+                                              << " EVEN tag: " << tag << " timestep: " << t << " overlapping recv pos timestep: " << tag_to_timestep_even.at(tag)
                                               << " pos: " << zoid.x_stencil_md[0][i].x << " " << zoid.x_stencil_md[0][i].y << " " << zoid.x_stencil_md[0][i].z
                                               << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
                                               << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
@@ -6716,6 +6793,314 @@ public:
         }
 
         return;
+    }
+
+    // Sending forces is strictly ghost to local. There is no point propagating things.
+    template <bool curr_dt, bool newton>
+    void CONSTRUCT_SEND_RHO_IDXS_ZOID_MANY_CUTS_HELPER(queue_info& zoid) {
+        int zoid_num = zoid.num;
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid_num]
+                : send_to_neighbors_many_cuts_next_dt[zoid_num];
+
+        std::map<int, int> idx_to_zoid;
+        std::set<int> all_force_neighbors;
+
+        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            zoid.send_rho_idxs_double_buffering[t] = new std::vector<int>[send_neighbors.size()];
+
+            if (!newton) {
+                continue;
+            }
+
+            std::set<int> send_idxs;
+            auto& local_idxs = zoid.local_idxs_per_timestep[t];
+            std::set<int> local_idxs_set;
+            local_idxs_set.insert(local_idxs.begin(), local_idxs.end());
+
+            auto& local_and_one_hop_ghost_idxs = zoid.local_and_one_hop_ghost_idxs_per_timestep[t];
+            std::set<int> local_and_one_hop_ghost_idxs_set;
+            local_and_one_hop_ghost_idxs_set.insert(local_and_one_hop_ghost_idxs.begin(), local_and_one_hop_ghost_idxs.end());
+
+            for (int i = 0; i < zoid.x_stencil_md[0].size(); i++) {
+                // only send ghost idxs for forces
+                bool is_local = (local_idxs_set.find(i) != local_idxs_set.end());
+                if (is_local) {
+                    continue;
+                }
+
+                auto& pos = zoid.x_stencil_md[t % DOUBLE_BUFFERING][i];
+                std::array<double, 3> atom_pos = {pos.x, pos.y, pos.z};
+
+                bool two_hop_ghost = true;
+                constexpr double NEIGHBOR_CUTOFF = ALLEGRO_SLOPE / 2;
+                for (int dim = 0; dim < domain->dimension; dim++) {
+                    // double lo = zoid.zoid.cuts[dim].lower + t * zoid.zoid.cuts[dim].slope_lower;
+                    // double hi = zoid.zoid.cuts[dim].upper + t * zoid.zoid.cuts[dim].slope_upper;
+                    double lo = zoid.lo[t][dim];
+                    double hi = zoid.hi[t][dim];
+                    double lo_one_hop = lo - NEIGHBOR_CUTOFF;
+                    double hi_one_hop = hi + NEIGHBOR_CUTOFF;
+
+                    double lo_two_hop = lo - ALLEGRO_SLOPE;
+                    double hi_two_hop = hi + ALLEGRO_SLOPE;
+
+                    if (atom_pos[dim] < lo) {
+                        two_hop_ghost = two_hop_ghost && atom_pos[dim] >= lo_two_hop && atom_pos[dim] < lo_one_hop;
+                    }
+
+                    if (atom_pos[dim] >= hi) {
+                        two_hop_ghost = two_hop_ghost && atom_pos[dim] >= hi_one_hop && atom_pos[dim] < hi_one_hop;
+                    }
+                }
+
+                // have to do this check as for later timesteps this might not be the case
+                if (!two_hop_ghost) {
+                    continue;
+                }
+
+                // TODO: pick first neighbor that allows us to map a path to get the force where it eventually belongs
+                for (int j = 0; j < send_neighbors.size(); j++) {
+                    auto send_zoid_num = send_neighbors[j];
+                    auto& send_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[send_zoid_num]
+                            : zoid_num_to_zoid_many_cuts_next_dt[send_zoid_num];
+
+                    bool in_neighbor_zoid = true;
+                    for (int dim = 0; dim < domain->dimension; dim++) {
+                        // double lo = send_zoid.zoid.cuts[dim].lower + t * send_zoid.zoid.cuts[dim].slope_lower;
+                        // double hi = send_zoid.zoid.cuts[dim].upper + t * send_zoid.zoid.cuts[dim].slope_upper;
+                        double lo = send_zoid.lo[t][dim];
+                        double hi = send_zoid.hi[t][dim];
+                        double p = atom_pos[dim];
+                        while (p < lo) {
+                            p += domain->prd[dim];
+                        }
+                        while (p >= hi) {
+                            p -= domain->prd[dim];
+                        }
+
+                        in_neighbor_zoid = in_neighbor_zoid && p >= lo && p < hi;
+                    }
+
+                    if (in_neighbor_zoid) {
+                        zoid.send_rho_idxs_double_buffering[t][j].push_back(i);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    template <bool curr_dt, bool newton>
+    void CONSTRUCT_SEND_RHO_IDXS_ZOID_MANY_CUTS() {
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+
+        cilk_for (int dep = 0; dep < NUM_DEPS; dep++) {
+            cilk_for (int j = 0; j < queues[dep].size(); j++) {
+                auto& zoid = queues[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                CONSTRUCT_SEND_RHO_IDXS_ZOID_MANY_CUTS_HELPER<curr_dt, newton>(zoid);
+            }
+        }
+    }
+
+    template <bool curr_dt, bool newton>
+    void CONSTRUCT_RECV_RHO_IDXS_ZOID_MANY_CUTS() {
+        assert(EXPERIMENT == EAM);
+        auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+
+        if (!newton) {
+            for (int dep = 0; dep < NUM_DEPS; dep++) {
+                for (int j = 0; j < queues[dep].size(); j++) {
+                    auto& zoid = queues[dep][j];
+                    if (zoid.num % comm->nprocs != comm->me) {
+                        continue;
+                    }
+
+                    auto &recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
+                                                        : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+
+                    for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                        zoid.recv_rho_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
+                    }
+                }
+            }
+
+            return;
+        }
+
+        std::vector<MPI_Request> r;
+        r.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1) * 4 / comm->nprocs);
+
+        std::vector<int>** zoid_send_data[NUM_ZOIDS_MANY_CUTS];
+        int** zoid_send_data_sizes[NUM_ZOIDS_MANY_CUTS];
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto& zoid = queues[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                zoid_send_data[zoid.num] = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                zoid_send_data_sizes[zoid.num] = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+
+                auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] :
+                                          send_to_neighbors_many_cuts_next_dt[zoid.num];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid_send_data[zoid.num][t] = new std::vector<int>[send_to_neighbors.size()];
+                    zoid_send_data_sizes[zoid.num][t] = new int[send_to_neighbors.size()];
+
+                    for (int i = 0; i < send_to_neighbors.size(); i++) {
+                        int send_zoid_num = send_to_neighbors[i];
+
+                        auto& send_rho_idxs = zoid.send_rho_idxs_double_buffering[t][i];
+
+                        // int mpi_tag = get_mpi_tag(send_zoid_num, zoid.num, t, t);
+                        int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
+
+                        zoid_send_data[zoid.num][t][i].reserve(send_rho_idxs.size());
+                        zoid_send_data_sizes[zoid.num][t][i] = send_rho_idxs.size();
+                        for (int k = 0; k < send_rho_idxs.size(); k++) {
+                            zoid_send_data[zoid.num][t][i].push_back(zoid.tag_stencil_md[0][send_rho_idxs[k]]);
+                        }
+
+                        r.emplace_back();
+                        MPI_Isend(&zoid_send_data_sizes[zoid.num][t][i], 1, MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+
+                        if (send_rho_idxs.size() > 0) {
+                            r.emplace_back();
+                            // std::vector<int> send_pos_tags;
+                            // send_pos_tags.reserve(size);
+                            MPI_Isend(zoid_send_data[zoid.num][t][i].data(), send_rho_idxs.size(), MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto& zoid = queues[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                std::unordered_map<int, int> tag_to_idx;
+                for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
+                    tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+                }
+
+                auto& recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
+                                                    : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+
+                std::map<int, int> tag_to_timestep;
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.recv_rho_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
+
+                    for (int i = 0; i < recv_from_neighbors.size(); i++) {
+                        int recv_zoid_num = recv_from_neighbors[i];
+
+                        // int mpi_tag = get_mpi_tag(zoid.num, recv_zoid_num, t, t);
+                        int mpi_tag = get_mpi_tag_many_cuts(zoid.num, recv_zoid_num);
+
+                        int nrecv;
+                        MPI_Recv(&nrecv, 1, MPI_INT, recv_zoid_num % comm->nprocs,
+                                 mpi_tag, world, MPI_STATUS_IGNORE);
+
+                        if (nrecv) {
+                            int* recv_buf = new int[nrecv];
+                            MPI_Recv(recv_buf, nrecv, MPI_INT, recv_zoid_num % comm->nprocs,
+                                     mpi_tag, world, MPI_STATUS_IGNORE);
+                            zoid.recv_force_idxs_double_buffering[t][i].reserve(nrecv);
+                            for (int k = 0; k < nrecv; k++) {
+                                zoid.recv_rho_idxs_double_buffering[t][i].push_back(tag_to_idx.at(recv_buf[k]));
+
+                                if (tag_to_timestep.count(recv_buf[k])) {
+                                    if (tag_to_timestep.at(recv_buf[k]) != t) {
+                                        int other_t = tag_to_timestep.at(recv_buf[k]);
+                                        int tag_idx = tag_to_idx.at(recv_buf[k]);
+
+                                        std::cout << std::setprecision (std::numeric_limits<double>::digits10 + 1)
+                                        << "tag: " << recv_buf[k] << " timestep: " << t << " overlapping recv force timestep: " << tag_to_timestep.at(recv_buf[k])
+                                        << " pos: " << zoid.x_stencil_md[0][tag_idx].x << " " << zoid.x_stencil_md[0][tag_idx].y << " " << zoid.x_stencil_md[0][tag_idx].z
+                                        << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
+                                        << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
+                                        << " other lo: " << zoid.lo[other_t][0] << " " << zoid.lo[other_t][1] << " " << zoid.lo[other_t][2]
+                                        << " other hi: " << zoid.hi[other_t][0] << " " << zoid.hi[other_t][1] << " " << zoid.hi[other_t][2]
+                                        << std::endl;
+                                    }
+                                    assert(tag_to_timestep.at(recv_buf[k]) == t);
+                                } else {
+                                    tag_to_timestep[recv_buf[k]] = t;
+                                }
+                            }
+                            delete[] recv_buf;
+                        }
+                    }
+                }
+            }
+        }
+
+        MPI_Waitall(r.size(), r.data(), MPI_STATUS_IGNORE);
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto &zoid = queues[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    delete[] zoid_send_data[zoid.num][t];
+                    delete[] zoid_send_data_sizes[zoid.num][t];
+                }
+
+                delete[] zoid_send_data[zoid.num];
+                delete[] zoid_send_data_sizes[zoid.num];
+            }
+        }
+
+        // debug
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto &zoid = queues[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) {
+                    continue;
+                }
+
+                std::set<int> all_idxs;
+                std::map<int, std::pair<int, int>> idx_to_zoid_timestep;
+
+                auto& recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
+                                                    : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    for (int i = 0; i < recv_from_neighbors.size(); i++) {
+                        auto& recv_idxs = zoid.recv_rho_idxs_double_buffering[t][i];
+                        for (int k = 0; k < recv_idxs.size(); k++) {
+                            int idx = recv_idxs[k];
+                            if (all_idxs.find(idx) != all_idxs.end()) {
+                                auto& [map_zoid, map_timestep] = idx_to_zoid_timestep.at(idx);
+                                if (map_timestep != t) {
+                                    std::cout << "RECV FORCE zoid: " << zoid.num << " timestep: " << t << " IDX: " << idx << " curr recv from: " << recv_from_neighbors[i] << " timestep: " << t
+                                              << " already there: " << idx_to_zoid_timestep[idx].first << " timestep: " << idx_to_zoid_timestep[idx].second
+                                              << " tag: " << zoid.tag_stencil_md[0][idx]
+                                              << std::endl;
+                                    assert(false);
+                                }
+                            }
+                            all_idxs.insert(idx);
+                            idx_to_zoid_timestep[idx] = {recv_from_neighbors[i], t};
+                        }
+                    }
+                }
+            }
+        }
     }
 
     template <bool curr_dt>
@@ -8412,8 +8797,10 @@ public:
             int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
 
             if constexpr (EXPERIMENT == EAM) {
+                int nsend_rho = zoid.send_rho_idxs_double_buffering[0][i].size();
                 int nsend_fp = zoid.send_fp_idxs_double_buffering[0][i].size();
-                zoid_ndoubles_send += DEBUG_SEND_RECV_DATA ? nsend_fp * 2 : DEBUG_SEND_RECV_DATA;
+                zoid_ndoubles_send += DEBUG_SEND_RECV_DATA ? nsend_rho * 2 : nsend_rho;
+                zoid_ndoubles_send += DEBUG_SEND_RECV_DATA ? nsend_fp * 2 : nsend_fp;
             }
 
             if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid.num][i]) {
@@ -9103,7 +9490,9 @@ public:
 
             if constexpr (EXPERIMENT == EAM) {
                 auto& zoid = zoid_num_to_zoid_many_cuts[zoid_num];
+                int nrecv_rho = zoid.recv_rho_idxs_double_buffering[0][i].size();
                 int nrecv_fp = zoid.recv_fp_idxs_double_buffering[0][i].size();
+                total_doubles_recv_from_zoid += DEBUG_SEND_RECV_DATA ? nrecv_rho * 2 : nrecv_rho;
                 total_doubles_recv_from_zoid += DEBUG_SEND_RECV_DATA ? nrecv_fp * 2 : nrecv_fp;
             }
 
@@ -10775,7 +11164,7 @@ public:
                 }
 
                 if constexpr (EXPERIMENT == EAM) {
-                    auto& recv_rho_idxs = zoid.recv_pos_idxs_double_buffering[t][recv_idx];
+                    auto& recv_rho_idxs = zoid.recv_rho_idxs_double_buffering[t][recv_idx];
                     for (int k = 0; k < recv_rho_idxs.size(); k++) {
                         int idx = recv_rho_idxs[k];
                         auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
@@ -10793,7 +11182,28 @@ public:
                                     << std::endl;
                         }
                         assert(target_tag == zoid.tag_stencil_md[0][idx]);
-                        zoid.rho_stencil_md[0][idx] = rho;
+                        zoid.rho_stencil_md[0][idx] += rho;
+                    }
+
+                    auto& recv_fp_idxs = zoid.recv_fp_idxs_double_buffering[t][recv_idx];
+                    for (int k = 0; k < recv_rho_idxs.size(); k++) {
+                        int idx = recv_fp_idxs[k];
+                        auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
+                        double fp = buf[buf_idx++];
+
+                        if (target_tag != zoid.tag_stencil_md[0][idx]) {
+                            std::cout << "RHO TAG WRONG me: " << comm->me
+                                    << " idx: " << idx << " k: " << k
+                                    << " my zoid: " << zoid.num << " my proc: " << zoid.num % comm->nprocs
+                                    << " recv from zoid: " << recv_zoid_num << " time: " << t
+                                    << " recv from proc: " << recv_zoid_num % comm->nprocs
+                                    << " tag I got: " << target_tag << " tag I want: " << zoid.tag_stencil_md[0][idx]
+                                    << " buf_idx: " << buf_idx
+                                    << " buf: " << buf
+                                    << std::endl;
+                        }
+                        assert(target_tag == zoid.tag_stencil_md[0][idx]);
+                        zoid.fp_stencil_md[0][idx] = fp;
                     }
                 }
             } else {
@@ -10808,11 +11218,18 @@ public:
                 }
 
                 if constexpr (EXPERIMENT == EAM) {
-                    auto& recv_rho_idxs = zoid.recv_pos_idxs_double_buffering[t][recv_idx];
+                    auto& recv_rho_idxs = zoid.recv_rho_idxs_double_buffering[t][recv_idx];
                     for (int k = 0; k < recv_rho_idxs.size(); k++) {
                         int idx = recv_rho_idxs[k];
                         double rho = buf[buf_idx++];
-                        zoid.rho_stencil_md[0][idx] = rho;
+                        zoid.rho_stencil_md[0][idx] += rho;
+                    }
+
+                    auto& recv_fp_idxs = zoid.recv_fp_idxs_double_buffering[t][recv_idx];
+                    for (int k = 0; k < recv_fp_idxs.size(); k++) {
+                        int idx = recv_fp_idxs[k];
+                        double fp = buf[buf_idx++];
+                        zoid.fp_stencil_md[0][idx] = fp;
                     }
                 }
             }
@@ -11732,12 +12149,20 @@ public:
                 }
 
                 if constexpr (EXPERIMENT == EAM) {
-                    auto& send_pos_idxs = zoid.send_pos_idxs_double_buffering[t][send_idx];
-                    for (int k = 0; k < send_pos_idxs.size(); k++) {
-                        int idx = send_pos_idxs[k];
+                    auto& send_rho_idxs = zoid.send_rho_idxs_double_buffering[t][send_idx];
+                    for (int k = 0; k < send_rho_idxs.size(); k++) {
+                        int idx = send_rho_idxs[k];
                         int tag = zoid.tag_stencil_md[0][idx];
                         buf[buf_idx++] = ubuf(tag).d;
                         buf[buf_idx++] = zoid.rho_stencil_md[0][idx];
+                    }
+
+                    auto& send_fp_idxs = zoid.send_fp_idxs_double_buffering[t][send_idx];
+                    for (int k = 0; k < send_fp_idxs.size(); k++) {
+                        int idx = send_fp_idxs[k];
+                        int tag = zoid.tag_stencil_md[0][idx];
+                        buf[buf_idx++] = ubuf(tag).d;
+                        buf[buf_idx++] = zoid.fp_stencil_md[0][idx];
                     }
                 }
             } else {
@@ -11750,10 +12175,16 @@ public:
                 }
 
                 if constexpr (EXPERIMENT == EAM) {
-                    auto& send_pos_idxs = zoid.send_pos_idxs_double_buffering[t][send_idx];
-                    for (int k = 0; k < send_pos_idxs.size(); k++) {
-                        int idx = send_pos_idxs[k];
+                    auto& send_rho_idxs = zoid.send_rho_idxs_double_buffering[t][send_idx];
+                    for (int k = 0; k < send_rho_idxs.size(); k++) {
+                        int idx = send_rho_idxs[k];
                         buf[buf_idx++] = zoid.rho_stencil_md[0][idx];
+                    }
+
+                    auto& send_fp_idxs = zoid.send_fp_idxs_double_buffering[t][send_idx];
+                    for (int k = 0; k < send_fp_idxs.size(); k++) {
+                        int idx = send_fp_idxs[k];
+                        buf[buf_idx++] = zoid.fp_stencil_md[0][idx];
                     }
                 }
             }
@@ -12349,7 +12780,9 @@ public:
         auto type2z2r = pair_eam->type2z2r;
         auto scale = pair_eam->scale;
 
-        memset(rho, 0, sizeof(double) * zoid.rho_stencil_md[0].size());
+        // memset(rho, 0, sizeof(double) * zoid.rho_stencil_md[0].size());
+
+        constexpr int target_tag = 186751;
         
         // set rho to 0??
         for (int ii = 0; ii < nlocal_and_ghost; ii++) {
@@ -12412,8 +12845,8 @@ public:
             // }
         }
 
-        for (int ii = 0; ii < nlocal; ii++) {
-            int i = local_idxs[ii];
+        for (int ii = 0; ii < nlocal_and_ghost; ii++) {
+            int i = local_and_ghost_idxs[ii];
 
             double xtmp = x[i].x;
             double ytmp = x[i].y;
@@ -12481,7 +12914,6 @@ public:
                     f[j].z -= delz * fpair;
                     spinlocks[j].unlock();
 
-                    constexpr int target_tag = 186751;
                     if (tags[i] == target_tag || tags[j] == target_tag) {
                         std::stringstream s1;
                         s1 << BOLDGREEN << "STENCILMD FOUND. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]

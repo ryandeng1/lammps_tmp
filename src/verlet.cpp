@@ -1067,6 +1067,12 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS<false>();
 
     if constexpr (EXPERIMENT == EAM) {
+        stencilMD->CONSTRUCT_RECV_RHO_IDXS_ZOID_MANY_CUTS<true, false>();
+        stencilMD->CONSTRUCT_SEND_RHO_IDXS_ZOID_MANY_CUTS<true, false>();
+
+        stencilMD->CONSTRUCT_RECV_RHO_IDXS_ZOID_MANY_CUTS<false, false>();
+        stencilMD->CONSTRUCT_SEND_RHO_IDXS_ZOID_MANY_CUTS<false, false>();
+
         stencilMD->CONSTRUCT_RECV_FP_IDXS_ZOID_MANY_CUTS<true>();
         stencilMD->CONSTRUCT_SEND_FP_IDXS_ZOID_MANY_CUTS<true>();
 

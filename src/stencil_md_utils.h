@@ -320,6 +320,8 @@ struct queue_info {
   std::vector<int>** send_vel_idxs_double_buffering;
   std::vector<int>** recv_vel_idxs_double_buffering;
 
+  std::vector<int>** send_rho_idxs_double_buffering;
+  std::vector<int>** recv_rho_idxs_double_buffering;
   std::vector<int>** send_fp_idxs_double_buffering;
   std::vector<int>** recv_fp_idxs_double_buffering;
   /* end for two timesteps */
