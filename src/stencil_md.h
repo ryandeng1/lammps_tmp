@@ -11683,6 +11683,61 @@ public:
             auto * _noalias x1_ = zoid.x_stencil_md[1].data();
             auto * _noalias v_ = zoid.v_stencil_md[0].data();
 
+            int pos_starting_idx = num_send_force * 3;
+            int pos_starting_idx2 = (num_send_force + num_send_pos) * 3;
+            int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * 3;
+
+            cilk_scope {
+                cilk_spawn [&]() noexcept {
+                    for (int i = 0; i < send_force_idxs.size(); i++) {
+                        int idx = send_force_idxs[i];
+                        int buf_idx = i * 3;
+
+                        buf[buf_idx] = f_[idx].x;
+                        buf[buf_idx + 1] = f_[idx].y;
+                        buf[buf_idx + 2] = f_[idx].z;
+
+                        f_[idx].x = 0;
+                        f_[idx].y = 0;
+                        f_[idx].z = 0;
+                    }
+                }();
+
+                cilk_spawn [&]() noexcept {
+                    for (int i = 0; i < send_pos_idxs.size(); i++) {
+                        int idx = send_pos_idxs[i];
+                        int buf_idx = pos_starting_idx + i * 3;
+
+                        buf[buf_idx] = x0_[idx].x;
+                        buf[buf_idx + 1] = x0_[idx].y;
+                        buf[buf_idx + 2] = x0_[idx].z;
+                    }
+                }();
+
+                cilk_spawn [&]() noexcept {
+                    for (int i = 0; i < send_pos_idxs2.size(); i++) {
+                        int idx = send_pos_idxs2[i];
+                        int buf_idx = pos_starting_idx2 + i * 3;
+
+                        buf[buf_idx] = x1_[idx].x;
+                        buf[buf_idx + 1] = x1_[idx].y;
+                        buf[buf_idx + 2] = x1_[idx].z;
+                    }
+                }();
+
+                cilk_spawn [&]() noexcept {
+                    for (int i = 0; i < send_vel_idxs.size(); i++) {
+                        int idx = send_vel_idxs[i];
+                        int buf_idx = vel_starting_idx + i * 3;
+
+                        buf[buf_idx] = v_[idx].x;
+                        buf[buf_idx + 1] = v_[idx].y;
+                        buf[buf_idx + 2] = v_[idx].z;
+                    }
+                }();
+            }
+
+            /*
             #pragma cilk grainsize 2048
             cilk_for (int i = 0; i < send_force_idxs.size(); i++) {
                 int idx = send_force_idxs[i];
@@ -11695,66 +11750,39 @@ public:
                 f_[idx].x = 0;
                 f_[idx].y = 0;
                 f_[idx].z = 0;
-
-                /*
-                buf[buf_idx] = zoid.f_stencil_md[0][idx].x;
-                buf[buf_idx + 1] = zoid.f_stencil_md[0][idx].y;
-                buf[buf_idx + 2] = zoid.f_stencil_md[0][idx].z;
-
-                zoid.f_stencil_md[0][idx].x = 0;
-                zoid.f_stencil_md[0][idx].y = 0;
-                zoid.f_stencil_md[0][idx].z = 0;
-                */
             }
 
-            int pos_starting_idx = num_send_force * 3;
             #pragma cilk grainsize 2048
             cilk_for (int i = 0; i < send_pos_idxs.size(); i++) {
                 int idx = send_pos_idxs[i];
                 int buf_idx = pos_starting_idx + i * 3;
 
-                /*
-                buf[buf_idx] = zoid.x_stencil_md[0][idx].x;
-                buf[buf_idx + 1] = zoid.x_stencil_md[0][idx].y;
-                buf[buf_idx + 2] = zoid.x_stencil_md[0][idx].z;
-                */
                 buf[buf_idx] = x0_[idx].x;
                 buf[buf_idx + 1] = x0_[idx].y;
                 buf[buf_idx + 2] = x0_[idx].z;
             }
 
-            int pos_starting_idx2 = (num_send_force + num_send_pos) * 3;
             #pragma cilk grainsize 2048
             cilk_for (int i = 0; i < send_pos_idxs2.size(); i++) {
                 int idx = send_pos_idxs2[i];
                 int buf_idx = pos_starting_idx2 + i * 3;
 
-                /*
-                buf[buf_idx] = zoid.x_stencil_md[1][idx].x;
-                buf[buf_idx + 1] = zoid.x_stencil_md[1][idx].y;
-                buf[buf_idx + 2] = zoid.x_stencil_md[1][idx].z;
-                */
                 buf[buf_idx] = x1_[idx].x;
                 buf[buf_idx + 1] = x1_[idx].y;
                 buf[buf_idx + 2] = x1_[idx].z;
             }
 
-            int vel_starting_idx = (num_send_force + num_send_pos + num_send_pos2) * 3;
 
             #pragma cilk grainsize 2048
             cilk_for (int i = 0; i < send_vel_idxs.size(); i++) {
                 int idx = send_vel_idxs[i];
                 int buf_idx = vel_starting_idx + i * 3;
 
-                /*
-                buf[buf_idx] = zoid.v_stencil_md[0][idx].x;
-                buf[buf_idx + 1] = zoid.v_stencil_md[0][idx].y;
-                buf[buf_idx + 2] = zoid.v_stencil_md[0][idx].z;
-                */
                 buf[buf_idx] = v_[idx].x;
                 buf[buf_idx + 1] = v_[idx].y;
                 buf[buf_idx + 2] = v_[idx].z;
             }
+            */
         }
 
         if constexpr (EXPERIMENT == DPD) {
