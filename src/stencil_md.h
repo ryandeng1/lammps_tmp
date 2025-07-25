@@ -56,6 +56,7 @@ constexpr bool USE_STREAMS = true;
 constexpr int NUM_RECV_STREAMS = 8;
 constexpr int NUM_SEND_STREAMS = 4;
 constexpr int NUM_STREAMS = NUM_SEND_STREAMS + NUM_RECV_STREAMS;
+constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -9322,6 +9323,12 @@ public:
                     auto res = MPIX_Stream_isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag + send_dep, manager->stream_comm, src_stream_idx, dst_stream_idx, &r[send_request_idx]);
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
+
+                    for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
+                        manager->m[src_stream_idx].lock();
+                        MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                        manager->m[src_stream_idx].unlock();
+                    }
                     /*
                     manager->m[dst_stream_idx].lock();
                     auto res = MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->comms[dst_stream_idx], &r[send_request_idx]);
@@ -9388,8 +9395,7 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
-                    constexpr int num_iter = 10;
-                    for (int i = 0; i < num_iter; i++) {
+                    for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
                         manager->m[src_stream_idx].lock();
                         MPIX_Stream_progress(manager->streams[src_stream_idx]);
                         manager->m[src_stream_idx].unlock();
