@@ -3271,7 +3271,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream(int starting_timestep, int 
             // check for work to do
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 auto& claimed = zoid_unpack_claimed[j];
-                if (!claimed.test() && !claimed.test_and_set()) {
+                if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
                     auto& zoid = my_queues[dep][j];
                     run_stencil_md_many_cuts_unpack_self_wrapper<curr_dt>(starting_timestep, dep, zoid,
                         test_f, test_x, test_v,
@@ -3318,6 +3318,13 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             zoid_claimed[zoid_num].clear();
         }
         dep_claimed[dep].clear();
+    }
+
+    std::vector<std::vector<std::atomic_flag>> zoid_unpack_claimed(NUM_DEPS);
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < my_queues[dep].size(); j++) {
+            zoid_unpack_claimed[dep][j].clear();
+        }
     }
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -3375,16 +3382,12 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         zoid_claimed, dep_claimed, stream_manager);
                 }
             } else {
-                std::vector<std::atomic_flag> zoid_unpack_claimed(my_queues[dep].size());
-                for (int j = 0; j < my_queues[dep].size(); j++) {
-                    zoid_unpack_claimed[j].clear();
-                }
                 for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                     cilk_spawn run_stencil_md_many_cuts_process_stream<curr_dt>(starting_timestep, dep, stream_num,
                         test_f, test_x, test_v,
                         zoid_recv_neighbor_counters, dep_counters,
                         send_r_zoid_to_zoid, send_r_proc_to_proc, 
-                        recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_claimed);
+                        recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_claimed[dep]);
                 }
 
                 /*
