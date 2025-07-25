@@ -3213,7 +3213,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             }
         }
 
-        /*
         if (dep < NUM_DEPS - 1) {
             cilk_spawn [this](MPIX_Stream_Manager* manager, std::vector<std::atomic<int>>& recv_neighbor_counters, int dep) {
                 while (true) {
@@ -3243,7 +3242,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 }
             }(stream_manager, zoid_recv_neighbor_counters, dep + 1);
         }
-        */
 
         // cilk_scope {
             if (dep == 0) {
