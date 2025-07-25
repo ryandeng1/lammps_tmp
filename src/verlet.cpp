@@ -3327,7 +3327,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
             auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
             int nrecv = zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size();
-            if (stream_num < NUM_SEND_STREAMS || nrecv > 0) {
+            if (stream_num >= NUM_RECV_STREAMS || nrecv > 0) {
                 dep_to_active_streams[dep].push_back(stream_num);
             }
         }
