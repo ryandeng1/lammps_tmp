@@ -3376,6 +3376,9 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 }
             } else {
                 std::vector<std::atomic_flag> zoid_unpack_claimed(my_queues[dep].size());
+                for (int j = 0; j < my_queues[dep].size(); j++) {
+                    zoid_unpack_claimed[j].clear();
+                }
                 for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                     cilk_spawn run_stencil_md_many_cuts_process_stream<curr_dt>(starting_timestep, dep, stream_num,
                         test_f, test_x, test_v,
