@@ -5256,8 +5256,8 @@ public:
     // basically create_neighbor_list_sw but half neighbor list
     template <bool newton>
     void CREATE_NEIGHBOR_LIST_HELPER_EAM(queue_info& zoid, std::vector<int>* neighbor_lst, bool print=false) {
-        constexpr int target_tag = 186751;
-        constexpr int target_tag2 = 186751;
+        constexpr int target_tag = 181712;
+        constexpr int target_tag2 = 186753;
 
         // This is a half neighbor list as LAMMPS uses half neighbor lists for EAM
         std::unordered_map<int, int> zoid_tag_to_idx;
@@ -5288,16 +5288,16 @@ public:
                 std::set<int> neigh_set;
                 neigh_set.insert(neighbor_lst[tag].begin(), neighbor_lst[tag].end());
 
-                if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
-                    std::stringstream s1;
-                    s1 << BOLDCYAN << "FOUND TAG MAIN LOCAL LOOP. zoid: " << zoid.num << " tag: " << tag
-                    << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
-                    << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
-                    << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
-                    << " needs neighbor? " << atom_needs_neighbors
-                    << RESET_COLOR << std::endl;
-                    std::cout << s1.str();
-                }
+                // if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
+                //     std::stringstream s1;
+                //     s1 << BOLDCYAN << "FOUND TAG MAIN LOCAL LOOP. zoid: " << zoid.num << " tag: " << tag
+                //     << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
+                //     << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
+                //     << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
+                //     << " needs neighbor? " << atom_needs_neighbors
+                //     << RESET_COLOR << std::endl;
+                //     std::cout << s1.str();
+                // }
 
                 if (!atom_needs_neighbors) {
                     continue;
@@ -5318,21 +5318,21 @@ public:
                     std::array<double, 3> neigh_pos = {x[neigh_idx].x, x[neigh_idx].y, x[neigh_idx].z};
                     auto [neigh_needs_neighbors, dist_to_boundary] = MANY_BODY_CHECK_IF_ATOM_NEEDS_NEIGHBOR(zoid, zoid.lo[t], zoid.hi[t], neigh_pos);
 
-                    if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
-                        std::stringstream s1;
-                        s1 << BOLDCYAN << "FOUND TAG MAIN LOCAL LOOP. zoid: " << zoid.num << " tag: " << tag << " " << neigh_tag
-                        << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
-                        << " pos: " << neigh_pos[0] << " " << neigh_pos[1] << " " << neigh_pos[2]
-                        << " needs neighbor? " << atom_needs_neighbors
-                        << " neigh local? " << neigh_local
-                        << " neigh needs neighbors? " << neigh_needs_neighbors
-                        << RESET_COLOR << std::endl;
-                        std::cout << s1.str();
-                    }
-
-                    // if (!neigh_needs_neighbors) {
-                    //     continue;
+                    // if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
+                    //     std::stringstream s1;
+                    //     s1 << BOLDCYAN << "FOUND TAG MAIN LOCAL LOOP. zoid: " << zoid.num << " tag: " << tag << " " << neigh_tag
+                    //     << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
+                    //     << " pos: " << neigh_pos[0] << " " << neigh_pos[1] << " " << neigh_pos[2]
+                    //     << " needs neighbor? " << atom_needs_neighbors
+                    //     << " neigh local? " << neigh_local
+                    //     << " neigh needs neighbors? " << neigh_needs_neighbors
+                    //     << RESET_COLOR << std::endl;
+                    //     std::cout << s1.str();
                     // }
+
+                    if (!neigh_needs_neighbors) {
+                        continue;
+                    }
 
                     // half neighbor list so tiebreak local-local pairs
                     if (neigh_local && neigh_needs_neighbors) {
@@ -5406,16 +5406,16 @@ public:
 
                 auto [atom_needs_neighbors, dist_to_boundary] = MANY_BODY_CHECK_IF_ATOM_NEEDS_NEIGHBOR(zoid, zoid.lo[t], zoid.hi[t], atom_pos);
 
-                if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
-                    std::stringstream s1;
-                    s1 << BOLDYELLOW << "ONE HOP GHOST FOUND IDX. zoid: " << zoid.num << " tag: " << tag
-                    << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
-                    << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
-                    << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
-                    << " needs neighbor? " << atom_needs_neighbors
-                    << RESET_COLOR << std::endl;
-                    std::cout << s1.str();
-                }
+                // if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
+                //     std::stringstream s1;
+                //     s1 << BOLDYELLOW << "ONE HOP GHOST FOUND IDX. zoid: " << zoid.num << " tag: " << tag
+                //     << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
+                //     << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
+                //     << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
+                //     << " needs neighbor? " << atom_needs_neighbors
+                //     << RESET_COLOR << std::endl;
+                //     std::cout << s1.str();
+                // }
 
                 if (!atom_needs_neighbors) {
                     continue;
@@ -5431,31 +5431,36 @@ public:
                     int neigh_local = (local_idxs_set.find(neigh_idx) != local_idxs_set.end());
                     std::array<double, 3> neigh_pos = {x[neigh_idx].x, x[neigh_idx].y, x[neigh_idx].z};
                     auto [neigh_needs_neighbors, dist_to_boundary] = MANY_BODY_CHECK_IF_ATOM_NEEDS_NEIGHBOR(zoid, zoid.lo[t], zoid.hi[t], neigh_pos);
+                    bool is_neigh_one_hop_ghost = (one_hop_ghost_neigh_idxs.find(neigh_idx) != one_hop_ghost_neigh_idxs.end());
 
-                    if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
-                        std::stringstream s1;
-                        s1 << BOLDYELLOW << "ONE HOP GHOST NEIGHBOR. zoid: " << zoid.num << " tag: " << tag << " " << neigh_tag
-                        << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
-                        << " pos: " << neigh_pos[0] << " " << neigh_pos[1] << " " << neigh_pos[2]
-                        << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
-                        << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
-                        << " atom needs neighbor? " << atom_needs_neighbors
-                        << " neigh local? " << neigh_local
-                        << " neigh needs neighbor? " << neigh_needs_neighbors
-                        << " is one hop ghost? " << (one_hop_ghost_neigh_idxs.find(neigh_idx) != one_hop_ghost_neigh_idxs.end())
-                        << RESET_COLOR << std::endl;
-                        std::cout << s1.str();
-                    }
+                    // if ((tag == target_tag || tag == target_tag2) && t == 0 && print) {
+                    //     std::stringstream s1;
+                    //     s1 << BOLDYELLOW << "ONE HOP GHOST NEIGHBOR. zoid: " << zoid.num << " tag: " << tag << " " << neigh_tag
+                    //     << " pos: " << atom_pos[0] << " " << atom_pos[1] << " " << atom_pos[2]
+                    //     << " pos: " << neigh_pos[0] << " " << neigh_pos[1] << " " << neigh_pos[2]
+                    //     << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
+                    //     << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
+                    //     << " atom needs neighbor? " << atom_needs_neighbors
+                    //     << " neigh local? " << neigh_local
+                    //     << " neigh needs neighbor? " << neigh_needs_neighbors
+                    //     << " is one hop ghost? " << (one_hop_ghost_neigh_idxs.find(neigh_idx) != one_hop_ghost_neigh_idxs.end())
+                    //     << RESET_COLOR << std::endl;
+                    //     std::cout << s1.str();
+                    // }
 
                     // I am a one-hop ghost. Possible cases: I am pointing to local, another one-hop ghost or a two-hop ghost.
                     // if pointing to a local, then I want to make sure that that local atom has not been evaluated yet.
 
-                    if (neigh_local && !neigh_needs_neighbors) {
+                    if (!neigh_needs_neighbors) {
+                        continue;
+                    }
+
+                    if (neigh_local && neigh_needs_neighbors) {
                         continue;
                     }
 
                     // Point to another one-hop ghost, pick one to tiebreak
-                    if (neigh_needs_neighbors && one_hop_ghost_neigh_idxs.find(neigh_idx) != one_hop_ghost_neigh_idxs.end()) {
+                    if (neigh_needs_neighbors && is_neigh_one_hop_ghost) {
                         if (x[neigh_idx].z < ztmp) continue;
                         if (x[neigh_idx].z == ztmp) {
                             if (x[neigh_idx].y < ytmp) continue;
@@ -5463,23 +5468,6 @@ public:
                         }
                     } 
 
-                    /*
-                    // local atom should have atom the local --> ghost edge
-                    if (neigh_local && neigh_needs_neighbors) {
-                        continue;
-                    }
-
-                    // This means this atom is close to the boundary, do tiebreaking
-                    if (neigh_needs_neighbors && one_hop_ghost_neigh_idxs.find(neigh_idx) != one_hop_ghost_neigh_idxs.end()) {
-                        // both neighbors are ghost atoms, pick one to tiebreak
-                        if (x[neigh_idx].z < ztmp) continue;
-                        if (x[neigh_idx].z == ztmp) {
-                            if (x[neigh_idx].y < ytmp) continue;
-                            if (x[neigh_idx].y == ytmp && x[neigh_idx].x < xtmp) continue;
-                        }
-                    }
-                    */
-                    
                     double delx = xtmp - x[neigh_idx].x;
                     double dely = ytmp - x[neigh_idx].y;
                     double delz = ztmp - x[neigh_idx].z;
@@ -5577,7 +5565,7 @@ public:
                     continue;
                 }
 
-                if constexpr (EXPERIMENT == SW) {
+                if constexpr (EXPERIMENT == SW || EXPERIMENT == TERSOFF) {
                     CREATE_NEIGHBOR_LIST_HELPER_SW<newton>(zoid, neighbor_lst);
                 } else if constexpr (EXPERIMENT == EAM) {
                     CREATE_NEIGHBOR_LIST_HELPER_EAM<newton>(zoid, neighbor_lst, true);
@@ -5594,7 +5582,7 @@ public:
                     continue;
                 }
 
-                if constexpr (EXPERIMENT == SW) {
+                if constexpr (EXPERIMENT == SW || EXPERIMENT == TERSOFF) {
                     CREATE_NEIGHBOR_LIST_HELPER_SW<newton>(zoid, neighbor_lst);
                 } else if constexpr (EXPERIMENT == EAM) {
                     CREATE_NEIGHBOR_LIST_HELPER_EAM<newton>(zoid, neighbor_lst);
@@ -12782,7 +12770,7 @@ public:
 
         // memset(rho, 0, sizeof(double) * zoid.rho_stencil_md[0].size());
 
-        constexpr int target_tag = 186751;
+        constexpr int target_tag = 186753;
         
         // set rho to 0??
         for (int ii = 0; ii < nlocal_and_ghost; ii++) {
@@ -12820,6 +12808,16 @@ public:
                         auto coeff = rhor_spline[type2rhor[itype][jtype]][m];
                         rho[j] += ((coeff[3]*p + coeff[4])*p + coeff[5])*p + coeff[6];
                     }
+
+                    // if (tags[i] == target_tag || tags[j] == target_tag) {
+                    //     std::stringstream s1;
+                    //     s1 << BOLDMAGENTA << "STENCILMD FOUND RHO. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]
+                    //     << " pos: " << x[i].x << " " << x[i].y << " " << x[i].z << " pos: " << x[j].x << " " << x[j].y << " " << x[j].z
+                    //     << " lo: " << zoid.lo[0][0] << " " << zoid.lo[0][1] << " " << zoid.lo[0][2]
+                    //     << " hi: " << zoid.hi[0][0] << " " << zoid.hi[0][1] << " " << zoid.hi[0][2]
+                    //     << RESET_COLOR << std::endl;
+                    //     std::cout << s1.str();
+                    // }
                 }
             }
         }
@@ -12914,17 +12912,17 @@ public:
                     f[j].z -= delz * fpair;
                     spinlocks[j].unlock();
 
-                    if (tags[i] == target_tag || tags[j] == target_tag) {
-                        std::stringstream s1;
-                        s1 << BOLDGREEN << "STENCILMD FOUND. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]
-                        << " pos: " << x[i].x << " " << x[i].y << " " << x[i].z << " pos: " << x[j].x << " " << x[j].y << " " << x[j].z
-                        << " rho: " << rho[i] << " " << rho[j]
-                        << " fp: " << fp[i] << " " << fp[j]
-                        << " lo: " << zoid.lo[0][0] << " " << zoid.lo[0][1] << " " << zoid.lo[0][2]
-                        << " hi: " << zoid.hi[0][0] << " " << zoid.hi[0][1] << " " << zoid.hi[0][2]
-                        << RESET_COLOR << std::endl;
-                        std::cout << s1.str();
-                    }
+                    // if (tags[i] == target_tag || tags[j] == target_tag) {
+                    //     std::stringstream s1;
+                    //     s1 << BOLDGREEN << "STENCILMD FOUND. zoid: " << zoid.num << " tags: " << tags[i] << " " << tags[j]
+                    //     << " pos: " << x[i].x << " " << x[i].y << " " << x[i].z << " pos: " << x[j].x << " " << x[j].y << " " << x[j].z
+                    //     << " rho: " << rho[i] << " " << rho[j]
+                    //     << " fp: " << fp[i] << " " << fp[j]
+                    //     << " lo: " << zoid.lo[0][0] << " " << zoid.lo[0][1] << " " << zoid.lo[0][2]
+                    //     << " hi: " << zoid.hi[0][0] << " " << zoid.hi[0][1] << " " << zoid.hi[0][2]
+                    //     << RESET_COLOR << std::endl;
+                    //     std::cout << s1.str();
+                    // }
 
                     // if (eflag) evdwl = scale[itype][jtype]*phi;
                     // if (evflag) ev_tally(i,j,nlocal,newton_pair,evdwl,0.0,fpair,delx,dely,delz);
@@ -12937,6 +12935,18 @@ public:
             f[i].z += fztmp;
             spinlocks[i].unlock();
         }
+
+        // for (int ii = 0; ii < nlocal_and_ghost; ii++) {
+        //     int i = local_and_ghost_idxs[ii];
+        //     if (tags[i] == target_tag) {
+        //         std::stringstream s1;
+        //         s1 << BOLDYELLOW << "FOUND TAG LOOK AT FORCE: " << tags[i] << " in zoid: " << zoid.num
+        //         << " rho: " << rho[i] << " fp: " << fp[i]
+        //         << " force: " << f[i].x << " " << f[i].y << " " << f[i].z
+        //         << RESET_COLOR << std::endl;
+        //         std::cout << s1.str();
+        //     }
+        // }
     }
 
 
