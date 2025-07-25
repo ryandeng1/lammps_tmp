@@ -3281,6 +3281,11 @@ void Verlet::run_stencil_md_many_cuts_process_stream(int starting_timestep, int 
                 }
             }
         }
+
+        if (dep < NUM_DEPS - 1) {
+            stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE,
+                recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
+        }
     }
 }
 
