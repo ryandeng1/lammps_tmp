@@ -3350,11 +3350,14 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         break;
                     }
 
-                    for (int i = 0; i < manager->num_streams; i++) {
-                        if (manager->m[i].try_lock()) {
-                            MPIX_Stream_progress(manager->streams[i]);
-                            manager->m[i].unlock();
+                    if (manager->global_lock.try_lock()) {
+                        for (int i = 0; i < manager->num_streams; i++) {
+                            if (manager->m[i].try_lock()) {
+                                MPIX_Stream_progress(manager->streams[i]);
+                                manager->m[i].unlock();
+                            }
                         }
+                        manager->global_lock.unlock();
                     }
 
                     // std::this_thread::sleep_for(std::chrono::nanoseconds(1));
@@ -3516,14 +3519,14 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
     for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
         for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
-            // stream_manager->global_lock.lock();
+            stream_manager->global_lock.lock();
             MPI_Waitall(send_r_zoid_to_zoid[zoid_num].size(), send_r_zoid_to_zoid[zoid_num].data(), MPI_STATUSES_IGNORE);
-            // stream_manager->global_lock.unlock();
+            stream_manager->global_lock.unlock();
         }
         if (dep < 2) {
-            // stream_manager->global_lock.lock();
+            stream_manager->global_lock.lock();
             MPI_Waitall(send_r_proc_to_proc[dep].size(), send_r_proc_to_proc[dep].data(), MPI_STATUSES_IGNORE);
-            // stream_manager->global_lock.unlock();
+            stream_manager->global_lock.unlock();
         }
     }
 }
