@@ -3274,7 +3274,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream(int starting_timestep, int 
                 auto& claimed = zoid_unpack_claimed[zoid_num];
                 if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
                     auto& zoid = my_queues[dep][j];
-                    run_stencil_md_many_cuts_unpack_self_wrapper<curr_dt>(starting_timestep, dep, zoid,
+                    cilk_spawn run_stencil_md_many_cuts_unpack_self_wrapper<curr_dt>(starting_timestep, dep, zoid,
                         test_f, test_x, test_v,
                         zoid_recv_neighbor_counters, dep_counters,
                         send_r_zoid_to_zoid, send_r_proc_to_proc,
