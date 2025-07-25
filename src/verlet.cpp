@@ -3322,6 +3322,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
     std::vector<std::vector<std::atomic_flag>> zoid_unpack_claimed(NUM_DEPS);
     for (int dep = 0; dep < NUM_DEPS; dep++) {
+        zoid_unpack_claimed[dep].resize(my_queues[dep].size());
         for (int j = 0; j < my_queues[dep].size(); j++) {
             zoid_unpack_claimed[dep][j].clear();
         }
