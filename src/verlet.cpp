@@ -3270,7 +3270,8 @@ void Verlet::run_stencil_md_many_cuts_process_stream(int starting_timestep, int 
 
             // check for work to do
             for (int j = 0; j < my_queues[dep].size(); j++) {
-                auto& claimed = zoid_unpack_claimed[j];
+                int zoid_num = my_queues[dep][j].num;
+                auto& claimed = zoid_unpack_claimed[zoid_num];
                 if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
                     auto& zoid = my_queues[dep][j];
                     run_stencil_md_many_cuts_unpack_self_wrapper<curr_dt>(starting_timestep, dep, zoid,
@@ -3320,13 +3321,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
         dep_claimed[dep].clear();
     }
 
-    std::vector<std::vector<std::atomic_flag>> zoid_unpack_claimed(NUM_DEPS);
-    for (int dep = 0; dep < NUM_DEPS; dep++) {
-        zoid_unpack_claimed[dep].resize(my_queues[dep].size());
-        for (int j = 0; j < my_queues[dep].size(); j++) {
-            zoid_unpack_claimed[dep][j].clear();
-        }
-    }
+    std::vector<std::atomic_flag> zoid_unpack_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep == 0) {
@@ -3388,7 +3383,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                         test_f, test_x, test_v,
                         zoid_recv_neighbor_counters, dep_counters,
                         send_r_zoid_to_zoid, send_r_proc_to_proc, 
-                        recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_claimed[dep]);
+                        recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_claimed);
                 }
 
                 /*
