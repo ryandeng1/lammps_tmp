@@ -13426,12 +13426,12 @@ public:
         // auto* spinlocks = next->spinlocks;
         auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
 
-        const auto* cutsq = pair->cutsq;
-        const auto* offset = pair->offset;
-        const auto* lj1 = pair->lj1;
-        const auto* lj2 = pair->lj2;
-        const auto* lj3 = pair->lj3;
-        const auto* lj4 = pair->lj4;
+        const auto* _noalias cutsq = pair->cutsq;
+        const auto* _noalias offset = pair->offset;
+        const auto* _noalias lj1 = pair->lj1;
+        const auto* _noalias lj2 = pair->lj2;
+        const auto* _noalias lj3 = pair->lj3;
+        const auto* _noalias lj4 = pair->lj4;
         // auto newton_pair = force->newton_pair;
         constexpr bool NEWTON_PAIR = true;
 
@@ -13449,7 +13449,7 @@ public:
         int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
         int num_workers = __cilkrts_get_nworkers();
 
-        auto* claimed = zoid.claimed_flags_stencil_md[0];
+        auto* _noalias claimed = zoid.claimed_flags_stencil_md[0];
 
         const auto& tags = zoid.tag_stencil_md[0];
 
@@ -13457,7 +13457,7 @@ public:
         int chunk_size = MODIFY_GRAINSIZE;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > 4096) {
+        if (1 || nlocal > 4096) {
             /*
             auto& segment_idxs = zoid.local_idxs_per_timestep_segment_idxs[timestep];
             auto& segment_sizes = zoid.local_idxs_per_timestep_segment_sizes[timestep];
@@ -13556,7 +13556,7 @@ public:
                 double fztmp = 0.0;
 
                 for (int jj = 0; jj < jnum; jj++) {
-                    double evdwl = 0.0;
+                    // double evdwl = 0.0;
                     // int j = jlist[jj];
                     int j = jlist[jj];
                     double factor_lj = special_lj[pair->sbmask(j)];
