@@ -3281,8 +3281,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream(int starting_timestep, int 
                         zoid_claimed, dep_claimed, stream_manager);
                 }
             }
-
-            std::this_thread::sleep_for(std::chrono::nanoseconds(1));
         }
 
         if (dep < NUM_DEPS - 1) {
