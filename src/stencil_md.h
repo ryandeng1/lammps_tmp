@@ -53,8 +53,8 @@
 
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
-constexpr int NUM_RECV_STREAMS = 16;
-constexpr int NUM_SEND_STREAMS = 8;
+constexpr int NUM_RECV_STREAMS = 18;
+constexpr int NUM_SEND_STREAMS = 6;
 constexpr int NUM_STREAMS = NUM_SEND_STREAMS + NUM_RECV_STREAMS;
 constexpr int NUM_PROGRESS_STREAM_ITER = 25;
 
