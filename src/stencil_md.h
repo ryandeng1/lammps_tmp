@@ -13457,7 +13457,7 @@ public:
         int chunk_size = MODIFY_GRAINSIZE;
 
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (1 || nlocal > 4096) {
+        if (nlocal > 1024) {
             /*
             auto& segment_idxs = zoid.local_idxs_per_timestep_segment_idxs[timestep];
             auto& segment_sizes = zoid.local_idxs_per_timestep_segment_sizes[timestep];
@@ -13661,7 +13661,7 @@ public:
         auto& bond_list = zoid.bond_list_modified[timestep];
         int nbonds = bond_list.size();
 
-        if (nbonds > 4096) {
+        if (nbonds > 1024) {
             #pragma cilk grainsize 1024
             cilk_for (int i = 0; i < nbonds; i++) {
                 auto& tup = bond_list[i];
