@@ -3281,6 +3281,8 @@ void Verlet::run_stencil_md_many_cuts_process_stream(int starting_timestep, int 
                         zoid_claimed, dep_claimed, stream_manager);
                 }
             }
+
+            std::this_thread::sleep_for(std::chrono::nanoseconds(1));
         }
 
         if (dep < NUM_DEPS - 1) {
@@ -3368,7 +3370,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     if (manager->global_lock.try_lock()) {
                         // for (int i = 0; i < manager->num_streams; i++) {
                         // for (auto& active_stream_num : active_streams) {
-                        cilk_for (int i = 0; i < active_streams.size(); i++) {
+                        for (int i = 0; i < active_streams.size(); i++) {
                             int active_stream_num = active_streams[i];
                             if (manager->m[active_stream_num].try_lock()) {
                                 MPIX_Stream_progress(manager->streams[active_stream_num]);
