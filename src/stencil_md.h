@@ -3654,6 +3654,13 @@ public:
                     }
 
                     assert(best_stream != -1);
+                    if (best_stream == -1) {
+                        std::stringstream s1;
+                        s1 << BOLDRED << "ERROR me: " << comm->me << " dep: " << dep << " proc: " << proc
+                        << " size: " << zoid_to_zoid_per_proc_recv[proc].size() << RESET_COLOR << std::endl;
+                        std::cout << s1.str();
+                        MPI_Abort(world, 0);
+                    }
                     zoid_to_zoid_to_recv_stream_num[pair] = best_stream;
                     stream_loads[best_stream]++;
                     proc_pair_to_streams[proc_pair].insert(best_stream);
@@ -3677,6 +3684,13 @@ public:
                             }
                         }
                         assert(best_stream != -1);
+                        if (best_stream == -1) {
+                            std::stringstream s1;
+                            s1 << BOLDRED << "ERROR me: " << comm->me << " dep: " << dep << " proc: " << proc
+                            << " size: " << zoid_to_zoid_per_proc_recv[proc].size() << RESET_COLOR << std::endl;
+                            std::cout << s1.str();
+                            MPI_Abort(world, 0);
+                        }
                         send_dep_proc_to_recv_dep_proc_recv_stream_num[tup] = best_stream;
                         stream_loads[best_stream]++;
                         proc_pair_to_streams[proc_pair].insert(best_stream);
