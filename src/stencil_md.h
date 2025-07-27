@@ -3543,10 +3543,10 @@ public:
         std::map<std::tuple<int, int, int>, int> send_dep_proc_to_recv_proc_send_stream_num;
         std::map<std::tuple<int, int, int, int>, int> send_dep_proc_to_recv_dep_proc_recv_stream_num;
 
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_send(comm->nprocs);
-            std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_recv(comm->nprocs);
+        std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_send(comm->nprocs);
+        std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_recv(comm->nprocs);
 
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 auto& zoid  = my_queues[dep][j];
                 auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] : send_to_neighbors_many_cuts_next_dt[zoid.num];
