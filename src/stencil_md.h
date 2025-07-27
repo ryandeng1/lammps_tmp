@@ -53,10 +53,10 @@
 
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
-constexpr int NUM_RECV_STREAMS = 12;
-constexpr int NUM_SEND_STREAMS = 4;
+constexpr int NUM_RECV_STREAMS = 16;
+constexpr int NUM_SEND_STREAMS = 8;
 constexpr int NUM_STREAMS = NUM_SEND_STREAMS + NUM_RECV_STREAMS;
-constexpr int NUM_PROGRESS_STREAM_ITER = 10;
+constexpr int NUM_PROGRESS_STREAM_ITER = 25;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -1064,8 +1064,8 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 4;
-    static constexpr int NUM_CUTS_Y = 4;
+    static constexpr int NUM_CUTS_X = 6;
+    static constexpr int NUM_CUTS_Y = 6;
     static constexpr int NUM_CUTS_Z = 4;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
