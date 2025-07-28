@@ -3526,9 +3526,9 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
             }
             */
 
-            stream_manager->m[stream_num].lock();
-            MPIX_Stream_progress(stream_manager->streams[stream_num]);
-            stream_manager->m[stream_num].unlock();
+            // stream_manager->m[stream_num].lock();
+            // MPIX_Stream_progress(stream_manager->streams[stream_num]);
+            // stream_manager->m[stream_num].unlock();
 
             for (int d = dep; d < NUM_DEPS; d++) {
                 for (int j = 0; j < my_queues[d].size(); j++) {
@@ -3584,9 +3584,13 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
             }
             num_iter++;
 
-            stream_manager->m[stream_num].lock();
-            MPIX_Stream_progress(stream_manager->streams[stream_num]);
-            stream_manager->m[stream_num].unlock();
+            // stream_manager->m[stream_num].lock();
+            // MPIX_Stream_progress(stream_manager->streams[stream_num]);
+            // stream_manager->m[stream_num].unlock();
+            if (stream_manager->m[stream_num].try_lock()) {
+                MPIX_Stream_progress(stream_manager->streams[stream_num]);
+                stream_manager->m[stream_num].unlock();
+            }
         }
 
         if (dep < NUM_DEPS - 1) {
