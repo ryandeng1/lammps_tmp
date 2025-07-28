@@ -175,6 +175,34 @@ class Verlet : public Integrate {
 
   void run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                           std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
+  template <bool curr_dt>
+  void unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_timestep, int dep,
+                                        queue_info& zoid, int recv_zoid_num, int find_idx,
+                                        int proc, int send_dep,
+                                        int start_timestep, int end_timestep, int pipeline_stage,
+                                        std::vector<std::atomic<int>>& zoid_recv_neighbor_counters,
+                                        std::vector<std::atomic<int>>& dep_counters,
+                                        std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
+                                        std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+                                        double** test_f, double** test_x, double** test_v,
+                                        std::vector<std::atomic_flag>& zoid_claimed,
+                                        std::vector<std::atomic_flag>& dep_claimed,
+                                        MPIX_Stream_Manager* request_manager, 
+                                        std::vector<std::atomic<bool>>& zoid_done);
+
+  template <bool curr_dt>
+  void unpack_data_proc_to_proc_better_work_queue(int starting_timestep, int dep,
+                                int proc, int send_dep,
+                                int start_timestep, int end_timestep, int pipeline_stage,
+                                std::vector<std::atomic<int>>& zoid_recv_neighbor_counters,
+                                std::vector<std::atomic<int>>& dep_counters,
+                                std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
+                                std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+                                double** test_f, double** test_x, double** test_v,
+                                std::vector<std::atomic_flag>& zoid_claimed,
+                                std::vector<std::atomic_flag>& dep_claimed,
+                                MPIX_Stream_Manager* request_manager, 
+                                std::vector<std::atomic<bool>>& zoid_done);
 
   template <bool curr_dt>
   void unpack_data_proc_to_proc_wrapper(int starting_timestep, int dep,

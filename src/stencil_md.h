@@ -11407,7 +11407,7 @@ public:
 
             if (recv_zoid_num % comm->nprocs == comm->me && unpack_self_force) {
                 auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num] : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
-                auto &send_neighbors = send_to_neighbors_many_cuts[recv_zoid_num];
+                auto &send_neighbors = curr_dt ? send_to_neighbors_many_cuts[recv_zoid_num] : send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
                 auto find_it = std::find(send_neighbors.begin(), send_neighbors.end(), zoid_num);
                 assert(find_it != send_neighbors.end());
                 int send_idx = std::distance(send_neighbors.begin(), find_it);
