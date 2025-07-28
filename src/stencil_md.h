@@ -9410,9 +9410,10 @@ public:
                     assert(res == MPI_SUCCESS);
 
                     for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
-                        manager->m[src_stream_idx].lock();
-                        MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                        manager->m[src_stream_idx].unlock();
+                        if (manager->m[src_stream_idx].try_lock()) {
+                            MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                            manager->m[src_stream_idx].unlock();
+                        }
                     }
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
