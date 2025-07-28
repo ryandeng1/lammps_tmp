@@ -2684,18 +2684,13 @@ void Verlet::stencil_md_run_zoid_wrapper_better_work_queue(int starting_timestep
                                     MPIX_Stream_Manager* stream_manager,
                                     std::vector<std::atomic<bool>>& zoid_done) noexcept {
 
-    if (zoid_done[zoid.num].load(std::memory_order_relaxed)) {
-        assert(false);
-        return;
-    }
-
     if (dep > 0) {
         stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, true);
     }
 
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_timestep - 1, end_timestep - 1,
                                         test_f, test_x, test_v);
-    zoid_done[zoid.num] = true;
+    zoid_done[zoid.num].store(true, std::memory_order_relaxed);
     
     stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
 
@@ -3491,7 +3486,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                     auto& recv_neighbors = curr_dt ? stencilMD->recv_from_neighbors_many_cuts[zoid_num] : stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid_num];
                     for (int i = 0; i < recv_neighbors.size(); i++) {
                         int recv_zoid_num = recv_neighbors[i];
-                        if (recv_zoid_num % comm->nprocs == comm->me && zoid_done[recv_zoid_num]) {
+                        if (recv_zoid_num % comm->nprocs == comm->me && zoid_done[recv_zoid_num].load(std::memory_order_relaxed)) {
                             auto& zoid_unpack_self_claimed_flag = zoid_unpack_self_claimed[zoid.num][i];
                             // unpack
                             if (!zoid_unpack_self_claimed_flag.test(std::memory_order_relaxed) && !zoid_unpack_self_claimed_flag.test_and_set(std::memory_order_relaxed)) {
@@ -3595,7 +3590,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 auto& zoid = my_queues[dep][j];
-                zoid_done[zoid.num] = false;
+                zoid_done[zoid.num].store(false, std::memory_order_relaxed);
 
                 int num_recv_neighbors = std::max(stencilMD->recv_from_neighbors_many_cuts[zoid.num].size(), stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid.num].size());
                 for (int i = 0; i < num_recv_neighbors; i++) {
