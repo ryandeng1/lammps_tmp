@@ -3546,10 +3546,10 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
             for (int j = 0; j < my_queues[0].size(); j++) {
                 auto& zoid = my_queues[0][j];
-                cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, 0, zoid, default_start_t, default_end_t,
+                cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, 0, zoid, default_start_t, default_end_t,
                     zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
                     test_f, test_x, test_v, 
-                    zoid_claimed, dep_claimed, stream_manager);
+                    zoid_claimed, dep_claimed, stream_manager, zoid_done);
             }
 
             for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
