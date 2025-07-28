@@ -3495,23 +3495,42 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                             auto& zoid_unpack_self_claimed_flag = zoid_unpack_self_claimed[zoid.num][i];
                             // unpack
                             if (!zoid_unpack_self_claimed_flag.test(std::memory_order_relaxed) && !zoid_unpack_self_claimed_flag.test_and_set(std::memory_order_relaxed)) {
-                                auto &send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[recv_zoid_num]
-                                                            : stencilMD->send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
-                                auto find_it = std::find(send_neighbors.begin(), send_neighbors.end(), zoid_num);
-                                assert(find_it != send_neighbors.end());
-                                int find_idx = std::distance(send_neighbors.begin(), find_it);
-                                // DO NOT unpack force
-                                stencilMD->UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(zoid, i, recv_zoid_num, find_idx, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE, false);
-                                zoid_recv_neighbor_counters[zoid.num]--;
-                                auto& claimed = zoid_claimed[zoid.num];
-                                if (zoid_recv_neighbor_counters[zoid.num] == 0) {
-                                    if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
-                                        cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, d, zoid, default_start_t, default_end_t,
-                                            zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                                            test_f, test_x, test_v, 
-                                            zoid_claimed, dep_claimed, stream_manager, zoid_done);
+                                cilk_spawn [this](int starting_timestep, int dep, queue_info& zoid, int recv_zoid_num, int recv_idx,
+                                    double** test_f, double** test_x, double** test_v,
+                                    std::vector<std::atomic<int>>& zoid_recv_neighbor_counters,
+                                    std::vector<std::atomic<int>>& dep_counters,
+                                    std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
+                                    std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+                                    std::vector<std::atomic_flag>& zoid_claimed,
+                                    std::vector<std::atomic_flag>& dep_claimed,
+                                    MPIX_Stream_Manager* stream_manager,
+                                    std::vector<std::atomic_flag*>& zoid_unpack_self_claimed,
+                                    std::vector<std::atomic<bool>>& zoid_done) {
+
+                                    int zoid_num = zoid.num;
+                                    auto &send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[recv_zoid_num]
+                                                                : stencilMD->send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
+                                    auto find_it = std::find(send_neighbors.begin(), send_neighbors.end(), zoid_num);
+                                    assert(find_it != send_neighbors.end());
+                                    int find_idx = std::distance(send_neighbors.begin(), find_it);
+                                    // DO NOT unpack force
+                                    stencilMD->UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(zoid, recv_idx, recv_zoid_num, find_idx, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE, false);
+                                    zoid_recv_neighbor_counters[zoid.num]--;
+                                    auto& claimed = zoid_claimed[zoid.num];
+                                    if (zoid_recv_neighbor_counters[zoid.num] == 0) {
+                                        if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
+                                            stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
+                                                zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
+                                                test_f, test_x, test_v, 
+                                                zoid_claimed, dep_claimed, stream_manager, zoid_done);
+                                        }
                                     }
-                                }
+                                }(starting_timestep, d, zoid, recv_zoid_num, i,
+                                test_f, test_x, test_v,
+                                zoid_recv_neighbor_counters, dep_counters,
+                                send_r_zoid_to_zoid, send_r_proc_to_proc,
+                                zoid_claimed, dep_claimed,
+                                stream_manager, zoid_unpack_self_claimed, zoid_done);
                             }
                         }
                     }
