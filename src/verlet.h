@@ -171,7 +171,7 @@ class Verlet : public Integrate {
                                                                     std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
 
   void run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v,
-                                std::vector<std::atomic_flag>& claimed);
+                                std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag*>& zoid_unpack_self_claimed);
 
   void run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                           std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2);
@@ -212,6 +212,7 @@ class Verlet : public Integrate {
     std::vector<std::vector<MPI_Request>>& recv_r_proc_to_proc,
     std::vector<std::atomic_flag>& claimed);
 
+
   template <bool curr_dt>
   void stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_info& zoid,
                                     int start_timestep, int end_timestep,
@@ -221,9 +222,20 @@ class Verlet : public Integrate {
                                     double** test_f, double** test_x, double** test_v,
                                     std::vector<std::atomic_flag>& zoid_claimed,
                                     std::vector<std::atomic_flag>& dep_claimed,
-                                    MPIX_Stream_Manager* request_manager);
+                                    MPIX_Stream_Manager* request_manager) noexcept;
 
- 
+  template <bool curr_dt>
+  void stencil_md_run_zoid_wrapper_better_work_queue(int starting_timestep, int dep, queue_info& zoid,
+                                    int start_timestep, int end_timestep,
+                                    std::vector<std::atomic<int>>& zoid_recv_neighbor_counters, std::vector<std::atomic<int>>& dep_counters,
+                                    std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
+                                    std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+                                    double** test_f, double** test_x, double** test_v,
+                                    std::vector<std::atomic_flag>& zoid_claimed,
+                                    std::vector<std::atomic_flag>& dep_claimed,
+                                    MPIX_Stream_Manager* request_manager,
+                                    std::vector<std::atomic<bool>>& zoid_done) noexcept;
+
   template <bool curr_dt>
   void run_stencil_md_many_cuts_unpack_self_wrapper(int starting_timestep, int dep, queue_info& zoid,
     double** test_f, double** test_x, double** test_v,
@@ -249,6 +261,20 @@ class Verlet : public Integrate {
     std::vector<std::atomic_flag>& zoid_unpack_claimed) noexcept;
 
   template <bool curr_dt>
+  void run_stencil_md_many_cuts_process_stream_better_work_queue(int starting_timestep, int dep, int stream_num,
+    double** test_f, double** test_x, double** test_v,
+    std::vector<std::atomic<int>>& zoid_recv_neighbor_counters,
+    std::vector<std::atomic<int>>& dep_counters,
+    std::vector<std::vector<MPI_Request>>& send_r_zoid_to_zoid,
+    std::vector<std::vector<MPI_Request>>& send_r_proc_to_proc,
+    std::vector<std::vector<std::vector<MPI_Request>>>& recv_r_zoid_to_zoid_streams,
+    std::vector<std::atomic_flag>& zoid_claimed,
+    std::vector<std::atomic_flag>& dep_claimed,
+    MPIX_Stream_Manager* stream_manager,
+    std::vector<std::atomic_flag*>& zoid_unpack_self_claimed,
+    std::vector<std::atomic<bool>>& zoid_done) noexcept;
+
+  template <bool curr_dt>
   void run_stencil_md_many_cuts_proc_to_proc(int starting_timestep,
     double** test_f, double** test_x, double** test_v,
     std::vector<std::atomic<int>>& zoid_recv_neighbor_counters,
@@ -258,7 +284,9 @@ class Verlet : public Integrate {
     std::vector<std::vector<std::vector<MPI_Request>>>& recv_r_zoid_to_zoid_streams,
     std::vector<std::vector<MPI_Request>>& recv_r_proc_to_proc,
     std::vector<std::atomic_flag>& zoid_claimed,
-    std::vector<std::atomic_flag>& dep_claimed, MPIX_Stream_Manager* request_manager) noexcept;
+    std::vector<std::atomic_flag>& dep_claimed, MPIX_Stream_Manager* request_manager,
+    std::vector<std::atomic_flag*>& zoid_unpack_self_claimed
+  ) noexcept;
 
 protected:
   int triclinic;    // 0 if domain is orthog, 1 if triclinic

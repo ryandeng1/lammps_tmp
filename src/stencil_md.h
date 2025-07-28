@@ -3543,10 +3543,10 @@ public:
         std::map<std::tuple<int, int, int>, int> send_dep_proc_to_recv_proc_send_stream_num;
         std::map<std::tuple<int, int, int, int>, int> send_dep_proc_to_recv_dep_proc_recv_stream_num;
 
-        std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_send(comm->nprocs);
-        std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_recv(comm->nprocs);
-
         for (int dep = 0; dep < NUM_DEPS; dep++) {
+            std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_send(comm->nprocs);
+            std::vector<std::vector<std::pair<int, int>>> zoid_to_zoid_per_proc_recv(comm->nprocs);
+
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 auto& zoid  = my_queues[dep][j];
                 auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] : send_to_neighbors_many_cuts_next_dt[zoid.num];
@@ -10892,7 +10892,7 @@ public:
 
     template <bool curr_dt>
     void UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED(queue_info& zoid, int recv_idx, int recv_zoid_num,
-                                                     int send_idx, int start_t, int end_t, int pipeline_stage) {
+                                                     int send_idx, int start_t, int end_t, int pipeline_stage, bool unpack_force=true) {
 
         assert(recv_zoid_num % comm->nprocs == comm->me);
 
@@ -10936,24 +10936,26 @@ public:
         auto * _noalias const recv_x1_ = zoid.x_stencil_md[1].data();
         auto * _noalias const send_x1_ = recv_zoid.x_stencil_md[1].data();
 
-        #pragma cilk grainsize 2048
-        cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
-            int recv_force_idx = recv_force_idxs[i];
-            int send_force_idx = send_force_idxs[i];
+        if (unpack_force) {
+            #pragma cilk grainsize 2048
+            cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
+                int recv_force_idx = recv_force_idxs[i];
+                int send_force_idx = send_force_idxs[i];
 
-            // auto& recv_f = zoid.f_stencil_md[0][recv_force_idx];
-            // auto& send_f = recv_zoid.f_stencil_md[0][send_force_idx];
-            auto& recv_f = recv_f_[recv_force_idx];
-            auto& send_f = send_f_[send_force_idx];
+                // auto& recv_f = zoid.f_stencil_md[0][recv_force_idx];
+                // auto& send_f = recv_zoid.f_stencil_md[0][send_force_idx];
+                auto& recv_f = recv_f_[recv_force_idx];
+                auto& send_f = send_f_[send_force_idx];
 
-            assert(recv_zoid.tag_stencil_md[0][send_force_idx] == zoid.tag_stencil_md[0][recv_force_idx]);
-            recv_f.x += send_f.x;
-            recv_f.y += send_f.y;
-            recv_f.z += send_f.z;
+                assert(recv_zoid.tag_stencil_md[0][send_force_idx] == zoid.tag_stencil_md[0][recv_force_idx]);
+                recv_f.x += send_f.x;
+                recv_f.y += send_f.y;
+                recv_f.z += send_f.z;
 
-            send_f.x = 0;
-            send_f.y = 0;
-            send_f.z = 0;
+                send_f.x = 0;
+                send_f.y = 0;
+                send_f.z = 0;
+            }
         }
 
         #pragma cilk grainsize 2048
@@ -11379,7 +11381,7 @@ public:
     }
 
     template <bool curr_dt>
-    void UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP(queue_info& zoid, int dep, int start_t, int end_t, int pipeline_stage) {
+    void UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP(queue_info& zoid, int dep, int start_t, int end_t, int pipeline_stage, bool unpack_self_force=false) {
         int zoid_num = zoid.num;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
             : recv_from_neighbors_many_cuts_next_dt[zoid_num];
@@ -11387,8 +11389,8 @@ public:
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
-            if (recv_neighbors[i] % comm->nprocs != comm->me) {
-                int recv_zoid_num = recv_neighbors[i];
+            int recv_zoid_num = recv_neighbors[i];
+            if (recv_zoid_num % comm->nprocs != comm->me) {
                 int recv_zoid_dep = curr_dt ? zoid_num_to_dep[recv_zoid_num] : zoid_num_to_dep_next_dt[recv_zoid_num];
                 if (recv_zoid_dep == dep - 1) {
                     auto buf = buf_recv_zoid_to_zoid[pipeline_stage][zoid_num][i];
@@ -11400,6 +11402,37 @@ public:
                     offset = DEBUG_SEND_RECV_DATA ? offset * (3 + 1) : offset * 3;
                     UNPACK_FORCE_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf + offset, i,
                                                                      recv_zoid_num, start_t, end_t, pipeline_stage);
+                }
+            }
+
+            if (recv_zoid_num % comm->nprocs == comm->me && unpack_self_force) {
+                auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num] : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
+                auto &send_neighbors = send_to_neighbors_many_cuts[recv_zoid_num];
+                auto find_it = std::find(send_neighbors.begin(), send_neighbors.end(), zoid_num);
+                assert(find_it != send_neighbors.end());
+                int send_idx = std::distance(send_neighbors.begin(), find_it);
+                auto& send_force_idxs = recv_zoid.send_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][send_idx];
+                auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][i];
+                auto * _noalias const recv_f_ = zoid.f_stencil_md[0].data();
+                auto * _noalias const send_f_ = recv_zoid.f_stencil_md[0].data();
+                #pragma cilk grainsize 2048
+                cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
+                    int recv_force_idx = recv_force_idxs[i];
+                    int send_force_idx = send_force_idxs[i];
+
+                    // auto& recv_f = zoid.f_stencil_md[0][recv_force_idx];
+                    // auto& send_f = recv_zoid.f_stencil_md[0][send_force_idx];
+                    auto& recv_f = recv_f_[recv_force_idx];
+                    auto& send_f = send_f_[send_force_idx];
+
+                    assert(recv_zoid.tag_stencil_md[0][send_force_idx] == zoid.tag_stencil_md[0][recv_force_idx]);
+                    recv_f.x += send_f.x;
+                    recv_f.y += send_f.y;
+                    recv_f.z += send_f.z;
+
+                    send_f.x = 0;
+                    send_f.y = 0;
+                    send_f.z = 0;
                 }
             }
         }
