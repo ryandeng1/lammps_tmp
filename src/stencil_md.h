@@ -2922,8 +2922,7 @@ public:
 
                     /* end stuff for 2 timesteps */
 
-                    zoid.neigh_short = new std::vector<int>[1];
-                    zoid.neigh_short[0].reserve(1024);
+                    zoid.neigh_short = new std::vector<std::vector<int>>[1];
                 }
             }
         }
@@ -3029,8 +3028,7 @@ public:
                     }
                     /* end stuff for 2 timesteps */
 
-                    zoid.neigh_short = new std::vector<int>[1];
-                    zoid.neigh_short[0].reserve(1024);
+                    zoid.neigh_short = new std::vector<std::vector<int>>[1];
                 }
             }
         }
@@ -4433,6 +4431,10 @@ public:
                             break;
                         }
                     }
+                }
+
+                for (int i = 0; i < zoid.x_stencil_md[0].size(); i++) {
+                    zoid.neigh_short[0][i].reserve(1024);
                 }
             }
         }
@@ -12636,9 +12638,10 @@ public:
         const auto& tags = zoid.tag_stencil_md[0];
         const auto& atom_type = zoid.type_stencil_md[0];
 
-        auto* neighshort = zoid.neigh_short[0].data();
-        
-        int num_neigh_short = zoid.neigh_short[0].capacity();
+        // auto* neighshort = zoid.neigh_short[0].data();
+        // int num_neigh_short = zoid.neigh_short[0].capacity();
+
+        auto& neigh_short = zoid.neigh_short[0];
 
         PairSW* pair_sw = (PairSW*) force->pair;
         auto map = pair_sw->map;
@@ -12670,6 +12673,8 @@ public:
             double fztmp = 0;
 
             // two-body interactions, skip half of them
+            auto* neigh_short_atom = neigh_short[i].data();
+            int num_neigh_short = neigh_short[i].capacity();
 
             auto& neigh_list = neighbor_list[i];
             int num_neigh = neigh_list.size();
@@ -12687,7 +12692,7 @@ public:
                 if (rsq >= params[ijparam].cutsq) {
                     continue;
                 } else {
-                    neighshort[numshort++] = j;
+                    neigh_short_atom[numshort++] = j;
                     assert(numshort <= num_neigh_short);
                 }
 
@@ -12726,7 +12731,7 @@ public:
             int jnumm1 = numshort - 1;
 
             for (int jj = 0; jj < jnumm1; jj++) {
-                int j = neighshort[jj];
+                int j = neigh_short_atom[jj];
                 int jtype = map[atom_type[j]];
                 int ijparam = elem3param[itype][jtype][jtype];
                 double delr1[3] = {x[j].x - xtmp, x[j].y - ytmp, x[j].z - ztmp};
@@ -12745,7 +12750,7 @@ public:
                 double fjztmp = 0;
 
                 for (int kk = jj+1; kk < numshort; kk++) {
-                    int k = neighshort[kk];
+                    int k = neigh_short_atom[kk];
                     int ktype = map[atom_type[k]];
                     int ikparam = elem3param[itype][ktype][ktype];
                     int ijkparam = elem3param[itype][jtype][ktype];
@@ -13056,9 +13061,9 @@ public:
         const auto& tags = zoid.tag_stencil_md[0];
         const auto& atom_type = zoid.type_stencil_md[0];
 
-        auto* neighshort = zoid.neigh_short[0].data();
+        // auto* neighshort = zoid.neigh_short[0].data();
         
-        int num_neigh_short = zoid.neigh_short[0].capacity();
+        // int num_neigh_short = zoid.neigh_short[0].capacity();
 
         PairTersoff* pair_tersoff = (PairTersoff*) force->pair;
         auto map = pair_tersoff->map;
@@ -13092,6 +13097,8 @@ public:
 
         double powern = params[0].powern;
 
+        auto& neigh_short = zoid.neigh_short[0];
+
         // loop over full neighbor list of my atoms
 
         #pragma cilk grainsize 1024
@@ -13106,6 +13113,9 @@ public:
             double fxtmp = 0;
             double fytmp = 0;
             double fztmp = 0;
+
+            auto* neigh_short_atom = neigh_short[i].data();
+            int num_neigh_short = neigh_short[i].capacity();
 
             // two-body interactions, skip half of them
 
@@ -13122,7 +13132,7 @@ public:
                 double rsq = delx*delx + dely*dely + delz*delz;
 
                 if (rsq < cutshortsq) {
-                    neighshort[numshort++] = j;
+                    neigh_short_atom[numshort++] = j;
                     assert(numshort <= num_neigh_short);
                 }
 
@@ -13173,7 +13183,7 @@ public:
             }
 
             for (int jj = 0; jj < numshort; jj++) {
-                int j = neighshort[jj];
+                int j = neigh_short_atom[jj];
                 int jtype = map[atom_type[j]];
                 int iparam_ij = elem3param[itype][jtype][jtype];
                 dbl3_t_stencil_md delr1 = {x[j].x - xtmp, x[j].y - ytmp, x[j].z - ztmp};
@@ -13195,7 +13205,7 @@ public:
                 // accumulate bondorder zeta for each i-j interaction via loop over k
                 for (int kk = 0; kk < numshort; kk++) {
                     if (jj == kk) continue;
-                    int k = neighshort[kk];
+                    int k = neigh_short_atom[kk];
                     int ktype = map[atom_type[k]];
                     int iparam_ijk = elem3param[itype][jtype][ktype];
 
@@ -13311,7 +13321,7 @@ public:
 
                 for (int kk = 0; kk < numshort; kk++) {
                     if (jj == kk) continue;
-                    int k = neighshort[kk];
+                    int k = neigh_short_atom[kk];
                     int ktype = map[atom_type[k]];
                     int iparam_ijk = elem3param[itype][jtype][ktype];
                     dbl3_t_stencil_md delr2 = {x[k].x - xtmp, x[k].y - ytmp, x[k].z - ztmp};

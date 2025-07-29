@@ -327,7 +327,7 @@ struct queue_info {
   /* end for two timesteps */
 
   // Many-body potentials
-  std::vector<int>* neigh_short;
+  std::vector<std::vector<int>>* neigh_short;
   std::vector<int>* local_and_one_hop_ghost_idxs_per_timestep;
 
   // EAM
