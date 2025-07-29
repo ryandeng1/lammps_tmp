@@ -53,9 +53,6 @@
 
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
-// constexpr int NUM_RECV_STREAMS = 8;
-// constexpr int NUM_SEND_STREAMS = 2;
-// constexpr int NUM_STREAMS = NUM_SEND_STREAMS + NUM_RECV_STREAMS;
 constexpr int NUM_STREAMS = 8;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
@@ -12659,7 +12656,8 @@ public:
         double c3 = params->c3;
         double c4 = params->c4;
 
-        for (int ii = 0; ii < nlocal; ii++) {
+        #pragma cilk grainsize 1024
+        cilk_for (int ii = 0; ii < nlocal; ii++) {
             int i = local_idxs[ii];
 
             int itag = tags[i];
@@ -13096,7 +13094,8 @@ public:
 
         // loop over full neighbor list of my atoms
 
-        for (int ii = 0; ii < nlocal; ii++) {
+        #pragma cilk grainsize 1024
+        cilk_for (int ii = 0; ii < nlocal; ii++) {
             int i = local_idxs[ii];
 
             int itag = tags[i];
