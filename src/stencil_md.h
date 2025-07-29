@@ -2949,6 +2949,8 @@ public:
                     zoid.rho_stencil_md = queues_many_cuts[coord.first][coord.second].rho_stencil_md;
                     zoid.fp_stencil_md = queues_many_cuts[coord.first][coord.second].fp_stencil_md;
 
+                    zoid.neigh_short = queues_many_cuts[coord.first][coord.second].neigh_short;
+
                     zoid.x_stencil_md = queues_many_cuts[coord.first][coord.second].x_stencil_md;
                     zoid.v_stencil_md = queues_many_cuts[coord.first][coord.second].v_stencil_md;
                     zoid.f_stencil_md = queues_many_cuts[coord.first][coord.second].f_stencil_md;
@@ -3027,8 +3029,6 @@ public:
                         }
                     }
                     /* end stuff for 2 timesteps */
-
-                    zoid.neigh_short = new std::vector<std::vector<int>>[1];
                 }
             }
         }
@@ -4433,6 +4433,7 @@ public:
                     }
                 }
 
+                zoid.neigh_short[0].resize(zoid.x_stencil_md[0].size());
                 for (int i = 0; i < zoid.x_stencil_md[0].size(); i++) {
                     zoid.neigh_short[0][i].reserve(1024);
                 }
@@ -14399,8 +14400,6 @@ public:
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
                 }
-
-                delete[] zoid.neigh_short;
 
                 delete[] zoid.local_idxs_per_timestep;
                 delete[] zoid.local_and_one_hop_ghost_idxs_per_timestep;
