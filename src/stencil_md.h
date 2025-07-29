@@ -57,7 +57,7 @@ constexpr bool USE_STREAMS = true;
 // constexpr int NUM_SEND_STREAMS = 2;
 // constexpr int NUM_STREAMS = NUM_SEND_STREAMS + NUM_RECV_STREAMS;
 constexpr int NUM_STREAMS = 8;
-constexpr int NUM_PROGRESS_STREAM_ITER = 25;
+constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
