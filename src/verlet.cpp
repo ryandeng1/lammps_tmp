@@ -1169,7 +1169,8 @@ void Verlet::setup_stencil_md_many_zoids() {
             } else if constexpr (EXPERIMENT == DPD) {
                 stencilMD->DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             } else if constexpr (EXPERIMENT == SW) {
-                // stencilMD->SW_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+                stencilMD->SW_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+            } else if constexpr (EXPERIMENT == TERSOFF) {
                 stencilMD->TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             } else if constexpr (EXPERIMENT == EAM) {
                 stencilMD->EAM_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
@@ -2041,7 +2042,9 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
             stencilMD->DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
             stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
         } else if constexpr (EXPERIMENT == SW) {
-            // stencilMD->SW_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            stencilMD->SW_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+        } else if constexpr (EXPERIMENT == TERSOFF) {
             stencilMD->TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
             stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
         } else if constexpr (EXPERIMENT == EAM) {
