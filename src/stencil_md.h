@@ -53,7 +53,7 @@
 
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
-constexpr int NUM_STREAMS = 8;
+constexpr int NUM_STREAMS = 4;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
@@ -304,98 +304,6 @@ public:
     void COMPARE_VEL_AGAINST_LAMMPS(bool curr_dt, int timestep, Atom* atom_, queue_info& zoid, double** test_f);
 
     void SET_CLAIMED_ATOMIC_BOOLS();
-
-    inline void final_integrate_stencil_md(const std::vector<int>& local_idxs, Atom* next) {
-        // update v of atoms in group
-
-        // auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
-        auto * _noalias const next_v = (dbl3_t_stencil_md *) next->v[0];
-
-        const auto * _noalias const f = (dbl3_t_stencil_md *) next->f[0];
-        const auto * _noalias const eval_f = (dbl3_t_stencil_md *) next->eval_f_stencil_md[0];
-        const int * const mask = next->mask;
-        // const int nlocal = atom_->nlocal;
-        const int next_nlocal = next->nlocal;
-
-        const double * const mass = atom->mass;
-        const int * const type = next->type;
-
-        int start = local_idxs[0];
-        double dtf = 0.5 * update->dt * force->ftm2v;
-
-        for (int i = 0; i < local_idxs.size(); i++) {
-            // int idx = local_idxs[i];
-            int idx = start + i;
-            assert(idx == local_idxs[i]);
-            if (mask[idx]) {
-                const double dtfm = dtf / mass[type[i]];
-                next_v[idx].x += dtfm * (f[idx].x + eval_f[idx].x);
-                next_v[idx].y += dtfm * (f[idx].y + eval_f[idx].y);
-                next_v[idx].z += dtfm * (f[idx].z + eval_f[idx].z);
-            }
-        }
-    }
-
-    inline void post_force_stencil_md_(Atom* atom_, Modify* modify_) {
-        auto * _noalias const v = (dbl3_t_stencil_md *) atom_->v[0];
-        auto * _noalias const eval_f = (dbl3_t_stencil_md *) atom_->eval_f_stencil_md[0];
-
-        int *type = atom_->type;
-        int *mask = atom_->mask;
-
-        int n_post_force = modify_->n_post_force;
-
-        assert(n_post_force == 1);
-
-        // auto fix_post_force = (FixLangevin*) modify_->fix[modify_->list_post_force[0]];
-        auto fix_post_force = (FixLangevin*) modify->fix[modify->list_post_force[0]];
-
-        auto gfactor1 = fix_post_force->gfactor1;
-        auto gfactor2 = fix_post_force->gfactor2;
-        // fix_post_force->compute_target();
-        auto tsqrt = fix_post_force->tsqrt;
-
-        const int nlocal = atom_->nlocal;
-
-        #pragma cilk grainsize 2048
-        cilk_for (int i = 0; i < nlocal; i++) {
-            // these are per-atom variables that get updated. Need to put them here to avoid races.
-            // double fdrag[3],fran[3];
-            // dbl3_t_stencil_md fdrag, fran;
-
-            // if (mask[i]) {
-                double gamma1 = gfactor1[type[i]];
-                double gamma2 = gfactor2[type[i]] * tsqrt;
-
-                double rand_x = 0.6;
-                double rand_y = 0.6;
-                double rand_z = 0.6;
-
-                dbl3_t_stencil_md fran = {gamma2 * (rand_x - 0.5), gamma2*(rand_y - 0.5), gamma2 * (rand_z - 0.5)};
-                dbl3_t_stencil_md fdrag = {gamma1 * v[i].x, gamma1 * v[i].y, gamma1 * v[i].z};
-
-                /*
-                fran.x = gamma2*(rand_x-0.5);
-                fran.y = gamma2*(rand_y-0.5);
-                fran.z = gamma2*(rand_z-0.5);
-                */
-
-                /*
-                fran[0] = gamma2*(random->uniform()-0.5);
-                fran[1] = gamma2*(random->uniform()-0.5);
-                fran[2] = gamma2*(random->uniform()-0.5);
-
-                fdrag.x = gamma1*v[i].x;
-                fdrag.y = gamma1*v[i].y;
-                fdrag.z = gamma1*v[i].z;
-                */
-
-                eval_f[i].x += fdrag.x + fran.x;
-                eval_f[i].y += fdrag.y + fran.y;
-                eval_f[i].z += fdrag.z + fran.z;
-            // }
-        }
-    }
 
     void TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_f) {
 
@@ -3644,7 +3552,8 @@ public:
                     for (int s = 0; s < stream_loads.size(); s++) {
                         // Skip if this stream is already used for this proc 
                         if (proc_pair_to_streams[proc_pair].count(s) > 0) {
-                            continue;
+                            // TODO: Ryan, maybe with nonblocking MPIX_Stream_progress this will work
+                            // continue;
                         }
                         if (stream_loads[s] < min_load) {
                             min_load = stream_loads[s];
@@ -3675,7 +3584,8 @@ public:
                         for (int s = 0; s < stream_loads.size(); s++) {
                             // Skip if this stream is already used for this proc 
                             if (proc_pair_to_streams[proc_pair].count(s) > 0) {
-                                continue;
+                                // TODO: Ryan, maybe with nonblocking MPIX_Stream_progress this will work
+                                // continue;
                             }
                             if (stream_loads[s] < min_load) {
                                 min_load = stream_loads[s];

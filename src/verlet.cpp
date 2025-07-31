@@ -1029,7 +1029,11 @@ void Verlet::setup_stencil_md_many_zoids() {
     if (comm->me == 0) {
         std::cout << BOLDMAGENTA << "GET ATOMS: " << duration << " seconds." << RESET_COLOR << std::endl;
     }
+
+    begin = std::chrono::high_resolution_clock::now();
     stencilMD->SORT_LOCAL_ATOMS_ZOID_MANY_CUTS();
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
 
     if (comm->me == 0) {
         std::cout << BOLDMAGENTA << "SORT ATOMS: " << duration << " seconds." << RESET_COLOR << std::endl;
