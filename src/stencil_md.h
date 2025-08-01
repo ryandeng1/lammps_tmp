@@ -1584,6 +1584,9 @@ public:
                     }
                 }
 
+                std::stringstream s1;
+                s1 << "me: " << comm->me << " before barrier." << std::endl;
+                std::cout << s1.str();
                 MPI_Barrier(world);
             }
 
