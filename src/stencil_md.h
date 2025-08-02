@@ -3183,7 +3183,7 @@ public:
         std::map<std::tuple<int, int, int>, int> send_dep_proc_to_recv_proc_send_stream_num;
         std::map<std::tuple<int, int, int, int>, int> send_dep_proc_to_recv_dep_proc_recv_stream_num;
 
-        constexpr int num_send_streams = 6;
+        constexpr int num_send_streams = 2;
         constexpr int num_recv_streams = 6;
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
