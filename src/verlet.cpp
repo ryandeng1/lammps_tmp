@@ -1013,8 +1013,8 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     MPI_Barrier(world);
 
-    stencilMD->INIT_ZOIDS_NUMBERING();
-    // stencilMD->INIT_ZOIDS_NUMBERING_BALANCED();
+    // stencilMD->INIT_ZOIDS_NUMBERING();
+    stencilMD->INIT_ZOIDS_NUMBERING_BALANCED_IMPROVED();
     stencilMD->INIT_ZOID_MANY_CUTS();
     stencilMD->INIT_ZOID_DATA_MANY_CUTS();
     stencilMD->INIT_MY_ZOIDS();
