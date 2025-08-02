@@ -1584,9 +1584,6 @@ public:
                     }
                 }
 
-                std::stringstream s1;
-                s1 << "me: " << comm->me << " before barrier." << std::endl;
-                std::cout << s1.str();
                 MPI_Barrier(world);
             }
 
@@ -8064,7 +8061,7 @@ public:
     }
 
     // 64 VCIs so 1 per comm
-    static constexpr int NUM_COMMS = 8;
+    static constexpr int NUM_COMMS = 1;
     std::vector<MPI_Comm> all_comms;
 
     MPI_Comm proc_to_proc_pipelined_comms[NUM_PIPELINE_STAGES][NUM_DEPS];
@@ -8744,7 +8741,7 @@ public:
 
                 MPI_Isend(buf, buf_idx, MPI_DOUBLE,
                             send_zoid_num % comm->nprocs, mpi_tag,
-                            all_comms[comm_idx], &r[r.size() - 1]);
+                            world, &r[r.size() - 1]);
             }
         }
     }
@@ -9442,7 +9439,7 @@ public:
                 int comm_idx = ZOID_TO_ZOID_TO_VCI_IDX[1].at({recv_zoid_num, zoid_num});
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE,
                             recv_zoid_num % comm->nprocs, mpi_tag,
-                            all_comms[comm_idx], &r[r.size() - 1]);
+                            world, &r[r.size() - 1]);
             }
         }
     }
