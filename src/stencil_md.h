@@ -3183,6 +3183,7 @@ public:
         std::map<std::tuple<int, int, int>, int> send_dep_proc_to_recv_proc_send_stream_num;
         std::map<std::tuple<int, int, int, int>, int> send_dep_proc_to_recv_dep_proc_recv_stream_num;
 
+        constexpr int num_send_streams = 6;
         constexpr int num_recv_streams = 6;
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -3232,7 +3233,7 @@ public:
                 for (int j = 0; j < zoid_to_zoid_per_proc_send[proc].size(); j++) {
                     auto pair = zoid_to_zoid_per_proc_send[proc][j];
                     // zoid_to_zoid_to_send_stream_num[pair] = (send_stream_idx % NUM_STREAMS) + NUM_RECV_STREAMS;
-                    zoid_to_zoid_to_send_stream_num[pair] = (send_stream_idx % NUM_STREAMS) + num_recv_streams;
+                    zoid_to_zoid_to_send_stream_num[pair] = (send_stream_idx % num_send_streams) + num_recv_streams;
                     // stream_loads[send_stream_idx]++;
                     send_stream_idx++;
                 }
@@ -3240,7 +3241,7 @@ public:
                 if (std::find(procs_to_send_to.begin(), procs_to_send_to.end(), proc) != procs_to_send_to.end()) {
                     auto tup = std::make_tuple(dep, comm->me, proc);
                     // send_dep_proc_to_recv_proc_send_stream_num[tup] = (send_stream_idx % NUM_SEND_STREAMS) + NUM_RECV_STREAMS;
-                    send_dep_proc_to_recv_proc_send_stream_num[tup] = (send_stream_idx % NUM_STREAMS) + num_recv_streams;
+                    send_dep_proc_to_recv_proc_send_stream_num[tup] = (send_stream_idx % num_send_streams) + num_recv_streams;
                     // stream_loads[send_stream_idx]++;
                     send_stream_idx++;
                 }
