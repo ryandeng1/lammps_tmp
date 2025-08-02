@@ -1874,9 +1874,128 @@ public:
                         << " (score: " << best_score << ") ===" << std::endl;
             }
             
-            // Final numbering assignment
+            // Use the best assignment
             std::map<int, std::vector<std::array<int, 3>>> proc_to_zoids = best_assignment->proc_to_zoids;
             std::map<std::array<int, 3>, int> zoid_to_proc = best_assignment->zoid_to_proc;
+            
+            // REORDER PROCESSORS: Group communicating processors close together in process numbering
+            // Build processor connectivity graph based on zoid neighbors
+            std::vector<std::set<int>> proc_neighbors(comm->nprocs);
+            std::vector<std::map<int, int>> proc_comm_weight(comm->nprocs);
+            
+            // Count communications between each processor pair (including periodic boundaries)
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                for (const auto& zoid : proc_to_zoids[proc]) {
+                    // Check send neighbors
+                    if (tmp_send_neighbors.count(zoid)) {
+                        for (const auto& neighbor : tmp_send_neighbors.at(zoid)) {
+                            if (zoid_to_proc.count(neighbor)) {
+                                int neighbor_proc = zoid_to_proc.at(neighbor);
+                                if (neighbor_proc != proc) {
+                                    proc_neighbors[proc].insert(neighbor_proc);
+                                    proc_comm_weight[proc][neighbor_proc]++;
+                                }
+                            }
+                        }
+                    }
+                    // Check receive neighbors
+                    if (tmp_recv_neighbors.count(zoid)) {
+                        for (const auto& neighbor : tmp_recv_neighbors.at(zoid)) {
+                            if (zoid_to_proc.count(neighbor)) {
+                                int neighbor_proc = zoid_to_proc.at(neighbor);
+                                if (neighbor_proc != proc) {
+                                    proc_neighbors[proc].insert(neighbor_proc);
+                                    proc_comm_weight[proc][neighbor_proc]++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Reorder processors using breadth-first traversal to keep communicating procs close
+            std::vector<int> old_to_new_proc(comm->nprocs, -1);
+            std::vector<bool> proc_assigned(comm->nprocs, false);
+            int next_new_proc = 0;
+            
+            // Start with processor that has the most communications
+            int start_proc = 0;
+            int max_comms = 0;
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                int total_comms = 0;
+                for (const auto& [other_proc, weight] : proc_comm_weight[proc]) {
+                    total_comms += weight;
+                }
+                if (total_comms > max_comms) {
+                    max_comms = total_comms;
+                    start_proc = proc;
+                }
+            }
+            
+            // BFS traversal to assign new processor numbers
+            std::queue<int> to_visit;
+            to_visit.push(start_proc);
+            proc_assigned[start_proc] = true;
+            old_to_new_proc[start_proc] = next_new_proc++;
+            
+            while (!to_visit.empty() && next_new_proc < comm->nprocs) {
+                int current_proc = to_visit.front();
+                to_visit.pop();
+                
+                // Sort neighbors by communication weight (heaviest first)
+                std::vector<std::pair<int, int>> weighted_neighbors;
+                for (int neighbor : proc_neighbors[current_proc]) {
+                    if (!proc_assigned[neighbor]) {
+                        int weight = proc_comm_weight[current_proc][neighbor];
+                        weighted_neighbors.push_back({weight, neighbor});
+                    }
+                }
+                std::sort(weighted_neighbors.begin(), weighted_neighbors.end(), std::greater<>());
+                
+                // Assign new processor numbers to neighbors in order of communication weight
+                for (const auto& [weight, neighbor] : weighted_neighbors) {
+                    if (!proc_assigned[neighbor]) {
+                        proc_assigned[neighbor] = true;
+                        old_to_new_proc[neighbor] = next_new_proc++;
+                        to_visit.push(neighbor);
+                    }
+                }
+            }
+            
+            // Assign any remaining processors that have no communications
+            for (int proc = 0; proc < comm->nprocs; proc++) {
+                if (!proc_assigned[proc]) {
+                    old_to_new_proc[proc] = next_new_proc++;
+                }
+            }
+            
+            // Apply the processor reordering
+            std::map<int, std::vector<std::array<int, 3>>> reordered_proc_to_zoids;
+            for (int old_proc = 0; old_proc < comm->nprocs; old_proc++) {
+                int new_proc = old_to_new_proc[old_proc];
+                reordered_proc_to_zoids[new_proc] = proc_to_zoids[old_proc];
+            }
+            proc_to_zoids = reordered_proc_to_zoids;
+            
+            // Update zoid_to_proc mapping
+            for (int new_proc = 0; new_proc < comm->nprocs; new_proc++) {
+                for (const auto& zoid : proc_to_zoids[new_proc]) {
+                    zoid_to_proc[zoid] = new_proc;
+                }
+            }
+            
+            if (comm->me == 0) {
+                std::cout << "Processor reordering completed to minimize communication distance." << std::endl;
+                
+                // Print processor neighbor statistics
+                std::vector<int> proc_neighbor_counts(comm->nprocs);
+                for (int proc = 0; proc < comm->nprocs; proc++) {
+                    proc_neighbor_counts[proc] = proc_neighbors[proc].size();
+                }
+                auto [min_neighbors, max_neighbors] = std::minmax_element(proc_neighbor_counts.begin(), proc_neighbor_counts.end());
+                std::cout << "Processor communication partners: min=" << *min_neighbors 
+                         << ", max=" << *max_neighbors << std::endl;
+            }
             
             // Assign global numbering maintaining round-robin across processors
             for (int proc = 0; proc < comm->nprocs; proc++) {
