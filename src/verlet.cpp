@@ -3429,11 +3429,11 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
     constexpr int curr_dt_idx = static_cast<int>(curr_dt);
     auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
     auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
-    if (dep < NUM_DEPS - 1 && zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size() == 0) {
+    int total_num_wait = zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size();
+    if (dep < NUM_DEPS - 1 && total_num_wait == 0) {
         stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
             recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
     } else {
-        int total_num_wait = zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size();
         int num_wait = 0;
         int num_iter = 0;
 
@@ -3591,6 +3591,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                 }
             }
 
+            std::this_thread::sleep_for(std::chrono::nanoseconds(1));
             num_iter++;
         }
 
