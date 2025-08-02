@@ -3192,7 +3192,6 @@ public:
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 auto& zoid  = my_queues[dep][j];
                 auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] : send_to_neighbors_many_cuts_next_dt[zoid.num];
-                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
 
                 for (int i = 0; i < send_neighbors.size(); i++) {
                     int send_zoid_num = send_neighbors[i];
@@ -3208,7 +3207,8 @@ public:
                     int send_proc = send_zoid_num % comm->nprocs;
                     zoid_to_zoid_per_proc_send[send_proc].push_back({zoid.num, send_zoid_num});
                 }
-
+                /*
+                auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
                 for (int i = 0; i < recv_neighbors.size(); i++) {
                     int recv_zoid_num = recv_neighbors[i];
                     if (recv_zoid_num % comm->nprocs == comm->me) {
@@ -3223,6 +3223,28 @@ public:
                     int recv_proc = recv_zoid_num % comm->nprocs;
                     zoid_to_zoid_per_proc_recv[recv_proc].push_back({recv_zoid_num, zoid.num});
                 }
+                */
+            }
+
+            if (dep < NUM_DEPS - 1) {
+                for (int j = 0; j < my_queues[dep + 1].size(); j++) {
+                    auto& zoid  = my_queues[dep + 1][j];
+                    auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num] : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                    for (int i = 0; i < recv_neighbors.size(); i++) {
+                        int recv_zoid_num = recv_neighbors[i];
+                        if (recv_zoid_num % comm->nprocs == comm->me) {
+                            continue;
+                        }
+
+                        int recv_zoid_dep = curr_dt ? zoid_num_to_dep[recv_zoid_num] : zoid_num_to_dep_next_dt[recv_zoid_num];
+                        if (recv_zoid_dep != dep - 1) {
+                            continue;
+                        }
+
+                        int recv_proc = recv_zoid_num % comm->nprocs;
+                        zoid_to_zoid_per_proc_recv[recv_proc].push_back({recv_zoid_num, zoid.num});
+                    }
+                }
             }
 
             const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][DEFAULT_PIPELINE_STAGE][dep];
@@ -3233,7 +3255,7 @@ public:
                     auto pair = zoid_to_zoid_per_proc_send[proc][j];
                     // zoid_to_zoid_to_send_stream_num[pair] = (send_stream_idx % NUM_STREAMS) + NUM_RECV_STREAMS;
                     zoid_to_zoid_to_send_stream_num[pair] = (send_stream_idx % NUM_STREAMS);
-                    stream_loads[send_stream_idx]++;
+                    // stream_loads[send_stream_idx]++;
                     send_stream_idx++;
                 }
 
@@ -3241,13 +3263,13 @@ public:
                     auto tup = std::make_tuple(dep, comm->me, proc);
                     // send_dep_proc_to_recv_proc_send_stream_num[tup] = (send_stream_idx % NUM_SEND_STREAMS) + NUM_RECV_STREAMS;
                     send_dep_proc_to_recv_proc_send_stream_num[tup] = (send_stream_idx % NUM_STREAMS);
-                    stream_loads[send_stream_idx]++;
+                    // stream_loads[send_stream_idx]++;
                     send_stream_idx++;
                 }
             }
 
             std::map<std::pair<int, int>, std::set<int>> proc_pair_to_streams;
-            // std::vector<int> stream_loads(NUM_RECV_STREAMS, 0);
+            // std::vector<int> stream_loads(NUM_STREAMS, 0);
 
             const auto& recv_proc_pairs = dep_to_recv_proc_pairs[curr_dt_idx][dep];
 
@@ -3258,6 +3280,7 @@ public:
 
                 auto proc_pair = std::make_pair(proc, comm->me);
 
+                /*
                 int recv_stream_idx = 0;
                 assert(zoid_to_zoid_per_proc_recv[proc].size() <= NUM_STREAMS);
                 for (int j = 0; j < zoid_to_zoid_per_proc_recv[proc].size(); j++) {
@@ -3283,6 +3306,7 @@ public:
                     std::cout << s1.str();
                     MPI_Abort(world, 0);
                 }
+                */
 
                 for (int j = 0; j < zoid_to_zoid_per_proc_recv[proc].size(); j++) {
                     auto pair = zoid_to_zoid_per_proc_recv[proc][j];
