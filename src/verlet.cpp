@@ -3591,7 +3591,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                 }
             }
 
-            std::this_thread::sleep_for(std::chrono::nanoseconds(1));
             num_iter++;
         }
 
