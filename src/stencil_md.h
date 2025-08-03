@@ -9060,19 +9060,12 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
-                    while (!MPIX_Request_is_complete(r[send_request_idx])) {
+                    for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
                         if (manager->m[src_stream_idx].try_lock()) {
                             MPIX_Stream_progress(manager->streams[src_stream_idx]);
                             manager->m[src_stream_idx].unlock();
                         }
                     }
-
-                    // for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
-                    //     if (manager->m[src_stream_idx].try_lock()) {
-                    //         MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                    //         manager->m[src_stream_idx].unlock();
-                    //     }
-                    // }
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
                         all_comms[dst_stream_idx], &r[send_request_idx]);
@@ -9438,20 +9431,18 @@ public:
                 GROW_RECV_ZOID_TO_ZOID_MANY_CUTS(zoid_num, find_idx, total_doubles_recv_from_zoid, pipeline_stage);
             }
 
-            // if (recv_zoid_num % comm->nprocs == 8 && mpi_tag == 229384) {
-            //     std::stringstream s1;
-            //     s1 << BOLDRED << "curr_dt: " << curr_dt << " me: " << comm->me << " dep: " << dep
-            //     << " zoid to zoid. " << recv_zoid_num << " to: " << zoid_num << " ndoubles: " << total_doubles_recv_from_zoid
-            //     << RESET_COLOR << std::endl;
-            //     std::cout << s1.str();
-            // }
-
             if (USE_STREAMS) {
                 manager->m[stream_num].lock();
                 MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
                     manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
-                // MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, manager->comms[stream_num], &r[recv_request_idx]);
                 manager->m[stream_num].unlock();
+                
+                for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
+                    if (manager->m[stream_num].try_lock()) {
+                        MPIX_Stream_progress(manager->streams[stream_num]);
+                        manager->m[stream_num].unlock();
+                    }
+                }
             } else {
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, all_comms[stream_num], &r[recv_request_idx]);
             }
