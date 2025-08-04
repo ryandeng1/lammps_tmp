@@ -300,7 +300,8 @@ class Verlet : public Integrate {
     std::vector<std::atomic_flag>& dep_claimed,
     MPIX_Stream_Manager* stream_manager,
     std::vector<std::atomic_flag*>& zoid_unpack_self_claimed,
-    std::vector<std::atomic<bool>>& zoid_done) noexcept;
+    std::vector<std::atomic<bool>>& zoid_done,
+    std::vector<std::atomic_flag>& zoid_unpack_claimed) noexcept;
 
   template <bool curr_dt>
   void run_stencil_md_many_cuts_proc_to_proc(int starting_timestep,
