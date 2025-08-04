@@ -53,7 +53,7 @@
 
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
-constexpr int NUM_STREAMS = 8;
+constexpr int NUM_STREAMS = 16;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
@@ -13134,11 +13134,11 @@ public:
         auto* _noalias spinlocks = zoid.spinlocks_stencil_md[0];
 
         const auto* _noalias cutsq = pair->cutsq;
-        const auto* _noalias offset = pair->offset;
+        // const auto* _noalias offset = pair->offset;
         const auto* _noalias lj1 = pair->lj1;
         const auto* _noalias lj2 = pair->lj2;
-        const auto* _noalias lj3 = pair->lj3;
-        const auto* _noalias lj4 = pair->lj4;
+        // const auto* _noalias lj3 = pair->lj3;
+        // const auto* _noalias lj4 = pair->lj4;
         // auto newton_pair = force->newton_pair;
         constexpr bool NEWTON_PAIR = true;
 
@@ -13246,11 +13246,11 @@ public:
                 // const int *_noalias const jlist = firstneigh[i];
                 const auto &jlist = neighbor_list[i];
                 const double *_noalias const cutsqi = cutsq[itype];
-                const double *_noalias const offseti = offset[itype];
+                // const double *_noalias const offseti = offset[itype];
                 const double *_noalias const lj1i = lj1[itype];
                 const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
+                // const double *_noalias const lj3i = lj3[itype];
+                // const double *_noalias const lj4i = lj4[itype];
 
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
@@ -13311,11 +13311,11 @@ public:
                 // const int *_noalias const jlist = firstneigh[i];
                 const auto &jlist = neighbor_list[i];
                 const double *_noalias const cutsqi = cutsq[itype];
-                const double *_noalias const offseti = offset[itype];
+                // const double *_noalias const offseti = offset[itype];
                 const double *_noalias const lj1i = lj1[itype];
                 const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
+                // const double *_noalias const lj3i = lj3[itype];
+                // const double *_noalias const lj4i = lj4[itype];
 
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
@@ -13867,7 +13867,7 @@ public:
         auto special_sqrt = pair->special_sqrt;
         auto cut = pair->cut;
 
-        #pragma cilk grainsize MODIFY_GRAINSIZE
+        #pragma cilk grainsize 1024
         cilk_for (int idx = 0; idx < nlocal; idx++) {
             int i = local_idxs[idx];
 
