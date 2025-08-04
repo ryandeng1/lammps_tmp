@@ -3488,7 +3488,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                 stream_manager->m[stream_num].unlock();
             }
 
-            /*
             for (int d = dep; d < NUM_DEPS; d++) {
                 for (int j = 0; j < my_queues[d].size(); j++) {
                     auto& zoid = my_queues[d][j];
@@ -3541,7 +3540,8 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                     }
                 }
             }
-            */
+
+            /*
             // check for work to do
             for (int j = 0; j < my_queues[dep].size(); j++) {
                 int zoid_num = my_queues[dep][j].num;
@@ -3555,6 +3555,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                         zoid_claimed, dep_claimed, stream_manager);
                 }
             }
+            */
 
             num_iter++;
         }
