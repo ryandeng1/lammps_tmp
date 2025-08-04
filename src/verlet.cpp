@@ -3631,7 +3631,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
         std::atomic<bool> progress_thread_done = false;
 
         cilk_spawn [this](MPIX_Stream_Manager* manager, std::atomic<bool>& done) {
-            while (!done.load(std::memory_order_relaxed)) {
+            while (!done.load(std::memory_order_acquire)) {
                 if (manager->global_lock.try_lock()) {
                     for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                         if (manager->m[stream_num].try_lock()) {
