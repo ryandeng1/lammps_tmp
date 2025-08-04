@@ -970,8 +970,8 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 4;
-    static constexpr int NUM_CUTS_Y = 4;
+    static constexpr int NUM_CUTS_X = 6;
+    static constexpr int NUM_CUTS_Y = 6;
     static constexpr int NUM_CUTS_Z = 4;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
@@ -9437,12 +9437,12 @@ public:
                     manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
                 manager->m[stream_num].unlock();
                 
-                for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
-                    if (manager->m[stream_num].try_lock()) {
-                        MPIX_Stream_progress(manager->streams[stream_num]);
-                        manager->m[stream_num].unlock();
-                    }
-                }
+                // for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
+                //     if (manager->m[stream_num].try_lock()) {
+                //         MPIX_Stream_progress(manager->streams[stream_num]);
+                //         manager->m[stream_num].unlock();
+                //     }
+                // }
             } else {
                 MPI_Irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag, all_comms[stream_num], &r[recv_request_idx]);
             }
