@@ -3659,7 +3659,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
         };
 
         // cilk_spawn f(stream_manager, progress_thread_done);
-        cilk_spawn start_progress_thread(stream_manager, &progress_thread_done);
+        // cilk_spawn start_progress_thread(stream_manager, &progress_thread_done);
 
         /*
         cilk_spawn [this](MPIX_Stream_Manager* manager, std::atomic<bool>& done) noexcept {
