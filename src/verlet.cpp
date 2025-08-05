@@ -3434,6 +3434,11 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
     if (dep < NUM_DEPS - 1 && total_num_wait == 0) {
         stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
             recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
+        run_stencil_md_many_cuts_process_stream_better_work_queue<curr_dt>(starting_timestep, dep + 1, stream_num,
+            test_f, test_x, test_v,
+            zoid_recv_neighbor_counters, dep_counters,
+            send_r_zoid_to_zoid, send_r_proc_to_proc, 
+            recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_self_claimed, zoid_done, zoid_unpack_claimed);
     } else {
         int num_wait = 0;
         int num_iter = 0;
@@ -3700,7 +3705,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
             cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                 auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][starting_dep + 1][stream_num];
                 auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][starting_dep + 1][stream_num];
-                if (zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size() > 0) {
+                int total_num_wait = zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size();
+                if (total_num_wait > 0) {
                     stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(starting_dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
                         recv_r_zoid_to_zoid_streams[starting_dep + 1][stream_num], stream_manager);
                 }
