@@ -8989,17 +8989,18 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
+                    while (!MPIX_Request_is_complete(r[send_request_idx])) {
+                        if (manager->m[src_stream_idx].try_lock()) {
+                            MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                            manager->m[src_stream_idx].unlock();
+                        }
+                    }
+
                     // for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
                     //     manager->m[src_stream_idx].lock();
                     //     MPIX_Stream_progress(manager->streams[src_stream_idx]);
                     //     manager->m[src_stream_idx].unlock();
                     // }
-                    /*
-                    manager->m[dst_stream_idx].lock();
-                    auto res = MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, manager->comms[dst_stream_idx], &r[send_request_idx]);
-                    manager->m[dst_stream_idx].unlock();
-                    assert(res == MPI_SUCCESS);
-                    */
                 } else {
                     MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
