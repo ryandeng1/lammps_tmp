@@ -3434,11 +3434,11 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
     if (dep < NUM_DEPS - 1 && total_num_wait == 0) {
         stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
             recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
-        run_stencil_md_many_cuts_process_stream_better_work_queue<curr_dt>(starting_timestep, dep + 1, stream_num,
-            test_f, test_x, test_v,
-            zoid_recv_neighbor_counters, dep_counters,
-            send_r_zoid_to_zoid, send_r_proc_to_proc, 
-            recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_self_claimed, zoid_done, zoid_unpack_claimed);
+        // run_stencil_md_many_cuts_process_stream_better_work_queue<curr_dt>(starting_timestep, dep + 1, stream_num,
+        //     test_f, test_x, test_v,
+        //     zoid_recv_neighbor_counters, dep_counters,
+        //     send_r_zoid_to_zoid, send_r_proc_to_proc, 
+        //     recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_self_claimed, zoid_done, zoid_unpack_claimed);
     } else {
         int num_wait = 0;
         int num_iter = 0;
@@ -3581,11 +3581,11 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
         if (dep < NUM_DEPS - 1) {
             stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE,
                 recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
-            run_stencil_md_many_cuts_process_stream_better_work_queue<curr_dt>(starting_timestep, dep + 1, stream_num,
-                test_f, test_x, test_v,
-                zoid_recv_neighbor_counters, dep_counters,
-                send_r_zoid_to_zoid, send_r_proc_to_proc, 
-                recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_self_claimed, zoid_done, zoid_unpack_claimed);
+            // run_stencil_md_many_cuts_process_stream_better_work_queue<curr_dt>(starting_timestep, dep + 1, stream_num,
+            //     test_f, test_x, test_v,
+            //     zoid_recv_neighbor_counters, dep_counters,
+            //     send_r_zoid_to_zoid, send_r_proc_to_proc, 
+            //     recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_self_claimed, zoid_done, zoid_unpack_claimed);
         }
     }
 }
@@ -3700,6 +3700,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
         }(stream_manager, progress_thread_done);
         */
 
+        /*
         cilk_scope {
             constexpr int starting_dep = 0;
             cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
@@ -3728,8 +3729,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_self_claimed, zoid_done, zoid_unpack_claimed);
             }
         }
+        */
 
-        /*
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             if (dep == 0) {
                 cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
@@ -3762,7 +3763,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 }
             }
         }
-        */
 
         progress_thread_done.store(true, std::memory_order_release);
 
