@@ -9060,12 +9060,21 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
+                    while (!MPIX_Request_is_complete(r[send_request_idx])) {
+                        if (manager->m[src_stream_idx].try_lock()) {
+                            MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                            manager->m[src_stream_idx].unlock();
+                        }
+                    }
+
+                    /*
                     for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
                         if (manager->m[src_stream_idx].try_lock()) {
                             MPIX_Stream_progress(manager->streams[src_stream_idx]);
                             manager->m[src_stream_idx].unlock();
                         }
                     }
+                    */
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
                         all_comms[dst_stream_idx], &r[send_request_idx]);
