@@ -3660,6 +3660,8 @@ public:
             }
         }
 
+        stream_num_to_dep_proc_pairs_all_deps[curr_dt_idx].resize(NUM_STREAMS);
+
         for (int dep = 1; dep < NUM_DEPS; dep++) {
             stream_num_to_dep_proc_pairs[curr_dt_idx][dep].resize(NUM_STREAMS);
             // for (auto& [dep_proc_pair, stream_pair]: send_dep_proc_to_stream_num[curr_dt_idx][dep]) {
@@ -9007,18 +9009,11 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
-                    while (!MPIX_Request_is_complete(r[send_request_idx])) {
-                        if (manager->m[src_stream_idx].try_lock()) {
-                            MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                            manager->m[src_stream_idx].unlock();
-                        }
+                    for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
+                        manager->m[src_stream_idx].lock();
+                        MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                        manager->m[src_stream_idx].unlock();
                     }
-
-                    // for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
-                    //     manager->m[src_stream_idx].lock();
-                    //     MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                    //     manager->m[src_stream_idx].unlock();
-                    // }
                 } else {
                     MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
@@ -9064,7 +9059,7 @@ public:
                 GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
             }
 
-            cilk_spawn [this](queue_info& zoid, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
+            cilk_spawn [this](int dep, queue_info& zoid, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
                 int pipeline_stage, MPIX_Stream_Manager* manager, int send_request_idx, std::vector<MPI_Request>& r) {
                 int zoid_num = zoid.num;
                 auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
@@ -9079,26 +9074,26 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
-                    while (!MPIX_Request_is_complete(r[send_request_idx])) {
-                        if (manager->m[src_stream_idx].try_lock()) {
-                            MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                            manager->m[src_stream_idx].unlock();
+                    if (dep == 0) {
+                        while (!MPIX_Request_is_complete(r[send_request_idx])) {
+                            if (manager->m[src_stream_idx].try_lock()) {
+                                MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                                manager->m[src_stream_idx].unlock();
+                            }
+                        }
+                    } else {
+                        for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
+                            if (manager->m[src_stream_idx].try_lock()) {
+                                MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                                manager->m[src_stream_idx].unlock();
+                            }
                         }
                     }
-
-                    /*
-                    for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
-                        if (manager->m[src_stream_idx].try_lock()) {
-                            MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                            manager->m[src_stream_idx].unlock();
-                        }
-                    }
-                    */
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
                         all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
-            }(zoid, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
+            }(send_dep, zoid, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
         }
 
         for (int i = 0; i < procs_to_send_to.size(); i++) {

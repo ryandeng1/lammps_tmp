@@ -2703,7 +2703,7 @@ void Verlet::stencil_md_run_zoid_wrapper_better_work_queue(int starting_timestep
 
     dep_counters[dep].fetch_sub(1, std::memory_order_relaxed);
     if (dep_counters[dep].load(std::memory_order_relaxed) == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
-        stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
+        // stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
     }
 }
 
@@ -3798,7 +3798,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
     std::vector<std::atomic_flag> zoid_unpack_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
 
     constexpr bool USE_BETTER_WORK_QUEUE = false;
-    constexpr bool ALL_DEPS = true;
+    constexpr bool ALL_DEPS = false;
     if (USE_BETTER_WORK_QUEUE) {
         std::vector<std::atomic<bool>> zoid_done(stencilMD->NUM_ZOIDS_MANY_CUTS);
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -3815,54 +3815,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
         std::atomic<bool> progress_thread_done = false;
 
-        // cilk_spawn start_progress_thread(stream_manager, &progress_thread_done);
-
-        /*
-        cilk_spawn [this](MPIX_Stream_Manager* manager, std::atomic<bool>& done) noexcept {
-            while (!done.load(std::memory_order_acquire)) {
-                if (manager->global_lock.try_lock()) {
-                    for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-                        if (manager->m[stream_num].try_lock()) {
-                            MPIX_Stream_progress(manager->streams[stream_num]);
-                            manager->m[stream_num].unlock();
-                        }
-                    }
-                    manager->global_lock.unlock();
-                }
-            }
-        }(stream_manager, progress_thread_done);
-        */
-
-        /*
-        cilk_scope {
-            constexpr int starting_dep = 0;
-            cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-                auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][starting_dep + 1][stream_num];
-                auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][starting_dep + 1][stream_num];
-                int total_num_wait = zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size();
-                if (total_num_wait > 0) {
-                    stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(starting_dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
-                        recv_r_zoid_to_zoid_streams[starting_dep + 1][stream_num], stream_manager);
-                }
-            }
-
-            // for (int j = 0; j < my_queues[starting_dep].size(); j++) {
-            //     auto& zoid = my_queues[starting_dep][j];
-            //     cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, starting_dep, zoid, default_start_t, default_end_t,
-            //         zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-            //         test_f, test_x, test_v, 
-            //         zoid_claimed, dep_claimed, stream_manager, zoid_done);
-            // }
-
-            for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-                cilk_spawn run_stencil_md_many_cuts_process_stream_better_work_queue<curr_dt>(starting_timestep, starting_dep + 1, stream_num,
-                    test_f, test_x, test_v,
-                    zoid_recv_neighbor_counters, dep_counters,
-                    send_r_zoid_to_zoid, send_r_proc_to_proc, 
-                    recv_r_zoid_to_zoid_streams, zoid_claimed, dep_claimed, stream_manager, zoid_unpack_self_claimed, zoid_done, zoid_unpack_claimed);
-            }
-        }
-        */
+        cilk_spawn start_progress_thread(stream_manager, &progress_thread_done);
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             if (dep == 0) {
@@ -3895,6 +3848,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     }
                 }
             }
+
+            cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
         }
 
         progress_thread_done.store(true, std::memory_order_release);
@@ -3915,65 +3870,6 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
         return;
     }
-
-    if (ALL_DEPS) {
-        std::vector<std::atomic<bool>> zoid_done(stencilMD->NUM_ZOIDS_MANY_CUTS);
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < my_queues[dep].size(); j++) {
-                auto& zoid = my_queues[dep][j];
-                zoid_done[zoid.num].store(false, std::memory_order_relaxed);
-
-                int num_recv_neighbors = std::max(stencilMD->recv_from_neighbors_many_cuts[zoid.num].size(), stencilMD->recv_from_neighbors_many_cuts_next_dt[zoid.num].size());
-                for (int i = 0; i < num_recv_neighbors; i++) {
-                    zoid_unpack_self_claimed[zoid.num][i].clear(std::memory_order_relaxed);
-                }
-            }
-        }
-
-        std::atomic<bool> progress_thread_done = false;
-
-        cilk_scope {
-            for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-                cilk_spawn stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS_ALL_DEPS<curr_dt>(stream_num, DEFAULT_PIPELINE_STAGE, recv_r_zoid_to_zoid_streams[0][stream_num], stream_manager);
-            }
-
-            constexpr int starting_dep = 0;
-            for (int j = 0; j < my_queues[starting_dep].size(); j++) {
-                auto& zoid = my_queues[starting_dep][j];
-                cilk_spawn stencil_md_run_zoid_wrapper<curr_dt>(starting_timestep, starting_dep, zoid, default_start_t, default_end_t,
-                    zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                    test_f, test_x, test_v, 
-                    zoid_claimed, dep_claimed, stream_manager);
-            }
-
-            for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-                cilk_spawn run_stencil_md_many_cuts_process_stream_better_work_queue_all_deps<curr_dt>(starting_timestep, stream_num,
-                    test_f, test_x, test_v,
-                    zoid_recv_neighbor_counters, dep_counters,
-                    send_r_zoid_to_zoid, send_r_proc_to_proc, 
-                    recv_r_zoid_to_zoid_streams[0], zoid_claimed, dep_claimed, stream_manager, zoid_unpack_self_claimed, zoid_done, zoid_unpack_claimed);
-            }
-        }
-
-        progress_thread_done.store(true, std::memory_order_release);
-
-        for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
-            for (int j = 0; j < my_queues[dep].size(); j++) {
-                int zoid_num = my_queues[dep][j].num;
-                stream_manager->global_lock.lock();
-                MPI_Waitall(send_r_zoid_to_zoid[zoid_num].size(), send_r_zoid_to_zoid[zoid_num].data(), MPI_STATUSES_IGNORE);
-                stream_manager->global_lock.unlock();
-            }
-            if (dep < 2) {
-                stream_manager->global_lock.lock();
-                MPI_Waitall(send_r_proc_to_proc[dep].size(), send_r_proc_to_proc[dep].data(), MPI_STATUSES_IGNORE);
-                stream_manager->global_lock.unlock();
-            }
-        }
-
-        return;
-    }
-
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         if (dep == 0) {
@@ -4318,20 +4214,6 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
         recv_r_zoid_to_zoid_streams[dep].resize(NUM_STREAMS);
         for (int i = 0; i < NUM_STREAMS; i++) {
             recv_r_zoid_to_zoid_streams[dep][i].resize(max_zoids_per_dep * MAX_NEIGHBORS, MPI_REQUEST_NULL);
-        }
-    }
-
-    constexpr bool ALL_DEPS = true;
-    if (ALL_DEPS) {
-        int total_size = 0;
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int i = 0; i < NUM_STREAMS; i++) {
-                total_size += recv_r_zoid_to_zoid_streams[dep][i].size();
-            }
-        }
-
-        for (int i = 0; i < NUM_STREAMS; i++) {
-            recv_r_zoid_to_zoid_streams[0][i].resize(total_size, MPI_REQUEST_NULL);
         }
     }
 
