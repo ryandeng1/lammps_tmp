@@ -3630,6 +3630,23 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
         std::atomic<bool> progress_thread_done = false;
 
+        auto f = [this](MPIX_Stream_Manager* manager, std::atomic<bool>& done) noexcept {
+            while (!done.load(std::memory_order_acquire)) {
+                if (manager->global_lock.try_lock()) {
+                    for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+                        if (manager->m[stream_num].try_lock()) {
+                            MPIX_Stream_progress(manager->streams[stream_num]);
+                            manager->m[stream_num].unlock();
+                        }
+                    }
+                    manager->global_lock.unlock();
+                }
+            }
+        };
+
+        cilk_spawn f(stream_manager, progress_thread_done);
+
+        /*
         cilk_spawn [this](MPIX_Stream_Manager* manager, std::atomic<bool>& done) noexcept {
             while (!done.load(std::memory_order_acquire)) {
                 if (manager->global_lock.try_lock()) {
@@ -3643,6 +3660,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 }
             }
         }(stream_manager, progress_thread_done);
+        */
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             if (dep == 0) {
