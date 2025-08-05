@@ -2701,10 +2701,12 @@ void Verlet::stencil_md_run_zoid_wrapper_better_work_queue(int starting_timestep
     
     stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
 
+    /*
     dep_counters[dep].fetch_sub(1, std::memory_order_relaxed);
     if (dep_counters[dep].load(std::memory_order_relaxed) == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
-        // stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
+        stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
     }
+    */
 }
 
 template <bool curr_dt>
