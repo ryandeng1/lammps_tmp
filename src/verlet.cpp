@@ -3567,8 +3567,8 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
     }
 }
 
-void start_progress_thread(MPIX_Stream_Manager* manager, std::atomic<bool>& done) noexcept {
-    while (!done.load(std::memory_order_acquire)) {
+void start_progress_thread(MPIX_Stream_Manager* manager, std::atomic<bool>* done) noexcept {
+    while (!done->load(std::memory_order_acquire)) {
         if (manager->global_lock.try_lock()) {
             for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                 if (manager->m[stream_num].try_lock()) {
@@ -3659,7 +3659,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
         };
 
         // cilk_spawn f(stream_manager, progress_thread_done);
-        cilk_spawn start_progress_thread(stream_manager, progress_thread_done);
+        cilk_spawn start_progress_thread(stream_manager, &progress_thread_done);
 
         /*
         cilk_spawn [this](MPIX_Stream_Manager* manager, std::atomic<bool>& done) noexcept {
