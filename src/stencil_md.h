@@ -8992,6 +8992,9 @@ public:
                         MPIX_Stream_progress(manager->streams[src_stream_idx]);
                         manager->m[src_stream_idx].unlock();
                     }
+                    if (MPIX_Request_is_complete(r[send_request_idx])) {
+                        MPI_Request_free(&r[send_request_idx]);
+                    }
                 } else {
                     MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
