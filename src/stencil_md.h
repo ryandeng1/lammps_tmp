@@ -9069,6 +9069,9 @@ public:
                                 manager->m[src_stream_idx].unlock();
                             }
                         }
+                        if (MPIX_Request_is_complete(r[send_request_idx])) {
+                            MPI_Request_free(&r[send_request_idx]);
+                        }
                     }
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
