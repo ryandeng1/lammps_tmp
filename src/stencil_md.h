@@ -54,7 +54,7 @@
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 24;
-constexpr int NUM_PROGRESS_STREAM_ITER = 0;
+constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -3152,6 +3152,8 @@ public:
                         }
                     }
                 }
+
+                std::cout << "dep: " << dep << " zoid: " << zoid.num << " num diff proc: " << num_diff_proc << std::endl;
             }
 
             std::cout << "total num diff proc: " << total_num_diff_proc << std::endl;
