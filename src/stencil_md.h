@@ -9055,6 +9055,12 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
+                    if (zoid_num == 32 && curr_dt) {
+                        std::stringstream s1;
+                        s1 << "zoid: " << zoid_num << " send to: " << send_zoid_num << " stream: " << src_stream_idx << " " << dst_stream_idx << " tag: " << mpi_tag << std::endl;
+                        std::cout << s1.str();
+                    }
+
                     if (false && dep == 0) {
                         while (!MPIX_Request_is_complete(r[send_request_idx])) {
                             if (manager->m[src_stream_idx].try_lock()) {
@@ -9071,6 +9077,7 @@ public:
                         }
                         if (MPIX_Request_is_complete(r[send_request_idx])) {
                             MPI_Request_free(&r[send_request_idx]);
+                            r[send_request_idx] = MPI_REQUEST_NULL;
                         }
                     }
                 } else {
@@ -9443,6 +9450,12 @@ public:
                 MPIX_Stream_irecv(buf, total_doubles_recv_from_zoid, MPI_DOUBLE, recv_zoid_num % comm->nprocs, mpi_tag,
                     manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
                 manager->m[stream_num].unlock();
+
+                if (recv_zoid_num == 32 && curr_dt) {
+                    std::stringstream s1;
+                    s1 << "zoid: " << recv_zoid_num << " send to: " << zoid_num << " stream: " << src_stream_idx << " " << stream_num << " tag: " << mpi_tag << std::endl;
+                    std::cout << s1.str();
+                }
                 
                 // for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
                 //     if (manager->m[stream_num].try_lock()) {
