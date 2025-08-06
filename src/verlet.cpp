@@ -3490,19 +3490,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                 stream_manager->m[stream_num].unlock();
             }
 
-            // check if dep-0 zoids have been completed
-            constexpr int starting_dep = 0;
-            for (int j = 0; j < my_queues[starting_dep].size(); j++) {
-                auto& zoid = my_queues[starting_dep][j];
-                auto& claimed = zoid_claimed[zoid.num];;
-                if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
-                    cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, starting_dep, zoid, default_start_t, default_end_t,
-                    zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
-                    test_f, test_x, test_v, 
-                    zoid_claimed, dep_claimed, stream_manager, zoid_done);
-                }
-            }
-
             for (int d = dep; d < NUM_DEPS; d++) {
                 for (int j = 0; j < my_queues[d].size(); j++) {
                     auto& zoid = my_queues[d][j];
