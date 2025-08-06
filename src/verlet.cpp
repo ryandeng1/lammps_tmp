@@ -3799,7 +3799,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
     std::vector<std::atomic_flag> zoid_unpack_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
 
-    constexpr bool USE_BETTER_WORK_QUEUE = false;
+    constexpr bool USE_BETTER_WORK_QUEUE = true;
     constexpr bool ALL_DEPS = false;
     if (USE_BETTER_WORK_QUEUE) {
         std::vector<std::atomic<bool>> zoid_done(stencilMD->NUM_ZOIDS_MANY_CUTS);
