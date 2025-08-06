@@ -3258,7 +3258,6 @@ public:
 
                 auto proc_pair = std::make_pair(proc, comm->me);
 
-                /*
                 int recv_stream_idx = 0;
                 assert(zoid_to_zoid_per_proc_recv[proc].size() <= NUM_STREAMS);
                 for (int j = 0; j < zoid_to_zoid_per_proc_recv[proc].size(); j++) {
@@ -3279,12 +3278,11 @@ public:
 
                 if (recv_stream_idx > NUM_STREAMS) {
                     std::stringstream s1;
-                    s1 << BOLDRED << "ERROR me: " << comm->me << " dep: " << dep << " proc: " << proc
+                    s1 << BOLDRED << "WARNING me: " << comm->me << " dep: " << dep << " proc: " << proc
                     << " size: " << zoid_to_zoid_per_proc_recv[proc].size() << " overall size: " << recv_stream_idx << RESET_COLOR << std::endl;
                     std::cout << s1.str();
-                    MPI_Abort(world, 0);
+                    // MPI_Abort(world, 0);
                 }
-                */
 
                 for (int j = 0; j < zoid_to_zoid_per_proc_recv[proc].size(); j++) {
                     auto pair = zoid_to_zoid_per_proc_recv[proc][j];
