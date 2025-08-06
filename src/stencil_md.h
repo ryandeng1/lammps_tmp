@@ -9041,7 +9041,7 @@ public:
             }
 
             cilk_spawn [this](int dep, queue_info& zoid, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
-                int pipeline_stage, MPIX_Stream_Manager* manager, int send_request_idx, std::vector<MPI_Request>& r) {
+                int pipeline_stage, MPIX_Stream_Manager* manager, int send_request_idx, std::vector<MPI_Request>& r) noexcept {
                 int zoid_num = zoid.num;
                 auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
                 PACK_DATA_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage);
@@ -9054,12 +9054,6 @@ public:
                         src_stream_idx, dst_stream_idx, &r[send_request_idx]);
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
-
-                    if (zoid_num == 32 && curr_dt) {
-                        std::stringstream s1;
-                        s1 << "zoid: " << zoid_num << " send to: " << send_zoid_num << " stream: " << src_stream_idx << " " << dst_stream_idx << " tag: " << mpi_tag << std::endl;
-                        std::cout << s1.str();
-                    }
 
                     if (false && dep == 0) {
                         while (!MPIX_Request_is_complete(r[send_request_idx])) {
@@ -9451,12 +9445,6 @@ public:
                     manager->stream_comm, src_stream_idx, stream_num, &r[recv_request_idx]);
                 manager->m[stream_num].unlock();
 
-                if (recv_zoid_num == 32 && curr_dt) {
-                    std::stringstream s1;
-                    s1 << "zoid: " << recv_zoid_num << " send to: " << zoid_num << " stream: " << src_stream_idx << " " << stream_num << " tag: " << mpi_tag << std::endl;
-                    std::cout << s1.str();
-                }
-                
                 // for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
                 //     if (manager->m[stream_num].try_lock()) {
                 //         MPIX_Stream_progress(manager->streams[stream_num]);
