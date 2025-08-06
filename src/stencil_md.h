@@ -8987,14 +8987,11 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
-                    for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
-                        manager->m[src_stream_idx].lock();
-                        MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                        manager->m[src_stream_idx].unlock();
-                    }
-                    if (MPIX_Request_is_complete(r[send_request_idx])) {
-                        MPI_Request_free(&r[send_request_idx]);
-                    }
+                    // for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
+                    //     manager->m[src_stream_idx].lock();
+                    //     MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                    //     manager->m[src_stream_idx].unlock();
+                    // }
                 } else {
                     MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
@@ -9055,23 +9052,10 @@ public:
                     manager->m[src_stream_idx].unlock();
                     assert(res == MPI_SUCCESS);
 
-                    if (false && dep == 0) {
-                        while (!MPIX_Request_is_complete(r[send_request_idx])) {
-                            if (manager->m[src_stream_idx].try_lock()) {
-                                MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                                manager->m[src_stream_idx].unlock();
-                            }
-                        }
-                    } else {
-                        for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
-                            if (manager->m[src_stream_idx].try_lock()) {
-                                MPIX_Stream_progress(manager->streams[src_stream_idx]);
-                                manager->m[src_stream_idx].unlock();
-                            }
-                        }
-                        if (MPIX_Request_is_complete(r[send_request_idx])) {
-                            MPI_Request_free(&r[send_request_idx]);
-                            r[send_request_idx] = MPI_REQUEST_NULL;
+                    for (int i = 0; i < NUM_PROGRESS_STREAM_ITER; i++) {
+                        if (manager->m[src_stream_idx].try_lock()) {
+                            MPIX_Stream_progress(manager->streams[src_stream_idx]);
+                            manager->m[src_stream_idx].unlock();
                         }
                     }
                 } else {
