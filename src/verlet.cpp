@@ -3413,6 +3413,8 @@ void Verlet::run_stencil_md_many_cuts_process_stream(int starting_timestep, int 
     }
 }
 
+static constexpr bool ALL_RECV_AT_START = true;
+
 template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int starting_timestep, int dep, int stream_num,
     double** test_f, double** test_x, double** test_v,
@@ -3434,8 +3436,10 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
     auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
     int total_num_wait = zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size();
     if (dep < NUM_DEPS - 1 && total_num_wait == 0) {
-        stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
-            recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
+        if (!ALL_RECV_AT_START) {
+            stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE, 
+                recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
+        }
     } else {
         int num_wait = 0;
         int num_iter = 0;
@@ -3563,8 +3567,10 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
         }
 
         if (dep < NUM_DEPS - 1) {
-            stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE,
-                recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
+            if (!ALL_RECV_AT_START) {
+                stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE,
+                    recv_r_zoid_to_zoid_streams[dep + 1][stream_num], stream_manager);
+            }
         }
     }
 }
@@ -3650,8 +3656,21 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
             cilk_spawn start_progress_thread(stream_manager, &progress_thread_done);
 
+            if (ALL_RECV_AT_START) {
+                for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+                    for (int dep = 1; dep < NUM_DEPS; dep++) {
+                        auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
+                        auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep][stream_num];
+                        if (zoid_pairs_at_stream.size() + send_dep_proc_pairs_at_stream.size() > 0) {
+                            stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep, stream_num, DEFAULT_PIPELINE_STAGE, 
+                                recv_r_zoid_to_zoid_streams[dep][stream_num], stream_manager);
+                        }
+                    }
+                }
+            }
+
             for (int dep = 0; dep < NUM_DEPS; dep++) {
-                if (dep == 0) {
+                if (dep == 0 && !ALL_RECV_AT_START) {
                     cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                         auto& zoid_pairs_at_stream = stencilMD->stream_num_to_zoid_pairs[curr_dt_idx][dep + 1][stream_num];
                         auto& send_dep_proc_pairs_at_stream = stencilMD->stream_num_to_dep_proc_pairs[curr_dt_idx][dep + 1][stream_num];
