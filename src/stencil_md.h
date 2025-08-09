@@ -1817,6 +1817,7 @@ public:
             }
             
             // METHOD 4: Graph Partitioning with METIS-like approach
+            /*
             {
                 Assignment graph_assignment;
                 graph_assignment.method_name = "Graph Partitioning";
@@ -1832,6 +1833,7 @@ public:
                 
                 assignments.push_back(graph_assignment);
             }
+            */
             
             // Optimize each assignment with local search
             for (auto& assignment : assignments) {
