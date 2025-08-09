@@ -56,14 +56,14 @@ constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
 constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 // constexpr double ADDITIONAL_CUTOFF = 0.4001;
-// constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
-constexpr double ADDITIONAL_CUTOFF = 1.0 + 1e-10;
+constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
+// constexpr double ADDITIONAL_CUTOFF = 1.0 + 1e-10;
 // constexpr double ADDITIONAL_CUTOFF = 0.3 + 1e-10;
 
 // this is for the potential, used when there is a multi-body potential
 constexpr double CUTOFF = 3.77;
-constexpr double ALLEGRO_CUTOFF_RADIUS = 2 * CUTOFF;
-// constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
+// constexpr double ALLEGRO_CUTOFF_RADIUS = 2 * CUTOFF;
+constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 // constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
 
 constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
@@ -80,7 +80,7 @@ constexpr int NUM_WORKERS_PER_THREAD = 512;
 
 constexpr bool ONLY_RUN_LAMMPS = false;
 
-constexpr bool ONLY_RUN_STENCIL_MD = false;
+constexpr bool ONLY_RUN_STENCIL_MD = true;
 
 constexpr bool USE_BOND = true;
 
