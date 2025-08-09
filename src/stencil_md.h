@@ -13709,9 +13709,11 @@ public:
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = MODIFY_GRAINSIZE;
 
+        constexpr int GRAINSIZE = 512;
+
         // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > MODIFY_GRAINSIZE) {
-            #pragma cilk grainsize MODIFY_GRAINSIZE
+        if (nlocal > GRAINSIZE) {
+            #pragma cilk grainsize GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -13723,8 +13725,8 @@ public:
                 const double *_noalias const offseti = offset[itype];
                 const double *_noalias const lj1i = lj1[itype];
                 const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
+                // const double *_noalias const lj3i = lj3[itype];
+                // const double *_noalias const lj4i = lj4[itype];
 
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
@@ -13787,8 +13789,8 @@ public:
                 const double *_noalias const offseti = offset[itype];
                 const double *_noalias const lj1i = lj1[itype];
                 const double *_noalias const lj2i = lj2[itype];
-                const double *_noalias const lj3i = lj3[itype];
-                const double *_noalias const lj4i = lj4[itype];
+                // const double *_noalias const lj3i = lj3[itype];
+                // const double *_noalias const lj4i = lj4[itype];
 
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
