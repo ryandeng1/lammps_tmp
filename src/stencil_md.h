@@ -13699,15 +13699,12 @@ public:
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
         const int nlocal = local_idxs.size();
 
-        int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
-        int num_workers = __cilkrts_get_nworkers();
-
-        auto* claimed = zoid.claimed_flags_stencil_md[0];
-
-        const auto& tags = zoid.tag_stencil_md[0];
-
-        int chunks_per_worker = num_chunks / num_workers;
-        int chunk_size = MODIFY_GRAINSIZE;
+        // int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+        // int num_workers = __cilkrts_get_nworkers();
+        // auto* claimed = zoid.claimed_flags_stencil_md[0];
+        // const auto& tags = zoid.tag_stencil_md[0];
+        // int chunks_per_worker = num_chunks / num_workers;
+        // int chunk_size = MODIFY_GRAINSIZE;
 
         constexpr int GRAINSIZE = 512;
 
