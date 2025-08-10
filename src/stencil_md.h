@@ -13690,23 +13690,17 @@ public:
         const auto* lj2 = pair->lj2;
         const auto* lj3 = pair->lj3;
         const auto* lj4 = pair->lj4;
-        constexpr int newton_pair = USE_NEWTON;
+        constexpr bool newton_pair = USE_NEWTON;
 
         const auto& atom_type = zoid.type_stencil_md[0];
 
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
         const int nlocal = local_idxs.size();
 
-        // int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
-        // int num_workers = __cilkrts_get_nworkers();
-        // auto* claimed = zoid.claimed_flags_stencil_md[0];
-        // const auto& tags = zoid.tag_stencil_md[0];
-        // int chunks_per_worker = num_chunks / num_workers;
-        // int chunk_size = MODIFY_GRAINSIZE;
-
         constexpr int GRAINSIZE = 512;
 
-        // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
+        constexpr bool USE_ATOMICS = true;
+
         if (nlocal > GRAINSIZE) {
             #pragma cilk grainsize GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
@@ -13714,7 +13708,6 @@ public:
 
                 const int itype = atom_type[i];
 
-                // const int *_noalias const jlist = firstneigh[i];
                 const auto &jlist = neighbor_list[i];
                 const double *_noalias const cutsqi = cutsq[itype];
                 const double *_noalias const offseti = offset[itype];
@@ -13726,7 +13719,6 @@ public:
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
                 double ztmp = x[i].z;
-                // int jnum = numneigh[i];
                 int jnum = jlist.size();
 
                 double fxtmp = 0.0;
@@ -13735,7 +13727,6 @@ public:
 
                 for (int jj = 0; jj < jnum; jj++) {
                     double evdwl = 0.0;
-                    // int j = jlist[jj];
                     int j = jlist[jj];
                     double factor_lj = special_lj[pair->sbmask(j)];
                     j &= NEIGHMASK;
@@ -13757,20 +13748,32 @@ public:
                         fztmp += delz * fpair;
 
                         if (newton_pair || j < nlocal) {
-                            spinlocks[j].lock();
-                            f[j].x -= delx * fpair;
-                            f[j].y -= dely * fpair;
-                            f[j].z -= delz * fpair;
-                            spinlocks[j].unlock();
+                            if (USE_ATOMICS) {
+                                __atomic_fetch_add(&f[j].x, -delx * fpair, __ATOMIC_RELAXED);
+                                __atomic_fetch_add(&f[j].y, -dely * fpair, __ATOMIC_RELAXED);
+                                __atomic_fetch_add(&f[j].z, -delz * fpair, __ATOMIC_RELAXED);
+                            } else {
+                                spinlocks[j].lock();
+                                f[j].x -= delx * fpair;
+                                f[j].y -= dely * fpair;
+                                f[j].z -= delz * fpair;
+                                spinlocks[j].unlock();
+                            }
                         }
                     }
                 }
 
-                spinlocks[i].lock();
-                f[i].x += fxtmp;
-                f[i].y += fytmp;
-                f[i].z += fztmp;
-                spinlocks[i].unlock();
+                if (USE_ATOMICS) {
+                    __atomic_fetch_add(&f[i].x, fxtmp, __ATOMIC_RELAXED);
+                    __atomic_fetch_add(&f[i].y, fytmp, __ATOMIC_RELAXED);
+                    __atomic_fetch_add(&f[i].z, fztmp, __ATOMIC_RELAXED);
+                } else {
+                    spinlocks[i].lock();
+                    f[i].x += fxtmp;
+                    f[i].y += fytmp;
+                    f[i].z += fztmp;
+                    spinlocks[i].unlock();
+                }
             }
         } else {
             for (int idx = 0; idx < nlocal; idx++) {
@@ -13778,7 +13781,6 @@ public:
 
                 const int itype = atom_type[i];
 
-                // const int *_noalias const jlist = firstneigh[i];
                 const auto &jlist = neighbor_list[i];
                 const double *_noalias const cutsqi = cutsq[itype];
                 const double *_noalias const offseti = offset[itype];
@@ -13790,7 +13792,6 @@ public:
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
                 double ztmp = x[i].z;
-                // int jnum = numneigh[i];
                 int jnum = jlist.size();
 
                 double fxtmp = 0.0;
@@ -13799,7 +13800,6 @@ public:
 
                 for (int jj = 0; jj < jnum; jj++) {
                     double evdwl = 0.0;
-                    // int j = jlist[jj];
                     int j = jlist[jj];
                     double factor_lj = special_lj[pair->sbmask(j)];
                     j &= NEIGHMASK;
