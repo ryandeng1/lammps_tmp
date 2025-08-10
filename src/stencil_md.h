@@ -13699,7 +13699,7 @@ public:
 
         constexpr int GRAINSIZE = 1024;
 
-        if (nlocal > 4 * GRAINSIZE) {
+        if (nlocal > 2 * GRAINSIZE) {
             #pragma cilk grainsize GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
