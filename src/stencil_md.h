@@ -13697,7 +13697,7 @@ public:
         const auto& local_idxs = zoid.local_idxs_per_timestep[timestep];
         const int nlocal = local_idxs.size();
 
-        constexpr int GRAINSIZE = 512;
+        constexpr int GRAINSIZE = 1024;
 
         if (nlocal > GRAINSIZE) {
             #pragma cilk grainsize GRAINSIZE
