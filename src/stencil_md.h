@@ -13676,9 +13676,7 @@ public:
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
         auto pair = (PairLJCut*) force->pair;
-        auto bond = (BondFENE*) force->bond;
 
-        const auto& bond_list = zoid.bond_list[timestep];
         const auto& neighbor_list = zoid.neighbor_list[timestep];
 
         const double * _noalias const special_lj = force->special_lj;
