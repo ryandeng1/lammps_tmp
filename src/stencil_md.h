@@ -13763,7 +13763,7 @@ public:
                 spinlocks[i].unlock();
             }
         } else if (nlocal > GRAINSIZE) {
-            #pragma cilk grainsize SMALL_GRAINSIZE
+            #pragma cilk grainsize GRAINSIZE 
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
