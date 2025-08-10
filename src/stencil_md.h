@@ -13699,8 +13699,6 @@ public:
 
         constexpr int GRAINSIZE = 512;
 
-        constexpr bool USE_ATOMICS = true;
-
         if (nlocal > GRAINSIZE) {
             #pragma cilk grainsize GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
@@ -13748,32 +13746,20 @@ public:
                         fztmp += delz * fpair;
 
                         if (newton_pair || j < nlocal) {
-                            if (USE_ATOMICS) {
-                                __atomic_fetch_add(&f[j].x, -delx * fpair, __ATOMIC_RELAXED);
-                                __atomic_fetch_add(&f[j].y, -dely * fpair, __ATOMIC_RELAXED);
-                                __atomic_fetch_add(&f[j].z, -delz * fpair, __ATOMIC_RELAXED);
-                            } else {
-                                spinlocks[j].lock();
-                                f[j].x -= delx * fpair;
-                                f[j].y -= dely * fpair;
-                                f[j].z -= delz * fpair;
-                                spinlocks[j].unlock();
-                            }
+                            spinlocks[j].lock();
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                            spinlocks[j].unlock();
                         }
                     }
                 }
 
-                if (USE_ATOMICS) {
-                    __atomic_fetch_add(&f[i].x, fxtmp, __ATOMIC_RELAXED);
-                    __atomic_fetch_add(&f[i].y, fytmp, __ATOMIC_RELAXED);
-                    __atomic_fetch_add(&f[i].z, fztmp, __ATOMIC_RELAXED);
-                } else {
-                    spinlocks[i].lock();
-                    f[i].x += fxtmp;
-                    f[i].y += fytmp;
-                    f[i].z += fztmp;
-                    spinlocks[i].unlock();
-                }
+                spinlocks[i].lock();
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+                spinlocks[i].unlock();
             }
         } else {
             for (int idx = 0; idx < nlocal; idx++) {
