@@ -13698,9 +13698,10 @@ public:
         const int nlocal = local_idxs.size();
 
         constexpr int GRAINSIZE = 1024;
+        constexpr int SMALL_GRAINSIZE = 128;
 
-        if (nlocal > 2 * GRAINSIZE) {
-            #pragma cilk grainsize GRAINSIZE
+        if ((dep == 0 && (timestep >  2)) || (dep == 3 && (timestep <= 2))) {
+            #pragma cilk grainsize SMALL_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -13762,7 +13763,6 @@ public:
                 spinlocks[i].unlock();
             }
         } else if (nlocal > GRAINSIZE) {
-            constexpr int SMALL_GRAINSIZE = 128;
             #pragma cilk grainsize SMALL_GRAINSIZE
             cilk_for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
