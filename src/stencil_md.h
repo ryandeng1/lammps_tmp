@@ -5260,6 +5260,26 @@ public:
             }
         }
 
+        for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            int total_neighbors = 0;
+            for (int dep = 0; dep < NUM_DEPS; dep++) {
+                for (int j = 0; j < my_queues_many_cuts[dep].size(); j++) {
+                    auto& zoid = my_queues_many_cuts[dep][j];
+                    auto& neighbor_list = zoid.neighbor_list[t];
+                    for (int i = 0; i < zoid.local_idxs_per_timestep[t].size(); i++) {
+                        int idx = zoid.local_idxs_per_timestep[t][i];
+                        int num_neigh = neighbor_list[idx].size();
+                        total_neighbors += num_neigh;
+                    }
+                }
+            }
+
+            MPI_Allreduce(MPI_IN_PLACE, &total_neighbors, 1, MPI_INT, MPI_SUM, world);
+            if (comm->me == 0) {
+                std::cout << "t: " << t << " num atoms: " << atom->natoms << " num neighbors: " << total_neighbors << " neighbors per atom: " << total_neighbors * 1.0 / atom->natoms << std::endl;
+            }
+        }
+
         delete[] neighbor_lst;
 
         /*
