@@ -1057,6 +1057,9 @@ void Verlet::setup_stencil_md_many_zoids() {
         std::cout << BOLDMAGENTA << "GET BOND LIST: " << duration << " seconds." << RESET_COLOR << std::endl;
     }
 
+    stencilMD->INIT_PER_WORKER_ARRAYS<true>();
+    stencilMD->INIT_PER_WORKER_ARRAYS<false>();
+
     stencilMD->INIT_AFFINITY_AND_LOCKS();
 
     stencilMD->CONSTRUCT_SEND_FORCE_IDXS_ZOID_MANY_CUTS<true, USE_NEWTON>();

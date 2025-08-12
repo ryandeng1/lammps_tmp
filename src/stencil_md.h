@@ -55,7 +55,6 @@ constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 20;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
-constexpr int MAX_PER_WORKER_FORCE_UPDATES = 100000;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -2482,12 +2481,9 @@ public:
                     assert(domain->dimension == 3);
 
                     int nworkers = __cilkrts_get_nworkers();
-                    zoid.per_worker_force_updates = new std::pair<int, dbl3_t_stencil_md>*[nworkers];
-                    zoid.per_worker_num_force_updates = new int[nworkers];
-
-                    for (int i = 0; i < nworkers; i++) {
-                        zoid.per_worker_force_updates[i] = new std::pair<int, dbl3_t_stencil_md>[MAX_PER_WORKER_FORCE_UPDATES];
-                    }
+                    zoid.per_worker_force_updates = new dbl3_t_stencil_md*[nworkers];
+                    zoid.global_to_local_idx = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.local_to_global_idx = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                     zoid.rho_stencil_md = new std::vector<double>[DOUBLE_BUFFERING];
                     zoid.fp_stencil_md = new std::vector<double>[DOUBLE_BUFFERING];
@@ -2602,7 +2598,8 @@ public:
                     auto coord = zoid_num_to_coord[zoid.num];
 
                     zoid.per_worker_force_updates = queues_many_cuts[coord.first][coord.second].per_worker_force_updates;
-                    zoid.per_worker_num_force_updates = queues_many_cuts[coord.first][coord.second].per_worker_num_force_updates;
+                    zoid.global_to_local_idx = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    zoid.local_to_global_idx = new std::vector<int>[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
                     zoid.rho_stencil_md = queues_many_cuts[coord.first][coord.second].rho_stencil_md;
                     zoid.fp_stencil_md = queues_many_cuts[coord.first][coord.second].fp_stencil_md;
@@ -13744,6 +13741,58 @@ public:
         }
     }
 
+    template <bool curr_dt>
+    void INIT_PER_WORKER_ARRAYS() {
+        const int nworkers = __cilkrts_get_nworkers();
+        auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < my_queues[dep].size(); j++) {
+                auto& zoid = my_queues[dep][j];
+                if (curr_dt) {
+                    for (int w = 0; w < nworkers; w++) {
+                        zoid.per_worker_force_updates[w] = new dbl3_t_stencil_md[zoid.x_stencil_md[0].size()];
+                        for (int i = 0; i < zoid.x_stencil_md[0].size(); i++) {
+                            zoid.per_worker_force_updates[w][i].x = 0;
+                            zoid.per_worker_force_updates[w][i].y = 0;
+                            zoid.per_worker_force_updates[w][i].z = 0;
+                        }
+                    }
+                }
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    std::set<int> idxs;
+                    auto& local_idxs = zoid.local_idxs_per_timestep[t];
+                    auto& neighbor_list = zoid.neighbor_list[t];
+                    for (int i = 0; i < local_idxs.size(); i++) {
+                        int local_idx = local_idxs[i];
+                        idxs.insert(local_idx);
+                        for (auto& neigh_idx : neighbor_list[local_idx]) {
+                            idxs.insert(neigh_idx);
+                        }
+                    }
+
+                    zoid.global_to_local_idx[t].resize(zoid.x_stencil_md[0].size(), -1);
+                    zoid.local_to_global_idx[t].resize(idxs.size(), -1);
+
+                    int local_idx = 0;
+                    for (auto& idx : idxs) {
+                        zoid.global_to_local_idx[t][idx] = local_idx++;
+                    }
+
+                    local_idx = 0;
+                    for (auto& idx : idxs) {
+                        zoid.local_to_global_idx[t][local_idx++] = idx;
+                    }
+
+                    assert(local_idx == idxs.size());
+                    for (int i = 0; i < local_idx; i++) {
+                        int global_idx = zoid.local_to_global_idx[t][i];
+                        assert(zoid.global_to_local_idx[t][global_idx] == i);
+                    }
+                }
+            }
+        }
+    }
+
     void LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
@@ -13779,19 +13828,22 @@ public:
             int nworkers = __cilkrts_get_nworkers();
             auto* claimed = zoid.claimed_flags_stencil_md[0];
             auto* per_worker_force_updates = zoid.per_worker_force_updates;
-            auto* per_worker_num_force_updates = zoid.per_worker_num_force_updates;
+            for (int w = 0; w < nworkers; w++) {
+                memset(per_worker_force_updates[w], 0, sizeof(dbl3_t_stencil_md) * zoid.x_stencil_md[0].size());
+            }
             int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
             int chunks_per_worker = num_chunks / nworkers;
-            for (int i = 0; i < nworkers; i++) {
-                per_worker_num_force_updates[i] = 0;
-            }
+
+            auto& global_to_local_idx = zoid.global_to_local_idx[timestep];
+            auto& local_to_global_idx = zoid.local_to_global_idx[timestep];
+            int num_local_to_global = local_to_global_idx.size();
+            std::vector<bool> workers_used(nworkers, false);
 
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
                 int worker_number = __cilkrts_get_worker_number();
                 int start_chunk = worker_number * chunks_per_worker;
-                int num_force_updates = per_worker_num_force_updates[worker_number];
-                auto* force_updates = per_worker_force_updates[worker_number];
+                auto* worker_local_updates = per_worker_force_updates[worker_number];
 
                 for (int c = 0; c < num_chunks; ++c) {
                     int s = (c + start_chunk) % num_chunks;
@@ -13801,6 +13853,7 @@ public:
                     }
 
                     if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                        workers_used[worker_number] = true;
                         for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nlocal; idx++) {
                             int i = local_idxs[idx];
 
@@ -13845,38 +13898,54 @@ public:
                                     fytmp += dely * fpair;
                                     fztmp += delz * fpair;
 
-                                    if (newton_pair || j < nlocal) {
+                                    if (true) {
                                         // f[j].x -= delx * fpair;
                                         // f[j].y -= dely * fpair;
                                         // f[j].z -= delz * fpair;
-                                        assert(num_force_updates < MAX_PER_WORKER_FORCE_UPDATES);
-                                        force_updates[num_force_updates++] = std::make_pair(j, dbl3_t_stencil_md {-delx * fpair, -dely * fpair, -delz * fpair});
+                                        int local_idx = global_to_local_idx[j];
+                                        assert(local_idx != -1);
+                                        auto& worker_local_f = worker_local_updates[local_idx];
+                                        worker_local_f.x -= delx * fpair;
+                                        worker_local_f.y -= dely * fpair;
+                                        worker_local_f.z -= delz * fpair;
                                     }
                                 }
                             }
 
-                            f[i].x += fxtmp;
-                            f[i].y += fytmp;
-                            f[i].z += fztmp;
+                            int local_idx = global_to_local_idx[i];
+                            assert(local_idx != -1);
+                            auto& worker_local_f = worker_local_updates[local_idx];
+                            worker_local_f.x += fxtmp;
+                            worker_local_f.y += fytmp;
+                            worker_local_f.z += fztmp;
+
+                            // f[i].x += fxtmp;
+                            // f[i].y += fytmp;
+                            // f[i].z += fztmp;
                         }
                     }
                 }
-
-                per_worker_num_force_updates[worker_number] = num_force_updates;
             }
 
             for (int i = 0; i < num_chunks; i++) {
                 claimed[i].clear(std::memory_order_relaxed);
             }
 
-            for (int w = 0; w < nworkers; w++) {
-                int num_updates = per_worker_num_force_updates[w];
-                auto* updates = per_worker_force_updates[w];
-                for (int j = 0; j < num_updates; j++) {
-                    auto& [idx, update] = updates[j];
-                    f[idx].x += update.x;
-                    f[idx].y += update.y;
-                    f[idx].z += update.z;
+            for (int local_idx = 0; local_idx < num_local_to_global; local_idx++) {
+                int global_idx = local_to_global_idx[local_idx];
+                assert(global_idx >= 0);
+                for (int w = 0; w < nworkers; w++) {
+                    if (!workers_used[w]) {
+                        continue;
+                    }
+                    auto& worker_local_f = per_worker_force_updates[w][local_idx];
+                    f[global_idx].x += worker_local_f.x;
+                    f[global_idx].y += worker_local_f.y;
+                    f[global_idx].z += worker_local_f.z;
+
+                    worker_local_f.x = 0;
+                    worker_local_f.y = 0;
+                    worker_local_f.z = 0;
                 }
             }
 
