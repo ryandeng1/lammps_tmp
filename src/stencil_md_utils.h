@@ -335,6 +335,10 @@ struct queue_info {
   std::vector<double>* rho_stencil_md;
   std::vector<double>* fp_stencil_md;
 
+  // Use extra-memory
+  std::pair<int, dbl3_t_stencil_md>** per_worker_force_updates;
+  int* per_worker_num_force_updates;
+
   int t0;
   int t1;
   int dim;

@@ -55,6 +55,7 @@ constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 20;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
+constexpr int MAX_PER_WORKER_FORCE_UPDATES = 25000;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -2480,6 +2481,14 @@ public:
 
                     assert(domain->dimension == 3);
 
+                    int nworkers = __cilkrts_get_nworkers();
+                    zoid.per_worker_force_updates = new std::pair<int, dbl3_t_stencil_md>*[nworkers];
+                    zoid.per_worker_num_force_updates = new int[nworkers];
+
+                    for (int i = 0; i < nworkers; i++) {
+                        zoid.per_worker_force_updates[i] = new std::pair<int, dbl3_t_stencil_md>[MAX_PER_WORKER_FORCE_UPDATES];
+                    }
+
                     zoid.rho_stencil_md = new std::vector<double>[DOUBLE_BUFFERING];
                     zoid.fp_stencil_md = new std::vector<double>[DOUBLE_BUFFERING];
                     zoid.x_stencil_md = new std::vector<dbl3_t_stencil_md>[DOUBLE_BUFFERING];
@@ -2591,6 +2600,9 @@ public:
                     /* start stuff for 2 timesteps */
                     // Copy the main data from the curr_dt zoid
                     auto coord = zoid_num_to_coord[zoid.num];
+
+                    zoid.per_worker_force_updates = queues_many_cuts[coord.first][coord.second].per_worker_force_updates;
+                    zoid.per_worker_num_force_updates = queues_many_cuts[coord.first][coord.second].per_worker_num_force_updates;
 
                     zoid.rho_stencil_md = queues_many_cuts[coord.first][coord.second].rho_stencil_md;
                     zoid.fp_stencil_md = queues_many_cuts[coord.first][coord.second].fp_stencil_md;
@@ -13760,6 +13772,116 @@ public:
 
         constexpr int GRAINSIZE = 1024;
         constexpr int SMALL_GRAINSIZE = 128;
+
+        constexpr bool USE_MEMORY = true;
+
+        if (USE_MEMORY) {
+            int nworkers = __cilkrts_get_nworkers();
+            auto* claimed = zoid.claimed_flags_stencil_md[0];
+            auto* per_worker_force_updates = zoid.per_worker_force_updates;
+            auto* per_worker_num_force_updates = zoid.per_worker_num_force_updates;
+            int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+            int chunks_per_worker = num_chunks / nworkers;
+            for (int i = 0; i < nworkers; i++) {
+                per_worker_num_force_updates[i] = 0;
+            }
+
+            #pragma cilk grainsize 1
+            cilk_for (int ii = 0; ii < num_chunks; ii++) {
+                int worker_number = __cilkrts_get_worker_number();
+                int start_chunk = worker_number * chunks_per_worker;
+                int num_force_updates = per_worker_num_force_updates[worker_number];
+                auto* force_updates = per_worker_force_updates[worker_number];
+
+                for (int c = 0; c < num_chunks; ++c) {
+                    int s = (c + start_chunk) % num_chunks;
+
+                    if (claimed[s].test(std::memory_order_relaxed)) {
+                        continue;
+                    }
+
+                    if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                        for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nlocal; idx++) {
+                            int i = local_idxs[idx];
+
+                            const int itype = atom_type[i];
+
+                            const auto &jlist = neighbor_list[i];
+                            const double *_noalias const cutsqi = cutsq[itype];
+                            const double *_noalias const offseti = offset[itype];
+                            const double *_noalias const lj1i = lj1[itype];
+                            const double *_noalias const lj2i = lj2[itype];
+                            // const double *_noalias const lj3i = lj3[itype];
+                            // const double *_noalias const lj4i = lj4[itype];
+
+                            double xtmp = x[i].x;
+                            double ytmp = x[i].y;
+                            double ztmp = x[i].z;
+                            int jnum = jlist.size();
+
+                            double fxtmp = 0.0;
+                            double fytmp = 0.0;
+                            double fztmp = 0.0;
+
+                            for (int jj = 0; jj < jnum; jj++) {
+                                double evdwl = 0.0;
+                                int j = jlist[jj];
+                                double factor_lj = special_lj[pair->sbmask(j)];
+                                j &= NEIGHMASK;
+
+                                double delx = xtmp - x[j].x;
+                                double dely = ytmp - x[j].y;
+                                double delz = ztmp - x[j].z;
+                                double rsq = delx * delx + dely * dely + delz * delz;
+                                int jtype = atom_type[j];
+
+                                if (rsq < cutsqi[jtype]) {
+                                    double r2inv = 1.0 / rsq;
+                                    double r6inv = r2inv * r2inv * r2inv;
+                                    double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                                    double fpair = factor_lj * forcelj * r2inv;
+
+                                    fxtmp += delx * fpair;
+                                    fytmp += dely * fpair;
+                                    fztmp += delz * fpair;
+
+                                    if (newton_pair || j < nlocal) {
+                                        // f[j].x -= delx * fpair;
+                                        // f[j].y -= dely * fpair;
+                                        // f[j].z -= delz * fpair;
+                                        assert(num_force_updates < MAX_PER_WORKER_FORCE_UPDATES);
+                                        force_updates[num_force_updates++] = std::make_pair(j, dbl3_t_stencil_md {-delx * fpair, -dely * fpair, -delz * fpair});
+                                    }
+                                }
+                            }
+
+                            f[i].x += fxtmp;
+                            f[i].y += fytmp;
+                            f[i].z += fztmp;
+                        }
+                    }
+                }
+
+                per_worker_num_force_updates[worker_number] = num_force_updates;
+            }
+
+            for (int i = 0; i < num_chunks; i++) {
+                claimed[i].clear(std::memory_order_relaxed);
+            }
+
+            for (int w = 0; w < nworkers; w++) {
+                int num_updates = per_worker_num_force_updates[w];
+                auto* updates = per_worker_force_updates[w];
+                for (int j = 0; j < num_updates; j++) {
+                    auto& [idx, update] = updates[j];
+                    f[idx].x += update.x;
+                    f[idx].y += update.y;
+                    f[idx].z += update.z;
+                }
+            }
+
+            return;
+        }
 
         if ((dep == 0 && (timestep >  2)) || (dep == 3 && (timestep <= 2))) {
             #pragma cilk grainsize SMALL_GRAINSIZE
