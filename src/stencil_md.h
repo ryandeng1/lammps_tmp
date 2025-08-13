@@ -13828,9 +13828,9 @@ public:
             int nworkers = __cilkrts_get_nworkers();
             auto* claimed = zoid.claimed_flags_stencil_md[0];
             auto* per_worker_force_updates = zoid.per_worker_force_updates;
-            for (int w = 0; w < nworkers; w++) {
-                memset(per_worker_force_updates[w], 0, sizeof(dbl3_t_stencil_md) * zoid.x_stencil_md[0].size());
-            }
+            // for (int w = 0; w < nworkers; w++) {
+            //     memset(per_worker_force_updates[w], 0, sizeof(dbl3_t_stencil_md) * zoid.x_stencil_md[0].size());
+            // }
             int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
             int chunks_per_worker = num_chunks / nworkers;
 
@@ -13899,9 +13899,6 @@ public:
                                     fztmp += delz * fpair;
 
                                     if (true) {
-                                        // f[j].x -= delx * fpair;
-                                        // f[j].y -= dely * fpair;
-                                        // f[j].z -= delz * fpair;
                                         int local_idx = global_to_local_idx[j];
                                         assert(local_idx != -1);
                                         auto& worker_local_f = worker_local_updates[local_idx];
