@@ -13921,7 +13921,8 @@ public:
                 claimed[i].clear(std::memory_order_relaxed);
             }
 
-            for (int local_idx = 0; local_idx < num_local_to_global; local_idx++) {
+            #pragma cilk grainsize 1024
+            cilk_for (int local_idx = 0; local_idx < num_local_to_global; local_idx++) {
                 int global_idx = local_to_global_idx[local_idx];
                 assert(global_idx >= 0);
                 for (int w = 0; w < nworkers; w++) {
@@ -14236,6 +14237,13 @@ public:
 
                 delete[] zoid.neigh_short;
 
+                for (int w = 0; w < __cilkrts_get_nworkers(); w++) {
+                    delete[] zoid.per_worker_force_updates[w];
+                }
+                delete[] zoid.per_worker_force_updates;
+                delete[] zoid.global_to_local_idx;
+                delete[] zoid.local_to_global_idx;
+
                 delete[] zoid.fp_stencil_md;
                 delete[] zoid.rho_stencil_md;
                 delete[] zoid.x_stencil_md;
@@ -14329,6 +14337,9 @@ public:
                 if (zoid.num % comm->nprocs != comm->me) {
                     continue;
                 }
+
+                delete[] zoid.global_to_local_idx;
+                delete[] zoid.local_to_global_idx;
 
                 delete[] zoid.local_idxs_per_timestep;
                 delete[] zoid.local_and_one_hop_ghost_idxs_per_timestep;
