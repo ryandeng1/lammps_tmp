@@ -13837,7 +13837,7 @@ public:
             auto& global_to_local_idx = zoid.global_to_local_idx[timestep];
             auto& local_to_global_idx = zoid.local_to_global_idx[timestep];
             int num_local_to_global = local_to_global_idx.size();
-            std::vector<bool> workers_used(nworkers, false);
+            std::vector<int> workers_used(nworkers, 0);
 
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
@@ -13853,7 +13853,7 @@ public:
                     }
 
                     if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
-                        workers_used[worker_number] = true;
+                        workers_used[worker_number] = 1;
                         for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nlocal; idx++) {
                             int i = local_idxs[idx];
 
@@ -13912,16 +13912,9 @@ public:
                                 }
                             }
 
-                            int local_idx = global_to_local_idx[i];
-                            assert(local_idx != -1);
-                            auto& worker_local_f = worker_local_updates[local_idx];
-                            worker_local_f.x += fxtmp;
-                            worker_local_f.y += fytmp;
-                            worker_local_f.z += fztmp;
-
-                            // f[i].x += fxtmp;
-                            // f[i].y += fytmp;
-                            // f[i].z += fztmp;
+                            f[i].x += fxtmp;
+                            f[i].y += fytmp;
+                            f[i].z += fztmp;
                         }
                     }
                 }
