@@ -13229,80 +13229,206 @@ public:
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = MODIFY_GRAINSIZE;
 
-        // if ((dep == 0 || dep == NUM_DEPS - 1) && nlocal > MODIFY_GRAINSIZE) {
-        if (nlocal > 1024) {
-            /*
-            auto& segment_idxs = zoid.local_idxs_per_timestep_segment_idxs[timestep];
-            auto& segment_sizes = zoid.local_idxs_per_timestep_segment_sizes[timestep];
+        constexpr bool USE_MEMORY = true;
 
-            for (int idx = 0; idx < segment_idxs.size(); idx++) {
-                int segment_idx = segment_idxs[idx];
-                int segment_size = segment_sizes[idx];
-                for (int k = 0; k < segment_size; k++) {
-                    int i = segment_idx + k;
-                    const int itype = atom_type[i];
+        if (USE_MEMORY) {
+            int nworkers = __cilkrts_get_nworkers();
+            auto* claimed = zoid.claimed_flags_stencil_md[0];
+            auto* per_worker_force_updates = zoid.per_worker_force_updates;
 
-                    // const int *_noalias const jlist = firstneigh[i];
-                    const auto &jlist = neighbor_list[i];
-                    const double *_noalias const cutsqi = cutsq[itype];
-                    const double *_noalias const offseti = offset[itype];
-                    const double *_noalias const lj1i = lj1[itype];
-                    const double *_noalias const lj2i = lj2[itype];
-                    const double *_noalias const lj3i = lj3[itype];
-                    const double *_noalias const lj4i = lj4[itype];
+            int num_chunks_pair = nlocal / MODIFY_GRAINSIZE + 1;
+            int chunks_per_worker_pair = num_chunks_pair / nworkers;
 
-                    double xtmp = x[i].x;
-                    double ytmp = x[i].y;
-                    double ztmp = x[i].z;
-                    // int jnum = numneigh[i];
-                    int jnum = jlist.size();
+            auto& global_to_local_idx = zoid.global_to_local_idx[timestep];
+            auto& local_to_global_idx = zoid.local_to_global_idx[timestep];
+            int num_local_to_global = local_to_global_idx.size();
+            std::vector<int> workers_used(nworkers, 0);
 
-                    double fxtmp = 0.0;
-                    double fytmp = 0.0;
-                    double fztmp = 0.0;
+            #pragma cilk grainsize 1
+            cilk_for (int ii = 0; ii < num_chunks_pair; ii++) {
+                int worker_number = __cilkrts_get_worker_number();
+                int start_chunk = worker_number * chunks_per_worker_pair;
 
-                    for (int jj = 0; jj < jnum; jj++) {
-                        double evdwl = 0.0;
-                        // int j = jlist[jj];
-                        int j = jlist[jj];
-                        double factor_lj = special_lj[pair->sbmask(j)];
-                        j &= NEIGHMASK;
+                for (int c = 0; c < num_chunks_pair; ++c) {
+                    int s = (c + start_chunk) % num_chunks_pair;
 
-                        double delx = xtmp - x[j].x;
-                        double dely = ytmp - x[j].y;
-                        double delz = ztmp - x[j].z;
-                        double rsq = delx * delx + dely * dely + delz * delz;
-                        int jtype = atom_type[j];
-
-                        if (rsq < cutsqi[jtype]) {
-                            double r2inv = 1.0 / rsq;
-                            double r6inv = r2inv * r2inv * r2inv;
-                            double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
-                            double fpair = factor_lj * forcelj * r2inv;
-
-                            fxtmp += delx * fpair;
-                            fytmp += dely * fpair;
-                            fztmp += delz * fpair;
-
-                            if (NEWTON_PAIR || is_local_idx[j]) {
-                                spinlocks[j].lock();
-                                f[j].x -= delx * fpair;
-                                f[j].y -= dely * fpair;
-                                f[j].z -= delz * fpair;
-                                spinlocks[j].unlock();
-                            }
-                        }
+                    if (claimed[s].test(std::memory_order_relaxed)) {
+                        continue;
                     }
 
-                    spinlocks[i].lock();
-                    f[i].x += fxtmp;
-                    f[i].y += fytmp;
-                    f[i].z += fztmp;
-                    spinlocks[i].unlock();
+                    if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                        workers_used[worker_number] = 1;
+                        auto* worker_local_updates = per_worker_force_updates[worker_number];
+                        for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nlocal; idx++) {
+                            int i = local_idxs[idx];
+
+                            const int itype = atom_type[i];
+
+                            const auto &jlist = neighbor_list[i];
+                            const double *_noalias const cutsqi = cutsq[itype];
+                            // const double *_noalias const offseti = offset[itype];
+                            const double *_noalias const lj1i = lj1[itype];
+                            const double *_noalias const lj2i = lj2[itype];
+                            // const double *_noalias const lj3i = lj3[itype];
+                            // const double *_noalias const lj4i = lj4[itype];
+
+                            double xtmp = x[i].x;
+                            double ytmp = x[i].y;
+                            double ztmp = x[i].z;
+                            int jnum = jlist.size();
+
+                            double fxtmp = 0.0;
+                            double fytmp = 0.0;
+                            double fztmp = 0.0;
+
+                            for (int jj = 0; jj < jnum; jj++) {
+                                double evdwl = 0.0;
+                                int j = jlist[jj];
+                                double factor_lj = special_lj[pair->sbmask(j)];
+                                j &= NEIGHMASK;
+
+                                double delx = xtmp - x[j].x;
+                                double dely = ytmp - x[j].y;
+                                double delz = ztmp - x[j].z;
+                                double rsq = delx * delx + dely * dely + delz * delz;
+                                int jtype = atom_type[j];
+
+                                if (rsq < cutsqi[jtype]) {
+                                    double r2inv = 1.0 / rsq;
+                                    double r6inv = r2inv * r2inv * r2inv;
+                                    double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                                    double fpair = factor_lj * forcelj * r2inv;
+
+                                    fxtmp += delx * fpair;
+                                    fytmp += dely * fpair;
+                                    fztmp += delz * fpair;
+
+                                    if (true) {
+                                        int local_idx = global_to_local_idx[j];
+                                        assert(local_idx != -1);
+                                        auto& worker_local_f = worker_local_updates[local_idx];
+                                        worker_local_f.x -= delx * fpair;
+                                        worker_local_f.y -= dely * fpair;
+                                        worker_local_f.z -= delz * fpair;
+                                    }
+                                }
+                            }
+
+                            f[i].x += fxtmp;
+                            f[i].y += fytmp;
+                            f[i].z += fztmp;
+                        }
+                    }
                 }
             }
-            */
 
+            auto& bond_list = zoid.bond_list_modified[timestep];
+            int nbonds = bond_list.size();
+
+            int num_chunks_bonds =  nbonds / MODIFY_GRAINSIZE + 1;
+            int chunks_per_worker_bonds = num_chunks_bonds / nworkers;
+
+            int max_num_chunks = std::max(num_chunks, num_chunks_bonds);
+            for (int i = 0; i < max_num_chunks; i++) {
+                claimed[i].clear(std::memory_order_relaxed);
+            }
+
+            #pragma cilk grainsize 1
+            cilk_for (int ii = 0; ii < num_chunks_bonds; ii++) {
+                int worker_number = __cilkrts_get_worker_number();
+                int start_chunk = worker_number * chunks_per_worker_bonds;
+
+                for (int c = 0; c < num_chunks_bonds; ++c) {
+                    int s = (c + start_chunk) % num_chunks_bonds;
+
+                    if (claimed[s].test(std::memory_order_relaxed)) {
+                        continue;
+                    }
+
+                    if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                        workers_used[worker_number] = 1;
+                        auto* worker_local_updates = per_worker_force_updates[worker_number];
+                        for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nbonds; idx++) {
+                            auto& tup = bond_list[idx];
+                            int i1 = std::get<0>(tup);
+                            int i2 = std::get<1>(tup);
+                            int type = std::get<2>(tup);
+
+                            double delx = x[i1].x - x[i2].x;
+                            double dely = x[i1].y - x[i2].y;
+                            double delz = x[i1].z - x[i2].z;
+
+                            double rsq = delx * delx + dely * dely + delz * delz;
+                            double r0sq = r0[type] * r0[type];
+                            double rlogarg = 1.0 - rsq / r0sq;
+
+                            if (rlogarg < 0.1) {
+                                error->warning(FLERR, "FENE bond too long: {} {} {} {:.8}",
+                                            update->ntimestep, atom->tag[i1], atom->tag[i2], sqrt(rsq));
+                                //                            if (check_error_thr((rlogarg <= -3.0),tid,FLERR,"Bad FENE bond"))
+                                //                                return;
+                                assert(false);
+
+                                rlogarg = 0.1;
+                            }
+
+                            double fbond = -k[type] / rlogarg;
+
+                            // force from LJ term
+                            double sr2 = 0.0;
+                            double sr6 = 0.0;
+
+                            if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
+                                sr2 = sigma[type] * sigma[type] / rsq;
+                                sr6 = sr2 * sr2 * sr2;
+                                fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
+                            }
+
+                            int local_idx_i1 = global_to_local_idx[i1];
+                            assert(local_idx_i1 != -1);
+                            auto& worker_local_f_i1 = worker_local_updates[local_idx_i1];
+                            worker_local_f_i1.x += delx * fbond;
+                            worker_local_f_i1.y += dely * fbond;
+                            worker_local_f_i1.z += delz * fbond;
+
+                            int local_idx_i2 = global_to_local_idx[i2];
+                            assert(local_idx_i2 != -1);
+                            auto& worker_local_f_i2 = worker_local_updates[local_idx_i2];
+                            worker_local_f_i2.x -= delx * fbond;
+                            worker_local_f_i2.y -= dely * fbond;
+                            worker_local_f_i2.z -= delz * fbond;
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < num_chunks_bonds; i++) {
+                claimed[i].clear(std::memory_order_relaxed);
+            }
+
+            #pragma cilk grainsize 1024
+            cilk_for (int local_idx = 0; local_idx < num_local_to_global; local_idx++) {
+                int global_idx = local_to_global_idx[local_idx];
+                assert(global_idx >= 0);
+                for (int w = 0; w < nworkers; w++) {
+                    if (!workers_used[w]) {
+                        continue;
+                    }
+                    auto& worker_local_f = per_worker_force_updates[w][local_idx];
+                    f[global_idx].x += worker_local_f.x;
+                    f[global_idx].y += worker_local_f.y;
+                    f[global_idx].z += worker_local_f.z;
+
+                    worker_local_f.x = 0;
+                    worker_local_f.y = 0;
+                    worker_local_f.z = 0;
+                }
+            }
+
+            return;
+        }
+
+        if (nlocal > 1024) {
             #pragma cilk grainsize 1024
             cilk_for(int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -13767,6 +13893,15 @@ public:
                         idxs.insert(local_idx);
                         for (auto& neigh_idx : neighbor_list[local_idx]) {
                             idxs.insert(neigh_idx);
+                        }
+                    }
+
+                    // For bond_fene potential, add in bond idxs
+                    if constexpr (EXPERIMENT == BOND_FENE) {
+                        auto& bond_list = zoid.bond_list_modified[t];
+                        for (auto& [i1, i2, type] : bond_list) {
+                            idxs.insert(i1);
+                            idxs.insert(i2);
                         }
                     }
 
