@@ -14287,6 +14287,132 @@ public:
         auto special_sqrt = pair->special_sqrt;
         auto cut = pair->cut;
 
+        constexpr bool USE_MEMORY = true;
+        if (USE_MEMORY) {
+            int nworkers = __cilkrts_get_nworkers();
+            auto* claimed = zoid.claimed_flags_stencil_md[0];
+            auto* per_worker_force_updates = zoid.per_worker_force_updates;
+            // for (int w = 0; w < nworkers; w++) {
+            //     memset(per_worker_force_updates[w], 0, sizeof(dbl3_t_stencil_md) * zoid.x_stencil_md[0].size());
+            // }
+            int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+            int chunks_per_worker = num_chunks / nworkers;
+
+            auto& global_to_local_idx = zoid.global_to_local_idx[timestep];
+            auto& local_to_global_idx = zoid.local_to_global_idx[timestep];
+            int num_local_to_global = local_to_global_idx.size();
+            std::vector<int> workers_used(nworkers, 0);
+
+            #pragma cilk grainsize 1
+            cilk_for (int ii = 0; ii < num_chunks; ii++) {
+                int worker_number = __cilkrts_get_worker_number();
+                int start_chunk = worker_number * chunks_per_worker;
+                auto* worker_local_updates = per_worker_force_updates[worker_number];
+
+                for (int c = 0; c < num_chunks; ++c) {
+                    int s = (c + start_chunk) % num_chunks;
+
+                    if (claimed[s].test(std::memory_order_relaxed)) {
+                        continue;
+                    }
+
+                    if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
+                        workers_used[worker_number] = 1;
+                        for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nlocal; idx++) {
+                            int i = local_idxs[idx];
+
+                            const int itype = atom_type[i];
+                            const auto &jlist = neighbor_list[i];
+
+                            double xtmp = x[i].x;
+                            double ytmp = x[i].y;
+                            double ztmp = x[i].z;
+                            double vxtmp = v[i].x;
+                            double vytmp = v[i].y;
+                            double vztmp = v[i].z;
+
+                            int jnum = jlist.size();
+
+                            double fxtmp = 0.0;
+                            double fytmp = 0.0;
+                            double fztmp = 0.0;
+
+                            for (int jj = 0; jj < jnum; jj++) {
+                                int j = jlist[jj];
+                                double factor_dpd = special_lj[pair->sbmask(j)];
+                                double factor_sqrt = special_sqrt[pair->sbmask(j)];
+                                j &= NEIGHMASK;
+
+                                double delx = xtmp - x[j].x;
+                                double dely = ytmp - x[j].y;
+                                double delz = ztmp - x[j].z;
+                                double rsq = delx * delx + dely * dely + delz * delz;
+                                int jtype = atom_type[j];
+
+                                if (rsq < cutsq[itype][jtype]) {
+                                    double r = sqrt(rsq);
+                                    if (r < EPSILON) continue;     // r can be 0.0 in DPD systems
+                                    double rinv = 1.0/r;
+                                    double delvx = vxtmp - v[j].x;
+                                    double delvy = vytmp - v[j].y;
+                                    double delvz = vztmp - v[j].z;
+                                    double dot = delx*delvx + dely*delvy + delz*delvz;
+                                    double wd = 1.0 - r/cut[itype][jtype];
+                                    double randnum = 0.6;
+
+                                    double fpair = pair->a0[itype][jtype]*wd;
+                                    fpair -= pair->gamma[itype][jtype]*wd*wd*dot*rinv;
+                                    fpair *= factor_dpd;
+                                    fpair += factor_sqrt*pair->sigma[itype][jtype]*wd*randnum*dtinvsqrt;
+                                    fpair *= rinv;
+
+                                    fxtmp += delx*fpair;
+                                    fytmp += dely*fpair;
+                                    fztmp += delz*fpair;
+
+                                    int local_idx = global_to_local_idx[j];
+                                    assert(local_idx != -1);
+                                    auto& worker_local_f = worker_local_updates[local_idx];
+                                    worker_local_f.x -= delx * fpair;
+                                    worker_local_f.y -= dely * fpair;
+                                    worker_local_f.z -= delz * fpair;
+                                }
+                            }
+
+                            f[i].x += fxtmp;
+                            f[i].y += fytmp;
+                            f[i].z += fztmp;
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < num_chunks; i++) {
+                claimed[i].clear(std::memory_order_relaxed);
+            }
+
+            #pragma cilk grainsize 1024
+            cilk_for (int local_idx = 0; local_idx < num_local_to_global; local_idx++) {
+                int global_idx = local_to_global_idx[local_idx];
+                assert(global_idx >= 0);
+                for (int w = 0; w < nworkers; w++) {
+                    if (!workers_used[w]) {
+                        continue;
+                    }
+                    auto& worker_local_f = per_worker_force_updates[w][local_idx];
+                    f[global_idx].x += worker_local_f.x;
+                    f[global_idx].y += worker_local_f.y;
+                    f[global_idx].z += worker_local_f.z;
+
+                    worker_local_f.x = 0;
+                    worker_local_f.y = 0;
+                    worker_local_f.z = 0;
+                }
+            }
+
+            return;
+        }
+
         #pragma cilk grainsize 1024
         cilk_for (int idx = 0; idx < nlocal; idx++) {
             int i = local_idxs[idx];
