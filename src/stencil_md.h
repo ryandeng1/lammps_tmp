@@ -14288,7 +14288,7 @@ public:
         auto cut = pair->cut;
 
         constexpr bool USE_MEMORY = true;
-        if (USE_MEMORY) {
+        if (false) {
             int nworkers = __cilkrts_get_nworkers();
             auto* claimed = zoid.claimed_flags_stencil_md[0];
             auto* per_worker_force_updates = zoid.per_worker_force_updates;
