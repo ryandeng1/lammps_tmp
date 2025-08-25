@@ -13229,7 +13229,7 @@ public:
         int chunks_per_worker = num_chunks / num_workers;
         int chunk_size = MODIFY_GRAINSIZE;
 
-        constexpr bool USE_MEMORY = true;
+        constexpr bool USE_MEMORY = false;
 
         if (USE_MEMORY) {
             int nworkers = __cilkrts_get_nworkers();
@@ -13648,12 +13648,12 @@ public:
                 double fbond = -k[type] / rlogarg;
 
                 // force from LJ term
-                double sr2 = 0.0;
-                double sr6 = 0.0;
+                // double sr2 = 0.0;
+                // double sr6 = 0.0;
 
                 if (rsq < MathConst::MY_CUBEROOT2 * sigma[type] * sigma[type]) {
-                    sr2 = sigma[type] * sigma[type] / rsq;
-                    sr6 = sr2 * sr2 * sr2;
+                    double sr2 = sigma[type] * sigma[type] / rsq;
+                    double sr6 = sr2 * sr2 * sr2;
                     fbond += 48.0 * epsilon[type] * sr6 * (sr6 - 0.5) / rsq;
                 }
 
