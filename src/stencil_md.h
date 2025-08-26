@@ -14157,6 +14157,74 @@ public:
         auto* gamma = pair->gamma;
         auto* a0 = pair->a0;
 
+        if (nlocal <= GRAINSIZE) {
+            for (int idx = 0; idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                const int itype = atom_type[i];
+                const auto &jlist = neighbor_list[i];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                double vxtmp = v[i].x;
+                double vytmp = v[i].y;
+                double vztmp = v[i].z;
+                int jnum = jlist.size();
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    int j = jlist[jj];
+                    double factor_dpd = special_lj[pair->sbmask(j)];
+                    double factor_sqrt = special_sqrt[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsq[itype][jtype]) {
+                        double r = sqrt(rsq);
+                        if (r < EPSILON) continue;     // r can be 0.0 in DPD systems
+                        double rinv = 1.0/r;
+                        double delvx = vxtmp - v[j].x;
+                        double delvy = vytmp - v[j].y;
+                        double delvz = vztmp - v[j].z;
+                        double dot = delx*delvx + dely*delvy + delz*delvz;
+                        double wd = 1.0 - r/cut[itype][jtype];
+                        double randnum = 0.6;
+
+                        double fpair = a0[itype][jtype]*wd;
+                        fpair -= gamma[itype][jtype]*wd*wd*dot*rinv;
+                        fpair *= factor_dpd;
+                        fpair += factor_sqrt*sigma[itype][jtype]*wd*randnum*dtinvsqrt;
+                        fpair *= rinv;
+
+                        fxtmp += delx*fpair;
+                        fytmp += dely*fpair;
+                        fztmp += delz*fpair;
+
+                        if (USE_NEWTON) {
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                        }
+                    }
+                }
+
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+            }
+
+            return;
+        }
+
         #pragma cilk grainsize GRAINSIZE
         cilk_for (int idx = 0; idx < nlocal; idx++) {
             int i = local_idxs[idx];
