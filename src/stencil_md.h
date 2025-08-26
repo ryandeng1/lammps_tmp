@@ -53,7 +53,7 @@
 
 constexpr bool USE_BREAK = false;
 constexpr bool USE_STREAMS = true;
-constexpr int NUM_STREAMS = 24;
+constexpr int NUM_STREAMS = 48;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
@@ -12816,7 +12816,9 @@ public:
 
         // loop over full neighbor list of my atoms
 
-        #pragma cilk grainsize 1024
+        constexpr int GRAINSIZE = 256;
+
+        #pragma cilk grainsize GRAINSIZE
         cilk_for (int ii = 0; ii < nlocal; ii++) {
             int i = local_idxs[ii];
 
