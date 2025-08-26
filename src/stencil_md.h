@@ -13968,7 +13968,7 @@ public:
             int nworkers = __cilkrts_get_nworkers();
             auto* claimed = zoid.claimed_flags_stencil_md[0];
             auto* per_worker_force_updates = zoid.per_worker_force_updates;
-            constexpr int LJ_GRAINSIZE = 512;
+            constexpr int LJ_GRAINSIZE = 256;
             int num_chunks = nlocal / LJ_GRAINSIZE + 1;
             int chunks_per_worker = num_chunks / nworkers;
 
