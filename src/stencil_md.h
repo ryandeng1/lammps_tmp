@@ -970,7 +970,7 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 6;
+    static constexpr int NUM_CUTS_X = 4;
     static constexpr int NUM_CUTS_Y = 4;
     static constexpr int NUM_CUTS_Z = 4;
 
@@ -5669,8 +5669,9 @@ public:
                 int zoid_num = zoid.num;
                 if (zoid_num % comm->nprocs == comm->me) {
                     int size = zoid.x_stencil_md[0].size();
-                    int num_chunks = size / MODIFY_GRAINSIZE + 1;
-                    int chunk_size = MODIFY_GRAINSIZE;
+                    constexpr int GRAINSIZE = 128;
+                    int num_chunks = size / GRAINSIZE + 1;
+                    int chunk_size = GRAINSIZE;
 
                     zoid.claimed_flags_stencil_md[0] = new std::atomic_flag[num_chunks];
 
