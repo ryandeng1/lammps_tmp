@@ -13968,10 +13968,8 @@ public:
             int nworkers = __cilkrts_get_nworkers();
             auto* claimed = zoid.claimed_flags_stencil_md[0];
             auto* per_worker_force_updates = zoid.per_worker_force_updates;
-            // for (int w = 0; w < nworkers; w++) {
-            //     memset(per_worker_force_updates[w], 0, sizeof(dbl3_t_stencil_md) * zoid.x_stencil_md[0].size());
-            // }
-            int num_chunks = nlocal / MODIFY_GRAINSIZE + 1;
+            constexpr int LJ_GRAINSIZE = 512;
+            int num_chunks = nlocal / LJ_GRAINSIZE + 1;
             int chunks_per_worker = num_chunks / nworkers;
 
             auto& global_to_local_idx = zoid.global_to_local_idx[timestep];
