@@ -14153,6 +14153,10 @@ public:
 
         constexpr int GRAINSIZE = 512;
 
+        auto* sigma = pair->sigma;
+        auto* gamma = pair->gamma;
+        auto* a0 = pair->a0;
+
         #pragma cilk grainsize GRAINSIZE
         cilk_for (int idx = 0; idx < nlocal; idx++) {
             int i = local_idxs[idx];
@@ -14195,10 +14199,10 @@ public:
                     double wd = 1.0 - r/cut[itype][jtype];
                     double randnum = 0.6;
 
-                    double fpair = pair->a0[itype][jtype]*wd;
-                    fpair -= pair->gamma[itype][jtype]*wd*wd*dot*rinv;
+                    double fpair = a0[itype][jtype]*wd;
+                    fpair -= gamma[itype][jtype]*wd*wd*dot*rinv;
                     fpair *= factor_dpd;
-                    fpair += factor_sqrt*pair->sigma[itype][jtype]*wd*randnum*dtinvsqrt;
+                    fpair += factor_sqrt*sigma[itype][jtype]*wd*randnum*dtinvsqrt;
                     fpair *= rinv;
 
                     fxtmp += delx*fpair;
