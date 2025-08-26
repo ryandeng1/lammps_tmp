@@ -13428,8 +13428,12 @@ public:
             return;
         }
 
-        if (nlocal > 512) {
-            #pragma cilk grainsize 512
+
+        constexpr int PAIR_GRAINSIZE = 256;
+        constexpr int BOND_GRAINSIZE = 256;
+
+        if (nlocal > PAIR_GRAINSIZE) {
+            #pragma cilk grainsize PAIR_GRAINSIZE
             cilk_for(int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -13560,8 +13564,8 @@ public:
         auto& bond_list = zoid.bond_list_modified[timestep];
         int nbonds = bond_list.size();
 
-        if (nbonds > 512) {
-            #pragma cilk grainsize 512
+        if (nbonds > BOND_GRAINSIZE) {
+            #pragma cilk grainsize BOND_GRAINSIZE
             cilk_for (int i = 0; i < nbonds; i++) {
                 auto& tup = bond_list[i];
                 int i1 = std::get<0>(tup);
