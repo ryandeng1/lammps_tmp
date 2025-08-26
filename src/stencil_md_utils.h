@@ -54,7 +54,7 @@ constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 6;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 // constexpr double ADDITIONAL_CUTOFF = 0.4001;
 constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
 // constexpr double ADDITIONAL_CUTOFF = 1.0 + 1e-10;
