@@ -13429,7 +13429,7 @@ public:
         }
 
 
-        constexpr int PAIR_GRAINSIZE = 512;
+        constexpr int PAIR_GRAINSIZE = 256;
         constexpr int BOND_GRAINSIZE = 512;
 
         if (nlocal > PAIR_GRAINSIZE) {
