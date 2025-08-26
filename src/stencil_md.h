@@ -12816,7 +12816,7 @@ public:
 
         // loop over full neighbor list of my atoms
 
-        constexpr int GRAINSIZE = 256;
+        constexpr int GRAINSIZE = 512;
 
         #pragma cilk grainsize GRAINSIZE
         cilk_for (int ii = 0; ii < nlocal; ii++) {
