@@ -13965,10 +13965,71 @@ public:
         constexpr bool USE_MEMORY = true;
 
         if (USE_MEMORY) {
+            constexpr int LJ_GRAINSIZE = 512;
+            if (nlocal <= LJ_GRAINSIZE) {
+                for (int idx = 0; idx < nlocal; idx++) {
+                    int i = local_idxs[idx];
+
+                    const int itype = atom_type[i];
+
+                    const auto &jlist = neighbor_list[i];
+                    const double *_noalias const cutsqi = cutsq[itype];
+                    const double *_noalias const offseti = offset[itype];
+                    const double *_noalias const lj1i = lj1[itype];
+                    const double *_noalias const lj2i = lj2[itype];
+                    // const double *_noalias const lj3i = lj3[itype];
+                    // const double *_noalias const lj4i = lj4[itype];
+
+                    double xtmp = x[i].x;
+                    double ytmp = x[i].y;
+                    double ztmp = x[i].z;
+                    int jnum = jlist.size();
+
+                    double fxtmp = 0.0;
+                    double fytmp = 0.0;
+                    double fztmp = 0.0;
+
+                    for (int jj = 0; jj < jnum; jj++) {
+                        double evdwl = 0.0;
+                        int j = jlist[jj];
+                        double factor_lj = special_lj[pair->sbmask(j)];
+                        j &= NEIGHMASK;
+
+                        double delx = xtmp - x[j].x;
+                        double dely = ytmp - x[j].y;
+                        double delz = ztmp - x[j].z;
+                        double rsq = delx * delx + dely * dely + delz * delz;
+                        int jtype = atom_type[j];
+
+                        if (rsq < cutsqi[jtype]) {
+                            double r2inv = 1.0 / rsq;
+                            double r6inv = r2inv * r2inv * r2inv;
+                            double forcelj = r6inv * (lj1i[jtype] * r6inv - lj2i[jtype]);
+                            double fpair = factor_lj * forcelj * r2inv;
+
+                            fxtmp += delx * fpair;
+                            fytmp += dely * fpair;
+                            fztmp += delz * fpair;
+
+                            if (newton_pair || j < nlocal) {
+                                f[j].x -= delx * fpair;
+                                f[j].y -= dely * fpair;
+                                f[j].z -= delz * fpair;
+                            }
+                        }
+                    }
+
+                    f[i].x += fxtmp;
+                    f[i].y += fytmp;
+                    f[i].z += fztmp;
+                }
+
+                return;
+            }
+
             int nworkers = __cilkrts_get_nworkers();
             auto* claimed = zoid.claimed_flags_stencil_md[0];
             auto* per_worker_force_updates = zoid.per_worker_force_updates;
-            constexpr int LJ_GRAINSIZE = 256;
             int num_chunks = nlocal / LJ_GRAINSIZE + 1;
             int chunks_per_worker = num_chunks / nworkers;
 
