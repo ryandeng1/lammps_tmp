@@ -13366,6 +13366,8 @@ public:
             }
         }
 
+        return;
+
         auto& bond_list = zoid.bond_list_modified[timestep];
         int nbonds = bond_list.size();
 
