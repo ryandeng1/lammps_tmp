@@ -13926,7 +13926,7 @@ public:
                 claimed[i].clear(std::memory_order_relaxed);
             }
 
-            #pragma cilk grainsize LJ_GRAINSIZE
+            #pragma cilk grainsize 1024
             cilk_for (int local_idx = 0; local_idx < num_local_to_global; local_idx++) {
                 int global_idx = local_to_global_idx[local_idx];
                 assert(global_idx >= 0);
