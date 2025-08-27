@@ -13771,7 +13771,7 @@ public:
         constexpr bool USE_MEMORY = true;
 
         if (USE_MEMORY) {
-            constexpr int LJ_GRAINSIZE = 1024;
+            constexpr int LJ_GRAINSIZE = 256;
             if (nlocal <= LJ_GRAINSIZE) {
                 for (int idx = 0; idx < nlocal; idx++) {
                     int i = local_idxs[idx];
