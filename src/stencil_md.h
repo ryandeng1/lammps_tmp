@@ -13768,8 +13768,8 @@ public:
         constexpr int GRAINSIZE = 1024;
         constexpr int SMALL_GRAINSIZE = 128;
 
-        constexpr bool USE_MEMORY = false;
-        constexpr int LJ_GRAINSIZE = 512;
+        constexpr bool USE_MEMORY = true;
+        constexpr int LJ_GRAINSIZE = 1024;
 
         if (USE_MEMORY) {
             if (nlocal <= LJ_GRAINSIZE) {
