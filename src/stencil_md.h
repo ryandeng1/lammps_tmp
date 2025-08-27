@@ -972,7 +972,7 @@ public:
 
     static constexpr int NUM_CUTS_X = 4;
     static constexpr int NUM_CUTS_Y = 4;
-    static constexpr int NUM_CUTS_Z = 3;
+    static constexpr int NUM_CUTS_Z = 4;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
     static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
@@ -7710,7 +7710,7 @@ public:
         MPI_Allreduce(MPI_IN_PLACE, &total_recv_proc, 1, MPI_INT, MPI_SUM, world);
         MPI_Allreduce(MPI_IN_PLACE, &total_recv_proc_mpi, 1, MPI_INT, MPI_SUM, world);
         if (comm->me == 0) {
-            std::cout << "total recv: " << total_recv_proc << " total recv through MPI: " << total_recv_proc_mpi << " dt: " << NUM_TIMESTEPS_IN_PARALLEL << std::endl;
+            std::cout << "RECV STATISTICS total recv: " << total_recv_proc << " total recv through MPI: " << total_recv_proc_mpi << " dt: " << NUM_TIMESTEPS_IN_PARALLEL << std::endl;
         }
     }
 
