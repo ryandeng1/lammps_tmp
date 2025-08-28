@@ -14095,7 +14095,7 @@ public:
         auto special_sqrt = pair->special_sqrt;
         auto cut = pair->cut;
 
-        constexpr int GRAINSIZE = 1024;
+        constexpr int GRAINSIZE = 256;
 
         auto* sigma = pair->sigma;
         auto* gamma = pair->gamma;
