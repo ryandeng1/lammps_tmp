@@ -3575,8 +3575,8 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
 __attribute__((noinline)) void start_progress_thread(MPIX_Stream_Manager* manager, std::atomic<bool>* done) noexcept {
     while (!done->load(std::memory_order_acquire)) {
         if (manager->global_lock.try_lock()) {
-            // cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-            for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+            cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+            // for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                 if (manager->m[stream_num].try_lock()) {
                     MPIX_Stream_progress(manager->streams[stream_num]);
                     manager->m[stream_num].unlock();
