@@ -972,7 +972,7 @@ public:
 
     static constexpr int NUM_CUTS_X = 8;
     static constexpr int NUM_CUTS_Y = 8;
-    static constexpr int NUM_CUTS_Z = 4;
+    static constexpr int NUM_CUTS_Z = 8;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
     static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
@@ -14095,7 +14095,7 @@ public:
         auto special_sqrt = pair->special_sqrt;
         auto cut = pair->cut;
 
-        constexpr int GRAINSIZE = 256;
+        constexpr int GRAINSIZE = 512;
 
         auto* sigma = pair->sigma;
         auto* gamma = pair->gamma;
