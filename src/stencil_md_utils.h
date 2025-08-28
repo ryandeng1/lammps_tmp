@@ -54,7 +54,7 @@ constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 8;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 constexpr double ADDITIONAL_CUTOFF = 0.5 + 1e-10;
 
 // this is for the potential, used when there is a multi-body potential
