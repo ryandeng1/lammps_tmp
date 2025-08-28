@@ -48,7 +48,7 @@ constexpr int SW = 3;
 constexpr int TERSOFF = 4;
 constexpr int EAM = 5;
 
-constexpr int EXPERIMENT = SW;
+constexpr int EXPERIMENT = TERSOFF;
 
 constexpr int NUM_DEPS = 4;
 
@@ -58,7 +58,7 @@ constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 constexpr double ADDITIONAL_CUTOFF = 2.0 + 1e-10;
 
 // this is for the potential, used when there is a multi-body potential
-constexpr double CUTOFF = 3.77;
+constexpr double CUTOFF = 3.2;
 constexpr double ALLEGRO_CUTOFF_RADIUS = 2 * CUTOFF;
 // constexpr double ALLEGRO_CUTOFF_RADIUS = 1.0;
 
@@ -74,9 +74,9 @@ constexpr double ALLEGRO_SLOPE = ALLEGRO_CUTOFF_RADIUS + ADDITIONAL_CUTOFF;
 
 constexpr int NUM_WORKERS_PER_THREAD = 512;
 
-constexpr bool ONLY_RUN_LAMMPS = true;
+constexpr bool ONLY_RUN_LAMMPS = false;
 
-constexpr bool ONLY_RUN_STENCIL_MD = false;
+constexpr bool ONLY_RUN_STENCIL_MD = true;
 
 constexpr bool USE_BOND = true;
 
