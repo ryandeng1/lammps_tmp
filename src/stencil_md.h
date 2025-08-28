@@ -12372,7 +12372,7 @@ public:
         double c3 = params->c3;
         double c4 = params->c4;
 
-        constexpr int GRAINSIZE = 256;
+        constexpr int GRAINSIZE = 512;
 
         #pragma cilk grainsize GRAINSIZE
         cilk_for (int ii = 0; ii < nlocal; ii++) {
