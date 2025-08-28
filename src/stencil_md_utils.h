@@ -54,7 +54,7 @@ constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 8;
 constexpr double ADDITIONAL_CUTOFF = 0.5 + 1e-10;
 
 // this is for the potential, used when there is a multi-body potential
@@ -74,9 +74,9 @@ constexpr double ALLEGRO_SLOPE = ALLEGRO_CUTOFF_RADIUS + ADDITIONAL_CUTOFF;
 
 constexpr int NUM_WORKERS_PER_THREAD = 512;
 
-constexpr bool ONLY_RUN_LAMMPS = true;
+constexpr bool ONLY_RUN_LAMMPS = false;
 
-constexpr bool ONLY_RUN_STENCIL_MD = false;
+constexpr bool ONLY_RUN_STENCIL_MD = true;
 
 constexpr bool USE_BOND = true;
 
