@@ -970,9 +970,9 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 8;
-    static constexpr int NUM_CUTS_Y = 8;
-    static constexpr int NUM_CUTS_Z = 8;
+    static constexpr int NUM_CUTS_X = 6;
+    static constexpr int NUM_CUTS_Y = 6;
+    static constexpr int NUM_CUTS_Z = 6;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
     static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
