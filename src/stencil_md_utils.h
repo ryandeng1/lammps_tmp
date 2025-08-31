@@ -82,12 +82,6 @@ constexpr int NUM_PIPELINE_STAGES = 2;
 constexpr int start_t[NUM_PIPELINE_STAGES] = {1, NUM_TIMESTEPS_IN_PARALLEL / 2 + 1};
 constexpr int end_t[NUM_PIPELINE_STAGES] = {NUM_TIMESTEPS_IN_PARALLEL / 2 + 1, NUM_TIMESTEPS_IN_PARALLEL + 1};
 
-constexpr bool USE_ATOMICS = false;
-
-constexpr int NUM_BINS = 1;
-
-constexpr bool SORT_BINS_BASED_ON_LOCAL_IDX = false;
-
 using dbl3_t_stencil_md = struct { double x,y,z; };
 
 using IDX_3D = std::array<int, 3>;

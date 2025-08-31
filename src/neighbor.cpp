@@ -2608,6 +2608,7 @@ void Neighbor::setup_bins_stencil_md(Atom* atom_, Domain* domain_, Comm* comm_) 
 }
 
 void Neighbor::setup_stencil_md_bond_bins(Atom* atom_) {
+    constexpr bool SORT_BINS_BASED_ON_LOCAL_IDX = false;
     atom_bondlist = new std::vector<std::pair<int, int>>[atom_->nlocal];
 
     for (int i = 0; i < nbondlist; i++) {

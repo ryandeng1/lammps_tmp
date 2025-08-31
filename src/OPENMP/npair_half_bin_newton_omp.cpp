@@ -177,6 +177,7 @@ void NPairHalfBinNewtonOmp::build_stencil_md(NeighList *list, Atom* atom_, Domai
     if (zoid.num == 0) {
         std::cout << "zoid: " << zoid.num << " npairhalfbinnewtonomp stencilmd build start" << std::endl;
     }
+    constexpr bool SORT_BINS_BASED_ON_LOCAL_IDX = false;
     int i,j,k,n,itype,jtype,ibin;
     double xtmp,ytmp,ztmp,delx,dely,delz,rsq;
     int *neighptr;
