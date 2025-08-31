@@ -129,9 +129,8 @@ double ComputeTemp::compute_scalar_stencil_md(Atom* atom_) {
                      mass[type[i]];
     }
 
-    if (USE_FAKE_COMPUTE_TEMP) {
-        return 4000;
-    }
+    std::cout << "StencilMD computing temperature. This is an error." << std::endl;
+    assert(false);
     MPI_Allreduce(&t,&scalar,1,MPI_DOUBLE,MPI_SUM,world);
     if (dynamic) dof_compute();
     if (dof < 0.0 && natoms_temp > 0.0)

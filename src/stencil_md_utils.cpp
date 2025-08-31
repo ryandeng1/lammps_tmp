@@ -181,6 +181,7 @@ int get_segments(const std::vector<int>& idxs, std::vector<int>& segment_idxs, s
 
 void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *queues)
 {
+  constexpr double MIDDLE_ZOID_WIDTH_RATIO = 0.5;
   int num_dims = 3;
   int initial_dep = 0;
   queue_info initial_zoid;

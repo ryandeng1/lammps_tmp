@@ -116,6 +116,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
     int newton_pair = force->newton_pair;
 
+    /*
     if (USE_ATOMICS) {
         const auto * _noalias const x = (dbl3_t *) atom_->x[0];
         auto * _noalias const f = (dbl3_t *) atom_->eval_f_stencil_md[0];
@@ -169,11 +170,9 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                     fytmp += dely*fpair;
                     fztmp += delz*fpair;
 
-                    /*
-                    ftmp.x += delx*fpair;
-                    ftmp.y += dely*fpair;
-                    ftmp.z += delz*fpair;
-                    */
+                    // ftmp.x += delx*fpair;
+                    // ftmp.y += dely*fpair;
+                    // ftmp.z += delz*fpair;
 
                     if (newton_pair || j < nlocal) {
                         // f[j].x -= delx*fpair;
@@ -184,17 +183,15 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
                         __atomic_fetch_add(&f[j].z, -delz*fpair, __ATOMIC_RELAXED);
                     }
 
-                    /*
-                    if (EFLAG) {
-                        evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
-                        evdwl *= factor_lj;
-                    }
+                    // if (EFLAG) {
+                    //     evdwl = r6inv*(lj3i[jtype]*r6inv-lj4i[jtype]) - offseti[jtype];
+                    //     evdwl *= factor_lj;
+                    // }
 
-                    if (EVFLAG) {
-                        ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
-                                     evdwl, 0.0, fpair, delx, dely, delz, thr);
-                    }
-                    */
+                    // if (EVFLAG) {
+                    //     ev_tally_thr(this, i, j, nlocal, NEWTON_PAIR,
+                    //                  evdwl, 0.0, fpair, delx, dely, delz, thr);
+                    // }
                 }
             }
 
@@ -209,6 +206,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
 
         return;
     }
+    */
 
     if (false && nlocal < 4096) {
         const auto * _noalias const x = (dbl3_t *) atom_->x[0];
@@ -297,9 +295,9 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
         return;
     }
 
+    /*
     int nthreads_to_use = inum / NUM_WORKERS_PER_THREAD;
 
-    /*
     if (nthreads_to_use < 1) {
         nthreads_to_use = 1;
     }
@@ -307,7 +305,6 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
     if (nthreads_to_use > nthreads) {
         nthreads_to_use = nthreads;
     }
-    */
 
     double **f_ = atom_->eval_f_stencil_md;
     double **torque = atom_->torque;
@@ -372,6 +369,7 @@ void PairLJCutOMP::compute_stencil_md(int eflag, int vflag, Atom* atom_, bool* c
             }
         }
     }
+    */
 
     // try new reduce
     /*

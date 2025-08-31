@@ -470,26 +470,26 @@ void FixOMP::pre_force(int)
 }
 
 void FixOMP::pre_force_stencil_md(int, Atom* atom_) {
-    const int nall = atom_->nlocal + atom_->nghost;
+    // const int nall = atom_->nlocal + atom_->nghost;
 
-    double **f = atom_->eval_f_stencil_md;
-    double **torque = atom_->torque;
-    double *erforce = atom_->erforce;
-    double *desph = atom_->desph;
-    double *drho = atom_->drho;
+    // double **f = atom_->eval_f_stencil_md;
+    // double **torque = atom_->torque;
+    // double *erforce = atom_->erforce;
+    // double *desph = atom_->desph;
+    // double *drho = atom_->drho;
 
-    int nthreads_to_use = atom_->nlocal / NUM_WORKERS_PER_THREAD;
-    if (nthreads_to_use < 1) {
-        nthreads_to_use = 1;
-    }
-    if (nthreads_to_use > comm->nthreads) {
-        nthreads_to_use = comm->nthreads;
-    }
+    // int nthreads_to_use = atom_->nlocal / NUM_WORKERS_PER_THREAD;
+    // if (nthreads_to_use < 1) {
+    //     nthreads_to_use = 1;
+    // }
+    // if (nthreads_to_use > comm->nthreads) {
+    //     nthreads_to_use = comm->nthreads;
+    // }
 
-    cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
-        // thr[tid]->check_tid(tid);
-        thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
-    }
+    // cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
+    //     // thr[tid]->check_tid(tid);
+    //     thr[tid]->init_force(nall,f,torque,erforce,desph,drho);
+    // }
     /*
     cilk_for (int tid = 0; tid < nthreads_to_use; tid++) {
         // thr[tid]->check_tid(tid);
