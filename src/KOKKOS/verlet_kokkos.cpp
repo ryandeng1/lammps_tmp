@@ -209,10 +209,6 @@ void VerletKokkos::setup(int flag)
   output->setup(flag);
   lmp->kokkos->auto_sync = 1;
   update->setupflag = 0;
-
-  std::cout << "ME: " << comm->me << " START SETUP STENCIL MD" << " nthreads: " << std::thread::hardware_concurrency() << std::endl;
-  setup_stencil_md();
-  std::cout << "ME: " << comm->me << " DONE SETUP STENCIL MD" << std::endl;
 }
 
 /* ----------------------------------------------------------------------

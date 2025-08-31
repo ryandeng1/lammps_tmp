@@ -36,7 +36,6 @@ class Verlet : public Integrate {
   void force_clear() override;
   void cleanup() override;
 
-  void setup_stencil_md();
   void setup_stencil_md_many_zoids();
 
   virtual void force_clear_stencil_md(Atom*, Force*, Neighbor*);
