@@ -254,20 +254,22 @@ void Verlet::setup(int flag) {
 
 void Verlet::setup_stencil_md_many_zoids() {
     // setup MPI stuff?
-    bool enable_striping = true;
-    bool enable_hashing = true;
+    // bool enable_striping = true;
+    // bool enable_hashing = true;
     MPI_Info comm_info;
     MPI_Info_create(&comm_info);
     MPI_Info_set(comm_info, "mpi_assert_no_any_source", "true");
     MPI_Info_set(comm_info, "mpi_assert_no_any_tag", "true");
-    MPI_Info_set(comm_info, "enable_multi_nic_striping", enable_striping ? "true" : "false");
-    MPI_Info_set(comm_info, "enable_multi_nic_hashing", enable_hashing ? "true" : "false");
+    // MPI_Info_set(comm_info, "enable_multi_nic_striping", enable_striping ? "true" : "false");
+    // MPI_Info_set(comm_info, "enable_multi_nic_hashing", enable_hashing ? "true" : "false");
     MPI_Comm_set_info(world, comm_info);
+
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
 
     /* LAMMPS TESTING CODE */
     double* send_f;
     double* recv_f;
-    if (TEST_AGAINST_LAMMPS) {
+    if (stencilmd_config.TEST_AGAINST_LAMMPS) {
         send_f = new double[(atom->natoms + 1) * 3];
         for (int i = 0; i < (atom->natoms + 1) * 3; i++) {
             send_f[i] = 0.0;

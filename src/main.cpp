@@ -19,8 +19,8 @@
 #include "pthread.h"
 #include <cilk/cilk_api.h>
 #include <sstream>
-// #include "CLI11.hpp"
-// #include "stencil_md_config.hpp"
+#include "cxxopts.hpp"
+#include "stencil_md_config.hpp"
 
 #ifdef __linux__
 #include "stencil_md_utils.h"
@@ -64,43 +64,24 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  /*
-  CLI::App app{"StencilMD YAML file"};
-  app.allow_non_standard_option_names();
+  cxxopts::Options options("StencilMD", "StencilMD: Optimizing Communication in Molecular Dynamics");
+  options.add_options()
+  ("c,config", "StencilMD config file name", cxxopts::value<std::string>())
+  ;
 
-  argv = app.ensure_utf8(argv);
+  options.allow_unrecognised_options();
+  auto result = options.parse(argc, argv);
 
-  std::string config_path = "default";
-  app.add_option("-c,--config", config_path, "config file path for StencilMD");
+  auto config_path = result["config"].as<std::string>();
 
-  std::string lammps_input_file = "default";
-  app.add_option("-i,-in", lammps_input_file, "lammps input file, not directly used for StencilMD");
+  StencilMDConfigManager::get_instance().load_from_config_file(config_path);
+  std::cout << "Configuration loaded successfully via Singleton for StencilMD." << std::endl;
 
-  std::string lammps_package = "default";
-  app.add_option("-pk,-package", lammps_package, "lammps package, not directly used for StencilMD");
-
-  std::string lammps_suffix = "default";
-  app.add_option("-sf,-suffix", lammps_suffix, "lammps package suffix, not directly used for StencilMD");
-
-  try {
-      // CLI11_PARSE(app, argc, argv);
-      app.parse(argc, argv);
-  } catch (std::runtime_error& e) {
-      std::cout << "parse error: " << e.what() << std::endl;
-  } catch (CLI::ParseError& e) {
-      std::cout << "parse error: " << e.what() << std::endl;
-  }
-  */
-
-  // StencilMDConfigManager::get_instance().load_from_config_file(config_path);
-  // std::cout << "Configuration loaded successfully via Singleton for StencilMD." << std::endl;
-
-  // const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
-  // stencilMDConfig = StencilMDConfigManager::get_instance().get_config();
+  const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
 
 #ifdef __linux__
-    // if (!stencilMDConfig.ONLY_RUN_LAMMPS) {
-    if (!ONLY_RUN_LAMMPS) {
+    if (!stencilmd_config.ONLY_RUN_LAMMPS) {
+    // if (!ONLY_RUN_LAMMPS) {
         constexpr bool USE_MULTI_SOCKET = true;
         if (USE_MULTI_SOCKET) {
             auto calling_thread = pthread_self();
