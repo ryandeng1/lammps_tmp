@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 
   cxxopts::Options options("StencilMD", "StencilMD: Optimizing Communication in Molecular Dynamics");
   options.add_options()
-  ("c,config", "StencilMD config file name", cxxopts::value<std::string>())
+  ("config", "StencilMD config file name", cxxopts::value<std::string>())
   ;
 
   options.allow_unrecognised_options();

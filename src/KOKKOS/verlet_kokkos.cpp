@@ -326,6 +326,8 @@ void VerletKokkos::run(int n) {
     std::cout << "n_pre_force: " << n_pre_force << " n_pre_reverse: " << n_pre_reverse << " n_post_force: " << n_post_force << " n_end_of_step: " << n_end_of_step << std::endl;
     */
 
+    bool TEST_AGAINST_LAMMPS = false;
+
     lmp->kokkos->auto_sync = 0;
 
     if (atomKK->sortfreq > 0) sortflag = 1;

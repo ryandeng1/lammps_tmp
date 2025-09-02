@@ -64,7 +64,7 @@ constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 
 constexpr bool DEBUG_SEND_RECV_DATA = false;
 
-constexpr bool TEST_AGAINST_LAMMPS = false;
+// constexpr bool TEST_AGAINST_LAMMPS = false;
 
 constexpr double ALLEGRO_SLOPE = ALLEGRO_CUTOFF_RADIUS + ADDITIONAL_CUTOFF;
 

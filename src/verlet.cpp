@@ -492,7 +492,7 @@ void Verlet::setup_stencil_md_many_zoids() {
                 stencilMD->post_force_stencil_md_zoid_many_cuts_setup(zoid, 0);
             }
 
-            if (TEST_AGAINST_LAMMPS) {
+            if (stencilmd_config.TEST_AGAINST_LAMMPS) {
                 stencilMD->TEST_AGAINST_LAMMPS_FORCE_DOUBLE_BUFFERING_SETUP(recv_f, zoid, 0);
             }
             stencilMD->PACK_AND_SEND_DATA_ZOID_TO_ZOID_SETUP(zoid, dep, all_send_requests[zoid_num]);
@@ -555,7 +555,7 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     std::cout << BOLDGREEN << "Initial Force computation passed" << RESET_COLOR << std::endl;
 
-    if (TEST_AGAINST_LAMMPS) {
+    if (stencilmd_config.TEST_AGAINST_LAMMPS) {
         delete[] send_f;
         delete[] recv_f;
     }
@@ -645,8 +645,10 @@ void Verlet::run(int n) {
     }
 
     if (TIME_LAMMPS_STATES) {
-	lammps_timings.reserve(3 * n);
+	    lammps_timings.reserve(3 * n);
     }
+
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
 
     // TODO: This is meant to maximize spending time ONLY on what I am tracking
     eflag = 0; vflag = 0;
@@ -677,7 +679,7 @@ void Verlet::run(int n) {
     double* send_x;
     double* send_v;
 
-    if (TEST_AGAINST_LAMMPS) {
+    if (stencilmd_config.TEST_AGAINST_LAMMPS) {
         for (int i = 0; i < test_num_timesteps; i++) {
             test_f[i] = new double[3 * (atom->natoms + 1)];
             test_x[i] = new double[3 * (atom->natoms + 1)];
@@ -738,7 +740,7 @@ void Verlet::run(int n) {
         timer->stamp();
 
         // Begin stencil md code
-        if (TEST_AGAINST_LAMMPS) {
+        if (stencilmd_config.TEST_AGAINST_LAMMPS) {
             // memset(send_f, 0, sizeof(send_f));
             for (int j = 0; j < 3 * (atom->natoms + 1); j++) {
                 send_f[j] = 0;
@@ -1089,7 +1091,7 @@ void Verlet::run(int n) {
     }
     */
 
-    if (TEST_AGAINST_LAMMPS) {
+    if (stencilmd_config.TEST_AGAINST_LAMMPS) {
         delete[] send_f;
         delete[] send_x;
         delete[] send_v;
@@ -1313,7 +1315,7 @@ void Verlet::run(int n) {
                   << " NEXT DT COMM DURATION: " << stencil_md_total_next_dt_comm_duration << RESET_COLOR << std::endl;
     }
 
-    if (TEST_AGAINST_LAMMPS) {
+    if (stencilmd_config.TEST_AGAINST_LAMMPS) {
         for (int i = 0; i < test_num_timesteps; i++) {
             delete[] test_f[i];
             delete[] test_x[i];
@@ -1325,8 +1327,9 @@ void Verlet::run(int n) {
 template <bool curr_dt>
 void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue_info& zoid, int start_t, int end_t,
                                            double** test_f, double** test_x, double** test_v) {
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
     for (int t = start_t; t < end_t; t++) {
-        if (TEST_AGAINST_LAMMPS) {
+        if (stencilmd_config.TEST_AGAINST_LAMMPS) {
             int timestep_to_compare_against = curr_dt ? starting_timestep + t
                     : starting_timestep + NUM_TIMESTEPS_IN_PARALLEL + t;
 

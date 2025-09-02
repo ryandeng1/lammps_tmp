@@ -227,7 +227,6 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator) :
 
   iarg = 1;
   while (iarg < narg) {
-
     if (strcmp(arg[iarg],"-cite") == 0 ||
                strcmp(arg[iarg],"-c") == 0) {
       if (iarg+2 > narg)
@@ -451,7 +450,12 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator) :
       iarg += 3;
       while (iarg < narg && arg[iarg][0] != '-') iarg++;
 
-    } else error->universe_all(FLERR,"Invalid command-line argument");
+    } else if (strcmp(arg[iarg], "--config") == 0) {
+      if (iarg+2 > narg)
+        error->universe_all(FLERR,"Invalid command-line argument");
+      iarg += 2;
+    }
+    else error->universe_all(FLERR,"Invalid command-line argument");
   }
 
   // if no partition command-line switch, universe is one world with all procs
