@@ -415,16 +415,6 @@ void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *que
   }
 }
 
-void print_cuts(const cuts_t &c)
-{
-  for (int i = 0; i < 3; i++) {
-    std::cout << "cuts_t: " << i << " lower: " << c.cuts[i].lower << " upper: " << c.cuts[i].upper
-              << std::endl;
-    std::cout << "Slope lower: " << c.cuts[i].slope_lower
-              << " Slope upper: " << c.cuts[i].slope_upper << std::endl;
-  }
-}
-
 int get_mpi_tag(int dst_zoid_num, int src_zoid_num, int start_timestep, int end_timestep) {
     int mpi_tag = (dst_zoid_num << 8 | src_zoid_num);
     mpi_tag = (mpi_tag << 8) | end_timestep;

@@ -89,117 +89,8 @@ using IDX_3D = std::array<int, 3>;
 constexpr int MODIFY_GRAINSIZE = 1024;
 
 constexpr bool USE_NEWTON = true;
-
-const std::map<IDX_3D, int> zoid_to_num_map = {
-        {{LEFT,  LEFT,  LEFT},  0},
-        {{RIGHT, RIGHT, RIGHT}, 1},
-        {{LEFT,  LEFT,  RIGHT}, 2},
-        {{RIGHT, RIGHT, LEFT},     3},
-        {{LEFT, RIGHT, LEFT},      4},
-        {{RIGHT, LEFT, LEFT},      5},
-        {{LEFT, RIGHT, RIGHT},     6},
-        {{RIGHT, LEFT, RIGHT},     7},
-
-        // begin dep 1
-        // group 0
-        {{LEFT, LEFT, MIDDLE},     8},
-        {{LEFT, MIDDLE, LEFT},     16},
-        {{MIDDLE, LEFT, LEFT},     24},
-
-        // group 1
-        {{RIGHT, RIGHT, PBC},      9},
-        {{RIGHT, PBC, RIGHT},      17},
-        {{PBC, RIGHT, RIGHT},      25},
-
-        // group 2
-        {{LEFT, LEFT, PBC},        10},
-        {{LEFT, MIDDLE, RIGHT},    18},
-        {{MIDDLE, LEFT, RIGHT},    26},
-
-        // group 3
-        {{RIGHT, RIGHT, MIDDLE},   11},
-        {{RIGHT, PBC, LEFT},       19},
-        {{PBC, RIGHT, LEFT},       27},
-
-        // group 4
-        {{LEFT, RIGHT, MIDDLE},    12},
-        {{LEFT, PBC, LEFT},        20},
-        {{MIDDLE, RIGHT, LEFT},    28},
-
-        // group 5
-        {{RIGHT, LEFT, MIDDLE},    13},
-        {{RIGHT, MIDDLE, LEFT},    21},
-        {{PBC, LEFT, LEFT},        29},
-
-        // group 6
-        {{LEFT, RIGHT, PBC},       14},
-        {{LEFT, PBC, RIGHT},       22},
-        {{MIDDLE, RIGHT, RIGHT},   30},
-
-        // group 7
-        {{RIGHT, LEFT, PBC},       15},
-        {{RIGHT, MIDDLE, RIGHT},   23},
-        {{PBC, LEFT, RIGHT},       31},
-
-        // begin dep 2
-        // group 0
-        {{LEFT, MIDDLE, MIDDLE},   32},
-        {{MIDDLE, LEFT, MIDDLE},   40},
-        {{MIDDLE, MIDDLE, LEFT},   48},
-
-        // group 1
-        {{RIGHT, PBC, PBC},        33},
-        {{PBC, RIGHT, PBC},        41},
-        {{PBC, PBC, RIGHT},        49},
-
-        // group 2
-        {{LEFT, MIDDLE, PBC},      34},
-        {{MIDDLE, LEFT, PBC},      42},
-        {{MIDDLE, MIDDLE, RIGHT},  50},
-
-        // group 3
-        {{RIGHT, PBC, MIDDLE},     35},
-        {{PBC, RIGHT, MIDDLE},     43},
-        {{PBC, PBC, LEFT},         51},
-
-        // group 4
-        {{LEFT, PBC, MIDDLE},      36},
-        {{MIDDLE, RIGHT, MIDDLE},  44},
-        {{MIDDLE, PBC, LEFT},      52},
-
-        // group 5
-        {{RIGHT, MIDDLE, MIDDLE},  37},
-        {{PBC, LEFT, MIDDLE},      45},
-        {{PBC, MIDDLE, LEFT},      53},
-
-        // group 6
-        {{LEFT, PBC, PBC},         38},
-        {{MIDDLE, RIGHT, PBC},     46},
-        {{MIDDLE, PBC, RIGHT},     54},
-
-
-        // group 7
-        {{RIGHT, MIDDLE, PBC},     39},
-        {{PBC, LEFT, PBC},         47},
-        {{PBC, MIDDLE, RIGHT},     55},
-
-        // begin dep3
-        {{MIDDLE, MIDDLE, MIDDLE}, 56},
-
-        {{PBC, PBC, PBC},          57},
-
-        {{MIDDLE, MIDDLE, PBC},    58},
-
-        {{PBC, PBC, MIDDLE},       59},
-
-        {{MIDDLE, PBC, MIDDLE},    60},
-
-        {{PBC, MIDDLE, MIDDLE},    61},
-
-        {{MIDDLE, PBC, PBC},       62},
-
-        {{PBC, MIDDLE, PBC},       63},
-};
+constexpr int DOUBLE_BUFFERING = 2;
+constexpr int NUM_DIMENSIONS = 3;
 
 struct cut_info {
   double lower;
@@ -248,9 +139,6 @@ struct spinlock {
 };
 
 typedef struct cuts cuts_t;
-
-constexpr int DOUBLE_BUFFERING = 2;
-constexpr int NUM_DIMENSIONS = 3;
 
 // struct that holds information for queue
 struct queue_info {
@@ -346,8 +234,6 @@ bool is_dep(int *, int *);
 bool is_dep_inverted(int *, int *);
 
 void get_zoids(double slope, double *lo, double *hi, std::deque<queue_info> *queues);
-
-void print_cuts(const cuts_t &);
 
 int get_segments(const std::vector<int>&, std::vector<int>&, std::vector<int>&, bool print=false);
 

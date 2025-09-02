@@ -336,6 +336,7 @@ void StencilMD::CREATE_NEXT_DT() {
     }
 }
 
+/*
 void StencilMD::INIT_ZOIDS() {
     if (comm->me == 0) {
         std::cout << BOLDYELLOW << "INIT ZOIDS. LO: " << domain->boxlo[0] << " " << domain->boxlo[1] << " " << domain->boxlo[2] << RESET_COLOR << std::endl;
@@ -407,6 +408,7 @@ void StencilMD::INIT_ZOIDS() {
         }
     }
 }
+*/
 
 void StencilMD::INIT_ZOID_DATA() {
     std::map<int, std::pair<int, int>> zoid_num_to_coord;
