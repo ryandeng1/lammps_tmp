@@ -36,10 +36,10 @@
 constexpr int LAMMPS_SEND_LOCAL = -1;
 constexpr int LAMMPS_SEND_GHOST = -2;
 
-constexpr int LEFT = 0;
-constexpr int RIGHT = 1;
-constexpr int MIDDLE = 2;
-constexpr int PBC = 3;
+// constexpr int LEFT = 0;
+// constexpr int RIGHT = 1;
+// constexpr int MIDDLE = 2;
+// constexpr int PBC = 3;
 
 constexpr int BOND_FENE = 0;
 constexpr int LJ = 1;

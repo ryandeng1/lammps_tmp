@@ -1572,6 +1572,7 @@ void CommBrick::exchange_stencil_md_initial_receive_double_buffering(queue_info 
 // all of the atoms at time 0
 void CommBrick::borders_stencil_md_initial_send(Atom *atom_, Domain *domain_, queue_info &zoid,
                                                 int timestep) {
+  /*
   int size_with_vel = 9;
   AtomVec *avec = atom_->avec;
 
@@ -1631,14 +1632,6 @@ void CommBrick::borders_stencil_md_initial_send(Atom *atom_, Domain *domain_, qu
         // send_zoid_lo[dim] - (NUM_TIMESTEPS_IN_PARALLEL + 1) * ALLEGRO_SLOPE;
         // double hi = send_zoid_hi[dim] + (NUM_TIMESTEPS_IN_PARALLEL + 1) *
         // ALLEGRO_SLOPE;
-        /*
-        double lo = send_zoid.zoid.cuts[dim].lower +
-            send_zoid.zoid.cuts[dim].slope_lower * timestep_idx -
-            (num_timesteps_in_parallel + 1) * allegro_slope;
-        double hi = send_zoid.zoid.cuts[dim].upper +
-            send_zoid.zoid.cuts[dim].slope_upper * timestep_idx +
-            (num_timesteps_in_parallel + 1) * allegro_slope;
-        */
 
         double lo = send_zoid.zoid.cuts[dim].lower +
                       send_zoid.zoid.cuts[dim].slope_lower * timestep;
@@ -1698,19 +1691,18 @@ void CommBrick::borders_stencil_md_initial_send(Atom *atom_, Domain *domain_, qu
                "Per-processor number of atoms is too large for "
                "molecular neighbor lists");
 
-  /*
-    int max = maxreverse*smax;
-    for (int i = 0; i < maxswap; i++) {
-        if (max > maxsend_stencil_md[i]) {
-            grow_send_stencil_md(max,i, 0);
-        }
-    }
+    // int max = maxreverse*smax;
+    // for (int i = 0; i < maxswap; i++) {
+    //     if (max > maxsend_stencil_md[i]) {
+    //         grow_send_stencil_md(max,i, 0);
+    //     }
+    // }
 
-    // reset global->local map
-    if (map_style != Atom::MAP_NONE) {
-        atom->map_set();
-    }
-    */
+    // // reset global->local map
+    // if (map_style != Atom::MAP_NONE) {
+    //     atom->map_set();
+    // }
+  */
 }
 
 void CommBrick::borders_stencil_md_initial_receive(Atom *atom_, Domain *domain_, queue_info &zoid, int timestep) {
