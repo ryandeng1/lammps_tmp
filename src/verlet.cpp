@@ -55,6 +55,7 @@
 #include <sstream>
 #include <cilk/opadd_reducer.h>
 #include <sys/time.h>
+#include "stencil_md_config.hpp"
 
 using namespace LAMMPS_NS;
 
