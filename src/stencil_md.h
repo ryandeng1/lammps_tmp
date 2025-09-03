@@ -971,15 +971,15 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 4;
-    static constexpr int NUM_CUTS_Y = 4;
-    static constexpr int NUM_CUTS_Z = 4;
+    // static constexpr int NUM_CUTS_X = 4;
+    // static constexpr int NUM_CUTS_Y = 4;
+    // static constexpr int NUM_CUTS_Z = 4;
 
-    static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
-    static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
-    static constexpr int NUM_ZOIDS_Z = NUM_CUTS_Z * 2;
+    // static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
+    // static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
+    // static constexpr int NUM_ZOIDS_Z = NUM_CUTS_Z * 2;
 
-    static constexpr int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+    // static constexpr int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
 
     queue_info* zoid_num_to_zoid_many_cuts;
     queue_info* zoid_num_to_zoid_many_cuts_next_dt;
@@ -1084,7 +1084,9 @@ public:
     std::vector<int> dep_to_send_zoids_next_dt[NUM_DEPS];
 
     void INIT_ZOID_MANY_CUTS() {
-        // TODO: test out more than 1 cut in each dimension
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
         assert(domain->dimension == 3);
 
         std::vector<double> bounds_x;
@@ -1095,11 +1097,11 @@ public:
             double width = domain->boxhi[dim] - domain->boxlo[dim];
             int num_cuts_in_dimension;
             if (dim == 0) {
-                num_cuts_in_dimension = NUM_CUTS_X;
+                num_cuts_in_dimension = stencilmd_config.NUM_CUTS_X;
             } else if (dim == 1) {
-                num_cuts_in_dimension = NUM_CUTS_Y;
+                num_cuts_in_dimension = stencilmd_config.NUM_CUTS_Y;
             } else if (dim == 2) {
-                num_cuts_in_dimension = NUM_CUTS_Z;
+                num_cuts_in_dimension = stencilmd_config.NUM_CUTS_Z;
             } else {
                 assert(false);
             }
@@ -1404,6 +1406,12 @@ public:
     }
 
     void INIT_ZOIDS_NUMBERING() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+
         std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_send_neighbors;
         std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_recv_neighbors;
 
@@ -1437,7 +1445,15 @@ public:
         std::vector<int> proc_to_zoid_count(comm->nprocs, 0);
         std::map<std::array<int, 3>, int> zoid_to_proc;
 
-        bool claimed[NUM_ZOIDS_X][NUM_ZOIDS_Y][NUM_ZOIDS_Y] = {0};
+        // bool claimed[NUM_ZOIDS_X][NUM_ZOIDS_Y][NUM_ZOIDS_Z] = {0};
+        std::vector<std::vector<std::vector<bool>>> claimed;
+        claimed.resize(NUM_ZOIDS_X);
+        for (int i = 0; i < NUM_ZOIDS_X; i++) {
+            claimed[i].resize(NUM_ZOIDS_Y);
+            for (int j = 0; j < NUM_ZOIDS_Z; j++) {
+                claimed[i][j].resize(NUM_ZOIDS_Z, false);
+            }
+        }
 
         std::vector<std::array<int, 3>> dep0_zoids;
         for (int x = 0; x < NUM_ZOIDS_X; x++) {
@@ -1660,6 +1676,12 @@ public:
 
         // Improved INIT_ZOIDS_NUMBERING_BALANCED implementation
         void INIT_ZOIDS_NUMBERING_BALANCED_IMPROVED() {
+            const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+            int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+            int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+            int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+            int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+
             // Build neighbor relationships (same as original)
             std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_send_neighbors;
             std::map<std::array<int, 3>, std::set<std::array<int, 3>>> tmp_recv_neighbors;
@@ -2454,6 +2476,9 @@ public:
 
     // END CLAUDE CODE
     void INIT_ZOID_DATA_MANY_CUTS() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_CUTS_X * 2 * stencilmd_config.NUM_CUTS_Y * 2 * stencilmd_config.NUM_CUTS_Z * 2;
+
         std::map<int, std::pair<int, int>> zoid_num_to_coord;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues_many_cuts[dep].size(); j++) {
@@ -2522,12 +2547,12 @@ public:
                     zoid.send_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
-                    if constexpr (EXPERIMENT == EAM) {
-                        zoid.send_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                        zoid.recv_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                        zoid.send_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                        zoid.recv_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    }
+                    // if constexpr (EXPERIMENT == EAM) {
+                    //     zoid.send_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    //     zoid.recv_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    //     zoid.send_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    //     zoid.recv_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // }
 
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -2635,12 +2660,12 @@ public:
                     zoid.send_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_pos_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
 
-                    if constexpr (EXPERIMENT == EAM) {
-                        zoid.send_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                        zoid.recv_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                        zoid.send_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                        zoid.recv_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                    }
+                    // if constexpr (EXPERIMENT == EAM) {
+                    //     zoid.send_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    //     zoid.recv_fp_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    //     zoid.send_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    //     zoid.recv_rho_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
+                    // }
 
                     zoid.send_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
                     zoid.recv_vel_idxs_double_buffering = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
@@ -2806,6 +2831,11 @@ public:
     }
 
     bool zoid_many_cuts_is_neighbor_all_deps(int* where_a, int* where_b) {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+
         for (int dim = 0; dim < domain->dimension; dim++) {
             int num_zoids_in_dimension;
             if (dim == 0) {
@@ -2835,6 +2865,11 @@ public:
     }
 
     bool zoid_many_cuts_is_neighbor_all_deps_next_dt(int* where_a, int* where_b) {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+
         for (int dim = 0; dim < domain->dimension; dim++) {
             int num_zoids_in_dimension;
             if (dim == 0) {
@@ -2864,6 +2899,12 @@ public:
     }
 
     void INIT_ZOID_MANY_CUTS_NEIGHBORS() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+
         // for neighbors
         send_to_neighbors_many_cuts = new std::vector<int>[NUM_ZOIDS_MANY_CUTS];
         send_to_neighbors_many_cuts_next_dt = new std::vector<int>[NUM_ZOIDS_MANY_CUTS];
@@ -3176,6 +3217,12 @@ public:
     void INIT_MPIX_STREAM_DATA() {
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
 
         zoid_to_stream_num[curr_dt_idx].resize(NUM_ZOIDS_MANY_CUTS);
         int stream_idx = 0;
@@ -3673,8 +3720,14 @@ public:
         auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
-        recv_request_idx_to_zoid_per_zoid[curr_dt_idx].resize(stencilMD->NUM_ZOIDS_MANY_CUTS);
-        recv_request_zoid_to_idx_per_zoid[curr_dt_idx].resize(stencilMD->NUM_ZOIDS_MANY_CUTS);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+
+        recv_request_idx_to_zoid_per_zoid[curr_dt_idx].resize(NUM_ZOIDS_MANY_CUTS);
+        recv_request_zoid_to_idx_per_zoid[curr_dt_idx].resize(NUM_ZOIDS_MANY_CUTS);
 
         constexpr int NUM_NEIGHBORS_PER_DEP[NUM_DEPS] = {0, 2, 4, 6};
 
@@ -3868,6 +3921,12 @@ public:
     void INIT_DEP_PROC_RECV_ZOID_DATA() {
         auto& queues = curr_dt ? queues_many_cuts
                 : queues_many_cuts_next_dt;
+
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
 
         for (int dep = 1; dep < NUM_DEPS; dep++) {
             if (curr_dt) {
@@ -4125,6 +4184,12 @@ public:
     }
 
     void SORT_LOCAL_ATOMS_ZOID_MANY_CUTS() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+
         // setup lammps code
         double binsize = 0.5 * neighbor->cutneighmax;
         double bininv = 1.0 / binsize;
@@ -5902,6 +5967,12 @@ public:
 
     template <bool curr_dt>
     void CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+
         std::vector<MPI_Request> r;
         r.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1) * 4 / comm->nprocs);
 
@@ -6191,8 +6262,15 @@ public:
         }
     }
 
+    /*
     template <bool curr_dt>
     void CONSTRUCT_SEND_FP_IDXS_ZOID_MANY_CUTS() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+
         std::vector<MPI_Request> r;
         r.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1) * 4 / comm->nprocs);
 
@@ -6595,6 +6673,12 @@ public:
 
     template <bool curr_dt, bool newton>
     void CONSTRUCT_RECV_RHO_IDXS_ZOID_MANY_CUTS() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_X = stencilmd_config.NUM_CUTS_X * 2;
+        int NUM_ZOIDS_Y = stencilmd_config.NUM_CUTS_Y * 2;
+        int NUM_ZOIDS_Z = stencilmd_config.NUM_CUTS_Z * 2;
+        int NUM_ZOIDS_MANY_CUTS = NUM_ZOIDS_X * NUM_ZOIDS_Y * NUM_ZOIDS_Z;
+
         assert(EXPERIMENT == EAM);
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
@@ -6789,6 +6873,7 @@ public:
             }
         }
     }
+    */
 
     template <bool curr_dt>
     void CONSTRUCT_RECV_POS_IDXS_ZOID_MANY_CUTS() {
@@ -6970,6 +7055,9 @@ public:
     template <bool curr_dt, bool newton>
     void CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
         if (!newton) {
             for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -7165,6 +7253,9 @@ public:
 
     template <bool curr_dt>
     void CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
         std::vector<MPI_Request> r;
         r.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1) * 4 / comm->nprocs);
 
@@ -7331,6 +7422,9 @@ public:
 
     template <bool curr_dt>
     void CONSTRUCT_NEW_RECV_FORCE_IDXS_FLATTENED() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
 
@@ -7410,6 +7504,9 @@ public:
 
     template <bool curr_dt>
     void CONSTRUCT_NEW_RECV_VEL_IDXS_FLATTENED() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
 
@@ -7487,6 +7584,9 @@ public:
 
     template <bool curr_dt>
     void CONSTRUCT_NEW_RECV_POS_IDXS_FLATTENED() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
 
@@ -7723,6 +7823,8 @@ public:
 
         constexpr int start_timestep = USE_PIPELINE ? start_t[pipeline_stage] : default_start_t;
         constexpr int end_timestep = USE_PIPELINE ? end_t[pipeline_stage] : default_end_t;
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
@@ -7838,6 +7940,8 @@ public:
 
     void INIT_SEND_RECV_BUFFERS_MANY_CUTS() {
         constexpr int INITIAL_SIZE = 1024;
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
         all_comms.resize(NUM_COMMS);
         for (int i = 0; i < NUM_COMMS; i++) {
@@ -7974,6 +8078,8 @@ public:
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         constexpr int start_timestep = USE_PIPELINE ? start_t[pipeline_stage] : default_start_t;
         constexpr int end_timestep = USE_PIPELINE ? end_t[pipeline_stage] : default_end_t;
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
         auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
 
@@ -8066,6 +8172,8 @@ public:
     void CONSTRUCT_SEND_ZOID_TO_ZOID_SIZES() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
         if (curr_dt) {
             send_zoid_to_zoid_sizes.resize(NUM_ZOIDS_MANY_CUTS);
@@ -8207,6 +8315,8 @@ public:
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
         constexpr int num_p = USE_PIPELINE ? NUM_PIPELINE_STAGES : 1;
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
         for (int p = 0; p < num_p; p++) {
             if (curr_dt) {
@@ -8309,6 +8419,8 @@ public:
     template <bool curr_dt>
     void CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES() {
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
         if (curr_dt) {
             recv_zoid_to_zoid_sizes.resize(NUM_ZOIDS_MANY_CUTS);
@@ -8396,6 +8508,8 @@ public:
     template <bool curr_dt>
     void CONSTRUCT_RECV_ZOID_TO_ZOID_SIZES_PIPELINED() {
         constexpr int num_p = USE_PIPELINE ? NUM_PIPELINE_STAGES : 1;
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
         for (int p = 0; p < num_p; p++) {
             constexpr int start_timestep = USE_PIPELINE ? start_t[p] : default_start_t;
@@ -8483,12 +8597,12 @@ public:
             int nsend = send_zoid_to_zoid_sizes_setup[zoid_num][i];
             int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
 
-            if constexpr (EXPERIMENT == EAM) {
-                int nsend_rho = zoid.send_rho_idxs_double_buffering[0][i].size();
-                int nsend_fp = zoid.send_fp_idxs_double_buffering[0][i].size();
-                zoid_ndoubles_send += DEBUG_SEND_RECV_DATA ? nsend_rho * 2 : nsend_rho;
-                zoid_ndoubles_send += DEBUG_SEND_RECV_DATA ? nsend_fp * 2 : nsend_fp;
-            }
+            // if constexpr (EXPERIMENT == EAM) {
+            //     int nsend_rho = zoid.send_rho_idxs_double_buffering[0][i].size();
+            //     int nsend_fp = zoid.send_fp_idxs_double_buffering[0][i].size();
+            //     zoid_ndoubles_send += DEBUG_SEND_RECV_DATA ? nsend_rho * 2 : nsend_rho;
+            //     zoid_ndoubles_send += DEBUG_SEND_RECV_DATA ? nsend_fp * 2 : nsend_fp;
+            // }
 
             if (zoid_ndoubles_send > nsend_buf_send_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid.num][i]) {
                 assert(false);
@@ -9180,13 +9294,13 @@ public:
 
             int total_doubles_recv_from_zoid = DEBUG_SEND_RECV_DATA ? recv_size * (3 + 1) : recv_size * 3;
 
-            if constexpr (EXPERIMENT == EAM) {
-                auto& zoid = zoid_num_to_zoid_many_cuts[zoid_num];
-                int nrecv_rho = zoid.recv_rho_idxs_double_buffering[0][i].size();
-                int nrecv_fp = zoid.recv_fp_idxs_double_buffering[0][i].size();
-                total_doubles_recv_from_zoid += DEBUG_SEND_RECV_DATA ? nrecv_rho * 2 : nrecv_rho;
-                total_doubles_recv_from_zoid += DEBUG_SEND_RECV_DATA ? nrecv_fp * 2 : nrecv_fp;
-            }
+            // if constexpr (EXPERIMENT == EAM) {
+            //     auto& zoid = zoid_num_to_zoid_many_cuts[zoid_num];
+            //     int nrecv_rho = zoid.recv_rho_idxs_double_buffering[0][i].size();
+            //     int nrecv_fp = zoid.recv_fp_idxs_double_buffering[0][i].size();
+            //     total_doubles_recv_from_zoid += DEBUG_SEND_RECV_DATA ? nrecv_rho * 2 : nrecv_rho;
+            //     total_doubles_recv_from_zoid += DEBUG_SEND_RECV_DATA ? nrecv_fp * 2 : nrecv_fp;
+            // }
 
             if (total_doubles_recv_from_zoid > nrecv_buf_recv_zoid_to_zoid[DEFAULT_PIPELINE_STAGE][zoid_num][i]) {
                 assert(false);
@@ -9787,16 +9901,17 @@ public:
                                          int start_t, int end_t) {
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
             int num_zoids_in_dimension;
             if (dim == 0) {
-                num_zoids_in_dimension = NUM_ZOIDS_X;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_X * 2;
             } else if (dim == 1) {
-                num_zoids_in_dimension = NUM_ZOIDS_Y;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Y * 2;
             } else {
-                num_zoids_in_dimension = NUM_ZOIDS_Z;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Z * 2;
             }
 
             if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
@@ -9917,15 +10032,17 @@ public:
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
 
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
             int num_zoids_in_dimension;
             if (dim == 0) {
-                num_zoids_in_dimension = NUM_ZOIDS_X;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_X * 2;
             } else if (dim == 1) {
-                num_zoids_in_dimension = NUM_ZOIDS_Y;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Y * 2;
             } else {
-                num_zoids_in_dimension = NUM_ZOIDS_Z;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Z * 2;
             }
 
             if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
@@ -10213,16 +10330,17 @@ public:
                                       int start_t, int end_t) {
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
             int num_zoids_in_dimension;
             if (dim == 0) {
-                num_zoids_in_dimension = NUM_ZOIDS_X;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_X * 2;
             } else if (dim == 1) {
-                num_zoids_in_dimension = NUM_ZOIDS_Y;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Y * 2;
             } else {
-                num_zoids_in_dimension = NUM_ZOIDS_Z;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Z * 2;
             }
 
             if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
@@ -10474,16 +10592,17 @@ public:
 
         auto &recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
             int num_zoids_in_dimension;
             if (dim == 0) {
-                num_zoids_in_dimension = NUM_ZOIDS_X;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_X * 2;
             } else if (dim == 1) {
-                num_zoids_in_dimension = NUM_ZOIDS_Y;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Y * 2;
             } else {
-                num_zoids_in_dimension = NUM_ZOIDS_Z;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Z * 2;
             }
 
             if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
@@ -10576,15 +10695,17 @@ public:
         auto &recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
 
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
             int num_zoids_in_dimension;
             if (dim == 0) {
-                num_zoids_in_dimension = NUM_ZOIDS_X;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_X * 2;
             } else if (dim == 1) {
-                num_zoids_in_dimension = NUM_ZOIDS_Y;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Y * 2;
             } else {
-                num_zoids_in_dimension = NUM_ZOIDS_Z;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Z * 2;
             }
 
             if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
@@ -10804,16 +10925,17 @@ public:
         constexpr int end_t = 1;
 
         auto& recv_zoid = zoid_num_to_zoid_many_cuts[recv_zoid_num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
             int num_zoids_in_dimension;
             if (dim == 0) {
-                num_zoids_in_dimension = NUM_ZOIDS_X;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_X * 2;
             } else if (dim == 1) {
-                num_zoids_in_dimension = NUM_ZOIDS_Y;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Y * 2;
             } else {
-                num_zoids_in_dimension = NUM_ZOIDS_Z;
+                num_zoids_in_dimension = stencilmd_config.NUM_CUTS_Z * 2;
             }
 
             if (recv_zoid.where[dim] == num_zoids_in_dimension - 1 && zoid.where[dim] == 0) {
@@ -10855,49 +10977,49 @@ public:
                     zoid.f_stencil_md[0][idx].z += f_z;
                 }
 
-                if constexpr (EXPERIMENT == EAM) {
-                    auto& recv_rho_idxs = zoid.recv_rho_idxs_double_buffering[t][recv_idx];
-                    for (int k = 0; k < recv_rho_idxs.size(); k++) {
-                        int idx = recv_rho_idxs[k];
-                        auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
-                        double rho = buf[buf_idx++];
+                // if constexpr (EXPERIMENT == EAM) {
+                //     auto& recv_rho_idxs = zoid.recv_rho_idxs_double_buffering[t][recv_idx];
+                //     for (int k = 0; k < recv_rho_idxs.size(); k++) {
+                //         int idx = recv_rho_idxs[k];
+                //         auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
+                //         double rho = buf[buf_idx++];
 
-                        if (target_tag != zoid.tag_stencil_md[0][idx]) {
-                            std::cout << "RHO TAG WRONG me: " << comm->me
-                                    << " idx: " << idx << " k: " << k
-                                    << " my zoid: " << zoid.num << " my proc: " << zoid.num % comm->nprocs
-                                    << " recv from zoid: " << recv_zoid_num << " time: " << t
-                                    << " recv from proc: " << recv_zoid_num % comm->nprocs
-                                    << " tag I got: " << target_tag << " tag I want: " << zoid.tag_stencil_md[0][idx]
-                                    << " buf_idx: " << buf_idx
-                                    << " buf: " << buf
-                                    << std::endl;
-                        }
-                        assert(target_tag == zoid.tag_stencil_md[0][idx]);
-                        zoid.rho_stencil_md[0][idx] += rho;
-                    }
+                //         if (target_tag != zoid.tag_stencil_md[0][idx]) {
+                //             std::cout << "RHO TAG WRONG me: " << comm->me
+                //                     << " idx: " << idx << " k: " << k
+                //                     << " my zoid: " << zoid.num << " my proc: " << zoid.num % comm->nprocs
+                //                     << " recv from zoid: " << recv_zoid_num << " time: " << t
+                //                     << " recv from proc: " << recv_zoid_num % comm->nprocs
+                //                     << " tag I got: " << target_tag << " tag I want: " << zoid.tag_stencil_md[0][idx]
+                //                     << " buf_idx: " << buf_idx
+                //                     << " buf: " << buf
+                //                     << std::endl;
+                //         }
+                //         assert(target_tag == zoid.tag_stencil_md[0][idx]);
+                //         zoid.rho_stencil_md[0][idx] += rho;
+                //     }
 
-                    auto& recv_fp_idxs = zoid.recv_fp_idxs_double_buffering[t][recv_idx];
-                    for (int k = 0; k < recv_rho_idxs.size(); k++) {
-                        int idx = recv_fp_idxs[k];
-                        auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
-                        double fp = buf[buf_idx++];
+                //     auto& recv_fp_idxs = zoid.recv_fp_idxs_double_buffering[t][recv_idx];
+                //     for (int k = 0; k < recv_rho_idxs.size(); k++) {
+                //         int idx = recv_fp_idxs[k];
+                //         auto target_tag = (tagint) ubuf(buf[buf_idx++]).i;
+                //         double fp = buf[buf_idx++];
 
-                        if (target_tag != zoid.tag_stencil_md[0][idx]) {
-                            std::cout << "RHO TAG WRONG me: " << comm->me
-                                    << " idx: " << idx << " k: " << k
-                                    << " my zoid: " << zoid.num << " my proc: " << zoid.num % comm->nprocs
-                                    << " recv from zoid: " << recv_zoid_num << " time: " << t
-                                    << " recv from proc: " << recv_zoid_num % comm->nprocs
-                                    << " tag I got: " << target_tag << " tag I want: " << zoid.tag_stencil_md[0][idx]
-                                    << " buf_idx: " << buf_idx
-                                    << " buf: " << buf
-                                    << std::endl;
-                        }
-                        assert(target_tag == zoid.tag_stencil_md[0][idx]);
-                        zoid.fp_stencil_md[0][idx] = fp;
-                    }
-                }
+                //         if (target_tag != zoid.tag_stencil_md[0][idx]) {
+                //             std::cout << "RHO TAG WRONG me: " << comm->me
+                //                     << " idx: " << idx << " k: " << k
+                //                     << " my zoid: " << zoid.num << " my proc: " << zoid.num % comm->nprocs
+                //                     << " recv from zoid: " << recv_zoid_num << " time: " << t
+                //                     << " recv from proc: " << recv_zoid_num % comm->nprocs
+                //                     << " tag I got: " << target_tag << " tag I want: " << zoid.tag_stencil_md[0][idx]
+                //                     << " buf_idx: " << buf_idx
+                //                     << " buf: " << buf
+                //                     << std::endl;
+                //         }
+                //         assert(target_tag == zoid.tag_stencil_md[0][idx]);
+                //         zoid.fp_stencil_md[0][idx] = fp;
+                //     }
+                // }
             } else {
                 for (int k = 0; k < recv_force_idxs.size(); k++) {
                     int idx = recv_force_idxs[k];
@@ -10909,21 +11031,21 @@ public:
                     zoid.f_stencil_md[0][idx].z += f_z;
                 }
 
-                if constexpr (EXPERIMENT == EAM) {
-                    auto& recv_rho_idxs = zoid.recv_rho_idxs_double_buffering[t][recv_idx];
-                    for (int k = 0; k < recv_rho_idxs.size(); k++) {
-                        int idx = recv_rho_idxs[k];
-                        double rho = buf[buf_idx++];
-                        zoid.rho_stencil_md[0][idx] += rho;
-                    }
+                // if constexpr (EXPERIMENT == EAM) {
+                //     auto& recv_rho_idxs = zoid.recv_rho_idxs_double_buffering[t][recv_idx];
+                //     for (int k = 0; k < recv_rho_idxs.size(); k++) {
+                //         int idx = recv_rho_idxs[k];
+                //         double rho = buf[buf_idx++];
+                //         zoid.rho_stencil_md[0][idx] += rho;
+                //     }
 
-                    auto& recv_fp_idxs = zoid.recv_fp_idxs_double_buffering[t][recv_idx];
-                    for (int k = 0; k < recv_fp_idxs.size(); k++) {
-                        int idx = recv_fp_idxs[k];
-                        double fp = buf[buf_idx++];
-                        zoid.fp_stencil_md[0][idx] = fp;
-                    }
-                }
+                //     auto& recv_fp_idxs = zoid.recv_fp_idxs_double_buffering[t][recv_idx];
+                //     for (int k = 0; k < recv_fp_idxs.size(); k++) {
+                //         int idx = recv_fp_idxs[k];
+                //         double fp = buf[buf_idx++];
+                //         zoid.fp_stencil_md[0][idx] = fp;
+                //     }
+                // }
             }
         }
     }
@@ -11940,23 +12062,23 @@ public:
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].z;
                 }
 
-                if constexpr (EXPERIMENT == EAM) {
-                    auto& send_rho_idxs = zoid.send_rho_idxs_double_buffering[t][send_idx];
-                    for (int k = 0; k < send_rho_idxs.size(); k++) {
-                        int idx = send_rho_idxs[k];
-                        int tag = zoid.tag_stencil_md[0][idx];
-                        buf[buf_idx++] = ubuf(tag).d;
-                        buf[buf_idx++] = zoid.rho_stencil_md[0][idx];
-                    }
+                // if constexpr (EXPERIMENT == EAM) {
+                //     auto& send_rho_idxs = zoid.send_rho_idxs_double_buffering[t][send_idx];
+                //     for (int k = 0; k < send_rho_idxs.size(); k++) {
+                //         int idx = send_rho_idxs[k];
+                //         int tag = zoid.tag_stencil_md[0][idx];
+                //         buf[buf_idx++] = ubuf(tag).d;
+                //         buf[buf_idx++] = zoid.rho_stencil_md[0][idx];
+                //     }
 
-                    auto& send_fp_idxs = zoid.send_fp_idxs_double_buffering[t][send_idx];
-                    for (int k = 0; k < send_fp_idxs.size(); k++) {
-                        int idx = send_fp_idxs[k];
-                        int tag = zoid.tag_stencil_md[0][idx];
-                        buf[buf_idx++] = ubuf(tag).d;
-                        buf[buf_idx++] = zoid.fp_stencil_md[0][idx];
-                    }
-                }
+                //     auto& send_fp_idxs = zoid.send_fp_idxs_double_buffering[t][send_idx];
+                //     for (int k = 0; k < send_fp_idxs.size(); k++) {
+                //         int idx = send_fp_idxs[k];
+                //         int tag = zoid.tag_stencil_md[0][idx];
+                //         buf[buf_idx++] = ubuf(tag).d;
+                //         buf[buf_idx++] = zoid.fp_stencil_md[0][idx];
+                //     }
+                // }
             } else {
                 for (int k = 0; k < send_force_idxs.size(); k++) {
                     int idx = send_force_idxs[k];
@@ -11966,19 +12088,19 @@ public:
                     buf[buf_idx++] = zoid.f_stencil_md[0][idx].z;
                 }
 
-                if constexpr (EXPERIMENT == EAM) {
-                    auto& send_rho_idxs = zoid.send_rho_idxs_double_buffering[t][send_idx];
-                    for (int k = 0; k < send_rho_idxs.size(); k++) {
-                        int idx = send_rho_idxs[k];
-                        buf[buf_idx++] = zoid.rho_stencil_md[0][idx];
-                    }
+                // if constexpr (EXPERIMENT == EAM) {
+                //     auto& send_rho_idxs = zoid.send_rho_idxs_double_buffering[t][send_idx];
+                //     for (int k = 0; k < send_rho_idxs.size(); k++) {
+                //         int idx = send_rho_idxs[k];
+                //         buf[buf_idx++] = zoid.rho_stencil_md[0][idx];
+                //     }
 
-                    auto& send_fp_idxs = zoid.send_fp_idxs_double_buffering[t][send_idx];
-                    for (int k = 0; k < send_fp_idxs.size(); k++) {
-                        int idx = send_fp_idxs[k];
-                        buf[buf_idx++] = zoid.fp_stencil_md[0][idx];
-                    }
-                }
+                //     auto& send_fp_idxs = zoid.send_fp_idxs_double_buffering[t][send_idx];
+                //     for (int k = 0; k < send_fp_idxs.size(); k++) {
+                //         int idx = send_fp_idxs[k];
+                //         buf[buf_idx++] = zoid.fp_stencil_md[0][idx];
+                //     }
+                // }
             }
         }
 
@@ -12544,6 +12666,7 @@ public:
         // if (vflag_fdotr) virial_fdotr_compute();
     }
 
+    /*
     void EAM_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         assert(EXPERIMENT == EAM);
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
@@ -12758,7 +12881,7 @@ public:
         //     }
         // }
     }
-
+    */
 
     void TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
@@ -14426,6 +14549,9 @@ public:
     }
 
     void CLEANUP_PIPELINED_BUFFERS() {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
         for (int p = 0; p < NUM_PIPELINE_STAGES; p++) {
             for (int zoid_num = 0; zoid_num < NUM_ZOIDS_MANY_CUTS ; zoid_num++) {
                 if (zoid_num % comm->nprocs != comm->me) {

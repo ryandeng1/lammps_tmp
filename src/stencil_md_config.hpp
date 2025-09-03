@@ -33,13 +33,10 @@ struct StencilMDConfig {
     double SKIN_DISTANCE = 0.0;
     double STENCIL_MD_SLOPE = 0.0;
 
-    int NUM_CUTS_X = 0;
-    int NUM_CUTS_Y = 0;
-    int NUM_CUTS_Z = 0;
-
-    int NUM_ZOIDS_X = 0;
-    int NUM_ZOIDS_Y = 0;
-    int NUM_ZOIDS_Z = 0;
+    int NUM_CUTS_X = -1;
+    int NUM_CUTS_Y = -1;
+    int NUM_CUTS_Z = -1;
+    int NUM_ZOIDS_MANY_CUTS = -1;
 };
 
 class StencilMDConfigManager {
@@ -104,9 +101,8 @@ public:
         config.NUM_CUTS_X = toml_config["NUM_CUTS_X"].value<int>().value();
         config.NUM_CUTS_Y = toml_config["NUM_CUTS_Y"].value<int>().value();
         config.NUM_CUTS_Z = toml_config["NUM_CUTS_Z"].value<int>().value();
-        config.NUM_ZOIDS_X = config.NUM_CUTS_X * 2;
-        config.NUM_ZOIDS_Y = config.NUM_CUTS_Y * 2;
-        config.NUM_ZOIDS_Z = config.NUM_CUTS_Z * 2;
+
+        config.NUM_ZOIDS_MANY_CUTS = (config.NUM_CUTS_X * 2) * (config.NUM_CUTS_Y * 2) * (config.NUM_CUTS_Z * 2);
 
         is_loaded = true;
     }

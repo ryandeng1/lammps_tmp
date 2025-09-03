@@ -267,6 +267,7 @@ void Verlet::setup_stencil_md_many_zoids() {
     MPI_Comm_set_info(world, comm_info);
 
     const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+    int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
     /* LAMMPS TESTING CODE */
     double* send_f;
@@ -380,6 +381,7 @@ void Verlet::setup_stencil_md_many_zoids() {
     stencilMD->CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS<false>();
 
+    /*
     if constexpr (EXPERIMENT == EAM) {
         stencilMD->CONSTRUCT_RECV_RHO_IDXS_ZOID_MANY_CUTS<true, false>();
         stencilMD->CONSTRUCT_SEND_RHO_IDXS_ZOID_MANY_CUTS<true, false>();
@@ -393,6 +395,7 @@ void Verlet::setup_stencil_md_many_zoids() {
         stencilMD->CONSTRUCT_RECV_FP_IDXS_ZOID_MANY_CUTS<false>();
         stencilMD->CONSTRUCT_SEND_FP_IDXS_ZOID_MANY_CUTS<false>();
     }
+    */
 
     stencilMD->CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS<true>();
     stencilMD->CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS<false>();
@@ -454,8 +457,8 @@ void Verlet::setup_stencil_md_many_zoids() {
     std::map<std::pair<int, int>, bool> did_recv_map;
     std::map<int, int> dep_to_nproc_send;
 
-    std::vector<MPI_Request> all_recv_requests[stencilMD->NUM_ZOIDS_MANY_CUTS];
-    std::vector<MPI_Request> all_send_requests[stencilMD->NUM_ZOIDS_MANY_CUTS];
+    std::vector<MPI_Request> all_recv_requests[NUM_ZOIDS_MANY_CUTS];
+    std::vector<MPI_Request> all_send_requests[NUM_ZOIDS_MANY_CUTS];
 
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
@@ -486,7 +489,8 @@ void Verlet::setup_stencil_md_many_zoids() {
             } else if constexpr (EXPERIMENT == TERSOFF) {
                 stencilMD->TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
             } else if constexpr (EXPERIMENT == EAM) {
-                stencilMD->EAM_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+                // stencilMD->EAM_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, 0);
+                assert(false);
             }
 
             if constexpr (EXPERIMENT == BOND_FENE) {
@@ -650,6 +654,7 @@ void Verlet::run(int n) {
     }
 
     const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+    int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
 
     // TODO: This is meant to maximize spending time ONLY on what I am tracking
     eflag = 0; vflag = 0;
@@ -785,11 +790,11 @@ void Verlet::run(int n) {
         // end stencil md code
 
         // auto begin_m = std::chrono::high_resolution_clock::now();
-	if (TIME_LAMMPS_STATES) {
-	    struct timeval tv_compute_start;
-	    gettimeofday(&tv_compute_start, NULL);
-	    lammps_timings.push_back(std::make_tuple("COMPUTE", "START", comm->me, tv_compute_start.tv_sec * MICROSECOND_FACTOR + tv_compute_start.tv_usec));
-	}
+        if (TIME_LAMMPS_STATES) {
+            struct timeval tv_compute_start;
+            gettimeofday(&tv_compute_start, NULL);
+            lammps_timings.push_back(std::make_tuple("COMPUTE", "START", comm->me, tv_compute_start.tv_sec * MICROSECOND_FACTOR + tv_compute_start.tv_usec));
+        }
 
         modify->initial_integrate(vflag);
 
@@ -1188,8 +1193,8 @@ void Verlet::run(int n) {
         std::cout << BOLDYELLOW << "------ RUN STENCILMD -------" << RESET_COLOR << std::endl;
     }
 
-    std::vector<std::atomic_flag> zoid_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
-    std::vector<std::atomic_flag*> zoid_unpack_self_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
+    std::vector<std::atomic_flag> zoid_claimed(NUM_ZOIDS_MANY_CUTS);
+    std::vector<std::atomic_flag*> zoid_unpack_self_claimed(NUM_ZOIDS_MANY_CUTS);
 
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
@@ -1199,7 +1204,7 @@ void Verlet::run(int n) {
         }
     }
 
-    for (int i = 0; i < stencilMD->NUM_ZOIDS_MANY_CUTS; i++) {
+    for (int i = 0; i < NUM_ZOIDS_MANY_CUTS; i++) {
         zoid_claimed[i].clear();
     }
 
@@ -1364,8 +1369,9 @@ void Verlet::run_stencil_md_zoid_many_cuts(int starting_timestep, int dep, queue
             stencilMD->TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
             stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
         } else if constexpr (EXPERIMENT == EAM) {
-            stencilMD->EAM_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
-            stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            // stencilMD->EAM_FORCE_COMPUTE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            // stencilMD->NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(zoid, dep, t + 1);
+            assert(false);
         }
     }
 }
@@ -2272,12 +2278,15 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_helper_with_proc_to_proc
 template <bool curr_dt>
 void Verlet::run_stencil_md_many_cuts_waitany(int starting_timestep, double **test_f, double **test_x, double **test_v,
                                               std::vector<std::atomic_flag>& claimed) {
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+    int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
     constexpr int MAX_NEIGHBORS = 26;
 
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
                               : stencilMD->my_queues_many_cuts_next_dt;
 
-    std::vector<MPI_Request> send_r[stencilMD->NUM_ZOIDS_MANY_CUTS];
+    std::vector<MPI_Request> send_r[NUM_ZOIDS_MANY_CUTS];
     std::vector<MPI_Request> recv_r[NUM_DEPS];
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         if (curr_dt) {
@@ -2909,6 +2918,9 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                                                     MPIX_Stream_Manager* stream_manager,
                                                     std::vector<std::atomic_flag*>& zoid_unpack_self_claimed) noexcept {
 
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+    int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
     constexpr int curr_dt_idx = static_cast<int>(curr_dt);
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts : stencilMD->my_queues_many_cuts_next_dt;
 
@@ -2940,12 +2952,12 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
         }
     }
 
-    std::vector<std::atomic_flag> zoid_unpack_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
+    std::vector<std::atomic_flag> zoid_unpack_claimed(NUM_ZOIDS_MANY_CUTS);
 
     constexpr bool USE_BETTER_WORK_QUEUE = true;
     if (USE_BETTER_WORK_QUEUE) {
         cilk_scope {
-            std::vector<std::atomic<bool>> zoid_done(stencilMD->NUM_ZOIDS_MANY_CUTS);
+            std::vector<std::atomic<bool>> zoid_done(NUM_ZOIDS_MANY_CUTS);
             for (int dep = 0; dep < NUM_DEPS; dep++) {
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     auto& zoid = my_queues[dep][j];
@@ -3112,8 +3124,11 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined(int starting_timestep, d
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts
                               : stencilMD->my_queues_many_cuts_next_dt;
 
-    std::vector<MPI_Request> send_r[stencilMD->NUM_ZOIDS_MANY_CUTS];
-    std::vector<MPI_Request> send_r2[stencilMD->NUM_ZOIDS_MANY_CUTS];
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+    int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
+    std::vector<MPI_Request> send_r[NUM_ZOIDS_MANY_CUTS];
+    std::vector<MPI_Request> send_r2[NUM_ZOIDS_MANY_CUTS];
 
     std::vector<MPI_Request> recv_r[NUM_DEPS];
     std::vector<MPI_Request> recv_r2[NUM_DEPS];
@@ -3325,22 +3340,25 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc(int st
 
 void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                       std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag*>& zoid_unpack_self_claimed) {
-    std::vector<std::atomic<int>> zoid_recv_neighbor_counters(stencilMD->NUM_ZOIDS_MANY_CUTS);
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+    int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
+    std::vector<std::atomic<int>> zoid_recv_neighbor_counters(NUM_ZOIDS_MANY_CUTS);
     std::vector<std::atomic<int>> dep_counters(NUM_DEPS);
-    std::vector<std::vector<MPI_Request>> send_r_zoid_to_zoid(stencilMD->NUM_ZOIDS_MANY_CUTS);
+    std::vector<std::vector<MPI_Request>> send_r_zoid_to_zoid(NUM_ZOIDS_MANY_CUTS);
     std::vector<std::vector<MPI_Request>> send_r_proc_to_proc(NUM_DEPS);
 
     MPIX_Stream_Manager* stream_manager =  new MPIX_Stream_Manager(NUM_STREAMS);
 
     // std::vector<std::vector<MPI_Request>> recv_r_zoid_to_zoid(NUM_DEPS);
-    std::vector<std::vector<MPI_Request>> recv_r_zoid_to_zoid(stencilMD->NUM_ZOIDS_MANY_CUTS);
+    std::vector<std::vector<MPI_Request>> recv_r_zoid_to_zoid(NUM_ZOIDS_MANY_CUTS);
     std::vector<std::vector<MPI_Request>> recv_r_proc_to_proc(NUM_DEPS);
 
     std::vector<std::vector<std::vector<MPI_Request>>> recv_r_zoid_to_zoid_streams(NUM_DEPS);
 
     std::vector<std::atomic_flag> dep_claimed(NUM_DEPS);
 
-    int max_zoids_per_dep = (stencilMD->NUM_ZOIDS_MANY_CUTS / 8) * 3 / comm->nprocs;
+    int max_zoids_per_dep = (NUM_ZOIDS_MANY_CUTS / 8) * 3 / comm->nprocs;
     if (comm->me == 0) {
         std::cout << "max zoids per dep: " << max_zoids_per_dep << std::endl;
     }
@@ -3395,12 +3413,15 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
 void Verlet::run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                                 std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag>& claimed2) {
 
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+    int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+
     constexpr bool WITH_PROC_TO_PROC = true;
 
     if (WITH_PROC_TO_PROC) {
         std::vector<std::vector<MPI_Request>> send_r[NUM_PIPELINE_STAGES] = {
-            std::vector<std::vector<MPI_Request>>(stencilMD->NUM_ZOIDS_MANY_CUTS),
-            std::vector<std::vector<MPI_Request>>(stencilMD->NUM_ZOIDS_MANY_CUTS)
+            std::vector<std::vector<MPI_Request>>(NUM_ZOIDS_MANY_CUTS),
+            std::vector<std::vector<MPI_Request>>(NUM_ZOIDS_MANY_CUTS)
         };
 
         std::vector<std::vector<MPI_Request>> send_r_proc_to_proc[NUM_PIPELINE_STAGES] = {
@@ -3412,8 +3433,8 @@ void Verlet::run_stencil_md_many_cuts_pipelined(int num_timesteps, double** test
         // send_r_proc_to_proc[0].resize(NUM_DEPS); send_r_proc_to_proc[1].resize(NUM_DEPS);
 
         std::vector<std::atomic<int>> recv_neighbor_counters[NUM_PIPELINE_STAGES] = {
-            std::vector<std::atomic<int>>(stencilMD->NUM_ZOIDS_MANY_CUTS),
-            std::vector<std::atomic<int>>(stencilMD->NUM_ZOIDS_MANY_CUTS)
+            std::vector<std::atomic<int>>(NUM_ZOIDS_MANY_CUTS),
+            std::vector<std::atomic<int>>(NUM_ZOIDS_MANY_CUTS)
         };
 
         for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
