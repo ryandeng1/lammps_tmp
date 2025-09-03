@@ -48,6 +48,7 @@
 #include "pair_sw.h"
 #include "pair_tersoff.h"
 #include "pair_eam.h"
+#include "stencil_md_config.hpp"
 
 #define EPSILON 1.0e-10
 
@@ -14449,7 +14450,8 @@ public:
     }
 
     ~StencilMD() {
-        if (ONLY_RUN_LAMMPS) {
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        if (stencilmd_config.ONLY_RUN_LAMMPS) {
             return;
         }
 

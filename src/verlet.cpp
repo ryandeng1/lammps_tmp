@@ -143,6 +143,7 @@ void Verlet::init() {
 ------------------------------------------------------------------------- */
 
 void Verlet::setup(int flag) {
+    const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
     if (comm->me == 0 && screen) {
         fputs("Setting up Verlet run ...\n", screen);
         if (flag) {
@@ -194,12 +195,12 @@ void Verlet::setup(int flag) {
     ev_set(update->ntimestep);
     force_clear();
 
-    if (!ONLY_RUN_STENCIL_MD) {
+    if (!stencilmd_config.ONLY_RUN_STENCIL_MD) {
         modify->setup_pre_force(vflag);
     }
 
     if (pair_compute_flag) {
-        if (!ONLY_RUN_STENCIL_MD) {
+        if (!stencilmd_config.ONLY_RUN_STENCIL_MD) {
             force->pair->compute(eflag, vflag);
         }
     } else if (force->pair) {
@@ -207,7 +208,7 @@ void Verlet::setup(int flag) {
     }
 
     if (atom->molecular != Atom::ATOMIC) {
-        if (!ONLY_RUN_STENCIL_MD) {
+        if (!stencilmd_config.ONLY_RUN_STENCIL_MD) {
             if (force->bond) {
                 force->bond->compute(eflag, vflag);
             }
@@ -248,7 +249,7 @@ void Verlet::setup(int flag) {
 
     std::cout << GREEN << "------------------- LAMMPS SETUP DONE -------------------------" << RESET_COLOR << std::endl;
 
-    if (!ONLY_RUN_LAMMPS) {
+    if (!stencilmd_config.ONLY_RUN_LAMMPS) {
         setup_stencil_md_many_zoids();
     }
 }
@@ -721,7 +722,7 @@ void Verlet::run(int n) {
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < n + 1; i++) {
-        if (ONLY_RUN_STENCIL_MD) {
+        if (stencilmd_config.ONLY_RUN_STENCIL_MD) {
             break;
         }
         /*
@@ -1098,7 +1099,7 @@ void Verlet::run(int n) {
     }
 
     MPI_Barrier(world);
-    if (ONLY_RUN_LAMMPS) {
+    if (stencilmd_config.ONLY_RUN_LAMMPS) {
         return;
     }
 
