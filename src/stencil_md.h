@@ -7825,6 +7825,7 @@ public:
         constexpr int end_timestep = USE_PIPELINE ? end_t[pipeline_stage] : default_end_t;
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
         int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
@@ -8080,6 +8081,7 @@ public:
         constexpr int end_timestep = USE_PIPELINE ? end_t[pipeline_stage] : default_end_t;
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
         int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
 
@@ -8174,6 +8176,7 @@ public:
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
         int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         if (curr_dt) {
             send_zoid_to_zoid_sizes.resize(NUM_ZOIDS_MANY_CUTS);
@@ -8317,6 +8320,7 @@ public:
         constexpr int num_p = USE_PIPELINE ? NUM_PIPELINE_STAGES : 1;
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
         int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int p = 0; p < num_p; p++) {
             if (curr_dt) {
@@ -8421,6 +8425,7 @@ public:
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
         int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         if (curr_dt) {
             recv_zoid_to_zoid_sizes.resize(NUM_ZOIDS_MANY_CUTS);
@@ -8510,6 +8515,7 @@ public:
         constexpr int num_p = USE_PIPELINE ? NUM_PIPELINE_STAGES : 1;
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
         int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int p = 0; p < num_p; p++) {
             constexpr int start_timestep = USE_PIPELINE ? start_t[p] : default_start_t;
@@ -8589,6 +8595,8 @@ public:
 
     void PACK_AND_SEND_DATA_ZOID_TO_ZOID_SETUP(queue_info& zoid, int dep, std::vector<MPI_Request>& r) {
         auto& send_neighbors = send_to_neighbors_many_cuts[zoid.num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int zoid_num = zoid.num;
 
@@ -8635,6 +8643,8 @@ public:
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int zoid_num = zoid.num;
 
@@ -8692,6 +8702,9 @@ public:
 
         auto& send_request_idxs = curr_dt ? send_to_neighbors_not_my_proc_idxs[zoid_num]
                                           : send_to_neighbors_not_my_proc_idxs_next_dt[zoid_num];
+
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         cilk_for (int i = 0; i < send_neighbors.size(); i++) {
             int send_zoid_num = send_neighbors[i];
@@ -8754,6 +8767,8 @@ public:
                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int zoid_num = zoid.num;
 
@@ -8814,6 +8829,9 @@ public:
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
+
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int zoid_num = zoid.num;
 
@@ -8877,6 +8895,8 @@ public:
         auto& send_request_idxs = curr_dt ? send_to_neighbors_not_my_proc_idxs[zoid.num]
                                           : send_to_neighbors_not_my_proc_idxs_next_dt[zoid.num];
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int zoid_num = zoid.num;
 
@@ -8981,6 +9001,9 @@ public:
 
         auto& send_request_idxs = send_to_neighbors_not_my_proc_idxs_only_next_dep[curr_dt_idx][zoid.num];
 
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
+
         int zoid_num = zoid.num;
 
         const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][pipeline_stage][send_dep];
@@ -9048,6 +9071,8 @@ public:
                                           std::vector<MPI_Request>& r) {
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][pipeline_stage][send_dep];
 
@@ -9096,6 +9121,8 @@ public:
         auto& queue = curr_dt ? my_queues_many_cuts[send_dep] : my_queues_many_cuts_next_dt[send_dep];
 
         int total_num_procs = 0;
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int p = 0; p < procs_to_send_to.size(); p++) {
             int proc = procs_to_send_to[p];
@@ -9165,6 +9192,8 @@ public:
         int zoid_num = zoid.num;
 
         const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][pipeline_stage][send_dep];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int i = 0; i < send_neighbors.size(); i++) {
             int send_zoid_num = send_neighbors[i];
@@ -9229,6 +9258,8 @@ public:
         auto& send_request_idxs = send_to_neighbors_not_my_proc_idxs_only_next_dep[curr_dt_idx][zoid.num];
 
         int zoid_num = zoid.num;
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         std::vector<int> proc_counts(comm->nprocs, 0);
 
@@ -9281,6 +9312,8 @@ public:
         auto& queues = queues_many_cuts;
 
         auto& recv_neighbors = recv_from_neighbors_many_cuts[zoid_num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -9329,6 +9362,8 @@ public:
 
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                                        : recv_from_neighbors_many_cuts_next_dt[zoid_num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -9375,6 +9410,8 @@ public:
                                        : recv_from_neighbors_many_cuts_next_dt[zoid_num];
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -9412,6 +9449,8 @@ public:
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num] : recv_from_neighbors_many_cuts_next_dt[zoid_num];
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -9455,6 +9494,8 @@ public:
         auto& queue = curr_dt ? my_queues_many_cuts[dep] : my_queues_many_cuts_next_dt[dep];
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
         int nrecv_zoid_to_zoid = stencilMD->nrecv_zoid_to_zoid[curr_dt_idx][pipeline_stage][dep];
 
         int request_arr_idx = nrecv_zoid_to_zoid;
@@ -9547,6 +9588,8 @@ public:
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int recv_request_idx = 0;
         auto& zoid_pairs = stream_num_to_zoid_pairs[curr_dt_idx][dep][stream_num];
@@ -9673,6 +9716,8 @@ public:
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID(int dep, std::vector<MPI_Request>& recv_r, std::vector<MPI_Request>& recv_r_proc_to_proc) {
         auto& my_queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         // recv data zoid to zoid
         for (int j = 0; j < my_queues[dep].size(); j++) {
@@ -9749,6 +9794,8 @@ public:
 
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
                                        : recv_from_neighbors_many_cuts_next_dt[zoid_num];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -9794,6 +9841,8 @@ public:
         auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened[recv_idx];
 
         int num_recv_force = recv_force_idxs.size();
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         if (DEBUG_SEND_RECV_DATA) {
             for (int i = 0; i < recv_force_idxs.size(); i++) {
@@ -9842,6 +9891,8 @@ public:
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
 
         auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][recv_idx];
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int num_recv_force = recv_force_idxs.size();
 
@@ -9902,6 +9953,7 @@ public:
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
@@ -10033,6 +10085,7 @@ public:
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
 
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
@@ -10331,6 +10384,7 @@ public:
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
@@ -10926,6 +10980,7 @@ public:
 
         auto& recv_zoid = zoid_num_to_zoid_many_cuts[recv_zoid_num];
         const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int pbc_flag_[3] = {0};
         for (int dim = 0; dim < 3; dim++) {
@@ -11186,6 +11241,8 @@ public:
             : recv_from_neighbors_many_cuts_next_dt[zoid_num];
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
             int recv_zoid_num = recv_neighbors[i];
@@ -11269,6 +11326,9 @@ public:
     void UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED_PROC_TO_PROC(queue_info& zoid, int send_dep, int proc,
                                                               int recv_zoid_num, int find_idx, int start_t, int end_t, int pipeline_stage) {
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
+
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
             : recv_from_neighbors_many_cuts_next_dt[zoid.num];
         assert(recv_neighbors[find_idx] == recv_zoid_num);
@@ -11416,6 +11476,9 @@ public:
         constexpr int start_timestep = USE_PIPELINE ? start_t[pipeline_stage] : default_start_t;
         constexpr int end_timestep = USE_PIPELINE ? end_t[pipeline_stage] : default_end_t;
 
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
+
         auto& queues = curr_dt ? my_queues_many_cuts[dep] : my_queues_many_cuts_next_dt[dep];
         auto pair = std::make_pair(zoid.num, proc);
 
@@ -11470,6 +11533,8 @@ public:
         int num_send_pos2 = send_pos_idxs2.size();
         int num_send_vel = send_vel_idxs.size();
 
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         if (DEBUG_SEND_RECV_DATA) {
             for (int i = 0; i < send_force_idxs.size(); i++) {
@@ -11858,6 +11923,10 @@ public:
         int num_send_pos2 = send_pos_idxs2.size();
         int num_send_vel = send_vel_idxs.size();
 
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        int NUM_ZOIDS_MANY_CUTS = stencilmd_config.NUM_ZOIDS_MANY_CUTS;
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
+
         if (DEBUG_SEND_RECV_DATA) {
             for (int i = 0; i < send_force_idxs.size(); i++) {
                 int idx = send_force_idxs[i];
@@ -12046,6 +12115,9 @@ public:
                                          int send_idx, int send_zoid_num) {
         constexpr int start_t = 0;
         constexpr int end_t = 1;
+
+        const auto& stencilmd_config = StencilMDConfigManager::get_instance().get_config();
+        bool DEBUG_SEND_RECV_DATA = stencilmd_config.DEBUG_SEND_RECV_DATA;
 
         int buf_idx = 0;
         for (int t = start_t; t < end_t; t++) {

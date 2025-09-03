@@ -62,7 +62,7 @@ constexpr double CUTOFF = 3.2;
 // constexpr double ALLEGRO_CUTOFF_RADIUS = 2 * CUTOFF;
 constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 
-constexpr bool DEBUG_SEND_RECV_DATA = false;
+// constexpr bool DEBUG_SEND_RECV_DATA = false;
 
 // constexpr bool TEST_AGAINST_LAMMPS = false;
 

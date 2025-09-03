@@ -43,24 +43,19 @@ class StencilMDConfigManager {
 private:
     StencilMDConfig config;
     bool is_loaded = false;
-    static inline std::unique_ptr<StencilMDConfigManager> instance;
-    static inline std::mutex init_mutex;
 
     // Private constructor to prevent external instantiation
     StencilMDConfigManager() = default;
 
 public:
-    // The static method to get the single instance
-    static StencilMDConfigManager& get_instance() {
-        // Double-checked locking pattern (optional, simple lock is often fine)
-        if (!instance) {
-            std::lock_guard<std::mutex> lock(init_mutex);
-            if (!instance) {
-                // Use 'new' directly because make_unique can't access private constructor
-                instance.reset(new StencilMDConfigManager());
-            }
-        }
-        return *instance;
+    // Deleted copy and move constructors for a proper singleton
+    StencilMDConfigManager(const StencilMDConfigManager&) = delete;
+    StencilMDConfigManager& operator=(const StencilMDConfigManager&) = delete;
+
+    // The modern, thread-safe way to get the single instance
+    static inline StencilMDConfigManager& get_instance() {
+        static StencilMDConfigManager instance;
+        return instance;
     }
 
     // Accessor for the configuration data
@@ -107,4 +102,3 @@ public:
         is_loaded = true;
     }
 };
-
