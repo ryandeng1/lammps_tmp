@@ -58,9 +58,6 @@ constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 24;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
-constexpr bool EMPTY_PAIR_CALC = false;
-constexpr bool EMPTY_COMM = false;
-
 static int64_t s_compute_time[24] = {0};
 static int64_t s_comm_time[24] = {0};
 
@@ -9051,9 +9048,6 @@ public:
     void PACK_DATA_WITH_PROC_TO_PROC(queue_info& zoid, int send_dep, int start_timestep, int end_timestep, int pipeline_stage,
         MPIX_Stream_Manager* stream_manager, std::vector<MPI_Request>& send_r_zoid_to_zoid) {
 
-        if constexpr (EMPTY_COMM) {
-            return;
-        }
         assert(pipeline_stage == DEFAULT_PIPELINE_STAGE);
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9446,9 +9440,6 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        if constexpr (EMPTY_COMM) {
-            return;
-        }
         // auto comm_begin = MPI_Wtime();
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
@@ -11081,9 +11072,6 @@ public:
 
     template <bool curr_dt>
     void UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP(queue_info& zoid, int dep, int start_t, int end_t, int pipeline_stage, bool unpack_self_force=false) {
-        if constexpr (EMPTY_COMM) {
-            return;
-        }
         int zoid_num = zoid.num;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
             : recv_from_neighbors_many_cuts_next_dt[zoid_num];
@@ -11171,9 +11159,6 @@ public:
     template <bool curr_dt>
     void UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED_PROC_TO_PROC(queue_info& zoid, int send_dep, int proc,
                                                               int recv_zoid_num, int find_idx, int start_t, int end_t, int pipeline_stage) {
-        if constexpr (EMPTY_COMM) {
-            return;
-        }
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
             : recv_from_neighbors_many_cuts_next_dt[zoid.num];
@@ -12014,9 +11999,6 @@ public:
     }
 
     void NVE_INITIAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
-        if constexpr (EMPTY_PAIR_CALC) {
-            return;
-        }
         auto * _noalias x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
 
@@ -12152,9 +12134,6 @@ public:
     }
 
     void FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
-        if constexpr (EMPTY_PAIR_CALC) {
-            return;
-        }
         auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
         auto * _noalias f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -12296,9 +12275,6 @@ public:
     }
 
     void NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
-        if constexpr (EMPTY_PAIR_CALC) {
-            return;
-        }
         auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
         if constexpr (EXPERIMENT == DPD) {
             v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING].data();
@@ -12375,9 +12351,6 @@ public:
     }
 
     void SW_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
-        if constexpr (EMPTY_PAIR_CALC) {
-            return;
-        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -12585,9 +12558,6 @@ public:
     }
 
     void EAM_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
-        if constexpr (EMPTY_PAIR_CALC) {
-            return;
-        }
         assert(EXPERIMENT == EAM);
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
@@ -12804,9 +12774,6 @@ public:
 
 
     void TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
-        if constexpr (EMPTY_PAIR_CALC) {
-            return;
-        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -13923,9 +13890,6 @@ public:
     }
 
     void LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
-        if constexpr (EMPTY_PAIR_CALC) {
-            return;
-        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -14257,9 +14221,6 @@ public:
     }
 
     void DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
-        if constexpr (EMPTY_PAIR_CALC) {
-            return;
-        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
         auto * _noalias const v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING].data();
@@ -14358,6 +14319,80 @@ public:
             return;
         }
 
+        int num_chunks_pair = nlocal / GRAINSIZE + 1;
+
+        #pragma cilk grainsize 1
+        cilk_for (int c = 0; c < num_chunks_pair; c++) {
+            for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                const int itype = atom_type[i];
+                const auto &jlist = neighbor_list[i];
+
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                double vxtmp = v[i].x;
+                double vytmp = v[i].y;
+                double vztmp = v[i].z;
+                int jnum = jlist.size();
+
+                double fxtmp = 0.0;
+                double fytmp = 0.0;
+                double fztmp = 0.0;
+
+                for (int jj = 0; jj < jnum; jj++) {
+                    int j = jlist[jj];
+                    double factor_dpd = special_lj[pair->sbmask(j)];
+                    double factor_sqrt = special_sqrt[pair->sbmask(j)];
+                    j &= NEIGHMASK;
+
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx * delx + dely * dely + delz * delz;
+                    int jtype = atom_type[j];
+
+                    if (rsq < cutsq[itype][jtype]) {
+                        double r = sqrt(rsq);
+                        if (r < EPSILON) continue;     // r can be 0.0 in DPD systems
+                        double rinv = 1.0/r;
+                        double delvx = vxtmp - v[j].x;
+                        double delvy = vytmp - v[j].y;
+                        double delvz = vztmp - v[j].z;
+                        double dot = delx*delvx + dely*delvy + delz*delvz;
+                        double wd = 1.0 - r/cut[itype][jtype];
+                        double randnum = 0.6;
+
+                        double fpair = a0[itype][jtype]*wd;
+                        fpair -= gamma[itype][jtype]*wd*wd*dot*rinv;
+                        fpair *= factor_dpd;
+                        fpair += factor_sqrt*sigma[itype][jtype]*wd*randnum*dtinvsqrt;
+                        fpair *= rinv;
+
+                        fxtmp += delx*fpair;
+                        fytmp += dely*fpair;
+                        fztmp += delz*fpair;
+
+                        if (USE_NEWTON) {
+                            spinlocks[j].lock();
+                            f[j].x -= delx * fpair;
+                            f[j].y -= dely * fpair;
+                            f[j].z -= delz * fpair;
+                            spinlocks[j].unlock();
+                        }
+                    }
+                }
+
+                spinlocks[i].lock();
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+                spinlocks[i].unlock();
+            }
+        }
+
+        /*
         #pragma cilk grainsize GRAINSIZE
         cilk_for (int idx = 0; idx < nlocal; idx++) {
             int i = local_idxs[idx];
@@ -14426,6 +14461,7 @@ public:
             f[i].z += fztmp;
             spinlocks[i].unlock();
         }
+        */
     }
 
     /* End code for many zoids per dimension */
