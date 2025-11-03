@@ -11171,6 +11171,9 @@ public:
     template <bool curr_dt>
     void UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED_PROC_TO_PROC(queue_info& zoid, int send_dep, int proc,
                                                               int recv_zoid_num, int find_idx, int start_t, int end_t, int pipeline_stage) {
+        if constexpr (EMPTY_COMM) {
+            return;
+        }
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
             : recv_from_neighbors_many_cuts_next_dt[zoid.num];
@@ -12293,6 +12296,9 @@ public:
     }
 
     void NVE_FINAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
         if constexpr (EXPERIMENT == DPD) {
             v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING].data();
