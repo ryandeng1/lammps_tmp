@@ -48,7 +48,7 @@ constexpr int SW = 3;
 constexpr int TERSOFF = 4;
 constexpr int EAM = 5;
 
-constexpr int EXPERIMENT = DPD;
+constexpr int EXPERIMENT = BOND_FENE;
 
 constexpr int NUM_DEPS = 4;
 
