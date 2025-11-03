@@ -935,8 +935,8 @@ void Verlet::run(int n) {
             //     std::stringstream s1;
             //     s1 << "total num pairs: " << total_num_pairs << std::endl;
             //     std::cout << s1.str();
-            //     timer->stamp(Timer::PAIR);
             // }
+            timer->stamp(Timer::PAIR);
         }
 
         if (atom->molecular != Atom::ATOMIC) {
