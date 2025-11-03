@@ -1251,13 +1251,15 @@ void Verlet::run(int n) {
         zoid_claimed[i].clear();
     }
 
-    comm_time = 0;
-    compute_time = 0;
-
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
     run_stencil_md_many_cuts(2 * NUM_TIMESTEPS_IN_PARALLEL, test_f, test_x, test_v, zoid_claimed, zoid_unpack_self_claimed);
+    for (int w = 0; w < 24; w++) {
+        s_compute_time[w] = 0;
+        s_comm_time[w] = 0;
+    }
+
     MPI_Barrier(world);
     if (comm->me == 0) {
         std::cout << "----- END WARMUP -----" << std::endl;
@@ -1298,10 +1300,19 @@ void Verlet::run(int n) {
     << " total duration: " << total_duration_stencil_md << std::endl;
     std::cout << output_stream.str();
 
-    // std::stringstream timing_stream;
-    // timing_stream << BOLDGREEN << "me: " << comm->me 
-    // << " stencil md breakdown: " << " compute time: " << (compute_time * 1e6) << " comm time: " << (comm_time * 1e6) << RESET_COLOR << std::endl;
-    // std::cout << timing_stream.str();
+    double total_compute_time = 0;
+    double total_comm_time = 0;
+    for (int w = 0; w < 24; w++) {
+        if (comm->me == 0) {
+            std::cout << "worker: " << w << " comm time: " << s_comm_time[w] * 1e6 << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
+        }
+        total_compute_time += s_compute_time[w];
+        total_comm_time += s_comm_time[w];
+    }
+
+    if (comm->me == 0) {
+        std::cout << "total compute time: " << total_compute_time << " total comm time: " << total_comm_time << std::endl;
+    }
 
     if (comm->me == 0) {
         for (auto& tup : stencil_md_timings) {
@@ -2062,23 +2073,14 @@ void Verlet::stencil_md_run_zoid_wrapper_better_work_queue(int starting_timestep
                                     std::vector<std::atomic<bool>>& zoid_done) noexcept {
 
     if (dep > 0) {
-        // auto comm_begin = MPI_Wtime();
         stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, true);
-        // auto comm_end = MPI_Wtime();
-        // comm_time += (comm_end - comm_begin);
     }
 
-    // auto compute_begin = MPI_Wtime();
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_timestep - 1, end_timestep - 1,
                                         test_f, test_x, test_v);
     zoid_done[zoid.num].store(true, std::memory_order_relaxed);
-    // auto compute_end = MPI_Wtime();
-    // compute_time += (compute_end - compute_begin);
     
-    // auto comm_begin = MPI_Wtime();
     stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
-    // auto comm_end = MPI_Wtime();
-    // comm_time += (comm_end - comm_begin);
 
     /*
     dep_counters[dep].fetch_sub(1, std::memory_order_relaxed);
@@ -2822,8 +2824,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
         auto& all_requests_at_stream = recv_r_zoid_to_zoid_streams[dep][stream_num];
         std::vector<bool> requests_completed(total_num_wait, false);
 
-        // auto comm_begin = MPI_Wtime();
-
         while (true) {
             bool all_true = (std::find(requests_completed.cbegin(), requests_completed.cend(), false) == requests_completed.cend());
             if (all_true) {
@@ -2866,10 +2866,16 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                 }
             }
 
+            auto comm_begin = MPI_Wtime();
+            auto w = __cilkrts_get_worker_number();
+
             if (stream_manager->m[stream_num].try_lock()) {
                 MPIX_Stream_progress(stream_manager->streams[stream_num]);
                 stream_manager->m[stream_num].unlock();
             }
+
+            auto comm_end = MPI_Wtime();
+            s_comm_time[w] += (comm_end - comm_begin);
 
             for (int d = dep; d < NUM_DEPS; d++) {
                 for (int j = 0; j < my_queues[d].size(); j++) {

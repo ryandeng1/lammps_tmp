@@ -58,8 +58,8 @@ constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 24;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
-static int64_t s_compute_time[24] = {0};
-static int64_t s_comm_time[24] = {0};
+static double s_compute_time[24] = {0};
+static double s_comm_time[24] = {0};
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -9082,6 +9082,7 @@ public:
 
             cilk_spawn [this](int dep, queue_info& zoid, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
                 int pipeline_stage, MPIX_Stream_Manager* manager, int send_request_idx, std::vector<MPI_Request>& r) noexcept {
+
                 int zoid_num = zoid.num;
                 auto *buf = buf_send_zoid_to_zoid[pipeline_stage][zoid_num][i];
                 PACK_DATA_MANY_CUTS_HELPER_PIPELINED<curr_dt>(zoid, buf, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage);
@@ -9440,7 +9441,8 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        // auto comm_begin = MPI_Wtime();
+        auto w = __cilkrts_get_worker_number();
+        auto comm_begin = MPI_Wtime();
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9540,8 +9542,8 @@ public:
             recv_request_idx++;
         }
 
-        // auto comm_end = MPI_Wtime();
-        // comm_time += (comm_end - comm_begin);
+        auto comm_end = MPI_Wtime();
+        s_comm_time[w] += (comm_end - comm_begin);
     }
 
     void MPIX_START_PROGRESS_THREAD(MPIX_Stream_Manager* manager) {
@@ -9927,6 +9929,9 @@ public:
     template <bool curr_dt>
     void UNPACK_POS_VEL_MANY_CUTS_HELPER_PIPELINED(queue_info& zoid, double* buf, int recv_idx, int recv_zoid_num,
                                                    int start_t, int end_t, int pipeline_stage) {
+        auto begin = MPI_Wtime();
+        auto w = __cilkrts_get_worker_number();
+
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
 
@@ -10007,8 +10012,9 @@ public:
             auto * _noalias x0_ = zoid.x_stencil_md[0].data();
             auto * _noalias x1_ = zoid.x_stencil_md[1].data();
 
-            #pragma cilk grainsize 2048
-            cilk_for (int i = 0; i < recv_pos_idxs.size(); i++) {
+            // #pragma cilk grainsize 2048
+            // cilk_for (int i = 0; i < recv_pos_idxs.size(); i++) {
+            for (int i = 0; i < recv_pos_idxs.size(); i++) {
                 int idx = recv_pos_idxs[i];
                 int buf_idx = pos_starting_idx + i;
                 const auto& x_ = buf_[buf_idx];
@@ -10025,8 +10031,9 @@ public:
 
             int pos_starting_idx2 = (num_recv_force + num_recv_pos);
 
-            #pragma cilk grainsize 2048
-            cilk_for (int i = 0; i < recv_pos_idxs2.size(); i++) {
+            // #pragma cilk grainsize 2048
+            // cilk_for (int i = 0; i < recv_pos_idxs2.size(); i++) {
+            for (int i = 0; i < recv_pos_idxs2.size(); i++) {
                 int idx = recv_pos_idxs2[i];
                 int buf_idx = pos_starting_idx2 + i;
                 const auto& x_ = buf_[buf_idx];
@@ -10061,8 +10068,9 @@ public:
             auto * _noalias v0_ = zoid.v_stencil_md[0].data();
 
             int vel_starting_idx = (num_recv_force + num_recv_pos + num_recv_pos2);
-            #pragma cilk grainsize 2048
-            cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
+            // #pragma cilk grainsize 2048
+            // cilk_for (int i = 0; i < recv_vel_idxs.size(); i++) {
+            for (int i = 0; i < recv_vel_idxs.size(); i++) {
                 int idx = recv_vel_idxs[i];
                 int buf_idx = vel_starting_idx + i;
                 const auto& v_ = buf_[buf_idx];
@@ -10101,8 +10109,9 @@ public:
                 auto * _noalias v1_ = zoid.v_stencil_md[1].data();
 
                 int vel_starting_idx2 = (num_recv_force + num_recv_pos + num_recv_pos2 + num_recv_vel);
-                #pragma cilk grainsize 2048
-                cilk_for (int i = 0; i < recv_vel_idxs2.size(); i++) {
+                // #pragma cilk grainsize 2048
+                // cilk_for (int i = 0; i < recv_vel_idxs2.size(); i++) {
+                for (int i = 0; i < recv_vel_idxs2.size(); i++) {
                     int idx = recv_vel_idxs2[i];
                     int buf_idx = vel_starting_idx2 + i;
                     const auto& v_ = buf_[buf_idx];
@@ -10116,6 +10125,9 @@ public:
                     v1_[idx].z = v_.z;
                 }
             }
+
+            auto comm_end = MPI_Wtime();
+            s_comm_time[w] += (comm_end - comm_begin);
         }
 
         /*
@@ -11076,6 +11088,9 @@ public:
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
             : recv_from_neighbors_many_cuts_next_dt[zoid_num];
 
+        auto comm_begin = MPI_Wtime();
+        auto w = __cilkrts_get_worker_number();
+
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         for (int i = 0; i < recv_neighbors.size(); i++) {
@@ -11105,8 +11120,9 @@ public:
                 auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][i];
                 auto * _noalias const recv_f_ = zoid.f_stencil_md[0].data();
                 auto * _noalias const send_f_ = recv_zoid.f_stencil_md[0].data();
-                #pragma cilk grainsize 2048
-                cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
+                // #pragma cilk grainsize 2048
+                // cilk_for (int i = 0; i < recv_force_idxs.size(); i++) {
+                for (int i = 0; i < recv_force_idxs.size(); i++) {
                     int recv_force_idx = recv_force_idxs[i];
                     int send_force_idx = send_force_idxs[i];
 
@@ -11126,6 +11142,9 @@ public:
                 }
             }
         }
+
+        auto comm_end = MPI_Wtime();
+        s_comm_time[w] += (comm_end - comm_begin);
     }
 
     template <bool curr_dt>
@@ -11361,6 +11380,8 @@ public:
         int num_send_pos2 = send_pos_idxs2.size();
         int num_send_vel = send_vel_idxs.size();
 
+        auto comm_begin = MPI_Wtime();
+        auto w = __cilkrts_get_worker_number();
 
         if (DEBUG_SEND_RECV_DATA) {
             for (int i = 0; i < send_force_idxs.size(); i++) {
@@ -11586,8 +11607,9 @@ public:
                 int vel_starting_idx2 = (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * 3;
                 auto * _noalias v_ = zoid.v_stencil_md[1].data();
 
-                #pragma cilk grainsize 2048
-                cilk_for (int i = 0; i < send_vel_idxs2.size(); i++) {
+                // #pragma cilk grainsize 2048
+                // cilk_for (int i = 0; i < send_vel_idxs2.size(); i++) {
+                for (int i = 0; i < send_vel_idxs2.size(); i++) {
                     int idx = send_vel_idxs2[i];
                     int buf_idx = vel_starting_idx2 + i * 3;
 
@@ -11604,6 +11626,9 @@ public:
                 return (num_send_force + num_send_pos + num_send_pos2 + num_send_vel + num_send_vel2) * 3;
             }
         }
+
+        auto comm_end = MPI_Wtime();
+        s_comm_time[w] += (comm_end - comm_begin);
 
         if (DEBUG_SEND_RECV_DATA) {
             return (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * (3 + 1);
@@ -12052,7 +12077,11 @@ public:
 
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
-                int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+                auto compute_begin = MPI_Wtime();
+                auto w = __cilkrts_get_worker_number();
+
+                // int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+                int start_chunk = w * chunks_per_worker;
                 for (int c = 0; c < num_chunks; ++c) {
                     int s = (c + start_chunk) % num_chunks;
 
@@ -12095,12 +12124,18 @@ public:
                         }
                     }
                 }
+
+                auto compute_end = MPI_Wtime();
+                s_compute_time[w] += (compute_end - compute_begin);
             }
 
             for (int i = 0; i < num_chunks; i++) {
                 claimed[i].clear(std::memory_order_relaxed);
             }
         } else {
+            auto compute_begin = MPI_Wtime();
+            auto w = __cilkrts_get_worker_number();
+
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -12130,6 +12165,9 @@ public:
                     next_x[i].z = x[i].z + dtv * v[i].z;
                 }
             }
+
+            auto compute_end = MPI_Wtime();
+            s_compute_time[w] += (compute_end - compute_begin);
         }
     }
 
@@ -12302,7 +12340,10 @@ public:
 
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
-                int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+                auto compute_begin = MPI_Wtime();
+                auto w = __cilkrts_get_worker_number();
+                // int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
+                int start_chunk = w * chunks_per_worker;
                 for (int c = 0; c < num_chunks; ++c) {
                     int s = (c + start_chunk) % num_chunks;
 
@@ -12327,12 +12368,18 @@ public:
                         }
                     }
                 }
+
+                auto compute_end = MPI_Wtime();
+                s_compute_time[w] += (compute_end - compute_begin);
             }
 
             for (int i = 0; i < num_chunks; i++) {
                 claimed[i].clear(std::memory_order_relaxed);
             }
         } else {
+            auto compute_begin = MPI_Wtime();
+            auto w = __cilkrts_get_worker_number();
+
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
                 int atom_type = type[i];
@@ -12347,6 +12394,9 @@ public:
                 v[i].y += dtfm * f[i].y;
                 v[i].z += dtfm * f[i].z;
             }
+
+            auto compute_end = MPI_Wtime();
+            s_compute_time[w] += (compute_end - compute_begin);
         }
     }
 
@@ -13803,6 +13853,9 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
+            auto w = __cilkrts_get_worker_number();
+            auto compute_begin = MPI_Wtime();
+
             for (int idx = c * PAIR_GRAINSIZE; idx < (c + 1) * PAIR_GRAINSIZE && idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -13867,6 +13920,9 @@ public:
                 f[i].z += fztmp;
                 spinlocks[i].unlock();
             }
+
+            auto compute_end = MPI_Wtime();
+            s_compute_time[w] += (compute_end - compute_begin);
         }
 
         auto& bond_list = zoid.bond_list_modified[timestep];
@@ -13875,6 +13931,9 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_bonds; c++) {
+            auto w = __cilkrts_get_worker_number();
+            auto compute_begin = MPI_Wtime();
+
             for (int i = c * BOND_GRAINSIZE; i < (c + 1) * BOND_GRAINSIZE && i < nbonds; i++) {
                 auto& tup = bond_list[i];
                 int i1 = std::get<0>(tup);
@@ -13933,6 +13992,9 @@ public:
                     spinlocks[i2].unlock();
                 }
             }
+
+            auto compute_end = MPI_Wtime();
+            s_compute_time[w] += (compute_end - compute_begin);
         }
 
         /*
@@ -14471,6 +14533,9 @@ public:
 
         if (USE_MEMORY) {
             if (nlocal <= LJ_GRAINSIZE) {
+                auto w = __cilkrts_get_worker_number();
+                auto compute_begin = MPI_Wtime();
+
                 for (int idx = 0; idx < nlocal; idx++) {
                     int i = local_idxs[idx];
 
@@ -14528,6 +14593,9 @@ public:
                     f[i].z += fztmp;
                 }
 
+                auto compute_end = MPI_Wtime();
+                s_compute_time[w] += (compute_end - compute_begin);
+
                 return;
             }
 
@@ -14557,6 +14625,8 @@ public:
 
                     if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
                         workers_used[worker_number] = 1;
+                        auto compute_begin = MPI_Wtime();
+
                         for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nlocal; idx++) {
                             int i = local_idxs[idx];
 
@@ -14616,6 +14686,9 @@ public:
                             f[i].y += fytmp;
                             f[i].z += fztmp;
                         }
+
+                        auto compute_end = MPI_Wtime();
+                        s_compute_time[worker_number] += (compute_end - compute_begin);
                     }
                 }
             }
@@ -14800,6 +14873,9 @@ public:
         auto* a0 = pair->a0;
 
         if (nlocal <= GRAINSIZE) {
+            auto w = __cilkrts_get_worker_number();
+            auto compute_begin = MPI_Wtime();
+
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -14864,6 +14940,9 @@ public:
                 f[i].z += fztmp;
             }
 
+            auto compute_end = MPI_Wtime();
+            s_compute_time[w] += (compute_end - compute_begin);
+
             return;
         }
 
@@ -14871,6 +14950,9 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
+            auto w = __cilkrts_get_worker_number();
+            auto compute_begin = MPI_Wtime();
+
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -14938,6 +15020,9 @@ public:
                 f[i].z += fztmp;
                 spinlocks[i].unlock();
             }
+
+            auto compute_end = MPI_Wtime();
+            s_compute_time[w] += (compute_end - compute_begin);
         }
 
         /*
