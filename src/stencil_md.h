@@ -12388,6 +12388,179 @@ public:
 
         constexpr int GRAINSIZE = 256;
 
+        int num_chunks_pair = nlocal / GRAINSIZE + 1;
+
+        #pragma cilk grainsize 1
+        cilk_for (int c = 0; c < num_chunks_pair; c++) {
+            for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                int itag = tags[i];
+                int itype = map[atom_type[i]];
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                double fxtmp = 0;
+                double fytmp = 0;
+                double fztmp = 0;
+
+                // two-body interactions, skip half of them
+                auto* neigh_short_atom = neigh_short[i].data();
+                int num_neigh_short = neigh_short[i].capacity();
+
+                auto& neigh_list = neighbor_list[i];
+                int num_neigh = neigh_list.size();
+
+                int numshort = 0;
+                for (int jj = 0; jj < num_neigh; jj++) {
+                    int j = neigh_list[jj];
+                    j &= NEIGHMASK;
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx*delx + dely*dely + delz*delz;
+                    int jtype = map[atom_type[j]];
+                    int ijparam = elem3param[itype][jtype][jtype];
+                    if (rsq >= params[ijparam].cutsq) {
+                        continue;
+                    } else {
+                        neigh_short_atom[numshort++] = j;
+                        assert(numshort <= num_neigh_short);
+                    }
+
+                    int jtag = tags[j];
+                    if (itag > jtag) {
+                        if ((itag+jtag) % 2 == 0) continue;
+                    } else if (itag < jtag) {
+                        if ((itag+jtag) % 2 == 1) continue;
+                    } else {
+                        if (x[j].z < ztmp) continue;
+                        if (x[j].z == ztmp && x[j].y < ytmp) continue;
+                        if (x[j].z == ztmp && x[j].y == ytmp && x[j].x < xtmp) continue;
+                    }
+
+                    // two-body implementation
+                    double r = sqrt(rsq);
+                    double rinvsq = 1.0/rsq;
+                    double rp = pow(r, -powerp);
+                    double rq = pow(r, -powerq);
+                    double rainv = 1.0 / (r - cut);
+                    double rainvsq = rainv * rainv * r;
+                    double expsrainv = exp(sigma * rainv);
+                    double fpair = (c1*rp - c2*rq + (c3*rp -c4*rq) * rainvsq) * expsrainv * rinvsq;
+                    // if (eflag) eng = (param->c5*rp - param->c6*rq) * expsrainv;
+                    fxtmp += delx*fpair;
+                    fytmp += dely*fpair;
+                    fztmp += delz*fpair;
+                    spinlocks[j].lock();
+                    f[j].x -= delx*fpair;
+                    f[j].y -= dely*fpair;
+                    f[j].z -= delz*fpair;
+                    spinlocks[j].unlock();
+                    // if (evflag) ev_tally(i,j,nlocal,newton_pair, evdwl,0.0,fpair,delx,dely,delz);
+                }
+
+                int jnumm1 = numshort - 1;
+
+                for (int jj = 0; jj < jnumm1; jj++) {
+                    int j = neigh_short_atom[jj];
+                    int jtype = map[atom_type[j]];
+                    int ijparam = elem3param[itype][jtype][jtype];
+                    double delr1[3] = {x[j].x - xtmp, x[j].y - ytmp, x[j].z - ztmp};
+                    double rsq1 = delr1[0]*delr1[0] + delr1[1]*delr1[1] + delr1[2]*delr1[2];
+
+                    double r1 = sqrt(rsq1);
+                    double rinvsq1 = 1.0/rsq1;
+                    auto& paramsij = params[ijparam];
+                    double rainv1 = 1.0/(r1 - paramsij.cut);
+                    double gsrainv1 = paramsij.sigma_gamma * rainv1;
+                    double gsrainvsq1 = gsrainv1 * rainv1 / r1;
+                    double expgsrainv1 = exp(gsrainv1);
+
+                    double fjxtmp = 0;
+                    double fjytmp = 0;
+                    double fjztmp = 0;
+
+                    for (int kk = jj+1; kk < numshort; kk++) {
+                        int k = neigh_short_atom[kk];
+                        int ktype = map[atom_type[k]];
+                        int ikparam = elem3param[itype][ktype][ktype];
+                        int ijkparam = elem3param[itype][jtype][ktype];
+
+                        auto& paramik = params[ikparam];
+                        auto& paramijk = params[ijkparam];
+
+                        double delr2[3] = {x[k].x - xtmp, x[k].y - ytmp, x[k].z - ztmp};
+                        double rsq2 = delr2[0]*delr2[0] + delr2[1]*delr2[1] + delr2[2]*delr2[2];
+
+                        double r2 = sqrt(rsq2);
+                        double rinvsq2 = 1.0/rsq2;
+                        double rainv2 = 1.0/(r2 - paramik.cut);
+                        double gsrainv2 = paramik.sigma_gamma * rainv2;
+                        double gsrainvsq2 = gsrainv2*rainv2/r2;
+                        double expgsrainv2 = exp(gsrainv2);
+
+                        double rinv12 = 1.0/(r1*r2);
+                        double cs = (delr1[0]*delr2[0] + delr1[1]*delr2[1] + delr1[2]*delr2[2]) * rinv12;
+                        double delcs = cs - paramijk.costheta;
+                        double delcssq = delcs*delcs;
+
+                        double facexp = expgsrainv1*expgsrainv2;
+
+                        // facrad = sqrt(paramij->lambda_epsilon*paramik->lambda_epsilon) *
+                        //          facexp*delcssq;
+
+                        double facrad = paramijk.lambda_epsilon * facexp*delcssq;
+                        double frad1 = facrad*gsrainvsq1;
+                        double frad2 = facrad*gsrainvsq2;
+                        double facang = paramijk.lambda_epsilon2 * facexp*delcs;
+                        double facang12 = rinv12*facang;
+                        double csfacang = cs*facang;
+                        double csfac1 = rinvsq1*csfacang;
+
+                        dbl3_t_stencil_md fj = {delr1[0]*(frad1+csfac1)-delr2[0]*facang12,
+                            delr1[1]*(frad1+csfac1)-delr2[1]*facang12, 
+                            delr1[2]*(frad1+csfac1)-delr2[2]*facang12};
+
+                        double csfac2 = rinvsq2*csfacang;
+
+                        dbl3_t_stencil_md fk = {delr2[0]*(frad2+csfac2)-delr1[0]*facang12, 
+                            delr2[1]*(frad2+csfac2)-delr1[1]*facang12,
+                            delr2[2]*(frad2+csfac2)-delr1[2]*facang12};
+
+                        fxtmp -= fj.x + fk.x;
+                        fytmp -= fj.y + fk.y;
+                        fztmp -= fj.z + fk.z;
+                        fjxtmp += fj.x;
+                        fjytmp += fj.y;
+                        fjztmp += fj.z;
+
+                        spinlocks[k].lock();
+                        f[k].x += fk.x;
+                        f[k].y += fk.y;
+                        f[k].z += fk.z;
+                        spinlocks[k].unlock();
+
+                        // if (evflag) ev_tally3(i,j,k,evdwl,0.0,fj,fk,delr1,delr2);
+                    }
+
+                    spinlocks[j].lock();
+                    f[j].x += fjxtmp;
+                    f[j].y += fjytmp;
+                    f[j].z += fjztmp;
+                    spinlocks[j].unlock();
+                }
+
+                spinlocks[i].lock();
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+                spinlocks[i].unlock();
+            }
+        }
+
+
+        /*
         #pragma cilk grainsize GRAINSIZE
         cilk_for (int ii = 0; ii < nlocal; ii++) {
             int i = local_idxs[ii];
@@ -12554,6 +12727,7 @@ public:
             f[i].z += fztmp;
             spinlocks[i].unlock();
         }
+        */
         // if (vflag_fdotr) virial_fdotr_compute();
     }
 
