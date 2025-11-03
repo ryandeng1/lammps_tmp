@@ -505,6 +505,46 @@ void Verlet::setup_stencil_md_many_zoids() {
         }
     }
 
+    int total_num_pairs = 0;
+    int arr[NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
+            auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
+            for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                const auto& local_idxs = zoid.local_idxs_per_timestep[t];
+                for (auto& local_idx : local_idxs) {
+                    total_num_pairs += zoid.neighbor_list[t][local_idx].size();
+                    arr[t] += zoid.neighbor_list[t][local_idx].size();;
+                }
+            }
+        }
+    }
+    
+    for (int dep = 0; dep < NUM_DEPS; dep++) {
+        for (int j = 0; j < stencilMD->my_queues_many_cuts_next_dt[dep].size(); j++) {
+            auto& zoid = stencilMD->my_queues_many_cuts_next_dt[dep][j];
+            for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                const auto& local_idxs = zoid.local_idxs_per_timestep[t];
+                for (auto& local_idx : local_idxs) {
+                    total_num_pairs += zoid.neighbor_list[t][local_idx].size();
+                    arr[t] += zoid.neighbor_list[t][local_idx].size();;
+                }
+            }
+        }
+    }
+
+    MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_INT, MPI_SUM, world);
+    MPI_Allreduce(MPI_IN_PLACE, arr, NUM_TIMESTEPS_IN_PARALLEL + 1, MPI_INT, MPI_SUM, world);
+    if (comm->me == 0) {
+        std::stringstream s1;
+        s1 << "total num pairs: " << total_num_pairs << " across 2dt: " << 2 * NUM_TIMESTEPS_IN_PARALLEL << " per timestep: " << total_num_pairs * 1.0 / NUM_TIMESTEPS_IN_PARALLEL << std::endl;
+        std::cout << s1.str();
+
+        for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+            std::cout << "time: " << t << " num pairs: " << arr[t] << std::endl;
+        }
+    }
+
     /*
     for (int dep = 1; dep < NUM_DEPS; dep++) {
         for (int proc = 0; proc < comm->nprocs; proc++) {
