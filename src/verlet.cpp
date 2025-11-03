@@ -59,6 +59,9 @@
 
 using namespace LAMMPS_NS;
 
+cilk::opadd_reducer<double> compute_time;
+cilk::opadd_reducer<double> comm_time;
+
 static cilk::opadd_reducer<int64_t> unpack_duration = 0;
 static cilk::opadd_reducer<int64_t> send_comm_duration = 0;
 static cilk::opadd_reducer<int64_t> recv_comm_duration = 0;

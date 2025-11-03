@@ -60,6 +60,9 @@ constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 constexpr bool EMPTY_PAIR_CALC = false;
 constexpr bool EMPTY_COMM = false;
 
+cilk::opadd_reducer<double> compute_time;
+cilk::opadd_reducer<double> comm_time;
+
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
     // Edge structure for the flow graph.
