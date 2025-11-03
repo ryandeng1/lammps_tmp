@@ -505,8 +505,8 @@ void Verlet::setup_stencil_md_many_zoids() {
         }
     }
 
-    int total_num_pairs = 0;
-    int arr[NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
+    int64_t total_num_pairs = 0;
+    int64_t arr[NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
             auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
@@ -533,8 +533,8 @@ void Verlet::setup_stencil_md_many_zoids() {
         }
     }
 
-    MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_INT, MPI_SUM, world);
-    MPI_Allreduce(MPI_IN_PLACE, arr, NUM_TIMESTEPS_IN_PARALLEL + 1, MPI_INT, MPI_SUM, world);
+    MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
+    MPI_Allreduce(MPI_IN_PLACE, arr, NUM_TIMESTEPS_IN_PARALLEL + 1, MPI_LONG, MPI_SUM, world);
     if (comm->me == 0) {
         std::stringstream s1;
         s1 << "total num pairs: " << total_num_pairs << " across 2dt: " << 2 * NUM_TIMESTEPS_IN_PARALLEL << " per timestep: " << total_num_pairs * 1.0 / NUM_TIMESTEPS_IN_PARALLEL << std::endl;
