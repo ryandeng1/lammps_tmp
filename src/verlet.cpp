@@ -1303,15 +1303,25 @@ void Verlet::run(int n) {
     double total_compute_time = 0;
     double total_comm_time = 0;
     for (int w = 0; w < 24; w++) {
-        if (comm->me == 0) {
-            std::cout << "worker: " << w << " comm time: " << s_comm_time[w] * 1e6 << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
-        }
+        // if (comm->me == 0) {
+        //     std::cout << "worker: " << w << " comm time: " << s_comm_time[w] * 1e6 << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
+        // }
         total_compute_time += s_compute_time[w];
         total_comm_time += s_comm_time[w];
     }
 
+    double all_reduce_compute;
+    double all_reduce_comm;
+
+    MPI_Allreduce(&total_compute_time, &all_reduce_compute, 1, MPI_DOUBLE, MPI_SUM, world);
+    MPI_Allreduce(&total_comm_time, &all_reduce_comm, 1, MPI_DOUBLE, MPI_SUM, world);
+
     if (comm->me == 0) {
-        std::cout << "total compute time: " << total_compute_time << " total comm time: " << total_comm_time << std::endl;
+        std::cout << "total compute time: " << total_compute_time * 1e6 << " total comm time: " << total_comm_time * 1e6 
+        << " all reduce compute time: " << all_reduce_compute * 1e6  << " all reduce comm: " << all_reduce_comm 
+        << " percentage comm: " << all_reduce_comm / (all_reduce_comm + all_reduce_compute)
+        << " percentage compute: " << all_reduce_compute / (all_reduce_comm + all_reduce_compute)
+        << std::endl;
     }
 
     if (comm->me == 0) {
