@@ -13356,7 +13356,7 @@ public:
 
         auto& bond_list = zoid.bond_list_modified[timestep];
         int nbonds = bond_list.size();
-        int num_chunks_bonds = nlocal / BOND_GRAINSIZE + 1;
+        int num_chunks_bonds = nbonds / BOND_GRAINSIZE + 1;
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_bonds; c++) {
