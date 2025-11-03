@@ -11998,6 +11998,9 @@ public:
     }
 
     void NVE_INITIAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         auto * _noalias x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias next_x = zoid.x_stencil_md[(timestep + 1) % DOUBLE_BUFFERING].data();
 
@@ -12133,6 +12136,9 @@ public:
     }
 
     void FUSE_POST_FORCE_FINAL_INTEGRATE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         auto * _noalias v = zoid.v_stencil_md[timestep % 1].data();
         auto * _noalias f = zoid.f_stencil_md[timestep % 1].data();
 
