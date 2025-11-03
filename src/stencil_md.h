@@ -58,6 +58,7 @@ constexpr int NUM_STREAMS = 24;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
 constexpr bool EMPTY_PAIR_CALC = true;
+constexpr bool EMPTY_COMM = true;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
@@ -8976,6 +8977,9 @@ public:
     template <bool curr_dt>
     void SEND_DATA_PROC_TO_PROC(int pipeline_stage, int send_dep,
                                 std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
+        if constexpr (EMPTY_COMM) {
+            return;
+        }
 
         // auto comm_begin = MPI_Wtime();
     
@@ -9047,6 +9051,9 @@ public:
     void PACK_DATA_WITH_PROC_TO_PROC(queue_info& zoid, int send_dep, int start_timestep, int end_timestep, int pipeline_stage,
         MPIX_Stream_Manager* stream_manager, std::vector<MPI_Request>& send_r_zoid_to_zoid) {
 
+        if constexpr (EMPTY_COMM) {
+            return;
+        }
         assert(pipeline_stage == DEFAULT_PIPELINE_STAGE);
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9439,6 +9446,9 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
+        if constexpr (EMPTY_COMM) {
+            return;
+        }
         // auto comm_begin = MPI_Wtime();
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
