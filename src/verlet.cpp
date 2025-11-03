@@ -2821,7 +2821,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
 
         // auto comm_begin = MPI_Wtime();
 
-        while (false && true) {
+        while (true) {
             bool all_true = (std::find(requests_completed.cbegin(), requests_completed.cend(), false) == requests_completed.cend());
             if (all_true) {
                 break;
