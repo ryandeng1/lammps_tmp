@@ -9089,6 +9089,9 @@ public:
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({zoid_num, send_zoid_num});
 
+                auto comm_begin = MPI_Wtime();
+                auto w = __cilkrts_get_worker_number();
+
                 if (USE_STREAMS) {
                     manager->m[src_stream_idx].lock();
                     auto res = MPIX_Stream_isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, manager->stream_comm,
@@ -9106,6 +9109,9 @@ public:
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
                         all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
+
+                auto comm_end = MPI_Wtime();
+                s_comm_time[w] += (comm_end - comm_begin);
             }(send_dep, zoid, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
         }
 
@@ -9929,7 +9935,7 @@ public:
     template <bool curr_dt>
     void UNPACK_POS_VEL_MANY_CUTS_HELPER_PIPELINED(queue_info& zoid, double* buf, int recv_idx, int recv_zoid_num,
                                                    int start_t, int end_t, int pipeline_stage) {
-        auto begin = MPI_Wtime();
+        auto comm_begin = MPI_Wtime();
         auto w = __cilkrts_get_worker_number();
 
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
@@ -10090,9 +10096,6 @@ public:
 
             int num_recv_vel = recv_vel_idxs.size();
 
-            auto comm_begin = MPI_Wtime();
-            auto w = __cilkrts_get_worker_number();
-
             if (DEBUG_SEND_RECV_DATA) {
                 int vel_starting_idx2 = (num_recv_force + num_recv_pos + num_recv_pos2 + num_recv_vel) * (3 + 1);
                 for (int i = 0; i < recv_vel_idxs2.size(); i++) {
@@ -10129,9 +10132,10 @@ public:
                 }
             }
 
-            auto comm_end = MPI_Wtime();
-            s_comm_time[w] += (comm_end - comm_begin);
         }
+
+        auto comm_end = MPI_Wtime();
+        s_comm_time[w] += (comm_end - comm_begin);
 
         /*
         auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][recv_idx];
