@@ -57,6 +57,8 @@ constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 24;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
+constexpr bool EMPTY_PAIR_CALC = false;
+
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
     // Edge structure for the flow graph.
@@ -8975,7 +8977,7 @@ public:
     void SEND_DATA_PROC_TO_PROC(int pipeline_stage, int send_dep,
                                 std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
 
-        auto comm_begin = MPI_Wtime();
+        // auto comm_begin = MPI_Wtime();
     
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9037,8 +9039,8 @@ public:
             }
         }
 
-        auto comm_end = MPI_Wtime();
-        comm_time += (comm_end - comm_begin);
+        // auto comm_end = MPI_Wtime();
+        // comm_time += (comm_end - comm_begin);
     }
 
     template <bool curr_dt>
@@ -9437,7 +9439,7 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        auto comm_begin = MPI_Wtime();
+        // auto comm_begin = MPI_Wtime();
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9537,8 +9539,8 @@ public:
             recv_request_idx++;
         }
 
-        auto comm_end = MPI_Wtime();
-        comm_time += (comm_end - comm_begin);
+        // auto comm_end = MPI_Wtime();
+        // comm_time += (comm_end - comm_begin);
     }
 
     void MPIX_START_PROGRESS_THREAD(MPIX_Stream_Manager* manager) {
@@ -12348,6 +12350,9 @@ public:
     }
 
     void SW_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -12555,6 +12560,9 @@ public:
     }
 
     void EAM_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         assert(EXPERIMENT == EAM);
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
@@ -12771,6 +12779,9 @@ public:
 
 
     void TERSOFF_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -13201,6 +13212,9 @@ public:
 
 
     void BOND_FENE_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -13749,6 +13763,9 @@ public:
     }
 
     void LJ_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
 
@@ -14080,6 +14097,9 @@ public:
     }
 
     void DPD_FORCE_COMPUTE_ZOID_MANY_CUTS(queue_info& zoid, int dep, int timestep) {
+        if constexpr (EMPTY_PAIR_CALC) {
+            return;
+        }
         const auto * _noalias const x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING].data();
         auto * _noalias const f = zoid.f_stencil_md[timestep % 1].data();
         auto * _noalias const v = zoid.v_stencil_md[timestep % DOUBLE_BUFFERING].data();
