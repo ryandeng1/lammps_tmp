@@ -57,7 +57,7 @@ constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 24;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
-constexpr bool EMPTY_PAIR_CALC = true;
+constexpr bool EMPTY_PAIR_CALC = false;
 constexpr bool EMPTY_COMM = false;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.

@@ -1248,8 +1248,8 @@ void Verlet::run(int n) {
         zoid_claimed[i].clear();
     }
 
-    // comm_time = 0;
-    // compute_time = 0;
+    comm_time = 0;
+    compute_time = 0;
 
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
