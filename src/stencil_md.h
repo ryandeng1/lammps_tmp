@@ -10090,6 +10090,9 @@ public:
 
             int num_recv_vel = recv_vel_idxs.size();
 
+            auto comm_begin = MPI_Wtime();
+            auto w = __cilkrts_get_worker_number();
+
             if (DEBUG_SEND_RECV_DATA) {
                 int vel_starting_idx2 = (num_recv_force + num_recv_pos + num_recv_pos2 + num_recv_vel) * (3 + 1);
                 for (int i = 0; i < recv_vel_idxs2.size(); i++) {
