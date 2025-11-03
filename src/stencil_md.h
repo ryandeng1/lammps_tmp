@@ -11081,6 +11081,9 @@ public:
 
     template <bool curr_dt>
     void UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP(queue_info& zoid, int dep, int start_t, int end_t, int pipeline_stage, bool unpack_self_force=false) {
+        if constexpr (EMPTY_COMM) {
+            return;
+        }
         int zoid_num = zoid.num;
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
             : recv_from_neighbors_many_cuts_next_dt[zoid_num];
