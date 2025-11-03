@@ -13006,6 +13006,379 @@ public:
 
         constexpr int GRAINSIZE = 256;
 
+        int num_chunks_pair = nlocal / GRAINSIZE + 1;
+
+        #pragma cilk grainsize 1
+        cilk_for (int c = 0; c < num_chunks_pair; c++) {
+            for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
+                int i = local_idxs[idx];
+
+                int itag = tags[i];
+                int itype = map[atom_type[i]];
+                double xtmp = x[i].x;
+                double ytmp = x[i].y;
+                double ztmp = x[i].z;
+                double fxtmp = 0;
+                double fytmp = 0;
+                double fztmp = 0;
+
+                auto* neigh_short_atom = neigh_short[i].data();
+                int num_neigh_short = neigh_short[i].capacity();
+
+                // two-body interactions, skip half of them
+
+                auto& neigh_list = neighbor_list[i];
+                int num_neigh = neigh_list.size();
+
+                int numshort = 0;
+                for (int jj = 0; jj < num_neigh; jj++) {
+                    int j = neigh_list[jj];
+                    j &= NEIGHMASK;
+                    double delx = xtmp - x[j].x;
+                    double dely = ytmp - x[j].y;
+                    double delz = ztmp - x[j].z;
+                    double rsq = delx*delx + dely*dely + delz*delz;
+
+                    if (rsq < cutshortsq) {
+                        neigh_short_atom[numshort++] = j;
+                        assert(numshort <= num_neigh_short);
+                    }
+
+                    int jtag = tags[j];
+                    if (itag > jtag) {
+                        if ((itag+jtag) % 2 == 0) continue;
+                    } else if (itag < jtag) {
+                        if ((itag+jtag) % 2 == 1) continue;
+                    } else {
+                        if (x[j].z < ztmp) continue;
+                        if (x[j].z == ztmp && x[j].y < ytmp) continue;
+                        if (x[j].z == ztmp && x[j].y == ytmp && x[j].x < xtmp) continue;
+                    }
+
+                    int jtype = map[atom_type[j]];
+                    int ijparam = elem3param[itype][jtype][jtype];
+                    if (rsq >= params[ijparam].cutsq) continue;
+
+                    // repulsive calculation
+                    double r = sqrt(rsq);
+                    // ters_fc 
+                    double ters_fc;
+                    double ters_fc_d;
+                    if (r < ters_R - ters_D) {
+                        ters_fc = 1;
+                        ters_fc_d = 0;
+                    } else if (r > ters_R + ters_D) {
+                        ters_fc = 0;
+                        ters_fc_d = 0;
+                    } else {
+                        ters_fc = 0.5*(1.0 - sin(MathConst::MY_PI2*(r - ters_R)/ters_D));
+                        ters_fc_d =  -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r - ters_R)/ters_D);
+                    }
+
+                    double repulsive_exp = exp(-lam1 * r);
+                    double fpair = -biga * repulsive_exp * (ters_fc_d - ters_fc * lam1) / r;
+
+                    fxtmp += delx*fpair;
+                    fytmp += dely*fpair;
+                    fztmp += delz*fpair;
+
+                    spinlocks[j].lock();
+                    f[j].x -= delx*fpair;
+                    f[j].y -= dely*fpair;
+                    f[j].z -= delz*fpair;
+                    spinlocks[j].unlock();
+                    // if (evflag) ev_tally(i,j,nlocal,newton_pair, evdwl,0.0,fpair,delx,dely,delz);
+                }
+
+                for (int jj = 0; jj < numshort; jj++) {
+                    int j = neigh_short_atom[jj];
+                    int jtype = map[atom_type[j]];
+                    int iparam_ij = elem3param[itype][jtype][jtype];
+                    dbl3_t_stencil_md delr1 = {x[j].x - xtmp, x[j].y - ytmp, x[j].z - ztmp};
+                    double rsq1 = delr1.x*delr1.x + delr1.y*delr1.y + delr1.z*delr1.z;
+
+                    if (rsq1 >= params[iparam_ij].cutsq) {
+                        continue;
+                    }
+
+                    double r1 = sqrt(rsq1);
+                    const double r1inv = 1.0/r1;
+                    dbl3_t_stencil_md r1hat = {r1inv * delr1.x, r1inv * delr1.y, r1inv * delr1.z};
+
+                    double fjxtmp = 0;
+                    double fjytmp = 0;
+                    double fjztmp = 0;
+                    double zeta_ij = 0;
+
+                    // accumulate bondorder zeta for each i-j interaction via loop over k
+                    for (int kk = 0; kk < numshort; kk++) {
+                        if (jj == kk) continue;
+                        int k = neigh_short_atom[kk];
+                        int ktype = map[atom_type[k]];
+                        int iparam_ijk = elem3param[itype][jtype][ktype];
+
+                        dbl3_t_stencil_md delr2 = {x[k].x - xtmp, x[k].y - ytmp, x[k].z - ztmp};
+                        double rsq2 = delr2.x*delr2.x + delr2.y*delr2.y + delr2.z*delr2.z;
+
+                        if (rsq2 >= params[iparam_ijk].cutsq) continue;
+
+                        double r2 = sqrt(rsq2);
+                        double r2inv = 1.0/r2;
+                        dbl3_t_stencil_md r2hat = {r2inv * delr2.x, r2inv * delr2.y, r2inv * delr2.z};
+
+                        // zeta calculation
+                        {
+                            double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
+                            double arg;
+                            if (powermint == 3) {
+                                double tmp = lam3 * (r1 - r2);
+                                arg = MathSpecial::cube(tmp);
+                            } else {
+                                arg = lam3 * (r1-r2);
+                            }
+
+                            double ex_delr;
+                            if (arg > 69.0776) ex_delr = 1.e30;
+                            else if (arg < -69.0776) ex_delr = 0.0;
+                            else ex_delr = exp(arg);
+
+                            double ters_fc_ik;
+                            if (r2 < ters_R - ters_D) {
+                                ters_fc_ik = 1;
+                            } else if (r2 > ters_R + ters_D) {
+                                ters_fc_ik = 0;
+                            } else {
+                                ters_fc_ik = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
+                            }
+
+                            double hcth = h - costheta;
+                            double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+                            zeta_ij += ters_fc_ik * ters_gijk * ex_delr;
+                        }
+                    }
+
+                    // force_zeta
+
+                    double fforce;
+                    double prefactor;
+
+                    {
+                        double ters_fc_r1;
+                        double ters_fc_r1_d;
+                        if (r1 < ters_R - ters_D) {
+                            ters_fc_r1 = 1;
+                            ters_fc_r1_d = 0;
+                        } else if (r1 > ters_R + ters_D) {
+                            ters_fc_r1 = 0;
+                            ters_fc_r1_d = 0;
+                        } else {
+                            ters_fc_r1 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r1 - ters_R)/ters_D));
+                            ters_fc_r1_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r1 - ters_R)/ters_D);
+                        }
+
+                        double fa;
+                        double fa_d;
+                        if (r1 > bigr + bigd) {
+                            fa = 0;
+                            fa_d = 0;
+                        } else {
+                            fa = -bigb * exp(-lam2 * r1) * ters_fc_r1;
+                            fa_d = bigb * exp(-lam2 * r1) * (lam2 * ters_fc_r1 - ters_fc_r1_d);
+                        }
+
+                        double bij;
+                        double bij_d;
+                        double ters_bij_tmp = beta * zeta_ij;
+                        if (ters_bij_tmp > c1) {
+                            bij = 1.0 / sqrt(ters_bij_tmp);
+                            bij_d = beta * -0.5*pow(ters_bij_tmp,-1.5);
+                        } else if (ters_bij_tmp > c2) {
+                            bij = (1.0 - pow(ters_bij_tmp, -powern) / (2.0*powern))/sqrt(ters_bij_tmp);
+                            bij_d = beta * (-0.5*pow(ters_bij_tmp,-1.5) *
+                                // error in negligible 2nd term fixed 9/30/2015
+                                // (1.0 - 0.5*(1.0 +  1.0/(2.0*param->powern)) *
+                                (1.0 - (1.0 +  1.0/(2.0*powern)) *
+                                pow(ters_bij_tmp,-powern)));
+                        } else if (ters_bij_tmp < c4) {
+                            bij = 1;
+                            bij_d = 0;
+                        } else if (ters_bij_tmp < c3) {
+                            bij = 1.0 - pow(ters_bij_tmp,powern)/(2.0*powern);
+                            bij_d = -0.5*beta * pow(ters_bij_tmp,powern-1.0);
+                        } else {
+                            double tmp_n = pow(ters_bij_tmp, powern);
+                            bij = pow(1.0 + tmp_n, -1.0/(2.0*powern));
+                            bij_d = -0.5 * pow(1.0+tmp_n, -1.0-(1.0/(2.0*powern)))*tmp_n / zeta_ij;
+                        }
+
+                        fforce = 0.5 * bij * fa_d;
+                        prefactor = -0.5 * fa * bij_d;
+                    }
+
+                    double fpair = fforce * r1inv;
+                    double delx = delr1.x * fpair;
+                    double dely = delr1.y * fpair;
+                    double delz = delr1.z * fpair;
+
+                    fxtmp += delx;
+                    fytmp += dely;
+                    fztmp += delz;
+                    fjxtmp -= delx;
+                    fjytmp -= dely;
+                    fjztmp -= delz;
+
+                    for (int kk = 0; kk < numshort; kk++) {
+                        if (jj == kk) continue;
+                        int k = neigh_short_atom[kk];
+                        int ktype = map[atom_type[k]];
+                        int iparam_ijk = elem3param[itype][jtype][ktype];
+                        dbl3_t_stencil_md delr2 = {x[k].x - xtmp, x[k].y - ytmp, x[k].z - ztmp};
+                        double rsq2 = delr2.x*delr2.x + delr2.y*delr2.y + delr2.z*delr2.z;
+
+                        if (rsq2 >= params[iparam_ijk].cutsq) continue;
+
+                        double r2 = sqrt(rsq2);
+                        double r2inv = 1.0/r2;
+                        dbl3_t_stencil_md r2hat = {r2inv * delr2.x, r2inv * delr2.y, r2inv * delr2.z};
+
+                        // attractive calculation/ters_zetaterm_d
+                        {
+                            double ters_fc_r2;
+                            double ters_fc_r2_d;
+                            if (r2 < ters_R - ters_D) {
+                                ters_fc_r2 = 1;
+                                ters_fc_r2_d = 0;
+                            } else if (r2 > ters_R + ters_D) {
+                                ters_fc_r2 = 0;
+                                ters_fc_r2_d = 0;
+                            } else {
+                                ters_fc_r2 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
+                                ters_fc_r2_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r2 - ters_R)/ters_D);
+                            }
+
+                            double tmp;
+                            if (powermint == 3) {
+                                tmp = MathSpecial::cube(lam3 * (r1 - r2));
+                            } else {
+                                tmp = lam3 * (r1 - r2);
+                            }
+
+                            double ex_delr;
+                            double ex_delr_d;
+
+                            if (tmp > 69.0776) ex_delr = 1.e30;
+                            else if (tmp < -69.0776) ex_delr = 0.0;
+                            else ex_delr = exp(tmp);
+
+                            if (powermint == 3) {
+                                ex_delr_d = 3.0 * MathSpecial::cube(lam3) * MathSpecial::square(r1 - r2) * ex_delr;
+                            } else {
+                                ex_delr_d = lam3 * ex_delr;
+                            }
+
+                            double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
+                            // ters_gijk
+                            double hcth = h - costheta;
+                            double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+
+                            // ters_gijk_d
+                            double numerator = -2.0 * ters_c * hcth;
+                            double denominator = 1.0 / (ters_d + hcth * hcth);
+                            double ters_gijk_d = gamma * numerator * denominator * denominator;
+
+                            // costheta_d
+                            double costheta_d;
+                            dbl3_t_stencil_md dcosdrj = {-costheta * r1hat.x + r2hat.x, -costheta * r1hat.y + r2hat.y, -costheta * r1hat.z + r2hat.z};
+                            dcosdrj.x *= r1inv;
+                            dcosdrj.y *= r1inv;
+                            dcosdrj.z *= r1inv;
+
+                            dbl3_t_stencil_md dcosdrk = {-costheta * r2hat.x + r1hat.x, -costheta * r2hat.y + r1hat.y, -costheta * r2hat.z + r1hat.z};
+                            dcosdrk.x *= r2inv;
+                            dcosdrk.y *= r2inv;
+                            dcosdrk.z *= r2inv;
+
+                            dbl3_t_stencil_md dcosdri = {dcosdrj.x + dcosdrk.x, dcosdrj.y + dcosdrk.y, dcosdrj.z + dcosdrk.z};
+                            dcosdri.x *= -1.0;
+                            dcosdri.y *= -1.0;
+                            dcosdri.z *= -1.0;
+
+                            double scale1 = -ters_fc_r2_d * ters_gijk * ex_delr;
+                            double scale2 = ters_fc_r2 * ters_gijk_d * ex_delr;
+                            double scale3 = ters_fc_r2 * ters_gijk * ex_delr_d;
+                            double scale4 = -scale3;
+
+                            dbl3_t_stencil_md dri = {scale1 * r2hat.x, scale1 * r2hat.y, scale1 * r2hat.z};
+                            dri.x += scale2 * dcosdri.x;
+                            dri.y += scale2 * dcosdri.y;
+                            dri.z += scale2 * dcosdri.z;
+
+                            dri.x += scale3 * r2hat.x;
+                            dri.y += scale3 * r2hat.y;
+                            dri.z += scale3 * r2hat.z;
+
+                            dri.x += scale4 * r1hat.x;
+                            dri.y += scale4 * r1hat.y;
+                            dri.z += scale4 * r1hat.z;
+
+                            dri.x *= prefactor;
+                            dri.y *= prefactor;
+                            dri.z *= prefactor;
+
+                            dbl3_t_stencil_md drj = {scale2 * dcosdrj.x, scale2 * dcosdrj.y, scale2 * dcosdrj.z};
+                            drj.x += scale3 * r1hat.x;
+                            drj.y += scale3 * r1hat.y;
+                            drj.z += scale3 * r1hat.z;
+
+                            drj.x *= prefactor;
+                            drj.y *= prefactor;
+                            drj.z *= prefactor;
+                            
+                            dbl3_t_stencil_md drk = {-scale1 * r2hat.x, -scale1 * r2hat.y, -scale1 * r2hat.z};
+                            drk.x += scale2 * dcosdrk.x;
+                            drk.y += scale2 * dcosdrk.y;
+                            drk.z += scale2 * dcosdrk.z;
+
+                            drk.x += scale4 * r2hat.x;
+                            drk.y += scale4 * r2hat.y;
+                            drk.z += scale4 * r2hat.z;
+
+                            drk.x *= prefactor;
+                            drk.y *= prefactor;
+                            drk.z *= prefactor;
+
+                            fxtmp += dri.x;
+                            fytmp += dri.y;
+                            fztmp += dri.z;
+
+                            fjxtmp += drj.x;
+                            fjytmp += drj.y;
+                            fjztmp += drj.z;
+
+                            spinlocks[k].lock();
+                            f[k].x += drk.x;
+                            f[k].y += drk.y;
+                            f[k].z += drk.z;
+                            spinlocks[k].unlock();
+                        }
+                    }
+
+                    spinlocks[j].lock();
+                    f[j].x += fjxtmp;
+                    f[j].y += fjytmp;
+                    f[j].z += fjztmp;
+                    spinlocks[j].unlock();
+                }
+
+                spinlocks[i].lock();
+                f[i].x += fxtmp;
+                f[i].y += fytmp;
+                f[i].z += fztmp;
+                spinlocks[i].unlock();
+            }
+        }
+
+        /*
         #pragma cilk grainsize GRAINSIZE
         cilk_for (int ii = 0; ii < nlocal; ii++) {
             int i = local_idxs[ii];
@@ -13373,6 +13746,7 @@ public:
             f[i].z += fztmp;
             spinlocks[i].unlock();
         }
+        */
         // if (vflag_fdotr) virial_fdotr_compute();
     }
 
