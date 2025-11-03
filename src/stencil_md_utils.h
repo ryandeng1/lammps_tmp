@@ -48,19 +48,21 @@ constexpr int SW = 3;
 constexpr int TERSOFF = 4;
 constexpr int EAM = 5;
 
-constexpr int EXPERIMENT = BOND_FENE;
+constexpr int EXPERIMENT = LJ;
 
 constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
-constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 8;
+// constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
+constexpr double ADDITIONAL_CUTOFF = 0.3 + 1e-10;
 
 // this is for the potential, used when there is a multi-body potential
 constexpr double CUTOFF = 3.2;
 // constexpr double ALLEGRO_CUTOFF_RADIUS = 2 * CUTOFF;
-constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
+// constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
+ constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
 
 constexpr bool DEBUG_SEND_RECV_DATA = false;
 
