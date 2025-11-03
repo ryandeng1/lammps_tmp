@@ -55,6 +55,7 @@
 #include <sstream>
 #include <cilk/opadd_reducer.h>
 #include <sys/time.h>
+#include "time_stencil_md.h"
 
 using namespace LAMMPS_NS;
 
@@ -880,11 +881,18 @@ void Verlet::run(int n) {
 
         if (pair_compute_flag) {
             // auto begin = std::chrono::high_resolution_clock::now();
+            int total_num_pairs = 0;
+            for (int k = 0; k < atom->nlocal; k++) {
+                total_num_pairs += force->pair->list->numneigh[k];
+            }
             force->pair->compute(eflag, vflag);
             // auto end = std::chrono::high_resolution_clock::now();
             // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             // lammps_pair_duration += duration;
             // lammps_num_atoms += atom->nlocal;
+            std::stringstream s1;
+            s1 << "total num pairs: " << total_num_pairs << std::endl;
+            std::cout << s1.str();
             timer->stamp(Timer::PAIR);
         }
 
@@ -1197,6 +1205,9 @@ void Verlet::run(int n) {
         zoid_claimed[i].clear();
     }
 
+    comm_time = 0;
+    compute_time = 0;
+
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
@@ -1205,6 +1216,9 @@ void Verlet::run(int n) {
     if (comm->me == 0) {
         std::cout << "----- END WARMUP -----" << std::endl;
     }
+
+    comm_time = 0;
+    compute_time = 0;
 
     int64_t duration;
 
@@ -1237,6 +1251,11 @@ void Verlet::run(int n) {
     << " throughput (timesteps/s) : " << throughput
     << " total duration: " << total_duration_stencil_md << std::endl;
     std::cout << output_stream.str();
+
+    std::stringstream timing_stream;
+    timing_stream << BOLDGREEN << "me: " << comm->me 
+    << " stencil md breakdown: " << " compute time: " << (compute_time * 1e6) << " comm time: " << (comm_time * 1e6) << RESET_COLOR << std::endl;
+    std::cout << timing_stream.str();
 
     if (comm->me == 0) {
         for (auto& tup : stencil_md_timings) {
@@ -1997,14 +2016,23 @@ void Verlet::stencil_md_run_zoid_wrapper_better_work_queue(int starting_timestep
                                     std::vector<std::atomic<bool>>& zoid_done) noexcept {
 
     if (dep > 0) {
+        auto comm_begin = MPI_Wtime();
         stencilMD->UNPACK_FORCE_MANY_CUTS_ZOID_PIPELINED_ONLY_NEXT_DEP<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, true);
+        auto comm_end = MPI_Wtime();
+        comm_time += (comm_end - comm_begin);
     }
 
+    auto compute_begin = MPI_Wtime();
     run_stencil_md_zoid_many_cuts<curr_dt>(starting_timestep, dep, zoid, start_timestep - 1, end_timestep - 1,
                                         test_f, test_x, test_v);
     zoid_done[zoid.num].store(true, std::memory_order_relaxed);
+    auto compute_end = MPI_Wtime();
+    compute_time += (compute_end - compute_begin);
     
+    auto comm_begin = MPI_Wtime();
     stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
+    auto comm_end = MPI_Wtime();
+    comm_time += (comm_end - comm_begin);
 
     /*
     dep_counters[dep].fetch_sub(1, std::memory_order_relaxed);
@@ -2748,6 +2776,8 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
         auto& all_requests_at_stream = recv_r_zoid_to_zoid_streams[dep][stream_num];
         std::vector<bool> requests_completed(total_num_wait, false);
 
+        auto comm_begin = MPI_Wtime();
+
         while (true) {
             bool all_true = (std::find(requests_completed.cbegin(), requests_completed.cend(), false) == requests_completed.cend());
             if (all_true) {
@@ -2866,6 +2896,9 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
 
             num_iter++;
         }
+
+        auto comm_end = MPI_Wtime();
+        comm_time += (comm_end - comm_begin);
 
         if (dep < NUM_DEPS - 1) {
             stencilMD->RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS<curr_dt>(dep + 1, stream_num, DEFAULT_PIPELINE_STAGE,
@@ -2992,6 +3025,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
             progress_thread_done.store(true, std::memory_order_release);
 
+            auto comm_begin = MPI_Wtime();
             for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     int zoid_num = my_queues[dep][j].num;
@@ -3005,6 +3039,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     stream_manager->global_lock.unlock();
                 }
             }
+            auto comm_end = MPI_Wtime();
+            comm_time += (comm_end - comm_begin);
         }
 
         return;

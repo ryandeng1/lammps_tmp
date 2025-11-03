@@ -48,6 +48,7 @@
 #include "pair_sw.h"
 #include "pair_tersoff.h"
 #include "pair_eam.h"
+#include "time_stencil_md.h"
 
 #define EPSILON 1.0e-10
 
@@ -970,8 +971,8 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 8;
-    static constexpr int NUM_CUTS_Y = 6;
+    static constexpr int NUM_CUTS_X = 4;
+    static constexpr int NUM_CUTS_Y = 4;
     static constexpr int NUM_CUTS_Z = 4;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
@@ -8974,6 +8975,8 @@ public:
     void SEND_DATA_PROC_TO_PROC(int pipeline_stage, int send_dep,
                                 std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
 
+        auto comm_begin = MPI_Wtime();
+    
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         const auto& procs_to_send_to = send_dep_to_procs[curr_dt_idx][pipeline_stage][send_dep];
@@ -9033,6 +9036,9 @@ public:
                 total_num_procs++;
             }
         }
+
+        auto comm_end = MPI_Wtime();
+        comm_time += (comm_end - comm_begin);
     }
 
     template <bool curr_dt>
@@ -9431,6 +9437,8 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
+        auto comm_begin = MPI_Wtime();
+
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
         int recv_request_idx = 0;
@@ -9528,6 +9536,9 @@ public:
 
             recv_request_idx++;
         }
+
+        auto comm_end = MPI_Wtime();
+        comm_time += (comm_end - comm_begin);
     }
 
     void MPIX_START_PROGRESS_THREAD(MPIX_Stream_Manager* manager) {
