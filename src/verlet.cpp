@@ -921,23 +921,22 @@ void Verlet::run(int n) {
 
         if (pair_compute_flag) {
             // auto begin = std::chrono::high_resolution_clock::now();
-            int total_num_pairs = 0;
-            for (int k = 0; k < atom->nlocal; k++) {
-                total_num_pairs += force->pair->list->numneigh[k];
-            }
+            // int total_num_pairs = 0;
+            // for (int k = 0; k < atom->nlocal; k++) {
+            //     total_num_pairs += force->pair->list->numneigh[k];
+            // }
             force->pair->compute(eflag, vflag);
             // auto end = std::chrono::high_resolution_clock::now();
             // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
             // lammps_pair_duration += duration;
             // lammps_num_atoms += atom->nlocal;
-
-            MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_INT, MPI_SUM, world);
-            if (comm->me == 0) {
-                std::stringstream s1;
-                s1 << "total num pairs: " << total_num_pairs << std::endl;
-                std::cout << s1.str();
-                timer->stamp(Timer::PAIR);
-            }
+            // MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_INT, MPI_SUM, world);
+            // if (comm->me == 0) {
+            //     std::stringstream s1;
+            //     s1 << "total num pairs: " << total_num_pairs << std::endl;
+            //     std::cout << s1.str();
+            //     timer->stamp(Timer::PAIR);
+            // }
         }
 
         if (atom->molecular != Atom::ATOMIC) {
