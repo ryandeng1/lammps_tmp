@@ -2843,6 +2843,10 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
         auto& all_requests_at_stream = recv_r_zoid_to_zoid_streams[dep][stream_num];
         std::vector<bool> requests_completed(total_num_wait, false);
 
+        auto loop_begin = MPI_Wtime();
+
+        double stream_time = 0;
+
         while (true) {
             bool all_true = (std::find(requests_completed.cbegin(), requests_completed.cend(), false) == requests_completed.cend());
             if (all_true) {
@@ -2893,7 +2897,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
             }
 
             auto comm_end = MPI_Wtime();
-            v_comm_time += (comm_end - comm_begin);
+            stream_time += (comm_end - comm_begin);
 
             for (int d = dep; d < NUM_DEPS; d++) {
                 for (int j = 0; j < my_queues[d].size(); j++) {
@@ -2966,6 +2970,13 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
 
             num_iter++;
         }
+
+        v_comm_time += stream_time;
+
+        auto loop_end = MPI_Wtime();
+        std::stringstream s1;
+        s1 << "total loop time: " << (loop_end - loop_begin) << " stream time: " << stream_time << std::endl;
+        std::cout << s1.str();
 
         // auto comm_end = MPI_Wtime();
         // comm_time += (comm_end - comm_begin);
