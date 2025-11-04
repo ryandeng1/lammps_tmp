@@ -509,6 +509,27 @@ void Verlet::setup_stencil_md_many_zoids() {
         }
     }
 
+    int dep = 0;
+    for (int j = 0; j < stencilMD->my_queues_many_cuts[dep].size(); j++) {
+        auto& zoid = stencilMD->my_queues_many_cuts[dep][j];
+        int zoid_num = zoid.num;
+        auto& top = zoid.local_idxs_per_timestep[NUM_TIMESTEPS_IN_PARALLEL];
+        std::cout << "dep 0 zoid top num: " << top.size() << std::endl;
+        int total_beneath = 0;
+        int total_num_pairs = 0;
+        for (int t = 1; t < NUM_TIMESTEPS_IN_PARALLEL; t++) {
+            const auto& local_idxs = zoid.local_idxs_per_timestep[t];
+            for (auto& idx: local_idxs) {
+                if (std::find(top.begin(), top.end(), idx) == top.end()) {
+                    total_beneath++;
+                    total_num_pairs += zoid.neighbor_list[t][idx].size();
+                }
+            }
+        }
+
+        std::cout << "total beneath: " << total_beneath << " npairs: " << total_num_pairs << std::endl;
+    }
+
     // int64_t total_num_pairs = 0;
     // int64_t arr[NUM_TIMESTEPS_IN_PARALLEL + 1] = {0};
     // for (int dep = 0; dep < NUM_DEPS; dep++) {
