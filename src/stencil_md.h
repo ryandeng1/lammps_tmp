@@ -8978,7 +8978,8 @@ public:
     template <bool curr_dt>
     void SEND_DATA_PROC_TO_PROC(int pipeline_stage, int send_dep,
                                 std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        // auto comm_begin = MPI_Wtime();
+        auto comm_begin = MPI_Wtime();
+        auto w = __cilkrts_get_worker_number();
     
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9040,8 +9041,8 @@ public:
             }
         }
 
-        // auto comm_end = MPI_Wtime();
-        // comm_time += (comm_end - comm_begin);
+        auto comm_end = MPI_Wtime();
+        s_comm_time[w] += (comm_end - comm_begin);
     }
 
     template <bool curr_dt>

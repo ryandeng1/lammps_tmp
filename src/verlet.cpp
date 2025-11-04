@@ -87,6 +87,8 @@ static constexpr bool TIME_LAMMPS_STATES = false;
 constexpr int64_t MICROSECOND_FACTOR = 1000000;
 constexpr int NUM_RECV_NEIGHBORS[NUM_DEPS] = {0, 2, 8, 26};
 
+static double other_time = 0;
+
 /* ---------------------------------------------------------------------- */
 
 Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
@@ -1312,15 +1314,18 @@ void Verlet::run(int n) {
 
     double all_reduce_compute;
     double all_reduce_comm;
+    double all_reduce_other;
 
     MPI_Allreduce(&total_compute_time, &all_reduce_compute, 1, MPI_DOUBLE, MPI_SUM, world);
     MPI_Allreduce(&total_comm_time, &all_reduce_comm, 1, MPI_DOUBLE, MPI_SUM, world);
+    MPI_Allreduce(&other_time, &all_reduce_other, 1, MPI_DOUBLE, MPI_SUM, world);
 
     if (comm->me == 0) {
-        std::cout << "total compute time: " << total_compute_time * 1e6 << " total comm time: " << total_comm_time * 1e6 
-        << " all reduce compute time: " << all_reduce_compute * 1e6  << " all reduce comm: " << all_reduce_comm 
-        << " percentage comm: " << all_reduce_comm / (all_reduce_comm + all_reduce_compute)
-        << " percentage compute: " << all_reduce_compute / (all_reduce_comm + all_reduce_compute)
+        std::cout << "total compute time: " << total_compute_time * 1e6 << " total comm time: " << total_comm_time * 1e6  << " total other time: " << other_time * 1e6
+        << " all reduce compute time: " << all_reduce_compute * 1e6  << " all reduce comm: " << all_reduce_comm * 1e6
+        << " percentage comm: " << all_reduce_comm / (all_reduce_comm + all_reduce_compute + all_reduce_other)
+        << " percentage compute: " << all_reduce_compute / (all_reduce_comm + all_reduce_compute + all_reduce_other)
+        << " percentage other: " << all_reduce_other / (all_reduce_comm + all_reduce_compute + all_reduce_other)
         << std::endl;
     }
 
@@ -3000,6 +3005,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
     constexpr int curr_dt_idx = static_cast<int>(curr_dt);
     auto& my_queues = curr_dt ? stencilMD->my_queues_many_cuts : stencilMD->my_queues_many_cuts_next_dt;
 
+    auto other_begin = MPI_Wtime();
+
     for (int dep = 0; dep < NUM_DEPS; dep++) {
         for (int j = 0; j < my_queues[dep].size(); j++) {
             int zoid_num = my_queues[dep][j].num;
@@ -3030,9 +3037,14 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
     std::vector<std::atomic_flag> zoid_unpack_claimed(stencilMD->NUM_ZOIDS_MANY_CUTS);
 
+    auto other_end = MPI_Wtime();
+    other_time += (other_end - other_begin);
+
     constexpr bool USE_BETTER_WORK_QUEUE = true;
     if (USE_BETTER_WORK_QUEUE) {
         cilk_scope {
+            auto other_begin = MPI_Wtime();
+
             std::vector<std::atomic<bool>> zoid_done(stencilMD->NUM_ZOIDS_MANY_CUTS);
             for (int dep = 0; dep < NUM_DEPS; dep++) {
                 for (int j = 0; j < my_queues[dep].size(); j++) {
@@ -3045,6 +3057,9 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     }
                 }
             }
+
+            auto other_end = MPI_Wtime();
+            other_time += (other_end - other_begin);
 
             std::atomic<bool> progress_thread_done = false;
 
@@ -3087,7 +3102,9 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
 
             progress_thread_done.store(true, std::memory_order_release);
 
-            // auto comm_begin = MPI_Wtime();
+            auto comm_begin = MPI_Wtime();
+            auto w = __cilkrts_get_worker_number();
+
             for (int dep = 0; dep < NUM_DEPS - 1; dep++) {
                 for (int j = 0; j < my_queues[dep].size(); j++) {
                     int zoid_num = my_queues[dep][j].num;
@@ -3101,8 +3118,8 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     stream_manager->global_lock.unlock();
                 }
             }
-            // auto comm_end = MPI_Wtime();
-            // comm_time += (comm_end - comm_begin);
+            auto comm_end = MPI_Wtime();
+            s_comm_time[w] += (comm_end - comm_begin);
         }
 
         return;
@@ -3416,6 +3433,8 @@ void Verlet::run_stencil_md_many_cuts_waitany_pipelined_with_proc_to_proc(int st
 
 void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double** test_x, double** test_v,
                                       std::vector<std::atomic_flag>& claimed, std::vector<std::atomic_flag*>& zoid_unpack_self_claimed) {
+    auto other_begin = MPI_Wtime();
+
     std::vector<std::atomic<int>> zoid_recv_neighbor_counters(stencilMD->NUM_ZOIDS_MANY_CUTS);
     std::vector<std::atomic<int>> dep_counters(NUM_DEPS);
     std::vector<std::vector<MPI_Request>> send_r_zoid_to_zoid(stencilMD->NUM_ZOIDS_MANY_CUTS);
@@ -3453,6 +3472,9 @@ void Verlet::run_stencil_md_many_cuts(int num_timesteps, double** test_f, double
             recv_r_zoid_to_zoid_streams[dep][i].resize(max_zoids_per_dep * MAX_NEIGHBORS, MPI_REQUEST_NULL);
         }
     }
+
+    auto other_end = MPI_Wtime();
+    other_time += (other_end - other_begin);
 
     for (int t = 0; t < num_timesteps; t += 2 * NUM_TIMESTEPS_IN_PARALLEL) {
         // run_stencil_md_many_cuts_helper<true>(t, test_f, test_x, test_v);
