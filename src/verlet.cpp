@@ -3128,7 +3128,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 }
             }
             auto comm_end = MPI_Wtime();
-            v_comm_time[w] += (comm_end - comm_begin);
+            v_comm_time += (comm_end - comm_begin);
         }
 
         return;
