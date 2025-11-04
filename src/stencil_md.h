@@ -12457,6 +12457,9 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
+            auto compute_begin = MPI_Wtime();
+            auto w = __cilkrts_get_worker_number();
+
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -12622,6 +12625,9 @@ public:
                 f[i].z += fztmp;
                 spinlocks[i].unlock();
             }
+
+            auto compute_end = MPI_Wtime();
+            s_compute_time[w] += (compute_end - compute_begin);
         }
 
 
@@ -13075,6 +13081,9 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
+            auto compute_begin = MPI_Wtime();
+            auto w = __cilkrts_get_worker_number();
+
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
@@ -13441,6 +13450,9 @@ public:
                 f[i].z += fztmp;
                 spinlocks[i].unlock();
             }
+
+            auto compute_end = MPI_Wtime();
+            s_compute_time[w] += (compute_end - compute_begin);
         }
 
         /*

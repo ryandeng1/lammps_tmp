@@ -1311,7 +1311,7 @@ void Verlet::run(int n) {
     }
 
     if (comm->me == 0) {
-        std::cout << "total v comm time: " << v_comm_time << std::endl;
+        std::cout << "total v comm time: " << v_comm_time * 1e6 << std::endl;
     }
 
     total_comm_time += v_comm_time;
