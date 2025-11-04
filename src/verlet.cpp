@@ -2971,9 +2971,8 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
             num_iter++;
         }
 
-        v_comm_time += stream_time;
-
         auto loop_end = MPI_Wtime();
+        v_comm_time += (loop_end - loop_begin);
         std::stringstream s1;
         s1 << "total loop time: " << (loop_end - loop_begin) << " stream time: " << stream_time << std::endl;
         std::cout << s1.str();
