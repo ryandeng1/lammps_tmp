@@ -59,9 +59,6 @@
 
 using namespace LAMMPS_NS;
 
-static int64_t v_compute_time[24] = {0};
-static int64_t v_comm_time[24] = {0};
-
 static cilk::opadd_reducer<int64_t> unpack_duration = 0;
 static cilk::opadd_reducer<int64_t> send_comm_duration = 0;
 static cilk::opadd_reducer<int64_t> recv_comm_duration = 0;
@@ -87,6 +84,7 @@ static constexpr bool TIME_LAMMPS_STATES = false;
 constexpr int64_t MICROSECOND_FACTOR = 1000000;
 constexpr int NUM_RECV_NEIGHBORS[NUM_DEPS] = {0, 2, 8, 26};
 
+static double v_comm_time[24] = {0};
 static double other_time = 0;
 
 /* ---------------------------------------------------------------------- */
@@ -1257,10 +1255,7 @@ void Verlet::run(int n) {
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
     run_stencil_md_many_cuts(2 * NUM_TIMESTEPS_IN_PARALLEL, test_f, test_x, test_v, zoid_claimed, zoid_unpack_self_claimed);
-    for (int w = 0; w < 24; w++) {
-        s_compute_time[w] = 0;
-        s_comm_time[w] = 0;
-    }
+    stencilMD->reset_timers();
 
     MPI_Barrier(world);
     if (comm->me == 0) {
@@ -1305,11 +1300,13 @@ void Verlet::run(int n) {
     double total_compute_time = 0;
     double total_comm_time = 0;
     for (int w = 0; w < 24; w++) {
-        // if (comm->me == 0) {
-        //     std::cout << "worker: " << w << " comm time: " << s_comm_time[w] * 1e6 << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
-        // }
         total_compute_time += s_compute_time[w];
         total_comm_time += s_comm_time[w];
+
+        total_comm_time += v_comm_time[w];
+        if (comm->me == 0) {
+            std::cout << "worker w: " << w << " comm time: " << s_comm_time[w] * 1e6 << " " << v_comm_time[w] * 1e6 << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
+        }
     }
 
     double all_reduce_compute;
@@ -2890,7 +2887,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
             }
 
             auto comm_end = MPI_Wtime();
-            s_comm_time[w] += (comm_end - comm_begin);
+            v_comm_time[w] += (comm_end - comm_begin);
 
             for (int d = dep; d < NUM_DEPS; d++) {
                 for (int j = 0; j < my_queues[d].size(); j++) {
@@ -3125,7 +3122,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                 }
             }
             auto comm_end = MPI_Wtime();
-            s_comm_time[w] += (comm_end - comm_begin);
+            v_comm_time[w] += (comm_end - comm_begin);
         }
 
         return;

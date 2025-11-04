@@ -310,6 +310,13 @@ public:
 
     void SET_CLAIMED_ATOMIC_BOOLS();
 
+    void reset_timers() {
+        for (int w = 0; w < 24; w++) {
+            s_compute_time[w] = 0;
+            s_comm_time[w] = 0;
+        }
+    }
+
     void TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_f) {
 
         const auto& x = zoid.x_stencil_md[timestep % DOUBLE_BUFFERING];
