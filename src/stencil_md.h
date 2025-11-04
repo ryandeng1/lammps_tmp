@@ -982,7 +982,7 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 4;
+    static constexpr int NUM_CUTS_X = 6;
     static constexpr int NUM_CUTS_Y = 4;
     static constexpr int NUM_CUTS_Z = 4;
 
