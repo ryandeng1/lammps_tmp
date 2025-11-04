@@ -2975,10 +2975,13 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
 }
 
 __attribute__((noinline)) void start_progress_thread(MPIX_Stream_Manager* manager, std::atomic<bool>* done) noexcept {
+    auto comm_begin = MPI_Wtime();
+    auto w = __cilkrts_get_worker_number();
+
     while (!done->load(std::memory_order_acquire)) {
         if (manager->global_lock.try_lock()) {
-            cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
-            // for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+            // cilk_for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
+            for (int stream_num = 0; stream_num < NUM_STREAMS; stream_num++) {
                 if (manager->m[stream_num].try_lock()) {
                     MPIX_Stream_progress(manager->streams[stream_num]);
                     manager->m[stream_num].unlock();
@@ -2987,6 +2990,9 @@ __attribute__((noinline)) void start_progress_thread(MPIX_Stream_Manager* manage
             manager->global_lock.unlock();
         }
     }
+
+    auto comm_end = MPI_Wtime();
+    s_comm_time[w] += (comm_end - comm_begin);
 }
 
 template <bool curr_dt>
