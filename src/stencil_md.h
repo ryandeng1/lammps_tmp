@@ -58,8 +58,8 @@ constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 24;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
-static double s_compute_time[24] = {0};
-static double s_comm_time[24] = {0};
+inline double s_compute_time[24] = {0};
+inline double s_comm_time[24] = {0};
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
