@@ -51,6 +51,7 @@
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
 // #include <mpi_proto.h>
+#include <ostream>
 #include <unordered_map>
 #include <sstream>
 #include <cilk/opadd_reducer.h>
@@ -84,7 +85,7 @@ static constexpr bool TIME_LAMMPS_STATES = false;
 constexpr int64_t MICROSECOND_FACTOR = 1000000;
 constexpr int NUM_RECV_NEIGHBORS[NUM_DEPS] = {0, 2, 8, 26};
 
-static double v_comm_time[24] = {0};
+static cilk::opadd_reducer<double> v_comm_time = 0;
 static double other_time = 0;
 
 /* ---------------------------------------------------------------------- */
@@ -1255,6 +1256,7 @@ void Verlet::run(int n) {
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
     run_stencil_md_many_cuts(2 * NUM_TIMESTEPS_IN_PARALLEL, test_f, test_x, test_v, zoid_claimed, zoid_unpack_self_claimed);
+    v_comm_time = 0;
     stencilMD->reset_timers();
 
     MPI_Barrier(world);
@@ -1303,11 +1305,16 @@ void Verlet::run(int n) {
         total_compute_time += s_compute_time[w];
         total_comm_time += s_comm_time[w];
 
-        total_comm_time += v_comm_time[w];
         if (comm->me == 0) {
-            std::cout << "worker w: " << w << " comm time: " << s_comm_time[w] * 1e6 << " " << v_comm_time[w] * 1e6 << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
+            std::cout << "worker w: " << w << " comm time: " << s_comm_time[w] * 1e6 << " " << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
         }
     }
+
+    if (comm->me == 0) {
+        std::cout << "total v comm time: " << v_comm_time << std::endl;
+    }
+
+    total_comm_time += v_comm_time;
 
     double all_reduce_compute;
     double all_reduce_comm;
@@ -2879,7 +2886,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
             }
 
             auto comm_begin = MPI_Wtime();
-            auto w = __cilkrts_get_worker_number();
 
             if (stream_manager->m[stream_num].try_lock()) {
                 MPIX_Stream_progress(stream_manager->streams[stream_num]);
@@ -2887,7 +2893,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
             }
 
             auto comm_end = MPI_Wtime();
-            v_comm_time[w] += (comm_end - comm_begin);
+            v_comm_time += (comm_end - comm_begin);
 
             for (int d = dep; d < NUM_DEPS; d++) {
                 for (int j = 0; j < my_queues[d].size(); j++) {
