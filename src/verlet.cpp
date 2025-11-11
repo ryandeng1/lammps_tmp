@@ -945,7 +945,7 @@ void Verlet::run(int n) {
         }
 
         if (pair_compute_flag) {
-            int total_num_pairs = 0;
+            int64_t total_num_pairs = 0;
             for (int k = 0; k < atom->nlocal; k++) {
                 total_num_pairs += force->pair->list->numneigh[k];
             }
@@ -953,9 +953,19 @@ void Verlet::run(int n) {
             force->pair->compute(eflag, vflag);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            std::stringstream s1;
-            s1 << "throughput: " << total_num_pairs * 1.0 / duration << std::endl;
-            std::cout << s1.str();
+            // std::stringstream s1;
+            // s1 << "throughput: " << total_num_pairs * 1.0 / duration << std::endl;
+            // std::cout << s1.str();
+            MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
+            MPI_Allreduce(MPI_IN_PLACE, &duration, 1, MPI_LONG, MPI_SUM, world);
+
+            if (comm->me == 0) {
+                int world_size;
+                MPI_Comm_size(world, &world_size);
+                std::stringstream s1;
+                std::cout << "average throughput per process: " << total_num_pairs * 1.0 / (duration * world_size) << std::endl;
+            }
+
             // lammps_pair_duration += duration;
             // lammps_num_atoms += atom->nlocal;
             // MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_INT, MPI_SUM, world);
