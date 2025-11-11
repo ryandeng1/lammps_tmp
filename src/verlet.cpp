@@ -955,18 +955,21 @@ void Verlet::run(int n) {
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
 
             double throughput = total_num_pairs * 1.0 / duration;
-            // std::stringstream s1;
-            // s1 << "throughput: " << total_num_pairs * 1.0 / duration << std::endl;
-            // std::cout << s1.str();
-            // MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
-            // MPI_Allreduce(MPI_IN_PLACE, &duration, 1, MPI_LONG, MPI_SUM, world);
-            MPI_Allreduce(MPI_IN_PLACE, &throughput, 1, MPI_DOUBLE, MPI_SUM, world);
+            if (comm->me < 5) {
+                std::stringstream s1;
+                s1 << "me: " << comm->me << " throughput: " << total_num_pairs * 1.0 / duration << std::endl;
+                std::cout << s1.str();
+            }
+            MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
+            MPI_Allreduce(MPI_IN_PLACE, &duration, 1, MPI_LONG, MPI_SUM, world);
+            // MPI_Allreduce(MPI_IN_PLACE, &throughput, 1, MPI_DOUBLE, MPI_SUM, world);
 
             if (comm->me == 0) {
                 int world_size;
                 MPI_Comm_size(world, &world_size);
                 std::stringstream s1;
-                std::cout << "average throughput per process: " << throughput / world_size << std::endl;
+                s1 << BOLDGREEN << "average throughput per process: " << total_num_pairs / duration << RESET_COLOR << std::endl;
+                std::cout << s1.str();
             }
 
             // lammps_pair_duration += duration;
