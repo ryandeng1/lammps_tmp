@@ -1293,6 +1293,9 @@ void Verlet::run(int n) {
     // run_stencil_md_many_cuts(n, test_f, test_x, test_v, zoid_claimed);
     // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
     run_stencil_md_many_cuts(2 * NUM_TIMESTEPS_IN_PARALLEL, test_f, test_x, test_v, zoid_claimed, zoid_unpack_self_claimed);
+
+    total_time = 0;
+    total_num_pairs = 0;
     v_comm_time = 0;
     stencilMD->reset_timers();
 
