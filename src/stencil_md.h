@@ -985,7 +985,7 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 6;
+    static constexpr int NUM_CUTS_X = 4;
     static constexpr int NUM_CUTS_Y = 4;
     static constexpr int NUM_CUTS_Z = 4;
 
@@ -12462,6 +12462,7 @@ public:
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
             auto compute_begin = MPI_Wtime();
             auto w = __cilkrts_get_worker_number();
+            int num_pairs = 0;
 
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -12481,6 +12482,8 @@ public:
 
                 auto& neigh_list = neighbor_list[i];
                 int num_neigh = neigh_list.size();
+
+                num_pairs += num_neigh;
 
                 int numshort = 0;
                 for (int jj = 0; jj < num_neigh; jj++) {
@@ -12631,6 +12634,9 @@ public:
 
             auto compute_end = MPI_Wtime();
             s_compute_time[w] += (compute_end - compute_begin);
+            auto duration = (compute_end - compute_begin) * 1e6;
+            total_time += duration;
+            total_num_pairs += num_pairs;
         }
 
 
@@ -13086,6 +13092,7 @@ public:
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
             auto compute_begin = MPI_Wtime();
             auto w = __cilkrts_get_worker_number();
+            int num_pairs = 0;
 
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -13106,6 +13113,8 @@ public:
 
                 auto& neigh_list = neighbor_list[i];
                 int num_neigh = neigh_list.size();
+
+                num_pairs += num_neigh;
 
                 int numshort = 0;
                 for (int jj = 0; jj < num_neigh; jj++) {
@@ -13456,6 +13465,9 @@ public:
 
             auto compute_end = MPI_Wtime();
             s_compute_time[w] += (compute_end - compute_begin);
+            auto duration = (compute_end - compute_begin) * 1e6;
+            total_time += duration;
+            total_num_pairs += num_pairs;
         }
 
         /*

@@ -48,24 +48,24 @@ constexpr int SW = 3;
 constexpr int TERSOFF = 4;
 constexpr int EAM = 5;
 
-constexpr int EXPERIMENT = DPD;
+constexpr int EXPERIMENT = SW;
 
 constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 6;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 4;
 // constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
 // constexpr double ADDITIONAL_CUTOFF = 0.3 + 1e-10;
-constexpr double ADDITIONAL_CUTOFF = 0.5 + 1e-10;
-// constexpr double ADDITIONAL_CUTOFF = 2.0 + 1e-10;
+// constexpr double ADDITIONAL_CUTOFF = 0.5 + 1e-10;
+constexpr double ADDITIONAL_CUTOFF = 2.0 + 1e-10;
 
 // this is for the potential, used when there is a multi-body potential
-constexpr double CUTOFF = 3.2;
-// constexpr double ALLEGRO_CUTOFF_RADIUS = 2 * CUTOFF;
+constexpr double CUTOFF = 3.77;
+constexpr double ALLEGRO_CUTOFF_RADIUS = 2 * CUTOFF;
 // constexpr double ALLEGRO_CUTOFF_RADIUS = 1.12;
 //  constexpr double ALLEGRO_CUTOFF_RADIUS = 2.5;
-constexpr double ALLEGRO_CUTOFF_RADIUS = 1.0;
+// constexpr double ALLEGRO_CUTOFF_RADIUS = 1.0;
 
 constexpr bool DEBUG_SEND_RECV_DATA = false;
 
