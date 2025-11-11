@@ -968,7 +968,7 @@ void Verlet::run(int n) {
                 int world_size;
                 MPI_Comm_size(world, &world_size);
                 std::stringstream s1;
-                s1 << BOLDGREEN << "average throughput per process: " << total_num_pairs / duration << RESET_COLOR << std::endl;
+                s1 << BOLDGREEN << "average throughput per process: " << total_num_pairs * 1.0 / duration << RESET_COLOR << std::endl;
                 std::cout << s1.str();
             }
 
