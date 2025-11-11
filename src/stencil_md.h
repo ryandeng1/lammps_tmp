@@ -14571,6 +14571,7 @@ public:
             if (nlocal <= LJ_GRAINSIZE) {
                 auto w = __cilkrts_get_worker_number();
                 auto compute_begin = MPI_Wtime();
+                int num_pairs = 0;
 
                 for (int idx = 0; idx < nlocal; idx++) {
                     int i = local_idxs[idx];
@@ -14584,6 +14585,8 @@ public:
                     const double *_noalias const lj2i = lj2[itype];
                     // const double *_noalias const lj3i = lj3[itype];
                     // const double *_noalias const lj4i = lj4[itype];
+
+                    num_pairs += jlist.size();
 
                     double xtmp = x[i].x;
                     double ytmp = x[i].y;
@@ -14632,6 +14635,10 @@ public:
                 auto compute_end = MPI_Wtime();
                 s_compute_time[w] += (compute_end - compute_begin);
 
+                total_num_pairs += num_pairs;
+                auto duration = (compute_end - compute_begin) * 1e6;
+                total_time += duration;
+
                 return;
             }
 
@@ -14662,6 +14669,7 @@ public:
                     if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
                         workers_used[worker_number] = 1;
                         auto compute_begin = MPI_Wtime();
+                        int num_pairs = 0;
 
                         for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nlocal; idx++) {
                             int i = local_idxs[idx];
@@ -14675,6 +14683,8 @@ public:
                             const double *_noalias const lj2i = lj2[itype];
                             // const double *_noalias const lj3i = lj3[itype];
                             // const double *_noalias const lj4i = lj4[itype];
+
+                            num_pairs += jlist.size();
 
                             double xtmp = x[i].x;
                             double ytmp = x[i].y;
@@ -14725,6 +14735,9 @@ public:
 
                         auto compute_end = MPI_Wtime();
                         s_compute_time[worker_number] += (compute_end - compute_begin);
+                        total_num_pairs += num_pairs;
+                        auto duration = (compute_end - compute_begin) * 1e6;
+                        total_time += duration;
                     }
                 }
             }
