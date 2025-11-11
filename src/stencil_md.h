@@ -14930,12 +14930,15 @@ public:
         if (nlocal <= GRAINSIZE) {
             auto w = __cilkrts_get_worker_number();
             auto compute_begin = MPI_Wtime();
+            int num_pairs = 0;
 
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
                 const int itype = atom_type[i];
                 const auto &jlist = neighbor_list[i];
+
+                num_pairs += jlist.size();
 
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
@@ -14997,6 +15000,9 @@ public:
 
             auto compute_end = MPI_Wtime();
             s_compute_time[w] += (compute_end - compute_begin);
+            auto duration = (compute_end - compute_begin) * 1e6;
+            total_time += duration;
+            total_num_pairs += num_pairs;
 
             return;
         }
@@ -15007,12 +15013,14 @@ public:
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
             auto w = __cilkrts_get_worker_number();
             auto compute_begin = MPI_Wtime();
+            int num_pairs = 0;
 
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
                 int i = local_idxs[idx];
 
                 const int itype = atom_type[i];
                 const auto &jlist = neighbor_list[i];
+                num_pairs += jlist.size();
 
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
@@ -15078,6 +15086,10 @@ public:
 
             auto compute_end = MPI_Wtime();
             s_compute_time[w] += (compute_end - compute_begin);
+
+            auto duration = (compute_end - compute_begin) * 1e6;
+            total_time += duration;
+            total_num_pairs += num_pairs;
         }
 
         /*
