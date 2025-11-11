@@ -61,6 +61,9 @@ constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 inline double s_compute_time[24] = {0};
 inline double s_comm_time[24] = {0};
 
+inline cilk::opadd_reducer<int64_t> total_num_pairs = 0;
+inline cilk::opadd_reducer<double> total_time = 0;
+
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
     // Edge structure for the flow graph.
@@ -13953,12 +13956,9 @@ public:
 
             auto compute_end = MPI_Wtime();
             s_compute_time[w] += (compute_end - compute_begin);
-            if (comm->me == 0) {
-                auto duration = (compute_end - compute_begin) * 1e6;
-                std::stringstream s1;
-                s1 << "pairs; " << num_pairs << " time: " << duration << " throughput: " << num_pairs * 1.0 / duration << std::endl;
-                std::cout << s1.str();
-            }
+            total_num_pairs += num_pairs;
+            auto duration = (compute_end - compute_begin) * 1e6;
+            total_time += duration;
         }
 
         auto& bond_list = zoid.bond_list_modified[timestep];

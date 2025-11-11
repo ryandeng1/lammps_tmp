@@ -1342,9 +1342,9 @@ void Verlet::run(int n) {
         total_compute_time += s_compute_time[w];
         total_comm_time += s_comm_time[w];
 
-        if (comm->me == 0) {
-            std::cout << "worker w: " << w << " comm time: " << s_comm_time[w] * 1e6 << " " << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
-        }
+        // if (comm->me == 0) {
+        //     std::cout << "worker w: " << w << " comm time: " << s_comm_time[w] * 1e6 << " " << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
+        // }
     }
 
     if (comm->me == 0) {
@@ -1368,6 +1368,16 @@ void Verlet::run(int n) {
         << " percentage compute: " << all_reduce_compute / (all_reduce_comm + all_reduce_compute + all_reduce_other)
         << " percentage other: " << all_reduce_other / (all_reduce_comm + all_reduce_compute + all_reduce_other)
         << std::endl;
+    }
+
+    int64_t num_pairs_total = total_num_pairs;
+    double time_total = total_time;
+
+    MPI_Allreduce(MPI_IN_PLACE, &num_pairs_total, 1, MPI_LONG, MPI_SUM, world);
+    MPI_Allreduce(MPI_IN_PLACE, &time_total, 1, MPI_DOUBLE, MPI_SUM, world);
+
+    if (comm->me == 0) {
+        std::cout << "average throughput: " << num_pairs_total * 1.0 / time_total << std::endl;
     }
 
     if (comm->me == 0) {
