@@ -88,6 +88,9 @@ constexpr int NUM_RECV_NEIGHBORS[NUM_DEPS] = {0, 2, 8, 26};
 static cilk::opadd_reducer<double> v_comm_time = 0;
 static double other_time = 0;
 
+static int64_t lammps_total_num_pairs = 0;
+static double lammps_total_pair_duration = 0;
+
 /* ---------------------------------------------------------------------- */
 
 Verlet::Verlet(LAMMPS* lmp, int narg, char** arg) : Integrate(lmp, narg, arg) {}
@@ -949,28 +952,13 @@ void Verlet::run(int n) {
             for (int k = 0; k < atom->nlocal; k++) {
                 total_num_pairs += force->pair->list->numneigh[k];
             }
-            auto begin = std::chrono::high_resolution_clock::now();
+            auto begin = MPI_Wtime();
             force->pair->compute(eflag, vflag);
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            auto end = MPI_Wtime();
+            auto duration = (end - begin) * 1e6;
 
-            double throughput = total_num_pairs * 1.0 / duration;
-            if (comm->me < 5) {
-                std::stringstream s1;
-                s1 << "me: " << comm->me << " throughput: " << total_num_pairs * 1.0 / duration << std::endl;
-                std::cout << s1.str();
-            }
-            MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
-            MPI_Allreduce(MPI_IN_PLACE, &duration, 1, MPI_LONG, MPI_SUM, world);
-            // MPI_Allreduce(MPI_IN_PLACE, &throughput, 1, MPI_DOUBLE, MPI_SUM, world);
-
-            if (comm->me == 0) {
-                int world_size;
-                MPI_Comm_size(world, &world_size);
-                std::stringstream s1;
-                s1 << BOLDGREEN << "average throughput per process: " << total_num_pairs * 1.0 / duration << RESET_COLOR << std::endl;
-                std::cout << s1.str();
-            }
+            lammps_total_num_pairs += total_num_pairs;
+            lammps_total_pair_duration += duration;
 
             // lammps_pair_duration += duration;
             // lammps_num_atoms += atom->nlocal;
@@ -1085,6 +1073,10 @@ void Verlet::run(int n) {
     MPI_Allreduce(&duration_lammps, &total_duration_lammps, 1, MPI_INT64_T, MPI_SUM, world);
 
     std::cout << "lammps total just running the thing: " << duration_lammps << " microseconds. " << " total duration: " << total_duration_lammps << std::endl;
+
+    MPI_Allreduce(MPI_IN_PLACE, &lammps_total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
+    MPI_Allreduce(MPI_IN_PLACE, &lammps_total_pair_duration, 1, MPI_DOUBLE, MPI_SUM, world);
+    std::
 
     int64_t total_comm_duration = 0;
     int64_t total_forward_comm_duration = 0;
