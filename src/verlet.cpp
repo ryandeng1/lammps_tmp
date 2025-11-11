@@ -1076,7 +1076,9 @@ void Verlet::run(int n) {
 
     MPI_Allreduce(MPI_IN_PLACE, &lammps_total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
     MPI_Allreduce(MPI_IN_PLACE, &lammps_total_pair_duration, 1, MPI_DOUBLE, MPI_SUM, world);
-    std::
+    if (comm->me == 0) {
+        std::cout << "Overall throughput: " << lammps_total_num_pairs * 1.0 / lammps_total_pair_duration << std::endl;
+    }
 
     int64_t total_comm_duration = 0;
     int64_t total_forward_comm_duration = 0;
