@@ -953,17 +953,20 @@ void Verlet::run(int n) {
             force->pair->compute(eflag, vflag);
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+
+            double throughput = total_num_pairs * 1.0 / duration;
             // std::stringstream s1;
             // s1 << "throughput: " << total_num_pairs * 1.0 / duration << std::endl;
             // std::cout << s1.str();
-            MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
-            MPI_Allreduce(MPI_IN_PLACE, &duration, 1, MPI_LONG, MPI_SUM, world);
+            // MPI_Allreduce(MPI_IN_PLACE, &total_num_pairs, 1, MPI_LONG, MPI_SUM, world);
+            // MPI_Allreduce(MPI_IN_PLACE, &duration, 1, MPI_LONG, MPI_SUM, world);
+            MPI_Allreduce(MPI_IN_PLACE, &throughput, 1, MPI_DOUBLE, MPI_SUM, world);
 
             if (comm->me == 0) {
                 int world_size;
                 MPI_Comm_size(world, &world_size);
                 std::stringstream s1;
-                std::cout << "average throughput per process: " << total_num_pairs * 1.0 / (duration * world_size) << std::endl;
+                std::cout << "average throughput per process: " << throughput / world_size << std::endl;
             }
 
             // lammps_pair_duration += duration;
