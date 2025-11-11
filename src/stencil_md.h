@@ -14746,6 +14746,8 @@ public:
                 claimed[i].clear(std::memory_order_relaxed);
             }
 
+            auto compute_begin = MPI_Wtime();
+
             #pragma cilk grainsize 1024
             cilk_for (int local_idx = 0; local_idx < num_local_to_global; local_idx++) {
                 int global_idx = local_to_global_idx[local_idx];
@@ -14764,6 +14766,10 @@ public:
                     worker_local_f.z = 0;
                 }
             }
+
+            auto compute_end = MPI_Wtime();
+            auto duration = (compute_end - compute_begin) * 1e6;
+            total_time += duration;
 
             return;
         }
