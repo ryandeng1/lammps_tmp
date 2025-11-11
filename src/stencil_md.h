@@ -982,7 +982,7 @@ public:
     std::vector<queue_info> my_queues_many_cuts[NUM_DEPS];
     std::vector<queue_info> my_queues_many_cuts_next_dt[NUM_DEPS];
 
-    static constexpr int NUM_CUTS_X = 4;
+    static constexpr int NUM_CUTS_X = 6;
     static constexpr int NUM_CUTS_Y = 4;
     static constexpr int NUM_CUTS_Z = 4;
 
@@ -13882,6 +13882,7 @@ public:
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
             auto w = __cilkrts_get_worker_number();
             auto compute_begin = MPI_Wtime();
+            int num_pairs = 0;
 
             for (int idx = c * PAIR_GRAINSIZE; idx < (c + 1) * PAIR_GRAINSIZE && idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -13896,6 +13897,8 @@ public:
                 const double *_noalias const lj2i = lj2[itype];
                 // const double *_noalias const lj3i = lj3[itype];
                 // const double *_noalias const lj4i = lj4[itype];
+
+                num_pairs += jlist.size();
 
                 double xtmp = x[i].x;
                 double ytmp = x[i].y;
@@ -13950,6 +13953,12 @@ public:
 
             auto compute_end = MPI_Wtime();
             s_compute_time[w] += (compute_end - compute_begin);
+            if (comm->me == 0) {
+                auto duration = (compute_end - compute_begin) * 1e6;
+                std::stringstream s1;
+                s1 << "pairs; " << num_pairs << " time: " << duration << " throughput: " << num_pairs * 1.0 / duration << std::endl;
+                std::cout << s1.str();
+            }
         }
 
         auto& bond_list = zoid.bond_list_modified[timestep];
