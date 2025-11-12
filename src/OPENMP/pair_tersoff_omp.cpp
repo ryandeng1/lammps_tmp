@@ -157,7 +157,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
         neighshort_thr[numshort++] = j;
         if (numshort >= maxshort_thr) {
           maxshort_thr += maxshort_thr/2;
-          memory->grow(neighshort_thr,maxshort_thr,"pair_thr:neighshort_thr");
+          // memory->grow(neighshort_thr,maxshort_thr,"pair_thr:neighshort_thr");
         }
       }
 
@@ -556,7 +556,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
         neighshort_thr[numshort++] = j;
         if (numshort >= maxshort_thr) {
           maxshort_thr += maxshort_thr/2;
-          memory->grow(neighshort_thr,maxshort_thr,"pair_thr:neighshort_thr");
+          // memory->grow(neighshort_thr,maxshort_thr,"pair_thr:neighshort_thr");
         }
       }
 
@@ -701,7 +701,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
     f[i].y += fytmp;
     f[i].z += fztmp;
   }
-  memory->destroy(neighshort_thr);
+  // memory->destroy(neighshort_thr);
 }
 
 /* ---------------------------------------------------------------------- */
