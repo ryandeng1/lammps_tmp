@@ -22,8 +22,13 @@ PairStyle(tersoff,PairTersoff);
 
 #include <cmath>
 
+#include "math_extra.h"
+#include "math_special.h"
 #include "math_const.h"
 #include "pair.h"
+
+using namespace MathExtra;
+using namespace MathSpecial;
 
 namespace LAMMPS_NS {
 
