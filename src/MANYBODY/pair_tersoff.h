@@ -92,7 +92,7 @@ class PairTersoff : public Pair {
   virtual void ters_zetaterm_d(double, double *, double, double, double *, double, double, double *,
                                double *, double *, Param *);
 
-  inline __attribute
+  inline __attribute__((always_inline))
   void PairTersoff::costheta_d(double *rij_hat, double rijinv,
                              double *rik_hat, double rikinv,
                              double *dri, double *drj, double *drk)
