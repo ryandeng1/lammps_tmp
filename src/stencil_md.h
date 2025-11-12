@@ -13055,30 +13055,30 @@ public:
 
         double cutshortsq = pair_tersoff->cutmax * pair_tersoff->cutmax;
 
-        double ters_R = params[0].bigr;
-        double ters_D = params[0].bigd;
-        double lam1 = params[0].lam1;
-        double lam2 = params[0].lam2;
-        double lam3 = params[0].lam3;
-        double biga = params[0].biga;
-        int powermint = params[0].powermint;
+        // double ters_R = params[0].bigr;
+        // double ters_D = params[0].bigd;
+        // double lam1 = params[0].lam1;
+        // double lam2 = params[0].lam2;
+        // double lam3 = params[0].lam3;
+        // double biga = params[0].biga;
+        // int powermint = params[0].powermint;
 
-        double ters_c = params[0].c * params[0].c;
-        double ters_d = params[0].d * params[0].d;
-        double h = params[0].h;
-        double beta = params[0].beta;
-        double gamma = params[0].gamma;
+        // double ters_c = params[0].c * params[0].c;
+        // double ters_d = params[0].d * params[0].d;
+        // double h = params[0].h;
+        // double beta = params[0].beta;
+        // double gamma = params[0].gamma;
 
-        double bigr = params[0].bigr;
-        double bigd = params[0].bigd;
-        double bigb = params[0].bigb;
+        // double bigr = params[0].bigr;
+        // double bigd = params[0].bigd;
+        // double bigb = params[0].bigb;
 
-        double c1 = params[0].c1;
-        double c2 = params[0].c2;
-        double c3 = params[0].c3;
-        double c4 = params[0].c4;
+        // double c1 = params[0].c1;
+        // double c2 = params[0].c2;
+        // double c3 = params[0].c3;
+        // double c4 = params[0].c4;
 
-        double powern = params[0].powern;
+        // double powern = params[0].powern;
 
         auto& neigh_short = zoid.neigh_short[0];
 
@@ -13150,19 +13150,19 @@ public:
                     // ters_fc 
                     double ters_fc;
                     double ters_fc_d;
-                    if (r < ters_R - ters_D) {
+                    if (r < params[0].ters_R - params[0].ters_D) {
                         ters_fc = 1;
                         ters_fc_d = 0;
-                    } else if (r > ters_R + ters_D) {
+                    } else if (r > params[0].ters_R + params[0].ters_D) {
                         ters_fc = 0;
                         ters_fc_d = 0;
                     } else {
-                        ters_fc = 0.5*(1.0 - sin(MathConst::MY_PI2*(r - ters_R)/ters_D));
-                        ters_fc_d =  -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r - ters_R)/ters_D);
+                        ters_fc = 0.5*(1.0 - sin(MathConst::MY_PI2*(r - params[0].ters_R)/params[0].ters_D));
+                        ters_fc_d =  -(MathConst::MY_PI4/params[0].ters_D) * cos(MathConst::MY_PI2*(r - params[0].ters_R)/params[0].ters_D);
                     }
 
-                    double repulsive_exp = exp(-lam1 * r);
-                    double fpair = -biga * repulsive_exp * (ters_fc_d - ters_fc * lam1) / r;
+                    double repulsive_exp = exp(-params[0].lam1 * r);
+                    double fpair = -params[0].biga * repulsive_exp * (ters_fc_d - ters_fc * params[0].lam1) / r;
 
                     fxtmp += delx*fpair;
                     fytmp += dely*fpair;
@@ -13216,11 +13216,11 @@ public:
                         {
                             double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
                             double arg;
-                            if (powermint == 3) {
-                                double tmp = lam3 * (r1 - r2);
+                            if (params[0].powermint == 3) {
+                                double tmp = params[0].lam3 * (r1 - r2);
                                 arg = MathSpecial::cube(tmp);
                             } else {
-                                arg = lam3 * (r1-r2);
+                                arg = params[0].lam3 * (r1-r2);
                             }
 
                             double ex_delr;
@@ -13229,16 +13229,16 @@ public:
                             else ex_delr = exp(arg);
 
                             double ters_fc_ik;
-                            if (r2 < ters_R - ters_D) {
+                            if (r2 < params[0].ters_R - params[0].ters_D) {
                                 ters_fc_ik = 1;
-                            } else if (r2 > ters_R + ters_D) {
+                            } else if (r2 > params[0].ters_R + params[0].ters_D) {
                                 ters_fc_ik = 0;
                             } else {
-                                ters_fc_ik = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
+                                ters_fc_ik = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - params[0].ters_R)/params[0].ters_D));
                             }
 
-                            double hcth = h - costheta;
-                            double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+                            double hcth = params[0].h - costheta;
+                            double ters_gijk = params[0].gamma * (1.0 + params[0].ters_c / params[0].ters_d - params[0].ters_c / (params[0].ters_d + hcth * hcth));
                             zeta_ij += ters_fc_ik * ters_gijk * ex_delr;
                         }
                     }
@@ -13251,50 +13251,50 @@ public:
                     {
                         double ters_fc_r1;
                         double ters_fc_r1_d;
-                        if (r1 < ters_R - ters_D) {
+                        if (r1 < params[0].ters_R - params[0].ters_D) {
                             ters_fc_r1 = 1;
                             ters_fc_r1_d = 0;
-                        } else if (r1 > ters_R + ters_D) {
+                        } else if (r1 > params[0].ters_R + params[0].ters_D) {
                             ters_fc_r1 = 0;
                             ters_fc_r1_d = 0;
                         } else {
-                            ters_fc_r1 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r1 - ters_R)/ters_D));
-                            ters_fc_r1_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r1 - ters_R)/ters_D);
+                            ters_fc_r1 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r1 - params[0].ters_R)/params[0].ters_D));
+                            ters_fc_r1_d = -(MathConst::MY_PI4/params[0].ters_D) * cos(MathConst::MY_PI2*(r1 - params[0].ters_R)/params[0].ters_D);
                         }
 
                         double fa;
                         double fa_d;
-                        if (r1 > bigr + bigd) {
+                        if (r1 > params[0].bigr + params[0].bigd) {
                             fa = 0;
                             fa_d = 0;
                         } else {
-                            fa = -bigb * exp(-lam2 * r1) * ters_fc_r1;
-                            fa_d = bigb * exp(-lam2 * r1) * (lam2 * ters_fc_r1 - ters_fc_r1_d);
+                            fa = -params[0].bigb * exp(-params[0].lam2 * r1) * ters_fc_r1;
+                            fa_d = params[0].bigb * exp(-params[0].lam2 * r1) * (params[0].lam2 * ters_fc_r1 - ters_fc_r1_d);
                         }
 
                         double bij;
                         double bij_d;
-                        double ters_bij_tmp = beta * zeta_ij;
-                        if (ters_bij_tmp > c1) {
+                        double ters_bij_tmp = params[0].beta * zeta_ij;
+                        if (ters_bij_tmp > params[0].c1) {
                             bij = 1.0 / sqrt(ters_bij_tmp);
-                            bij_d = beta * -0.5*pow(ters_bij_tmp,-1.5);
-                        } else if (ters_bij_tmp > c2) {
-                            bij = (1.0 - pow(ters_bij_tmp, -powern) / (2.0*powern))/sqrt(ters_bij_tmp);
-                            bij_d = beta * (-0.5*pow(ters_bij_tmp,-1.5) *
+                            bij_d = params[0].beta * -0.5*pow(ters_bij_tmp,-1.5);
+                        } else if (ters_bij_tmp > params[0].c2) {
+                            bij = (1.0 - pow(ters_bij_tmp, -params[0].powern) / (2.0*params[0].powern))/sqrt(ters_bij_tmp);
+                            bij_d = params[0].beta * (-0.5*pow(ters_bij_tmp,-1.5) *
                                 // error in negligible 2nd term fixed 9/30/2015
                                 // (1.0 - 0.5*(1.0 +  1.0/(2.0*param->powern)) *
-                                (1.0 - (1.0 +  1.0/(2.0*powern)) *
-                                pow(ters_bij_tmp,-powern)));
-                        } else if (ters_bij_tmp < c4) {
+                                (1.0 - (1.0 +  1.0/(2.0*params[0].powern)) *
+                                pow(ters_bij_tmp,-params[0].powern)));
+                        } else if (ters_bij_tmp < params[0].c4) {
                             bij = 1;
                             bij_d = 0;
-                        } else if (ters_bij_tmp < c3) {
-                            bij = 1.0 - pow(ters_bij_tmp,powern)/(2.0*powern);
-                            bij_d = -0.5*beta * pow(ters_bij_tmp,powern-1.0);
+                        } else if (ters_bij_tmp < params[0].c3) {
+                            bij = 1.0 - pow(ters_bij_tmp,params[0].powern)/(2.0*params[0].powern);
+                            bij_d = -0.5*params[0].beta * pow(ters_bij_tmp,params[0].powern-1.0);
                         } else {
-                            double tmp_n = pow(ters_bij_tmp, powern);
-                            bij = pow(1.0 + tmp_n, -1.0/(2.0*powern));
-                            bij_d = -0.5 * pow(1.0+tmp_n, -1.0-(1.0/(2.0*powern)))*tmp_n / zeta_ij;
+                            double tmp_n = pow(ters_bij_tmp, params[0].powern);
+                            bij = pow(1.0 + tmp_n, -1.0/(2.0*params[0].powern));
+                            bij_d = -0.5 * pow(1.0+tmp_n, -1.0-(1.0/(2.0*params[0].powern)))*tmp_n / zeta_ij;
                         }
 
                         fforce = 0.5 * bij * fa_d;
@@ -13331,22 +13331,22 @@ public:
                         {
                             double ters_fc_r2;
                             double ters_fc_r2_d;
-                            if (r2 < ters_R - ters_D) {
+                            if (r2 < params[0].ters_R - params[0].ters_D) {
                                 ters_fc_r2 = 1;
                                 ters_fc_r2_d = 0;
-                            } else if (r2 > ters_R + ters_D) {
+                            } else if (r2 > params[0].ters_R + params[0].ters_D) {
                                 ters_fc_r2 = 0;
                                 ters_fc_r2_d = 0;
                             } else {
-                                ters_fc_r2 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - ters_R)/ters_D));
-                                ters_fc_r2_d = -(MathConst::MY_PI4/ters_D) * cos(MathConst::MY_PI2*(r2 - ters_R)/ters_D);
+                                ters_fc_r2 = 0.5*(1.0 - sin(MathConst::MY_PI2*(r2 - params[0].ters_R)/params[0].ters_D));
+                                ters_fc_r2_d = -(MathConst::MY_PI4/params[0].ters_D) * cos(MathConst::MY_PI2*(r2 - params[0].ters_R)/params[0].ters_D);
                             }
 
                             double tmp;
-                            if (powermint == 3) {
-                                tmp = MathSpecial::cube(lam3 * (r1 - r2));
+                            if (params[0].powermint == 3) {
+                                tmp = MathSpecial::cube(params[0].lam3 * (r1 - r2));
                             } else {
-                                tmp = lam3 * (r1 - r2);
+                                tmp = params[0].lam3 * (r1 - r2);
                             }
 
                             double ex_delr;
@@ -13356,21 +13356,23 @@ public:
                             else if (tmp < -69.0776) ex_delr = 0.0;
                             else ex_delr = exp(tmp);
 
-                            if (powermint == 3) {
-                                ex_delr_d = 3.0 * MathSpecial::cube(lam3) * MathSpecial::square(r1 - r2) * ex_delr;
+                            if (params[0].powermint == 3) {
+                                ex_delr_d = 3.0 * MathSpecial::cube(params[0].lam3) * MathSpecial::square(r1 - r2) * ex_delr;
                             } else {
-                                ex_delr_d = lam3 * ex_delr;
+                                ex_delr_d = params[0].lam3 * ex_delr;
                             }
 
                             double costheta = r1hat.x * r2hat.x + r1hat.y * r2hat.y + r1hat.z * r2hat.z;
                             // ters_gijk
-                            double hcth = h - costheta;
-                            double ters_gijk = gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
+                            double hcth = params[0].h - costheta;
+                            double ters_gijk = params[0].gamma * (1.0 + params[0].ters_c / params[0].ters_d - params[0].ters_c / (params[0].ters_d + params[0].hcth * hcth));
 
                             // ters_gijk_d
+                            double ters_c = params[0].c * params[0].c;
+                            double ters_d = params[0].d * params[0].d;
                             double numerator = -2.0 * ters_c * hcth;
                             double denominator = 1.0 / (ters_d + hcth * hcth);
-                            double ters_gijk_d = gamma * numerator * denominator * denominator;
+                            double ters_gijk_d = params[0].gamma * numerator * denominator * denominator;
 
                             // costheta_d
                             double costheta_d;
