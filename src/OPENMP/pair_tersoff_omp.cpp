@@ -488,6 +488,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
 
   return;
 
+  /*
   int i,j,k,ii,jj,kk,jnum,maxshort_thr;
   tagint itag,jtag;
   int itype,jtype,ktype,iparam_ij,iparam_ijk;
@@ -588,7 +589,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
       f[j].y -= dely*fpair;
       f[j].z -= delz*fpair;
 
-      if (EVFLAG) ev_tally_thr(this,i,j,nlocal,/* newton_pair */ 1,
+      if (EVFLAG) ev_tally_thr(this,i,j,nlocal,1,
                                evdwl,0.0,fpair,delx,dely,delz,thr);
     }
 
@@ -654,7 +655,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
       fjytmp -= delr1[1]*fpair;
       fjztmp -= delr1[2]*fpair;
 
-      if (EVFLAG) ev_tally_thr(this,i,j,nlocal,/* newton_pair */ 1,evdwl,0.0,
+      if (EVFLAG) ev_tally_thr(this,i,j,nlocal,1,evdwl,0.0,
                                -fpair,-delr1[0],-delr1[1],-delr1[2],thr);
 
       // attractive term via loop over k
@@ -701,7 +702,8 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
     f[i].y += fytmp;
     f[i].z += fztmp;
   }
-  // memory->destroy(neighshort_thr);
+  memory->destroy(neighshort_thr);
+  */
 }
 
 /* ---------------------------------------------------------------------- */
