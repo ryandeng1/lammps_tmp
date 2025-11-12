@@ -14758,8 +14758,37 @@ public:
                 claimed[i].clear(std::memory_order_relaxed);
             }
 
-            auto compute_begin = MPI_Wtime();
 
+            int num_chunks_reduce = num_local_to_global / 1024 + 1;
+
+            #pragma cilk grainsize 1
+            cilk_for (int c = 0; c < num_chunks_reduce; c++) {
+                auto compute_begin = MPI_Wtime();
+
+                for (int local_idx = c * 1024; local_idx < (c + 1) * 1024 && local_idx < num_local_to_global; local_idx++) {
+                    int global_idx = local_to_global_idx[local_idx];
+                    assert(global_idx >= 0);
+                    for (int w = 0; w < nworkers; w++) {
+                        if (!workers_used[w]) {
+                            continue;
+                        }
+                        auto& worker_local_f = per_worker_force_updates[w][local_idx];
+                        f[global_idx].x += worker_local_f.x;
+                        f[global_idx].y += worker_local_f.y;
+                        f[global_idx].z += worker_local_f.z;
+
+                        worker_local_f.x = 0;
+                        worker_local_f.y = 0;
+                        worker_local_f.z = 0;
+                    }
+                }
+
+                auto compute_end = MPI_Wtime();
+                auto duration = (compute_end - compute_begin) * 1e6;
+                total_time += duration;
+            }
+
+            /*
             #pragma cilk grainsize 1024
             cilk_for (int local_idx = 0; local_idx < num_local_to_global; local_idx++) {
                 int global_idx = local_to_global_idx[local_idx];
@@ -14778,10 +14807,7 @@ public:
                     worker_local_f.z = 0;
                 }
             }
-
-            auto compute_end = MPI_Wtime();
-            auto duration = (compute_end - compute_begin) * 1e6;
-            total_time += duration;
+            */
 
             return;
         }
