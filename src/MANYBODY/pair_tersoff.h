@@ -20,6 +20,9 @@ PairStyle(tersoff,PairTersoff);
 #ifndef LMP_PAIR_TERSOFF_H
 #define LMP_PAIR_TERSOFF_H
 
+#include <cmath>
+
+#include "math_const.h"
 #include "pair.h"
 
 namespace LAMMPS_NS {
@@ -108,6 +111,113 @@ class PairTersoff : public Pair {
 };
 
 }    // namespace LAMMPS_NS
+
+inline double LAMMPS_NS::PairTersoff::ters_fc(double r, Param *param)
+{
+  const double ters_R = param->bigr;
+  const double ters_D = param->bigd;
+
+  if (r < ters_R - ters_D) return 1.0;
+  if (r > ters_R + ters_D) return 0.0;
+  return 0.5 * (1.0 - sin(MathConst::MY_PI2 * (r - ters_R) / ters_D));
+}
+
+inline double LAMMPS_NS::PairTersoff::ters_fc_d(double r, Param *param)
+{
+  const double ters_R = param->bigr;
+  const double ters_D = param->bigd;
+
+  if (r < ters_R - ters_D) return 0.0;
+  if (r > ters_R + ters_D) return 0.0;
+  return -(MathConst::MY_PI4 / ters_D) * cos(MathConst::MY_PI2 * (r - ters_R) / ters_D);
+}
+
+inline double LAMMPS_NS::PairTersoff::ters_fa(double r, Param *param)
+{
+  if (r > param->bigr + param->bigd) return 0.0;
+  return -param->bigb * exp(-param->lam2 * r) * ters_fc(r, param);
+}
+
+inline double LAMMPS_NS::PairTersoff::ters_fa_d(double r, Param *param)
+{
+  if (r > param->bigr + param->bigd) return 0.0;
+  return param->bigb * exp(-param->lam2 * r) *
+         (param->lam2 * ters_fc(r, param) - ters_fc_d(r, param));
+}
+
+inline double LAMMPS_NS::PairTersoff::ters_bij(double zeta, Param *param)
+{
+  const double tmp = param->beta * zeta;
+  if (tmp > param->c1) return 1.0 / sqrt(tmp);
+  if (tmp > param->c2)
+    return (1.0 - pow(tmp, -param->powern) / (2.0 * param->powern)) / sqrt(tmp);
+  if (tmp < param->c4) return 1.0;
+  if (tmp < param->c3) return 1.0 - pow(tmp, param->powern) / (2.0 * param->powern);
+  return pow(1.0 + pow(tmp, param->powern), -1.0 / (2.0 * param->powern));
+}
+
+inline double LAMMPS_NS::PairTersoff::ters_bij_d(double zeta, Param *param)
+{
+  const double tmp = param->beta * zeta;
+  if (tmp > param->c1) return param->beta * -0.5 * pow(tmp, -1.5);
+  if (tmp > param->c2)
+    return param->beta * (-0.5 * pow(tmp, -1.5) *
+                          // error in negligible 2nd term fixed 9/30/2015
+                          // (1.0 - 0.5*(1.0 +  1.0/(2.0*param->powern)) *
+                          (1.0 - (1.0 + 1.0 / (2.0 * param->powern)) * pow(tmp, -param->powern)));
+  if (tmp < param->c4) return 0.0;
+  if (tmp < param->c3) return -0.5 * param->beta * pow(tmp, param->powern - 1.0);
+
+  const double tmp_n = pow(tmp, param->powern);
+  return -0.5 * pow(1.0 + tmp_n, -1.0 - (1.0 / (2.0 * param->powern))) * tmp_n / zeta;
+}
+
+inline void LAMMPS_NS::PairTersoff::repulsive(Param *param, double rsq, double &fforce,
+                                              int eflag, double &eng)
+{
+  const double r = sqrt(rsq);
+  const double tmp_fc = ters_fc(r, param);
+  const double tmp_fc_d = ters_fc_d(r, param);
+  const double tmp_exp = exp(-param->lam1 * r);
+  fforce = -param->biga * tmp_exp * (tmp_fc_d - tmp_fc * param->lam1) / r;
+  if (eflag) eng = tmp_fc * param->biga * tmp_exp;
+}
+
+inline void LAMMPS_NS::PairTersoff::force_zeta(Param *param, double rsq, double zeta_ij,
+                                               double &fforce, double &prefactor, int eflag,
+                                               double &eng)
+{
+  const double r = sqrt(rsq);
+  const double fa = ters_fa(r, param);
+  const double fa_d = ters_fa_d(r, param);
+  const double bij = ters_bij(zeta_ij, param);
+  fforce = 0.5 * bij * fa_d;
+  prefactor = -0.5 * fa * ters_bij_d(zeta_ij, param);
+  if (eflag) eng = 0.5 * bij * fa;
+}
+
+// attractive term
+// use param_ij cutoff for rij test
+// use param_ijk cutoff for rik test
+inline void LAMMPS_NS::PairTersoff::attractive(Param *param, double prefactor, double rsqij,
+                                               double rsqik, double *rij_hat, double *rik_hat,
+                                               double *fi, double *fj, double *fk)
+{
+  const double rij = sqrt(rsqij);
+  const double rik = sqrt(rsqik);
+
+  // correct 1/r for shift in rsq
+  double rijinv, rikinv;
+  if (shift_flag == 1) {
+    rijinv = 1.0 / (rij - shift);
+    rikinv = 1.0 / (rik - shift);
+  } else {
+    rijinv = 1.0 / rij;
+    rikinv = 1.0 / rik;
+  }
+
+  ters_zetaterm_d(prefactor, rij_hat, rij, rijinv, rik_hat, rik, rikinv, fi, fj, fk, param);
+}
 
 #endif
 #endif
