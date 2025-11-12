@@ -13150,7 +13150,7 @@ public:
                     // ters_fc 
                     double ters_fc;
                     double ters_fc_d;
-                    if (r < params[0].ters_R - ters_D) {
+                    if (r < ters_R - ters_D) {
                         ters_fc = 1;
                         ters_fc_d = 0;
                     } else if (r > ters_R + ters_D) {
