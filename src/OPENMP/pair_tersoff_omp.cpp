@@ -132,7 +132,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
 
   for (int ii = iifrom; ii < iito; ii++) {
     int i = ilist[ii];
-    int itag = tags[i];
+    int itag = tag[i];
     int itype = map[type[i]];
     double xtmp = x[i].x;
     double ytmp = x[i].y;
@@ -161,7 +161,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
         }
       }
 
-      int jtag = tags[j];
+      int jtag = tag[j];
       if (itag > jtag) {
           if ((itag+jtag) % 2 == 0) continue;
       } else if (itag < jtag) {
@@ -207,7 +207,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
 
     for (int jj = 0; jj < numshort; jj++) {
       int j = neighshort_thr[jj];
-      int jtype = map[atom_type[j]];
+      int jtype = map[type[j]];
       int iparam_ij = elem3param[itype][jtype][jtype];
       dbl3_t delr1 = {x[j].x - xtmp, x[j].y - ytmp, x[j].z - ztmp};
       double rsq1 = delr1.x*delr1.x + delr1.y*delr1.y + delr1.z*delr1.z;
@@ -229,7 +229,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
       for (int kk = 0; kk < numshort; kk++) {
         if (jj == kk) continue;
         int k = neighshort_thr[kk];
-        int ktype = map[atom_type[k]];
+        int ktype = map[type[k]];
         int iparam_ijk = elem3param[itype][jtype][ktype];
 
         dbl3_t delr2 = {x[k].x - xtmp, x[k].y - ytmp, x[k].z - ztmp};
