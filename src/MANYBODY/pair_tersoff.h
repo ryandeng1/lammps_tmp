@@ -86,11 +86,29 @@ class PairTersoff : public Pair {
 
   virtual void ters_zetaterm_d(double, double *, double, double, double *, double, double, double *,
                                double *, double *, Param *);
-  void costheta_d(double *, double, double *, double, double *, double *, double *);
+
+  inline __attribute
+  void PairTersoff::costheta_d(double *rij_hat, double rijinv,
+                             double *rik_hat, double rikinv,
+                             double *dri, double *drj, double *drk)
+  {
+    // first element is devative wrt Ri, second wrt Rj, third wrt Rk
+
+    double cos_theta = dot3(rij_hat,rik_hat);
+
+    scaleadd3(-cos_theta,rij_hat,rik_hat,drj);
+    scale3(rijinv,drj);
+    scaleadd3(-cos_theta,rik_hat,rij_hat,drk);
+    scale3(rikinv,drk,drk);
+    add3(drj,drk,dri);
+    scale3(-1.0,dri);
+  }
+
 
   // inlined functions for efficiency
 
-  inline double ters_gijk(const double costheta, const Param *const param) const
+  inline __attribute__((always_inline))
+  double ters_gijk(const double costheta, const Param *const param) const
   {
     const double ters_c = param->c * param->c;
     const double ters_d = param->d * param->d;
@@ -99,7 +117,8 @@ class PairTersoff : public Pair {
     return param->gamma * (1.0 + ters_c / ters_d - ters_c / (ters_d + hcth * hcth));
   }
 
-  inline double ters_gijk_d(const double costheta, const Param *const param) const
+  inline __attribute__((always_inline))
+  double ters_gijk_d(const double costheta, const Param *const param) const
   {
     const double ters_c = param->c * param->c;
     const double ters_d = param->d * param->d;
@@ -112,7 +131,8 @@ class PairTersoff : public Pair {
 
 }    // namespace LAMMPS_NS
 
-inline double LAMMPS_NS::PairTersoff::ters_fc(double r, Param *param)
+inline __attribute__((always_inline))
+double LAMMPS_NS::PairTersoff::ters_fc(double r, Param *param)
 {
   const double ters_R = param->bigr;
   const double ters_D = param->bigd;
@@ -122,7 +142,8 @@ inline double LAMMPS_NS::PairTersoff::ters_fc(double r, Param *param)
   return 0.5 * (1.0 - sin(MathConst::MY_PI2 * (r - ters_R) / ters_D));
 }
 
-inline double LAMMPS_NS::PairTersoff::ters_fc_d(double r, Param *param)
+inline __attribute__((always_inline))
+double LAMMPS_NS::PairTersoff::ters_fc_d(double r, Param *param)
 {
   const double ters_R = param->bigr;
   const double ters_D = param->bigd;
@@ -132,20 +153,23 @@ inline double LAMMPS_NS::PairTersoff::ters_fc_d(double r, Param *param)
   return -(MathConst::MY_PI4 / ters_D) * cos(MathConst::MY_PI2 * (r - ters_R) / ters_D);
 }
 
-inline double LAMMPS_NS::PairTersoff::ters_fa(double r, Param *param)
+inline __attribute__((always_inline))
+double LAMMPS_NS::PairTersoff::ters_fa(double r, Param *param)
 {
   if (r > param->bigr + param->bigd) return 0.0;
   return -param->bigb * exp(-param->lam2 * r) * ters_fc(r, param);
 }
 
-inline double LAMMPS_NS::PairTersoff::ters_fa_d(double r, Param *param)
+inline __attribute__((always_inline))
+double LAMMPS_NS::PairTersoff::ters_fa_d(double r, Param *param)
 {
   if (r > param->bigr + param->bigd) return 0.0;
   return param->bigb * exp(-param->lam2 * r) *
          (param->lam2 * ters_fc(r, param) - ters_fc_d(r, param));
 }
 
-inline double LAMMPS_NS::PairTersoff::ters_bij(double zeta, Param *param)
+inline __attribute__((always_inline))
+double LAMMPS_NS::PairTersoff::ters_bij(double zeta, Param *param)
 {
   const double tmp = param->beta * zeta;
   if (tmp > param->c1) return 1.0 / sqrt(tmp);
@@ -156,7 +180,8 @@ inline double LAMMPS_NS::PairTersoff::ters_bij(double zeta, Param *param)
   return pow(1.0 + pow(tmp, param->powern), -1.0 / (2.0 * param->powern));
 }
 
-inline double LAMMPS_NS::PairTersoff::ters_bij_d(double zeta, Param *param)
+inline __attribute__((always_inline))
+double LAMMPS_NS::PairTersoff::ters_bij_d(double zeta, Param *param)
 {
   const double tmp = param->beta * zeta;
   if (tmp > param->c1) return param->beta * -0.5 * pow(tmp, -1.5);
@@ -172,7 +197,8 @@ inline double LAMMPS_NS::PairTersoff::ters_bij_d(double zeta, Param *param)
   return -0.5 * pow(1.0 + tmp_n, -1.0 - (1.0 / (2.0 * param->powern))) * tmp_n / zeta;
 }
 
-inline void LAMMPS_NS::PairTersoff::repulsive(Param *param, double rsq, double &fforce,
+inline __attribute__((always_inline))
+void LAMMPS_NS::PairTersoff::repulsive(Param *param, double rsq, double &fforce,
                                               int eflag, double &eng)
 {
   const double r = sqrt(rsq);
@@ -183,7 +209,8 @@ inline void LAMMPS_NS::PairTersoff::repulsive(Param *param, double rsq, double &
   if (eflag) eng = tmp_fc * param->biga * tmp_exp;
 }
 
-inline void LAMMPS_NS::PairTersoff::force_zeta(Param *param, double rsq, double zeta_ij,
+inline __attribute__((always_inline))
+void LAMMPS_NS::PairTersoff::force_zeta(Param *param, double rsq, double zeta_ij,
                                                double &fforce, double &prefactor, int eflag,
                                                double &eng)
 {
@@ -199,7 +226,8 @@ inline void LAMMPS_NS::PairTersoff::force_zeta(Param *param, double rsq, double 
 // attractive term
 // use param_ij cutoff for rij test
 // use param_ijk cutoff for rik test
-inline void LAMMPS_NS::PairTersoff::attractive(Param *param, double prefactor, double rsqij,
+inline __attribute__((always_inline))
+void LAMMPS_NS::PairTersoff::attractive(Param *param, double prefactor, double rsqij,
                                                double rsqik, double *rij_hat, double *rik_hat,
                                                double *fi, double *fj, double *fk)
 {
@@ -218,6 +246,86 @@ inline void LAMMPS_NS::PairTersoff::attractive(Param *param, double prefactor, d
 
   ters_zetaterm_d(prefactor, rij_hat, rij, rijinv, rik_hat, rik, rikinv, fi, fj, fk, param);
 }
+
+inline __attribute((always_inline))
+void PairTersoff::ters_zetaterm_d(double prefactor,
+                                  double *rij_hat, double rij, double rijinv,
+                                  double *rik_hat, double rik, double rikinv,
+                                  double *dri, double *drj, double *drk,
+                                  Param *param)
+{
+  double gijk,gijk_d,ex_delr,ex_delr_d,fc,dfc,cos_theta,tmp;
+  double dcosdri[3],dcosdrj[3],dcosdrk[3];
+
+  fc = ters_fc(rik,param);
+  dfc = ters_fc_d(rik,param);
+  if (param->powermint == 3) tmp = cube(param->lam3 * (rij-rik));
+  else tmp = param->lam3 * (rij-rik);
+
+  if (tmp > 69.0776) ex_delr = 1.e30;
+  else if (tmp < -69.0776) ex_delr = 0.0;
+  else ex_delr = exp(tmp);
+
+  if (param->powermint == 3)
+    ex_delr_d = 3.0*cube(param->lam3) * square(rij-rik)*ex_delr;
+  else ex_delr_d = param->lam3 * ex_delr;
+
+  cos_theta = dot3(rij_hat,rik_hat);
+  gijk = ters_gijk(cos_theta,param);
+  gijk_d = ters_gijk_d(cos_theta,param);
+  costheta_d(rij_hat,rijinv,rik_hat,rikinv,dcosdri,dcosdrj,dcosdrk);
+
+  // compute the derivative wrt Ri
+  // dri = -dfc*gijk*ex_delr*rik_hat;
+  // dri += fc*gijk_d*ex_delr*dcosdri;
+  // dri += fc*gijk*ex_delr_d*(rik_hat - rij_hat);
+
+  scale3(-dfc*gijk*ex_delr,rik_hat,dri);
+  scaleadd3(fc*gijk_d*ex_delr,dcosdri,dri,dri);
+  scaleadd3(fc*gijk*ex_delr_d,rik_hat,dri,dri);
+  scaleadd3(-fc*gijk*ex_delr_d,rij_hat,dri,dri);
+  scale3(prefactor,dri);
+
+  // compute the derivative wrt Rj
+  // drj = fc*gijk_d*ex_delr*dcosdrj;
+  // drj += fc*gijk*ex_delr_d*rij_hat;
+
+  scale3(fc*gijk_d*ex_delr,dcosdrj,drj);
+  scaleadd3(fc*gijk*ex_delr_d,rij_hat,drj,drj);
+  scale3(prefactor,drj);
+
+  // compute the derivative wrt Rk
+  // drk = dfc*gijk*ex_delr*rik_hat;
+  // drk += fc*gijk_d*ex_delr*dcosdrk;
+  // drk += -fc*gijk*ex_delr_d*rik_hat;
+
+  scale3(dfc*gijk*ex_delr,rik_hat,drk);
+  scaleadd3(fc*gijk_d*ex_delr,dcosdrk,drk,drk);
+  scaleadd3(-fc*gijk*ex_delr_d,rik_hat,drk,drk);
+  scale3(prefactor,drk);
+}
+
+inline __attribute((always_inline))
+double PairTersoff::zeta(Param *param, double rsqij, double rsqik,
+                         double *rij_hat, double *rik_hat)
+{
+  double rij,rik,costheta,arg,ex_delr;
+
+  rij = sqrt(rsqij);
+  rik = sqrt(rsqik);
+  costheta = dot3(rij_hat,rik_hat);
+
+  if (param->powermint == 3) arg = cube(param->lam3 * (rij-rik));
+  else arg = param->lam3 * (rij-rik);
+
+  if (arg > 69.0776) ex_delr = 1.e30;
+  else if (arg < -69.0776) ex_delr = 0.0;
+  else ex_delr = exp(arg);
+
+  return ters_fc(rik,param) * ters_gijk(costheta,param) * ex_delr;
+}
+
+
 
 #endif
 #endif
