@@ -209,13 +209,14 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
       delr1[1] = x[j].y - ytmp;
       delr1[2] = x[j].z - ztmp;
       rsq1 = delr1[0]*delr1[0] + delr1[1]*delr1[1] + delr1[2]*delr1[2];
+      const double r1 = sqrt(rsq1);
 
       if (SHIFT_FLAG)
-        rsq1 += shift*shift + 2*sqrt(rsq1)*shift;
+        rsq1 += shift*shift + 2*r1*shift;
 
       if (rsq1 >= params[iparam_ij].cutsq) continue;
 
-      const double r1inv = 1.0/sqrt(dot3(delr1, delr1));
+      const double r1inv = 1.0/r1;
       scale3(r1inv, delr1, r1_hat);
 
       // accumulate bondorder zeta for each i-j interaction via loop over k
@@ -233,13 +234,14 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
         delr2[1] = x[k].y - ytmp;
         delr2[2] = x[k].z - ztmp;
         rsq2 = delr2[0]*delr2[0] + delr2[1]*delr2[1] + delr2[2]*delr2[2];
+        const double r2 = sqrt(rsq2);
 
         if (SHIFT_FLAG)
-          rsq2 += shift*shift + 2*sqrt(rsq2)*shift;
+          rsq2 += shift*shift + 2*r2*shift;
 
         if (rsq2 >= params[iparam_ijk].cutsq) continue;
 
-        const double r2inv = 1.0/sqrt(dot3(delr2, delr2));
+        const double r2inv = 1.0/r2;
         scale3(r2inv, delr2, r2_hat);
 
         zeta_ij += zeta(&params[iparam_ijk],rsq1,rsq2,r1_hat,r2_hat);
@@ -273,13 +275,14 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
         delr2[1] = x[k].y - ytmp;
         delr2[2] = x[k].z - ztmp;
         rsq2 = delr2[0]*delr2[0] + delr2[1]*delr2[1] + delr2[2]*delr2[2];
+        const double r2 = sqrt(rsq2);
 
         if (SHIFT_FLAG)
-          rsq2 += shift*shift + 2*sqrt(rsq2)*shift;
+          rsq2 += shift*shift + 2*r2*shift;
 
         if (rsq2 >= params[iparam_ijk].cutsq) continue;
 
-        const double r2inv = 1.0/sqrt(dot3(delr2, delr2));
+        const double r2inv = 1.0/r2;
         scale3(r2inv, delr2, r2_hat);
 
         attractive(&params[iparam_ijk],prefactor,
