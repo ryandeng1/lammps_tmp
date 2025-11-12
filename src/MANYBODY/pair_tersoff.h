@@ -27,6 +27,7 @@ PairStyle(tersoff,PairTersoff);
 #include "math_const.h"
 #include "pair.h"
 
+using namespace LAMMPS_NS;
 using namespace MathExtra;
 using namespace MathSpecial;
 
@@ -93,7 +94,7 @@ class PairTersoff : public Pair {
                                double *, double *, Param *);
 
   inline __attribute__((always_inline))
-  void PairTersoff::costheta_d(double *rij_hat, double rijinv,
+  void costheta_d(double *rij_hat, double rijinv,
                              double *rik_hat, double rikinv,
                              double *dri, double *drj, double *drk)
   {
