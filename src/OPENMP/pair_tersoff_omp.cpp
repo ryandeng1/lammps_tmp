@@ -87,6 +87,8 @@ void PairTersoffOMP::compute(int eflag, int vflag)
   } // end of omp parallel region
 }
 
+static int neighshort_thr[10000];
+
 template <int SHIFT_FLAG, int EVFLAG, int EFLAG, int VFLAG_EITHER>
 void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
 {
@@ -100,7 +102,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
   double r1_hat[3],r2_hat[3];
   double zeta_ij,prefactor;
   double forceshiftfac;
-  int *ilist,*jlist,*numneigh,**firstneigh,*neighshort_thr;
+  int *ilist,*jlist,*numneigh,**firstneigh;//,*neighshort_thr;
 
   evdwl = 0.0;
 
@@ -115,7 +117,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
   numneigh = list->numneigh;
   firstneigh = list->firstneigh;
   maxshort_thr = maxshort;
-  memory->create(neighshort_thr,maxshort_thr,"pair_thr:neighshort_thr");
+  // memory->create(neighshort_thr,maxshort_thr,"pair_thr:neighshort_thr");
 
   double fxtmp,fytmp,fztmp;
 
@@ -158,7 +160,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
         neighshort_thr[numshort++] = j;
         if (numshort >= maxshort_thr) {
           maxshort_thr += maxshort_thr/2;
-          memory->grow(neighshort_thr,maxshort_thr,"pair_thr:neighshort_thr");
+          // memory->grow(neighshort_thr,maxshort_thr,"pair_thr:neighshort_thr");
         }
       }
 
@@ -303,7 +305,7 @@ void PairTersoffOMP::eval(int iifrom, int iito, ThrData * const thr)
     f[i].y += fytmp;
     f[i].z += fztmp;
   }
-  memory->destroy(neighshort_thr);
+  // memory->destroy(neighshort_thr);
 }
 
 /* ---------------------------------------------------------------------- */
