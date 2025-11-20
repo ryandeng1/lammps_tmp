@@ -142,7 +142,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     // 5. Resize the type (CRITICAL STEP)
     // This ensures that if you send an array of records, MPI respects 
     // the compiler's padding at the END of the struct.
-    MPI_Type_create_resized(tmp_type, 0, sizeof(record), mpi_record_type);
+    MPI_Type_create_resized(tmp_type, 0, sizeof(record), &record_type);
 
     // 6. Commit the type so it can be used
     MPI_Type_commit(&record_type);
@@ -152,7 +152,9 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     MPI_Allgatherv(records.data(), counts[rank], record_type, all_records.data(),
                     counts.data(), displacements.data(), record_type, MPI_COMM_WORLD);
 
-    std::cout << "len my records: " << records.size() << " all records size: " << all_records.size() << std::endl;
+    std::stringstream s1;
+    s1 << "rank: " << rank << " len my records: " << records.size() << " all records size: " << all_records.size() << std::endl;
+    std::cout << s1.str();
 
     // Free the temporary type
     MPI_Type_free(&tmp_type);
@@ -1527,7 +1529,6 @@ void Verlet::run(int n) {
             delete[] test_v[i];
         }
     }
-
 
     gather_and_analyze_timestamp_records(timestamp_records);
 }
