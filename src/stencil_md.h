@@ -74,8 +74,8 @@ typedef struct {
     bool send;
 } record;
 
-std::mutex timestamp_mutex;
-std::vector<record> timestamp_records;
+inline std::mutex timestamp_mutex;
+inline std::vector<record> timestamp_records;
 
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
