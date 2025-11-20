@@ -113,20 +113,21 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     }
 
     MPI_Datatype record_type;
-    const int nitems = 7;
-    int blocklengths[7] = {1, 1, 1, 1, 1, 1, 1};
+    const int nitems = 8;
+    int blocklengths[8] = {1, 1, 1, 1, 1, 1, 1, 1};
 
     // 2. setup the types
     // Note: MPI_C_BOOL is safe for C++ bools in modern MPI implementations (MPI-3+)
-    MPI_Datatype types[7] = {
+    MPI_Datatype types[8] = {
         MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, 
         MPI_DOUBLE, 
-        MPI_C_BOOL 
+        MPI_C_BOOL,
+        MPI_INT,
     };
 
     // 3. setup the displacements (offsets)
     // We use offsetof to handle compiler padding automatically
-    MPI_Aint offsets[7];
+    MPI_Aint offsets[8];
     offsets[0] = offsetof(record, send_zoid);
     offsets[1] = offsetof(record, send_proc);
     offsets[2] = offsetof(record, recv_zoid);
@@ -134,6 +135,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     offsets[4] = offsetof(record, dep);
     offsets[5] = offsetof(record, timestamp);
     offsets[6] = offsetof(record, send);
+    offsets[7] = offsetof(record, starting_timestep);
 
     // 4. Create the struct type
     MPI_Datatype tmp_type;
@@ -152,12 +154,29 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     MPI_Allgatherv(records.data(), counts[rank], record_type, all_records.data(),
                     counts.data(), displacements.data(), record_type, MPI_COMM_WORLD);
 
-    std::stringstream s1;
-    s1 << "rank: " << rank << " len my records: " << records.size() << " all records size: " << all_records.size() << std::endl;
-    std::cout << s1.str();
-
     // Free the temporary type
     MPI_Type_free(&tmp_type);
+
+    if (rank == 0) {
+        std::map<int, std::vector<record>> starting_timestep_to_records;
+        for (const auto& record : all_records) {
+            starting_timestep_to_records[record.starting_timestep].push_back(record);
+        }
+
+        for (auto& [starting_timestep, records] : starting_timestep_to_records) {
+            std::cout << "starting timestep: " << starting_timestep << std::endl;
+            double last_time = -1;
+            record tmp;
+            for (auto& r : records) {
+                if (!r.send && r.timestamp > last_time) {
+                    last_time = r.timestamp;
+                    tmp = r;
+                }
+            }
+
+            std::cout << "last receiving is zoid: " << tmp.recv_zoid << " dep: " << tmp.dep << " recv from proc: " << tmp.send_proc << " recv from zoid: " << tmp.send_zoid << std::endl;
+        }
+    }
 }
 
 
@@ -1365,6 +1384,7 @@ void Verlet::run(int n) {
     total_num_pairs = 0;
     v_comm_time = 0;
     stencilMD->reset_timers();
+    timestamp_records.clear();
 
     MPI_Barrier(world);
     if (comm->me == 0) {
@@ -2033,6 +2053,7 @@ void Verlet::unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_tim
                 dep,
                 MPI_Wtime(),
                 false,
+                starting_timestep,
             });
             timestamp_mutex.unlock();
         }
@@ -2168,11 +2189,11 @@ void Verlet::stencil_md_run_zoid_wrapper(int starting_timestep, int dep, queue_i
     
     // std::vector<int> eval_zoids;
 
-    stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
+    stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(starting_timestep, zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
 
     dep_counters[dep]--;
     if (dep_counters[dep] == 0 && !dep_claimed[dep].test(std::memory_order_relaxed) && !dep_claimed[dep].test_and_set(std::memory_order_relaxed)) {
-        stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
+        stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(starting_timestep, DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
     }
 
     auto& send_neighbors = curr_dt ? stencilMD->send_to_neighbors_many_cuts[zoid.num] : stencilMD->send_to_neighbors_many_cuts_next_dt[zoid.num];
@@ -2234,7 +2255,7 @@ void Verlet::stencil_md_run_zoid_wrapper_better_work_queue(int starting_timestep
                                         test_f, test_x, test_v);
     zoid_done[zoid.num].store(true, std::memory_order_relaxed);
     
-    stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
+    stencilMD->PACK_DATA_WITH_PROC_TO_PROC<curr_dt>(starting_timestep, zoid, dep, start_timestep, end_timestep, DEFAULT_PIPELINE_STAGE, stream_manager, send_r_zoid_to_zoid[zoid.num]);
 
     /*
     dep_counters[dep].fetch_sub(1, std::memory_order_relaxed);
@@ -3011,12 +3032,13 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                 timestamp_mutex.lock();
                                 timestamp_records.push_back({
                                     src_zoid_num,
-                                    src_zoid_num % comm->nprocs,
+                                    -1,
                                     dst_zoid_num,
                                     comm->me,
                                     dep,
                                     MPI_Wtime(),
                                     false,
+                                    starting_timestep,
                                 });
                                 timestamp_mutex.unlock();
                                 cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
@@ -3267,7 +3289,7 @@ void Verlet::run_stencil_md_many_cuts_proc_to_proc(int starting_timestep, double
                     }
                 }
 
-                cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
+                cilk_spawn stencilMD->SEND_DATA_PROC_TO_PROC<curr_dt>(starting_timestep, DEFAULT_PIPELINE_STAGE, dep, send_r_proc_to_proc[dep], stream_manager);
             }
 
             progress_thread_done.store(true, std::memory_order_release);

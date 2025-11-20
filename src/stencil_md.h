@@ -72,6 +72,7 @@ typedef struct {
     int dep;
     double timestamp;
     bool send;
+    int starting_timestep;
 } record;
 
 inline std::mutex timestamp_mutex;
@@ -8999,7 +9000,7 @@ public:
     }
 
     template <bool curr_dt>
-    void SEND_DATA_PROC_TO_PROC(int pipeline_stage, int send_dep,
+    void SEND_DATA_PROC_TO_PROC(int starting_timestep, int pipeline_stage, int send_dep,
                                 std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
         auto comm_begin = MPI_Wtime();
         auto w = __cilkrts_get_worker_number();
@@ -9069,6 +9070,7 @@ public:
                     send_dep,
                     MPI_Wtime(),
                     true,
+                    starting_timestep,
                 });
                 timestamp_mutex.unlock();
 
@@ -9081,7 +9083,7 @@ public:
     }
 
     template <bool curr_dt>
-    void PACK_DATA_WITH_PROC_TO_PROC(queue_info& zoid, int send_dep, int start_timestep, int end_timestep, int pipeline_stage,
+    void PACK_DATA_WITH_PROC_TO_PROC(int starting_timestep, queue_info& zoid, int send_dep, int start_timestep, int end_timestep, int pipeline_stage,
         MPIX_Stream_Manager* stream_manager, std::vector<MPI_Request>& send_r_zoid_to_zoid) {
 
         assert(pipeline_stage == DEFAULT_PIPELINE_STAGE);
@@ -9116,7 +9118,7 @@ public:
                 GROW_SEND_ZOID_TO_ZOID_MANY_CUTS(zoid.num, i, zoid_ndoubles_send, pipeline_stage);
             }
 
-            cilk_spawn [this](int dep, queue_info& zoid, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
+            cilk_spawn [this](int starting_timestep, int dep, queue_info& zoid, double zoid_ndoubles_send, int i, int send_zoid_num, int start_timestep, int end_timestep,
                 int pipeline_stage, MPIX_Stream_Manager* manager, int send_request_idx, std::vector<MPI_Request>& r) noexcept {
 
                 int zoid_num = zoid.num;
@@ -9154,13 +9156,14 @@ public:
                         dep,
                         MPI_Wtime(),
                         true,
+                        starting_timestep,
                     });
                     timestamp_mutex.unlock();
                 }
 
                 auto comm_end = MPI_Wtime();
                 s_comm_time[w] += (comm_end - comm_begin);
-            }(send_dep, zoid, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
+            }(starting_timestep, send_dep, zoid, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
         }
 
         for (int i = 0; i < procs_to_send_to.size(); i++) {
