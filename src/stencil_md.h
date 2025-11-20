@@ -64,6 +64,19 @@ inline double s_comm_time[24] = {0};
 inline cilk::opadd_reducer<int64_t> total_num_pairs = 0;
 inline cilk::opadd_reducer<double> total_time = 0;
 
+typedef struct {
+    int send_zoid;
+    int send_proc;
+    int recv_zoid;
+    int recv_proc;
+    int dep;
+    double timestamp;
+    bool send;
+} record;
+
+std::mutex timestamp_mutex;
+std::vector<record> timestamp_records;
+
 // MinCostFlow class implementing a simple min-cost max-flow using SPFA.
 struct MinCostFlow {
     // Edge structure for the flow graph.
@@ -9047,6 +9060,18 @@ public:
                     MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
 
+                timestamp_mutex.lock();
+                timestamp_records.push_back({
+                    -1,
+                    comm->me,
+                    -1,
+                    proc,
+                    send_dep,
+                    MPI_Wtime(),
+                    true,
+                });
+                timestamp_mutex.unlock();
+
                 total_num_procs++;
             }
         }
@@ -9119,6 +9144,18 @@ public:
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
                         all_comms[dst_stream_idx], &r[send_request_idx]);
+
+                    timestamp_mutex.lock();
+                    timestamp_records.push_back({
+                        zoid.num,
+                        -1,
+                        send_zoid_num,
+                        send_zoid_num % comm->nprocs,
+                        dep,
+                        MPI_Wtime(),
+                        true,
+                    });
+                    timestamp_mutex.unlock();
                 }
 
                 auto comm_end = MPI_Wtime();

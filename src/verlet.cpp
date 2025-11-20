@@ -91,6 +91,73 @@ static double other_time = 0;
 static int64_t lammps_total_num_pairs = 0;
 static double lammps_total_pair_duration = 0;
 
+void gather_and_analyze_timestamp_records(std::vector<record>& records) {
+    int world_size;
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    std::vector<int> counts(world_size, 0);
+    std::vector<int> displacements(world_size, 0);
+
+    int my_count = records.size();
+    MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+    int total_size = 0;
+    for (int proc = 0; proc < world_size; proc++) {
+        total_size += counts[proc];
+    }
+
+    displacements[0] = 0;
+    for (int proc = 1; proc < world_size; proc++) {
+        displacements[proc] = displacements[proc - 1] + counts[proc - 1];
+    }
+
+    MPI_Datatype record_type;
+    const int nitems = 7;
+    int blocklengths[7] = {1, 1, 1, 1, 1, 1, 1};
+
+    // 2. setup the types
+    // Note: MPI_C_BOOL is safe for C++ bools in modern MPI implementations (MPI-3+)
+    MPI_Datatype types[7] = {
+        MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, 
+        MPI_DOUBLE, 
+        MPI_C_BOOL 
+    };
+
+    // 3. setup the displacements (offsets)
+    // We use offsetof to handle compiler padding automatically
+    MPI_Aint offsets[7];
+    offsets[0] = offsetof(record, send_zoid);
+    offsets[1] = offsetof(record, send_proc);
+    offsets[2] = offsetof(record, recv_zoid);
+    offsets[3] = offsetof(record, recv_proc);
+    offsets[4] = offsetof(record, dep);
+    offsets[5] = offsetof(record, timestamp);
+    offsets[6] = offsetof(record, send);
+
+    // 4. Create the struct type
+    MPI_Datatype tmp_type;
+    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &tmp_type);
+
+    // 5. Resize the type (CRITICAL STEP)
+    // This ensures that if you send an array of records, MPI respects 
+    // the compiler's padding at the END of the struct.
+    MPI_Type_create_resized(tmp_type, 0, sizeof(record), mpi_record_type);
+
+    // 6. Commit the type so it can be used
+    MPI_Type_commit(&record_type);
+
+    std::vector<record> all_records(total_size);
+
+    MPI_Allgatherv(records.data(), counts[rank], record_type, all_records.data(),
+                    counts.data(), displacements.data(), record_type, MPI_COMM_WORLD);
+
+    std::cout << "len my records: " << records.size() << " all records size: " << all_records.size() << std::endl;
+
+    // Free the temporary type
+    MPI_Type_free(&tmp_type);
+}
+
 
 /* ---------------------------------------------------------------------- */
 
@@ -1460,6 +1527,9 @@ void Verlet::run(int n) {
             delete[] test_v[i];
         }
     }
+
+
+    gather_and_analyze_timestamp_records(timestamp_records);
 }
 
 template <bool curr_dt>
@@ -1953,6 +2023,17 @@ void Verlet::unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_tim
             std::stringstream s1;
             s1 << std::setprecision (15) << "zoid: " << zoid.num << " at dep: " << dep << " last msg is proc to proc from: " << proc << " timestamp: " << MPI_Wtime() << std::endl;
             std::cout << s1.str();
+            timestamp_mutex.lock();
+            timestamp_records.push_back({
+                -1,
+                proc,
+                zoid.num,
+                comm->me,
+                dep,
+                MPI_Wtime(),
+                false,
+            });
+            timestamp_mutex.unlock();
         }
         cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, start_timestep, end_timestep,
             zoid_recv_neighbor_counters, dep_counters, 
@@ -2926,6 +3007,17 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                     s1 << std::setprecision (15)  << "zoid: " << dst_zoid_num << " at dep: " << dep << " last msg is zoid to zoid from: " << src_zoid_num << " timestep: " << MPI_Wtime() << std::endl;
                                     std::cout << s1.str();
                                 }
+                                timestamp_mutex.lock();
+                                timestamp_records.push_back({
+                                    src_zoid_num,
+                                    src_zoid_num % comm->nprocs,
+                                    dst_zoid_num,
+                                    comm->me,
+                                    dep,
+                                    MPI_Wtime(),
+                                    false,
+                                });
+                                timestamp_mutex.unlock();
                                 cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
                                 zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
                                 test_f, test_x, test_v, 
