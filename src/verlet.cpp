@@ -1951,7 +1951,7 @@ void Verlet::unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_tim
     if (counter.load(std::memory_order_relaxed) == 0 && !claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
         if (comm->me == 0) {
             std::stringstream s1;
-            s1 << "zoid: " << zoid.num << " at dep: " << dep << " last msg is proc to proc from: " << proc << " timestamp: " << MPI_Wtime() << std::endl;
+            s1 << std::setprecision (15) << "zoid: " << zoid.num << " at dep: " << dep << " last msg is proc to proc from: " << proc << " timestamp: " << MPI_Wtime() << std::endl;
             std::cout << s1.str();
         }
         cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, start_timestep, end_timestep,
@@ -2923,7 +2923,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                             && !claimed.test_and_set(std::memory_order_relaxed)) {
                                 if (comm->me == 0) {
                                     std::stringstream s1;
-                                    s1 << "zoid: " << dst_zoid_num << " at dep: " << dep << " last msg is zoid to zoid from: " << src_zoid_num << " timestep: " << MPI_Wtime() << std::endl;
+                                    s1 << std::setprecision (15)  << "zoid: " << dst_zoid_num << " at dep: " << dep << " last msg is zoid to zoid from: " << src_zoid_num << " timestep: " << MPI_Wtime() << std::endl;
                                     std::cout << s1.str();
                                 }
                                 cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
