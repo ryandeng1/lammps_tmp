@@ -114,7 +114,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
     MPI_Datatype record_type;
     constexpr int nitems = 10;
-    int blocklengths[nitems] = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+    int blocklengths[nitems] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
     // 2. setup the types
     // Note: MPI_C_BOOL is safe for C++ bools in modern MPI implementations (MPI-3+)
@@ -160,11 +160,15 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
     // Free the temporary type
     MPI_Type_free(&tmp_type);
+    MPI_Type_free(&record_type);
 
     if (rank == 0) {
         std::map<int, std::map<bool, std::vector<record>>> starting_timestep_to_records;
-        for (const auto& record : all_records) {
-            starting_timestep_to_records[record.starting_timestep][record.curr_dt].push_back(record);
+        for (const auto& r : all_records) {
+            if (r.send && r.proc_to_proc) {
+                std::cout << "send proc to proc" << std::endl;
+            }
+            starting_timestep_to_records[r.starting_timestep][r.curr_dt].push_back(r);
         }
 
         for (auto& [starting_timestep, curr_dt_to_records] : starting_timestep_to_records) {
@@ -179,10 +183,12 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     }
                 }
 
-                std::cout << "last receiving is zoid: " << last.recv_zoid << " dep: " << last.dep << " recv from proc: " << last.send_proc << " recv from zoid: " << last.send_zoid << " num records: " << records.size() << std::endl;
+                std::cout << "last receiving is zoid: " << last.recv_zoid << " dep: " << last.dep << " recv from proc: " << last.send_proc << " recv from zoid: " << last.send_zoid << " num records: " << records.size() << " proc to proc: " << last.proc_to_proc << std::endl;
 
                 for (auto& r : records) {
-                    std::cout << "record: " << r.send << " " << r.proc_to_proc << " " << r.send_proc << " " << r.recv_proc << std::endl;
+                    if (r.send) {
+                        std::cout << "record: " << r.send << " " << r.proc_to_proc << " " << r.send_proc << " " << r.recv_proc << std::endl;
+                    }
                     if (last.proc_to_proc && r.send && r.send_proc == last.send_proc && r.recv_proc == last.recv_proc) {
                         std::cout << "PROC TO PROC sender proc: " << " proc: " << r.send_proc << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
                     }
