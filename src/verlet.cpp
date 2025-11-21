@@ -355,7 +355,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
 
                     if (!found) {
                         if (r.dep != 0) {
-                            std::cout << "still couldn't find matching receive for a send at dep: " << r.dep << " proc to proc? " << r.proc_to_proc << std::endl;
+                            std::cout << "still couldn't find matching receive for a send at dep: " << r.dep 
+                                << " proc to proc? " << r.proc_to_proc << " send zoids: " << r.send_zoid << " " << r.recv_zoid << std::endl;
                         }
                         continue;
                     }
