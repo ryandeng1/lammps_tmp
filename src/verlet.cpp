@@ -228,10 +228,11 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
                 struct NodeKey {
                     bool proc_node;
-                    int id;
+                    int send_id;
+                    int recv_id;
                     int send_dep;
                     bool operator==(const NodeKey& other) const noexcept {
-                        return proc_node == other.proc_node && id == other.id && send_dep == other.send_dep;
+                        return proc_node == other.proc_node && send_id == other.send_id && send_dep == other.send_dep;
                     }
                 };
 
@@ -246,7 +247,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
                 struct NodeKeyHasher {
                     std::size_t operator()(const NodeKey& key) const noexcept {
-                        std::size_t h1 = std::hash<int>()(key.id);
+                        std::size_t h1 = std::hash<int>()(key.send_id);
                         std::size_t h2 = std::hash<int>()(key.proc_node);
                         return h1 ^ (h2 << 1);
                     }
@@ -265,16 +266,16 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
                 auto make_sender_node_key = [](const record& r) -> NodeKey {
                     if (r.proc_to_proc) {
-                        return {true, r.send_proc, r.dep};
+                        return {true, r.send_proc, r.recv_proc, r.send_dep};
                     }
-                    return {false, r.send_zoid, r.dep};
+                    return {false, r.send_zoid, r.recv_zoid, r.send_dep};
                 };
 
                 auto make_receiver_node_key = [](const record& r) -> NodeKey {
                     if (r.proc_to_proc) {
-                        return {true, r.recv_proc, r.dep};
+                        return {true, r.send_proc, r.recv_proc, r.send_dep};
                     }
-                    return {false, r.recv_zoid, r.dep};
+                    return {false, r.send_zoid, r.recv_zoid, r.send_dep};
                 };
 
                 // Build send buckets keyed by message endpoints.
@@ -333,6 +334,10 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     auto it = receives_by_node.find(node_key);
                     if (it == receives_by_node.end()) {
                         std::cout << "couldn't find receive for send: " << r.dep << std::endl;
+                        bool found = false;
+                        for (auto& r2 : receives_by_node) {
+
+                        }
                         continue;
                     }
                     const auto& vec = it->second;
