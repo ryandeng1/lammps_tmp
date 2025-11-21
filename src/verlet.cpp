@@ -165,10 +165,12 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     if (rank == 0) {
         std::map<int, std::map<bool, std::vector<record>>> starting_timestep_to_records;
         for (const auto& r : all_records) {
-            if (r.send && r.proc_to_proc) {
-                std::cout << "send proc to proc" << std::endl;
-            }
             starting_timestep_to_records[r.starting_timestep][r.curr_dt].push_back(r);
+        }
+
+        std::map<int, std::map<bool, std::vector<record>>> my_timestep_to_records;
+        for (const auto& r : timestamp_records) {
+            my_timestep_to_records[r.starting_timestep][r.curr_dt].push_back(r);
         }
 
         for (auto& [starting_timestep, curr_dt_to_records] : starting_timestep_to_records) {
@@ -176,21 +178,21 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                 std::cout << "starting timestep: " << starting_timestep << " curr_dt: " << curr_dt << std::endl;
                 double last_time = -1;
                 record last;
-                for (auto& r : timestamp_records) {
+                for (auto& r : my_timestep_to_records[starting_timestep][curr_dt]) {
                     if (!r.send && r.timestamp > last_time) {
                         last_time = r.timestamp;
                         last = r;
                     }
                 }
 
-                std::cout << "last receiving is zoid: " << last.recv_zoid << " dep: " << last.dep << " recv from proc: " << last.send_proc << " recv from zoid: " << last.send_zoid << " num records: " << records.size() << " proc to proc: " << last.proc_to_proc << std::endl;
+                std::cout << "last receiving is zoid: " << last.recv_zoid << " dep: " << last.dep << " recv from proc: " << last.send_proc << " recv from zoid: " << last.send_zoid << " num records: " << records.size() << " proc to proc: " << last.proc_to_proc << " curr dt: " << curr_dt << std::endl;
 
                 for (auto& r : records) {
-                    if (last.proc_to_proc && r.send && r.send_proc == last.send_proc && r.recv_proc == last.recv_proc) {
+                    if (last.proc_to_proc && r.send && r.curr_dt == last.curr_dt && r.send_proc == last.send_proc && r.recv_proc == last.recv_proc) {
                         std::cout << "PROC TO PROC sender proc: " << " proc: " << r.send_proc << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
                     }
 
-                    if (!last.proc_to_proc && r.send && r.send_zoid == last.send_zoid && r.recv_zoid == last.recv_zoid) {
+                    if (!last.proc_to_proc && r.send && r.curr_dt == last.curr_dt && r.send_zoid == last.send_zoid && r.recv_zoid == last.recv_zoid) {
                         std::cout << "ZOID TO ZOID sender zoid: " << r.send_zoid << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
                     }
                 }
