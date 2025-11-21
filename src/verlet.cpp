@@ -316,12 +316,16 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
                 std::cout << "Trace path (newest receive to earliest dependency):" << std::endl;
                 int current_receive = last_receive_idx_global;
+
+                double total_duration = 0;
+
                 while (current_receive != -1) {
                     const auto& recv_record = records[current_receive];
                     std::cout << "RECV -> dep " << recv_record.dep << " recv_proc " << recv_record.recv_proc
                               << " recv_zoid " << recv_record.recv_zoid << " from proc " << recv_record.send_proc
                               << " from zoid " << recv_record.send_zoid << " timestamp " << recv_record.timestamp
-                              << " proc_to_proc " << recv_record.proc_to_proc << std::endl;
+                              << " proc_to_proc " << recv_record.proc_to_proc 
+                              << std::endl;
 
                     int send_idx = recv_to_send[current_receive];
                     if (send_idx == -1) {
@@ -329,13 +333,21 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     }
 
                     const auto& send_record = records[send_idx];
+
+                    double duration = (recv_record.timestamp - send_record.timestamp) * 1e6;
                     std::cout << "SEND -> dep " << send_record.dep << " send_proc " << send_record.send_proc
                               << " send_zoid " << send_record.send_zoid << " to proc " << send_record.recv_proc
                               << " to zoid " << send_record.recv_zoid << " timestamp " << send_record.timestamp
-                              << " proc_to_proc " << send_record.proc_to_proc << std::endl;
+                              << " proc_to_proc " << send_record.proc_to_proc 
+                              << " duration: " << duration
+                              << std::endl;
+
+                    total_duration += duration;
 
                     current_receive = send_parent[send_idx];
                 }
+
+                std::cout << "total duration: " << total_duration << std::endl;
             }
         }
     }
