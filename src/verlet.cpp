@@ -112,7 +112,6 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
         displacements[proc] = displacements[proc - 1] + counts[proc - 1];
     }
 
-    MPI_Datatype record_type;
     constexpr int nitems = 10;
     int blocklengths[nitems] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
@@ -142,13 +141,13 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     offsets[9] = offsetof(record, proc_to_proc);
 
     // 4. Create the struct type
-    MPI_Datatype tmp_type;
-    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &tmp_type);
+    MPI_Datatype record_type;
+    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &record_type);
 
-    // 5. Resize the type (CRITICAL STEP)
-    // This ensures that if you send an array of records, MPI respects 
-    // the compiler's padding at the END of the struct.
-    MPI_Type_create_resized(tmp_type, 0, sizeof(record), &record_type);
+    // // 5. Resize the type (CRITICAL STEP)
+    // // This ensures that if you send an array of records, MPI respects 
+    // // the compiler's padding at the END of the struct.
+    // MPI_Type_create_resized(tmp_type, 0, sizeof(record), &record_type);
 
     // 6. Commit the type so it can be used
     MPI_Type_commit(&record_type);
@@ -157,10 +156,6 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
     MPI_Allgatherv(records.data(), counts[rank], record_type, all_records.data(),
                     counts.data(), displacements.data(), record_type, MPI_COMM_WORLD);
-
-    // Free the temporary type
-    MPI_Type_free(&tmp_type);
-    MPI_Type_free(&record_type);
 
     if (rank == 0) {
         std::map<int, std::map<bool, std::vector<record>>> starting_timestep_to_records;
@@ -199,6 +194,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
             }
         }
     }
+
+    MPI_Type_free(&record_type);
 }
 
 
