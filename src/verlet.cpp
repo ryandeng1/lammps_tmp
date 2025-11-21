@@ -92,7 +92,7 @@ static double other_time = 0;
 static int64_t lammps_total_num_pairs = 0;
 static double lammps_total_pair_duration = 0;
 
-void gather_and_analyze_timestamp_records(std::vector<record>& records) {
+void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
     int world_size;
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -100,7 +100,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     std::vector<int> counts(world_size, 0);
     std::vector<int> displacements(world_size, 0);
 
-    int my_count = records.size();
+    int my_count = my_records.size();
     MPI_Allgather(&my_count, 1, MPI_INT, counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
     int total_size = 0;
@@ -158,7 +158,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
     std::vector<record> all_records(total_size);
 
-    MPI_Allgatherv(records.data(), counts[rank], record_type, all_records.data(),
+    MPI_Allgatherv(my_records.data(), counts[rank], record_type, all_records.data(),
                     counts.data(), displacements.data(), record_type, MPI_COMM_WORLD);
 
     if (rank == 0) {
@@ -273,7 +273,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
                 auto make_receiver_node_key = [](const record& r) -> NodeKey {
                     if (r.proc_to_proc) {
-                        return {true, r.send_proc, r.recv_proc, r.send_dep};
+                        return {true, r.send_proc, r.recv_zoid, r.send_dep};
                     }
                     return {false, r.send_zoid, r.recv_zoid, r.send_dep};
                 };
@@ -333,10 +333,16 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     auto node_key = make_sender_node_key(r);
                     auto it = receives_by_node.find(node_key);
                     if (it == receives_by_node.end()) {
-                        std::cout << "couldn't find receive for send: " << r.dep << std::endl;
                         bool found = false;
-                        for (auto& r2 : receives_by_node) {
-
+                        for (auto& [k, v] : receives_by_node) {
+                            if (r.send_zoid == k.recv_id) {
+                                found = true;
+                                it = receives_by_node.find(k);
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            std::cout << "still couldn't find matching receive for a send at dep: " << r.dep << std::endl;
                         }
                         continue;
                     }
