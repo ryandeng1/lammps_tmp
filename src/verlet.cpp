@@ -240,8 +240,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     return records[a].timestamp < records[b].timestamp;
                 });
 
-                std::unordered_map<MessageKey, std::vector<int>> pending_sends;
-                std::unordered_map<NodeKey, int> last_receive_for_node;
+                std::map<MessageKey, std::vector<int>> pending_sends;
+                std::map<NodeKey, int> last_receive_for_node;
 
                 auto make_msg_key = [](const record& r) -> MessageKey {
                     if (r.proc_to_proc) {
