@@ -298,6 +298,40 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                 for (int idx = 0; idx < records.size(); idx++) {
                     const auto& r = records[idx];
                     if (r.send) continue;
+
+                    bool found = false;
+                    int found_idx = -1;
+                    for (int idx2 = 0; idx2 < records.size(); idx2++) {
+                        if (idx == idx2 || !records[idx2].send) {
+                            continue;
+                        }
+
+                        auto& r2 = records[idx2];
+
+                        if (!r.proc_to_proc && r.recv_zoid == r2.send_zoid) {
+                            found = true;
+                            found_idx = idx2;
+                            break;
+                        }
+
+                        if (r.proc_to_proc && r.recv_proc == r2.send_proc && r.send_dep == r2.send_dep) {
+                            found = true;
+                            found_idx = idx2;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        std::cout << "still couldn't find matching send for a receive at dep: " << r.dep 
+                            << " proc to proc? " << r.proc_to_proc << std::endl;
+                        continue;
+                    }
+
+                    int send_idx = found_idx;
+                    recv_to_send[idx] = send_idx;
+                    send_to_recv[send_idx] = idx;
+
+                    /*
                     auto key = make_msg_key(r);
                     auto sit = sends_by_key.find(key);
                     if (sit == sends_by_key.end()) {
@@ -311,6 +345,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                     cursor++;
                     recv_to_send[idx] = send_idx;
                     send_to_recv[send_idx] = idx;
+                    */
                 }
 
                 // // Build receive lists per node for parent lookup.
