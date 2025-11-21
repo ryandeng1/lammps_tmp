@@ -313,39 +313,61 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                     send_to_recv[send_idx] = idx;
                 }
 
-                // Build receive lists per node for parent lookup.
-                std::unordered_map<NodeKey, std::vector<int>, NodeKeyHasher> receives_by_node;
-                for (int idx = 0; idx < records.size(); idx++) {
-                    if (!records[idx].send) {
-                        receives_by_node[make_receiver_node_key(records[idx])].push_back(idx);
-                    }
-                }
-                for (auto& [node, vec] : receives_by_node) {
-                    std::sort(vec.begin(), vec.end(), [&records](int a, int b) {
-                        return records[a].timestamp < records[b].timestamp;
-                    });
-                }
+                // // Build receive lists per node for parent lookup.
+                // std::unordered_map<NodeKey, std::vector<int>, NodeKeyHasher> receives_by_node;
+                // for (int idx = 0; idx < records.size(); idx++) {
+                //     if (!records[idx].send) {
+                //         receives_by_node[make_receiver_node_key(records[idx])].push_back(idx);
+                //     }
+                // }
+                // for (auto& [node, vec] : receives_by_node) {
+                //     std::sort(vec.begin(), vec.end(), [&records](int a, int b) {
+                //         return records[a].timestamp < records[b].timestamp;
+                //     });
+                // }
 
                 // For each send, pick the most recent receive at the sender node with timestamp <= send.timestamp.
                 for (int idx = 0; idx < records.size(); idx++) {
                     const auto& r = records[idx];
                     if (!r.send) continue;
                     auto node_key = make_sender_node_key(r);
-                    auto it = receives_by_node.find(node_key);
-                    if (it == receives_by_node.end()) {
-                        bool found = false;
-                        for (auto& [k, v] : receives_by_node) {
-                            if (r.send_zoid == k.recv_id) {
-                                found = true;
-                                it = receives_by_node.find(k);
-                                break;
-                            }
+                    bool found = false;
+                    int found_idx = -1;
+                    for (int idx2 = 0; idx2 < records.size(); idx2++) {
+                        if (idx == idx2 || records[idx2].send) {
+                            continue;
                         }
-                        if (!found) {
-                            std::cout << "still couldn't find matching receive for a send at dep: " << r.dep << std::endl;
+
+                        auto& r2 = records[idx2];
+
+                        if (r.send_zoid == r2.recv_zoid) {
+                            found = true;
+                            found_idx = idx2;
+                            break;
                         }
+                    }
+
+                    if (!found) {
+                        std::cout << "still couldn't find matching receive for a send at dep: " << r.dep << std::endl;
                         continue;
                     }
+
+                    // auto it = receives_by_node.find(node_key);
+                    // if (it == receives_by_node.end()) {
+                    //     bool found = false;
+                    //     for (auto& [k, v] : receives_by_node) {
+                    //         if (r.send_zoid == k.recv_id) {
+                    //             found = true;
+                    //             it = receives_by_node.find(k);
+                    //             break;
+                    //         }
+                    //     }
+                    //     if (!found) {
+                    //         std::cout << "still couldn't find matching receive for a send at dep: " << r.dep << std::endl;
+                    //     }
+                    //     continue;
+                    // }
+                    /*
                     const auto& vec = it->second;
                     auto it_upper = std::upper_bound(vec.begin(), vec.end(), r.timestamp,
                                                      [&records](double ts, int recv_idx) {
@@ -353,7 +375,9 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                                                      });
                     if (it_upper == vec.begin()) continue;
                     --it_upper;
-                    send_parent[idx] = *it_upper;
+                    */
+                    // send_parent[idx] = *it_upper;
+                    send_parent[idx] = found_idx;
                 }
 
                 int current_receive = last_receive_idx_global;
