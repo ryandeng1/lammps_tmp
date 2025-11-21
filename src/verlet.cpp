@@ -194,6 +194,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                 record last = my_records[last_idx];
 
                 int last_receive_idx_global = -1;
+                double best_time = -std::numeric_limits<double>::infinity();
                 for (int i = 0; i < records.size(); i++) {
                     const auto& candidate = records[i];
                     if (candidate.send) continue;
@@ -203,9 +204,10 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     if (candidate.send_proc != last.send_proc) continue;
                     if (candidate.send_zoid != last.send_zoid) continue;
                     if (candidate.starting_timestep != last.starting_timestep) continue;
-                    // if (std::fabs(candidate.timestamp - last.timestamp) > 1e-15) continue;
-                    last_receive_idx_global = i;
-                    break;
+                    if (candidate.timestamp > best_time) {
+                        best_time = candidate.timestamp;
+                        last_receive_idx_global = i;
+                    }
                 }
 
                 if (last_receive_idx_global == -1) {
@@ -254,15 +256,6 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                 std::vector<int> recv_to_send(records.size(), -1);
                 std::vector<int> send_to_recv(records.size(), -1);
 
-                std::vector<int> order(records.size());
-                std::iota(order.begin(), order.end(), 0);
-                std::sort(order.begin(), order.end(), [&records](int a, int b) {
-                    return records[a].timestamp < records[b].timestamp;
-                });
-
-                std::unordered_map<MessageKey, std::vector<int>, MessageKeyHasher> pending_sends;
-                std::unordered_map<NodeKey, int, NodeKeyHasher> last_receive_for_node;
-
                 auto make_msg_key = [](const record& r) -> MessageKey {
                     if (r.proc_to_proc) {
                         return {true, r.send_proc, r.recv_proc};
@@ -272,40 +265,84 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
                 auto make_sender_node_key = [](const record& r) -> NodeKey {
                     if (r.proc_to_proc) {
-                        return {true, r.send_proc, r.send_dep};
+                        return {true, r.send_proc, r.dep};
                     }
-                    return {false, r.send_zoid, r.send_dep};
+                    return {false, r.send_zoid, r.dep};
                 };
 
                 auto make_receiver_node_key = [](const record& r) -> NodeKey {
                     if (r.proc_to_proc) {
-                        return {true, r.recv_proc, r.send_dep};
+                        return {true, r.recv_proc, r.dep};
                     }
-                    return {false, r.recv_zoid, r.send_dep};
+                    return {false, r.recv_zoid, r.dep};
                 };
 
-                for (int idx : order) {
-                    auto& r = records[idx];
-                    if (r.send) {
-                        auto node_key = make_sender_node_key(r);
-                        auto it = last_receive_for_node.find(node_key);
-                        if (it != last_receive_for_node.end()) {
-                            send_parent[idx] = it->second;
-                        }
-                        auto key = make_msg_key(r);
-                        pending_sends[key].push_back(idx);
-                    } else {
-                        auto key = make_msg_key(r);
-                        auto it = pending_sends.find(key);
-                        if (it != pending_sends.end() && !it->second.empty()) {
-                            int send_idx = it->second.back();
-                            it->second.pop_back();
-                            recv_to_send[idx] = send_idx;
-                            send_to_recv[send_idx] = idx;
-                        }
-                        auto node_key = make_receiver_node_key(r);
-                        last_receive_for_node[node_key] = idx;
+                // Build send buckets keyed by message endpoints.
+                std::unordered_map<MessageKey, std::vector<int>, MessageKeyHasher> sends_by_key;
+                for (int idx = 0; idx < records.size(); idx++) {
+                    if (records[idx].send) {
+                        sends_by_key[make_msg_key(records[idx])].push_back(idx);
                     }
+                }
+
+                // Sort sends in each bucket by timestamp to preserve causal order when possible.
+                for (auto& [key, vec] : sends_by_key) {
+                    std::sort(vec.begin(), vec.end(), [&records](int a, int b) {
+                        return records[a].timestamp < records[b].timestamp;
+                    });
+                }
+
+                // Pair each receive with the next send in its bucket.
+                std::unordered_map<MessageKey, std::size_t, MessageKeyHasher> send_cursors;
+                for (int idx = 0; idx < records.size(); idx++) {
+                    const auto& r = records[idx];
+                    if (r.send) continue;
+                    auto key = make_msg_key(r);
+                    auto sit = sends_by_key.find(key);
+                    if (sit == sends_by_key.end()) {
+                        std::cout << "couldn't find send message for dep: " << r.dep << std::endl;
+                        continue;
+                    }
+                    auto& vec = sit->second;
+                    auto& cursor = send_cursors[key];
+                    if (cursor >= vec.size()) continue;
+                    int send_idx = vec[cursor];
+                    cursor++;
+                    recv_to_send[idx] = send_idx;
+                    send_to_recv[send_idx] = idx;
+                }
+
+                // Build receive lists per node for parent lookup.
+                std::unordered_map<NodeKey, std::vector<int>, NodeKeyHasher> receives_by_node;
+                for (int idx = 0; idx < records.size(); idx++) {
+                    if (!records[idx].send) {
+                        receives_by_node[make_receiver_node_key(records[idx])].push_back(idx);
+                    }
+                }
+                for (auto& [node, vec] : receives_by_node) {
+                    std::sort(vec.begin(), vec.end(), [&records](int a, int b) {
+                        return records[a].timestamp < records[b].timestamp;
+                    });
+                }
+
+                // For each send, pick the most recent receive at the sender node with timestamp <= send.timestamp.
+                for (int idx = 0; idx < records.size(); idx++) {
+                    const auto& r = records[idx];
+                    if (!r.send) continue;
+                    auto node_key = make_sender_node_key(r);
+                    auto it = receives_by_node.find(node_key);
+                    if (it == receives_by_node.end()) {
+                        std::cout << "couldn't find receive for send: " << r.dep << std::endl;
+                        continue;
+                    }
+                    const auto& vec = it->second;
+                    auto it_upper = std::upper_bound(vec.begin(), vec.end(), r.timestamp,
+                                                     [&records](double ts, int recv_idx) {
+                                                         return ts < records[recv_idx].timestamp;
+                                                     });
+                    if (it_upper == vec.begin()) continue;
+                    --it_upper;
+                    send_parent[idx] = *it_upper;
                 }
 
                 int current_receive = last_receive_idx_global;
