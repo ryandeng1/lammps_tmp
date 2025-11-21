@@ -113,21 +113,22 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     }
 
     MPI_Datatype record_type;
-    const int nitems = 8;
-    int blocklengths[8] = {1, 1, 1, 1, 1, 1, 1, 1};
+    constexpr int nitems = 9;
+    int blocklengths[nitems] = {1, 1, 1, 1, 1, 1, 1, 1};
 
     // 2. setup the types
     // Note: MPI_C_BOOL is safe for C++ bools in modern MPI implementations (MPI-3+)
-    MPI_Datatype types[8] = {
+    MPI_Datatype types[nitems] = {
         MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, 
         MPI_DOUBLE, 
         MPI_C_BOOL,
         MPI_INT,
+        MPI_C_BOOL,
     };
 
     // 3. setup the displacements (offsets)
     // We use offsetof to handle compiler padding automatically
-    MPI_Aint offsets[8];
+    MPI_Aint offsets[nitems];
     offsets[0] = offsetof(record, send_zoid);
     offsets[1] = offsetof(record, send_proc);
     offsets[2] = offsetof(record, recv_zoid);
@@ -136,6 +137,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     offsets[5] = offsetof(record, timestamp);
     offsets[6] = offsetof(record, send);
     offsets[7] = offsetof(record, starting_timestep);
+    offsets[8] = offsetof(record, curr_dt);
 
     // 4. Create the struct type
     MPI_Datatype tmp_type;
@@ -158,23 +160,25 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     MPI_Type_free(&tmp_type);
 
     if (rank == 0) {
-        std::map<int, std::vector<record>> starting_timestep_to_records;
+        std::map<int, std::map<bool, std::vector<record>>> starting_timestep_to_records;
         for (const auto& record : all_records) {
-            starting_timestep_to_records[record.starting_timestep].push_back(record);
+            starting_timestep_to_records[record.starting_timestep][record.curr_dt].push_back(record);
         }
 
-        for (auto& [starting_timestep, records] : starting_timestep_to_records) {
+        for (auto& [starting_timestep, curr_dt_to_records] : starting_timestep_to_records) {
             std::cout << "starting timestep: " << starting_timestep << std::endl;
-            double last_time = -1;
-            record tmp;
-            for (auto& r : records) {
-                if (!r.send && r.timestamp > last_time) {
-                    last_time = r.timestamp;
-                    tmp = r;
+            for (auto& [curr_dt, records] : curr_dt_to_records) {
+                double last_time = -1;
+                record tmp;
+                for (auto& r : records) {
+                    if (!r.send && r.timestamp > last_time) {
+                        last_time = r.timestamp;
+                        tmp = r;
+                    }
                 }
-            }
 
-            std::cout << "last receiving is zoid: " << tmp.recv_zoid << " dep: " << tmp.dep << " recv from proc: " << tmp.send_proc << " recv from zoid: " << tmp.send_zoid << std::endl;
+                std::cout << "last receiving is zoid: " << tmp.recv_zoid << " dep: " << tmp.dep << " recv from proc: " << tmp.send_proc << " recv from zoid: " << tmp.send_zoid << std::endl;
+            }
         }
     }
 }
@@ -2054,6 +2058,7 @@ void Verlet::unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_tim
                 MPI_Wtime(),
                 false,
                 starting_timestep,
+                curr_dt,
             });
             timestamp_mutex.unlock();
         }
@@ -3039,6 +3044,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                     MPI_Wtime(),
                                     false,
                                     starting_timestep,
+                                    curr_dt,
                                 });
                                 timestamp_mutex.unlock();
                                 cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,

@@ -73,6 +73,7 @@ typedef struct {
     double timestamp;
     bool send;
     int starting_timestep;
+    bool curr_dt;
 } record;
 
 inline std::mutex timestamp_mutex;
@@ -9071,6 +9072,7 @@ public:
                     MPI_Wtime(),
                     true,
                     starting_timestep,
+                    curr_dt,
                 });
                 timestamp_mutex.unlock();
 
@@ -9157,6 +9159,7 @@ public:
                         MPI_Wtime(),
                         true,
                         starting_timestep,
+                        curr_dt,
                     });
                     timestamp_mutex.unlock();
                 }
