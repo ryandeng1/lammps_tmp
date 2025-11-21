@@ -308,13 +308,13 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
 
                         auto& r2 = records[idx2];
 
-                        if (!r.proc_to_proc && r.recv_zoid == r2.send_zoid) {
+                        if (!r.proc_to_proc && r.recv_zoid == r2.recv_zoid) {
                             found = true;
                             found_idx = idx2;
                             break;
                         }
 
-                        if (r.proc_to_proc && r.recv_proc == r2.send_proc && r.send_dep == r2.send_dep) {
+                        if (r.proc_to_proc && r.recv_proc == r2.recv_proc && r.send_dep == r2.send_dep) {
                             found = true;
                             found_idx = idx2;
                             break;
