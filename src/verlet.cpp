@@ -142,13 +142,14 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     offsets[9] = offsetof(record, proc_to_proc);
 
     // 4. Create the struct type
+    MPI_Datatype tmp_type;
     MPI_Datatype record_type;
-    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &record_type);
+    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &tmp_type);
 
-    // // 5. Resize the type (CRITICAL STEP)
-    // // This ensures that if you send an array of records, MPI respects 
-    // // the compiler's padding at the END of the struct.
-    // MPI_Type_create_resized(tmp_type, 0, sizeof(record), &record_type);
+    // 5. Resize the type (CRITICAL STEP)
+    // This ensures that if you send an array of records, MPI respects 
+    // the compiler's padding at the END of the struct.
+    MPI_Type_create_resized(tmp_type, 0, sizeof(record), &record_type);
 
     // 6. Commit the type so it can be used
     MPI_Type_commit(&record_type);
@@ -354,6 +355,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
         }
     }
 
+    MPI_Type_free(&tmp_type);
     MPI_Type_free(&record_type);
 }
 
