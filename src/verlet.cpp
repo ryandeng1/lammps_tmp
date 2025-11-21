@@ -113,8 +113,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     }
 
     MPI_Datatype record_type;
-    constexpr int nitems = 9;
-    int blocklengths[nitems] = {1, 1, 1, 1, 1, 1, 1, 1};
+    constexpr int nitems = 10;
+    int blocklengths[nitems] = {1, 1, 1, 1, 1, 1, 1, 1, 1};
 
     // 2. setup the types
     // Note: MPI_C_BOOL is safe for C++ bools in modern MPI implementations (MPI-3+)
@@ -124,6 +124,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
         MPI_C_BOOL,
         MPI_INT,
         MPI_C_BOOL,
+        MPI_INT,
     };
 
     // 3. setup the displacements (offsets)
@@ -138,6 +139,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     offsets[6] = offsetof(record, send);
     offsets[7] = offsetof(record, starting_timestep);
     offsets[8] = offsetof(record, curr_dt);
+    offsets[9] = offsetof(record, proc_to_proc);
 
     // 4. Create the struct type
     MPI_Datatype tmp_type;
@@ -170,29 +172,24 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                 std::cout << "starting timestep: " << starting_timestep << " curr_dt: " << curr_dt << std::endl;
                 double last_time = -1;
                 record last;
-                bool proc_to_proc;
                 for (auto& r : timestamp_records) {
                     if (!r.send && r.timestamp > last_time) {
                         last_time = r.timestamp;
                         last = r;
-
-                        if (r.send_proc == -1) {
-                            proc_to_proc = true;
-                        } else {
-                            proc_to_proc = false;
-                        }
                     }
                 }
 
                 std::cout << "last receiving is zoid: " << last.recv_zoid << " dep: " << last.dep << " recv from proc: " << last.send_proc << " recv from zoid: " << last.send_zoid << std::endl;
 
                 for (auto& r : records) {
-                    if (r.send_proc == last.send_proc && r.send && r.recv_zoid == last.recv_zoid && r.send_zoid == last.send_zoid) {
-                        std::cout << "sender zoid: " << r.send_zoid << " proc: " << r.send_proc << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
+                    if (last.proc_to_proc && r.send && r.send_proc == last.send_proc && r.recv_proc == last.recv_proc) {
+                        std::cout << "PROC TO PROC sender proc: " << " proc: " << r.send_proc << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
+                    }
+
+                    if (!last.proc_to_proc && r.send && r.send_zoid == last.send_zoid && r.recv_zoid == last.recv_zoid) {
+                        std::cout << "PROC TO PROC sender zoid: " << r.send_zoid << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
                     }
                 }
-
-
             }
         }
     }
@@ -2074,6 +2071,7 @@ void Verlet::unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_tim
                 false,
                 starting_timestep,
                 curr_dt,
+                true,
             });
             timestamp_mutex.unlock();
         }
@@ -3052,7 +3050,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                 timestamp_mutex.lock();
                                 timestamp_records.push_back({
                                     src_zoid_num,
-                                    -1,
+                                    src_zoid_num % comm->nprocs,
                                     dst_zoid_num,
                                     comm->me,
                                     dep,
@@ -3060,6 +3058,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                     false,
                                     starting_timestep,
                                     curr_dt,
+                                    false,
                                 });
                                 timestamp_mutex.unlock();
                                 cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
