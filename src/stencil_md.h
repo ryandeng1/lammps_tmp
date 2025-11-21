@@ -75,6 +75,7 @@ typedef struct {
     int starting_timestep;
     bool curr_dt;
     bool proc_to_proc;
+    int send_dep;
 } record;
 
 inline std::mutex timestamp_mutex;
@@ -9069,12 +9070,13 @@ public:
                     comm->me,
                     -1,
                     proc,
-                    send_dep,
+                    -1,
                     MPI_Wtime(),
                     true,
                     starting_timestep,
                     curr_dt,
                     true,
+                    send_dep,
                 });
                 timestamp_mutex.unlock();
 
@@ -9158,12 +9160,13 @@ public:
                     comm->me,
                     send_zoid_num,
                     send_zoid_num % comm->nprocs,
-                    dep,
+                    -1,
                     MPI_Wtime(),
                     true,
                     starting_timestep,
                     curr_dt,
                     false,
+                    -1,
                 });
                 timestamp_mutex.unlock();
 

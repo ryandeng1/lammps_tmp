@@ -113,8 +113,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
         displacements[proc] = displacements[proc - 1] + counts[proc - 1];
     }
 
-    constexpr int nitems = 10;
-    int blocklengths[nitems] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    constexpr int nitems = 11;
+    int blocklengths[nitems] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
     // 2. setup the types
     // Note: MPI_C_BOOL is safe for C++ bools in modern MPI implementations (MPI-3+)
@@ -123,6 +123,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
         MPI_DOUBLE, 
         MPI_C_BOOL,
         MPI_INT,
+        MPI_C_BOOL,
         MPI_C_BOOL,
         MPI_INT,
     };
@@ -140,6 +141,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
     offsets[7] = offsetof(record, starting_timestep);
     offsets[8] = offsetof(record, curr_dt);
     offsets[9] = offsetof(record, proc_to_proc);
+    offsets[10] = offsetof(record, send_dep);
 
     // 4. Create the struct type
     MPI_Datatype tmp_type;
@@ -196,7 +198,6 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     const auto& candidate = records[i];
                     if (candidate.send) continue;
                     if (candidate.proc_to_proc != last.proc_to_proc) continue;
-                    if (candidate.dep != last.dep) continue;
                     if (candidate.recv_proc != last.recv_proc) continue;
                     if (candidate.recv_zoid != last.recv_zoid) continue;
                     if (candidate.send_proc != last.send_proc) continue;
@@ -226,8 +227,9 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                 struct NodeKey {
                     bool proc_node;
                     int id;
+                    int send_dep;
                     bool operator==(const NodeKey& other) const noexcept {
-                        return proc_node == other.proc_node && id == other.id;
+                        return proc_node == other.proc_node && id == other.id && send_dep == other.send_dep;
                     }
                 };
 
@@ -270,16 +272,16 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
 
                 auto make_sender_node_key = [](const record& r) -> NodeKey {
                     if (r.proc_to_proc) {
-                        return {true, r.send_proc};
+                        return {true, r.send_proc, r.send_dep};
                     }
-                    return {false, r.send_zoid};
+                    return {false, r.send_zoid, r.send_dep};
                 };
 
                 auto make_receiver_node_key = [](const record& r) -> NodeKey {
                     if (r.proc_to_proc) {
-                        return {true, r.recv_proc};
+                        return {true, r.recv_proc, r.send_dep};
                     }
-                    return {false, r.recv_zoid};
+                    return {false, r.recv_zoid, r.send_dep};
                 };
 
                 for (int idx : order) {
@@ -305,18 +307,6 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                         last_receive_for_node[node_key] = idx;
                     }
                 }
-
-                // for (auto& r : records) {
-                //     if (last.proc_to_proc && r.send && r.send_proc == last.send_proc && r.recv_proc == last.recv_proc) {
-                //         std::cout << "PROC TO PROC sender proc: " << " proc: " << r.send_proc << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
-                //     }
-
-                //     if (!last.proc_to_proc && r.send && r.send_zoid == last.send_zoid && r.recv_zoid == last.recv_zoid) {
-                //         std::cout << "ZOID TO ZOID sender zoid: " << r.send_zoid << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
-                //     }
-                // }
-
-                // std::cout << "Trace path (newest receive to earliest dependency):" << std::endl;
 
                 int current_receive = last_receive_idx_global;
 
@@ -2221,9 +2211,6 @@ void Verlet::unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_tim
     counter.fetch_sub(1, std::memory_order_relaxed);
     if (counter.load(std::memory_order_relaxed) == 0 && !claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
         if (comm->me == 0) {
-            // std::stringstream s1;
-            // s1 << std::setprecision (15) << "zoid: " << zoid.num << " at dep: " << dep << " last msg is proc to proc from: " << proc << " timestamp: " << MPI_Wtime() << std::endl;
-            // std::cout << s1.str();
             timestamp_mutex.lock();
             timestamp_records.push_back({
                 -1,
@@ -2236,6 +2223,7 @@ void Verlet::unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_tim
                 starting_timestep,
                 curr_dt,
                 true,
+                send_dep,
             });
             timestamp_mutex.unlock();
         }
@@ -3206,11 +3194,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                         if (zoid_recv_neighbor_counters[zoid.num].load(std::memory_order_relaxed) == 0
                             && !claimed.test(std::memory_order_relaxed)
                             && !claimed.test_and_set(std::memory_order_relaxed)) {
-                                if (comm->me == 0) {
-                                    // std::stringstream s1;
-                                    // s1 << std::setprecision (15)  << "zoid: " << dst_zoid_num << " at dep: " << dep << " last msg is zoid to zoid from: " << src_zoid_num << " timestep: " << MPI_Wtime() << std::endl;
-                                    // std::cout << s1.str();
-                                }
                                 timestamp_mutex.lock();
                                 timestamp_records.push_back({
                                     src_zoid_num,
@@ -3223,6 +3206,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                     starting_timestep,
                                     curr_dt,
                                     false,
+                                    -1,
                                 });
                                 timestamp_mutex.unlock();
                                 cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
