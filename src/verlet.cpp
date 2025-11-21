@@ -186,15 +186,12 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                 std::cout << "last receiving is zoid: " << last.recv_zoid << " dep: " << last.dep << " recv from proc: " << last.send_proc << " recv from zoid: " << last.send_zoid << " num records: " << records.size() << " proc to proc: " << last.proc_to_proc << std::endl;
 
                 for (auto& r : records) {
-                    if (r.send) {
-                        std::cout << "record: " << r.send << " " << r.proc_to_proc << " " << r.send_proc << " " << r.recv_proc << std::endl;
-                    }
                     if (last.proc_to_proc && r.send && r.send_proc == last.send_proc && r.recv_proc == last.recv_proc) {
                         std::cout << "PROC TO PROC sender proc: " << " proc: " << r.send_proc << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
                     }
 
                     if (!last.proc_to_proc && r.send && r.send_zoid == last.send_zoid && r.recv_zoid == last.recv_zoid) {
-                        std::cout << "PROC TO PROC sender zoid: " << r.send_zoid << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
+                        std::cout << "ZOID TO ZOID sender zoid: " << r.send_zoid << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
                     }
                 }
             }
