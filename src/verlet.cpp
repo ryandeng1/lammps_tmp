@@ -172,6 +172,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
             my_timestep_to_records[r.starting_timestep][r.curr_dt].push_back(r);
         }
 
+        double overall_time = 0;
+
         for (auto& [starting_timestep, curr_dt_to_records] : starting_timestep_to_records) {
             for (auto& [curr_dt, records] : curr_dt_to_records) {
                 std::cout << "starting timestep: " << starting_timestep << " curr_dt: " << curr_dt << std::endl;
@@ -458,8 +460,11 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                 }
 
                 std::cout << "total duration: " << total_duration << std::endl;
+                overall_time += total_duration;
             }
         }
+
+        std::cout << "overall time in simulation: " << overall_time << std::endl;
     }
 
     MPI_Type_free(&tmp_type);
