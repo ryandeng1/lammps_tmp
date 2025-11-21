@@ -43,6 +43,7 @@
 #include <cstring>
 #include <map>
 #include <algorithm>
+#include <numeric>
 #include "pair_lj_cut.h"
 
 #include "stencil_md.h"
@@ -172,15 +173,136 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
             for (auto& [curr_dt, records] : curr_dt_to_records) {
                 std::cout << "starting timestep: " << starting_timestep << " curr_dt: " << curr_dt << std::endl;
                 double last_time = -1;
-                record last;
-                for (auto& r : my_timestep_to_records[starting_timestep][curr_dt]) {
+                std::vector<record>& my_records = my_timestep_to_records[starting_timestep][curr_dt];
+                int last_idx = -1;
+                for (int i = 0; i < my_records.size(); i++) {
+                    auto& r = my_records[i];
                     if (!r.send && r.timestamp > last_time) {
                         last_time = r.timestamp;
-                        last = r;
+                        last_idx = i;
                     }
                 }
 
+                if (last_idx == -1) {
+                    std::cout << "no receive records found for timestep/curr_dt on rank 0" << std::endl;
+                    continue;
+                }
+
+                record last = my_records[last_idx];
+
+                int last_receive_idx_global = -1;
+                for (int i = 0; i < records.size(); i++) {
+                    const auto& candidate = records[i];
+                    if (candidate.send) continue;
+                    if (candidate.proc_to_proc != last.proc_to_proc) continue;
+                    if (candidate.dep != last.dep) continue;
+                    if (candidate.recv_proc != last.recv_proc) continue;
+                    if (candidate.recv_zoid != last.recv_zoid) continue;
+                    if (candidate.send_proc != last.send_proc) continue;
+                    if (candidate.send_zoid != last.send_zoid) continue;
+                    if (std::fabs(candidate.timestamp - last.timestamp) > 1e-15) continue;
+                    last_receive_idx_global = i;
+                    break;
+                }
+
+                if (last_receive_idx_global == -1) {
+                    std::cout << "unable to locate matching aggregated receive record" << std::endl;
+                    continue;
+                }
+
                 std::cout << "last receiving is zoid: " << last.recv_zoid << " dep: " << last.dep << " recv from proc: " << last.send_proc << " recv from zoid: " << last.send_zoid << " num records: " << records.size() << " proc to proc: " << last.proc_to_proc << " curr dt: " << curr_dt << std::endl;
+
+                struct MessageKey {
+                    bool proc_to_proc;
+                    int from;
+                    int to;
+                    bool operator==(const MessageKey& other) const noexcept {
+                        return proc_to_proc == other.proc_to_proc && from == other.from && to == other.to;
+                    }
+                };
+
+                struct NodeKey {
+                    bool proc_node;
+                    int id;
+                    bool operator==(const NodeKey& other) const noexcept {
+                        return proc_node == other.proc_node && id == other.id;
+                    }
+                };
+
+                struct MessageKeyHasher {
+                    std::size_t operator()(const MessageKey& key) const noexcept {
+                        std::size_t h1 = std::hash<int>()(key.from);
+                        std::size_t h2 = std::hash<int>()(key.to);
+                        std::size_t h3 = std::hash<int>()(key.proc_to_proc);
+                        return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1);
+                    }
+                };
+
+                struct NodeKeyHasher {
+                    std::size_t operator()(const NodeKey& key) const noexcept {
+                        std::size_t h1 = std::hash<int>()(key.id);
+                        std::size_t h2 = std::hash<int>()(key.proc_node);
+                        return h1 ^ (h2 << 1);
+                    }
+                };
+
+                std::vector<int> send_parent(records.size(), -1);
+                std::vector<int> recv_to_send(records.size(), -1);
+                std::vector<int> send_to_recv(records.size(), -1);
+
+                std::vector<int> order(records.size());
+                std::iota(order.begin(), order.end(), 0);
+                std::sort(order.begin(), order.end(), [&records](int a, int b) {
+                    return records[a].timestamp < records[b].timestamp;
+                });
+
+                std::unordered_map<MessageKey, std::vector<int>, MessageKeyHasher> pending_sends;
+                std::unordered_map<NodeKey, int, NodeKeyHasher> last_receive_for_node;
+
+                auto make_msg_key = [](const record& r) -> MessageKey {
+                    if (r.proc_to_proc) {
+                        return {true, r.send_proc, r.recv_proc};
+                    }
+                    return {false, r.send_zoid, r.recv_zoid};
+                };
+
+                auto make_sender_node_key = [](const record& r) -> NodeKey {
+                    if (r.proc_to_proc) {
+                        return {true, r.send_proc};
+                    }
+                    return {false, r.send_zoid};
+                };
+
+                auto make_receiver_node_key = [](const record& r) -> NodeKey {
+                    if (r.proc_to_proc) {
+                        return {true, r.recv_proc};
+                    }
+                    return {false, r.recv_zoid};
+                };
+
+                for (int idx : order) {
+                    auto& r = records[idx];
+                    if (r.send) {
+                        auto node_key = make_sender_node_key(r);
+                        auto it = last_receive_for_node.find(node_key);
+                        if (it != last_receive_for_node.end()) {
+                            send_parent[idx] = it->second;
+                        }
+                        auto key = make_msg_key(r);
+                        pending_sends[key].push_back(idx);
+                    } else {
+                        auto key = make_msg_key(r);
+                        auto it = pending_sends.find(key);
+                        if (it != pending_sends.end() && !it->second.empty()) {
+                            int send_idx = it->second.back();
+                            it->second.pop_back();
+                            recv_to_send[idx] = send_idx;
+                            send_to_recv[send_idx] = idx;
+                        }
+                        auto node_key = make_receiver_node_key(r);
+                        last_receive_for_node[node_key] = idx;
+                    }
+                }
 
                 for (auto& r : records) {
                     if (last.proc_to_proc && r.send && r.send_proc == last.send_proc && r.recv_proc == last.recv_proc) {
@@ -190,6 +312,29 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     if (!last.proc_to_proc && r.send && r.send_zoid == last.send_zoid && r.recv_zoid == last.recv_zoid) {
                         std::cout << "ZOID TO ZOID sender zoid: " << r.send_zoid << " timestamp: " << r.timestamp << " difference: " << (last.timestamp - r.timestamp) * 1e6 << std::endl;
                     }
+                }
+
+                std::cout << "Trace path (newest receive to earliest dependency):" << std::endl;
+                int current_receive = last_receive_idx_global;
+                while (current_receive != -1) {
+                    const auto& recv_record = records[current_receive];
+                    std::cout << "RECV -> dep " << recv_record.dep << " recv_proc " << recv_record.recv_proc
+                              << " recv_zoid " << recv_record.recv_zoid << " from proc " << recv_record.send_proc
+                              << " from zoid " << recv_record.send_zoid << " timestamp " << recv_record.timestamp
+                              << " proc_to_proc " << recv_record.proc_to_proc << std::endl;
+
+                    int send_idx = recv_to_send[current_receive];
+                    if (send_idx == -1) {
+                        break;
+                    }
+
+                    const auto& send_record = records[send_idx];
+                    std::cout << "SEND -> dep " << send_record.dep << " send_proc " << send_record.send_proc
+                              << " send_zoid " << send_record.send_zoid << " to proc " << send_record.recv_proc
+                              << " to zoid " << send_record.recv_zoid << " timestamp " << send_record.timestamp
+                              << " proc_to_proc " << send_record.proc_to_proc << std::endl;
+
+                    current_receive = send_parent[send_idx];
                 }
             }
         }
