@@ -166,16 +166,25 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
         }
 
         for (auto& [starting_timestep, curr_dt_to_records] : starting_timestep_to_records) {
-            std::cout << "starting timestep: " << starting_timestep << std::endl;
             for (auto& [curr_dt, records] : curr_dt_to_records) {
+                std::cout << "starting timestep: " << starting_timestep << " curr_dt: " << curr_dt << std::endl;
                 double last_time = -1;
                 record tmp;
-                for (auto& r : records) {
+                bool proc_to_proc;
+                for (auto& r : timestamp_records) {
                     if (!r.send && r.timestamp > last_time) {
                         last_time = r.timestamp;
                         tmp = r;
+
+                        if (r.send_proc == -1) {
+                            proc_to_proc = true;
+                        } else {
+                            proc_to_proc = false;
+                        }
                     }
                 }
+
+                // how to know 
 
                 std::cout << "last receiving is zoid: " << tmp.recv_zoid << " dep: " << tmp.dep << " recv from proc: " << tmp.send_proc << " recv from zoid: " << tmp.send_zoid << std::endl;
             }
@@ -2045,9 +2054,9 @@ void Verlet::unpack_data_proc_to_proc_wrapper_better_work_queue(int starting_tim
     counter.fetch_sub(1, std::memory_order_relaxed);
     if (counter.load(std::memory_order_relaxed) == 0 && !claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
         if (comm->me == 0) {
-            std::stringstream s1;
-            s1 << std::setprecision (15) << "zoid: " << zoid.num << " at dep: " << dep << " last msg is proc to proc from: " << proc << " timestamp: " << MPI_Wtime() << std::endl;
-            std::cout << s1.str();
+            // std::stringstream s1;
+            // s1 << std::setprecision (15) << "zoid: " << zoid.num << " at dep: " << dep << " last msg is proc to proc from: " << proc << " timestamp: " << MPI_Wtime() << std::endl;
+            // std::cout << s1.str();
             timestamp_mutex.lock();
             timestamp_records.push_back({
                 -1,
@@ -3030,9 +3039,9 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                             && !claimed.test(std::memory_order_relaxed)
                             && !claimed.test_and_set(std::memory_order_relaxed)) {
                                 if (comm->me == 0) {
-                                    std::stringstream s1;
-                                    s1 << std::setprecision (15)  << "zoid: " << dst_zoid_num << " at dep: " << dep << " last msg is zoid to zoid from: " << src_zoid_num << " timestep: " << MPI_Wtime() << std::endl;
-                                    std::cout << s1.str();
+                                    // std::stringstream s1;
+                                    // s1 << std::setprecision (15)  << "zoid: " << dst_zoid_num << " at dep: " << dep << " last msg is zoid to zoid from: " << src_zoid_num << " timestep: " << MPI_Wtime() << std::endl;
+                                    // std::cout << s1.str();
                                 }
                                 timestamp_mutex.lock();
                                 timestamp_records.push_back({
