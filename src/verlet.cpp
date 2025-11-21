@@ -230,6 +230,23 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     }
                 };
 
+                struct MessageKeyHasher {
+                    std::size_t operator()(const MessageKey& key) const noexcept {
+                        std::size_t h1 = std::hash<int>()(key.from);
+                        std::size_t h2 = std::hash<int>()(key.to);
+                        std::size_t h3 = std::hash<int>()(key.proc_to_proc);
+                        return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1);
+                    }
+                };
+
+                struct NodeKeyHasher {
+                    std::size_t operator()(const NodeKey& key) const noexcept {
+                        std::size_t h1 = std::hash<int>()(key.id);
+                        std::size_t h2 = std::hash<int>()(key.proc_node);
+                        return h1 ^ (h2 << 1);
+                    }
+                };
+
                 std::vector<int> send_parent(records.size(), -1);
                 std::vector<int> recv_to_send(records.size(), -1);
                 std::vector<int> send_to_recv(records.size(), -1);
@@ -240,8 +257,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& records) {
                     return records[a].timestamp < records[b].timestamp;
                 });
 
-                std::map<MessageKey, std::vector<int>> pending_sends;
-                std::map<NodeKey, int> last_receive_for_node;
+                std::unordered_map<MessageKey, std::vector<int>, MessageKeyHasher> pending_sends;
+                std::unordered_map<NodeKey, int, NodeKeyHasher> last_receive_for_node;
 
                 auto make_msg_key = [](const record& r) -> MessageKey {
                     if (r.proc_to_proc) {
