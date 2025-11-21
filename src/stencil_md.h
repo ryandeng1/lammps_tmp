@@ -9150,22 +9150,22 @@ public:
                 } else {
                     MPI_Isend(buf, zoid_ndoubles_send, MPI_DOUBLE, send_zoid_num % comm->nprocs, mpi_tag, 
                         all_comms[dst_stream_idx], &r[send_request_idx]);
-
-                    timestamp_mutex.lock();
-                    timestamp_records.push_back({
-                        zoid.num,
-                        comm->me,
-                        send_zoid_num,
-                        send_zoid_num % comm->nprocs,
-                        dep,
-                        MPI_Wtime(),
-                        true,
-                        starting_timestep,
-                        curr_dt,
-                        false,
-                    });
-                    timestamp_mutex.unlock();
                 }
+
+                timestamp_mutex.lock();
+                timestamp_records.push_back({
+                    zoid.num,
+                    comm->me,
+                    send_zoid_num,
+                    send_zoid_num % comm->nprocs,
+                    dep,
+                    MPI_Wtime(),
+                    true,
+                    starting_timestep,
+                    curr_dt,
+                    false,
+                });
+                timestamp_mutex.unlock();
 
                 auto comm_end = MPI_Wtime();
                 s_comm_time[w] += (comm_end - comm_begin);
