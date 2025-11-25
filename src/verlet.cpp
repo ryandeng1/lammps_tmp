@@ -373,7 +373,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                     bool found = false;
                     int found_idx = -1;
 
-                    for (int idx2 = 0; idx2 < records.size(); idx2++) {
+                    // pick the most recent receive for this send, so start with the latest timestamp
+                    for (int idx2 = records.size() - 1; idx2 >= 0; idx2--) {
                         if (idx == idx2 || records[idx2].send) {
                             continue;
                         }
