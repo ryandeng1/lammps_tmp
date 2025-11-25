@@ -9064,21 +9064,21 @@ public:
                     MPI_Isend(buf, total_nsend, MPI_DOUBLE, proc, mpi_tag, all_comms[dst_stream_idx], &r[send_request_idx]);
                 }
 
-                timestamp_mutex.lock();
-                timestamp_records.push_back({
-                    -1,
-                    comm->me,
-                    -1,
-                    proc,
-                    send_dep,
-                    MPI_Wtime(),
-                    true,
-                    starting_timestep,
-                    curr_dt,
-                    true,
-                    send_dep,
-                });
-                timestamp_mutex.unlock();
+                // timestamp_mutex.lock();
+                // timestamp_records.push_back({
+                //     -1,
+                //     comm->me,
+                //     -1,
+                //     proc,
+                //     send_dep,
+                //     MPI_Wtime(),
+                //     true,
+                //     starting_timestep,
+                //     curr_dt,
+                //     true,
+                //     send_dep,
+                // });
+                // timestamp_mutex.unlock();
 
                 total_num_procs++;
             }
