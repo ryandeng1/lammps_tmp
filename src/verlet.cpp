@@ -371,7 +371,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                     auto node_key = make_sender_node_key(r);
                     bool found = false;
                     int found_idx = -1;
-                    for (int idx2 = 0; idx2 < records.size(); idx2++) {
+                    for (int idx2 = records.size(); idx2 >= 0; idx2--) {
                         if (idx == idx2 || records[idx2].send) {
                             continue;
                         }
