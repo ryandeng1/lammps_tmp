@@ -310,7 +310,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
 
                         auto& r2 = records[idx2];
 
-                        if (!r.proc_to_proc && r.recv_zoid == r2.recv_zoid) {
+                        if (!r.proc_to_proc && r.recv_zoid == r2.recv_zoid && r.send_zoid == r2.send_zoid) {
                             found = true;
                             found_idx = idx2;
                             break;
