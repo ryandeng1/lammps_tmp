@@ -373,6 +373,8 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                     bool found = false;
                     int found_idx = -1;
 
+                    double max_diff = -1;
+
                     // pick the most recent receive for this send, so start with the latest timestamp
                     for (int idx2 = records.size() - 1; idx2 >= 0; idx2--) {
                         if (idx == idx2 || records[idx2].send) {
@@ -382,12 +384,17 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                         auto& r2 = records[idx2];
 
                         if (!r.proc_to_proc && r.send_zoid == r2.recv_zoid) {
-                            found = true;
-                            found_idx = idx2;
-                            if (r2.send_zoid % world_size != r2.recv_zoid % world_size) {
-                                // break at first non shared memory zoid transfer
-                                break;
+                            auto send_idx = recv_to_send[idx2];
+                            if (send_idx != -1) {
+                                double new_diff = r2.timestamp - records[send_idx].timestamp;
+                                if (new_diff > max_diff) {
+                                    found = true;
+                                    found_idx = idx2;
+                                }
                             }
+
+                            // found = true;
+                            // found_idx = idx2;
                             // break;
                         }
 
