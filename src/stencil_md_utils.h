@@ -78,9 +78,9 @@ constexpr bool TEST_AGAINST_LAMMPS = false;
 
 constexpr double ALLEGRO_SLOPE = ALLEGRO_CUTOFF_RADIUS + ADDITIONAL_CUTOFF;
 
-constexpr bool ONLY_RUN_LAMMPS = false;
+constexpr bool ONLY_RUN_LAMMPS = true;
 
-constexpr bool ONLY_RUN_STENCIL_MD = true;
+constexpr bool ONLY_RUN_STENCIL_MD = false;
 
 constexpr bool USE_BOND = true;
 
