@@ -390,6 +390,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                                 if (new_diff > max_diff) {
                                     found = true;
                                     found_idx = idx2;
+                                    max_diff = new_diff;
                                 }
                             }
 
