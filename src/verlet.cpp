@@ -3391,42 +3391,42 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                     int find_idx = std::distance(send_neighbors.begin(), find_it);
                                     // DO NOT unpack force
                                     stencilMD->UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(zoid, recv_idx, recv_zoid_num, find_idx, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE, false);
+                                    timestamp_mutex.lock();
+                                    int send_dep = curr_dt ? stencilMD->zoid_num_to_dep[recv_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[recv_zoid_num];
+                                    // sender record
+                                    timestamp_records.push_back({
+                                        recv_zoid_num,
+                                        recv_zoid_num % comm->nprocs,
+                                        zoid.num,
+                                        comm->me,
+                                        send_dep,
+                                        MPI_Wtime(),
+                                        true,
+                                        starting_timestep,
+                                        curr_dt,
+                                        false,
+                                        send_dep,
+                                    });
+
+                                    // receiver record
+                                    timestamp_records.push_back({
+                                        recv_zoid_num,
+                                        recv_zoid_num % comm->nprocs,
+                                        zoid.num,
+                                        comm->me,
+                                        dep,
+                                        MPI_Wtime(),
+                                        false,
+                                        starting_timestep,
+                                        curr_dt,
+                                        false,
+                                        -1,
+                                    });
+                                    timestamp_mutex.unlock();
                                     zoid_recv_neighbor_counters[zoid.num].fetch_sub(1, std::memory_order_relaxed);
                                     auto& claimed = zoid_claimed[zoid.num];
                                     if (zoid_recv_neighbor_counters[zoid.num].load(std::memory_order_relaxed) == 0) {
                                         if (!claimed.test(std::memory_order_relaxed) && !claimed.test_and_set(std::memory_order_relaxed)) {
-                                            // timestamp_mutex.lock();
-                                            // int send_dep = curr_dt ? stencilMD->zoid_num_to_dep[recv_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[recv_zoid_num];
-                                            // // sender record
-                                            // timestamp_records.push_back({
-                                            //     recv_zoid_num,
-                                            //     recv_zoid_num % comm->nprocs,
-                                            //     zoid.num,
-                                            //     comm->me,
-                                            //     send_dep,
-                                            //     MPI_Wtime(),
-                                            //     true,
-                                            //     starting_timestep,
-                                            //     curr_dt,
-                                            //     false,
-                                            //     send_dep,
-                                            // });
-
-                                            // // receiver record
-                                            // timestamp_records.push_back({
-                                            //     recv_zoid_num,
-                                            //     recv_zoid_num % comm->nprocs,
-                                            //     zoid.num,
-                                            //     comm->me,
-                                            //     dep,
-                                            //     MPI_Wtime(),
-                                            //     false,
-                                            //     starting_timestep,
-                                            //     curr_dt,
-                                            //     false,
-                                            //     -1,
-                                            // });
-                                            // timestamp_mutex.unlock();
                                             stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
                                                 zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
                                                 test_f, test_x, test_v, 
