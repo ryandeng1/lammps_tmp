@@ -384,7 +384,11 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                         if (!r.proc_to_proc && r.send_zoid == r2.recv_zoid) {
                             found = true;
                             found_idx = idx2;
-                            break;
+                            if (r2.send_zoid % world_size != r2.recv_zoid % world_size) {
+                                // break at first non shared memory zoid transfer
+                                break;
+                            }
+                            // break;
                         }
 
                         if (r.proc_to_proc && r.send_proc == r2.recv_proc && r.send_dep == r2.dep) {
