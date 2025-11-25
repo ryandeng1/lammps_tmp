@@ -374,14 +374,14 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
 
                     double max_diff = -1;
 
-                    for (int idx2 = records.size(); idx2 >= 0; idx2--) {
+                    for (int idx2 = 0; idx2 < records.size(); idx2++) {
                         if (idx == idx2 || records[idx2].send) {
                             continue;
                         }
 
                         auto& r2 = records[idx2];
 
-                        if (!r.proc_to_proc && r.send_zoid == r2.send_zoid && r.recv_zoid == r2.recv_zoid) {
+                        if (!r.proc_to_proc && r.send_zoid == r2.recv_zoid) {
                             if (r.timestamp - r2.timestamp > max_diff) {
                                 max_diff = (r.timestamp - r2.timestamp);
                                 found = true;
