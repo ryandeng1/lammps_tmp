@@ -303,6 +303,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
 
                     bool found = false;
                     int found_idx = -1;
+
                     for (int idx2 = 0; idx2 < records.size(); idx2++) {
                         if (idx == idx2 || !records[idx2].send) {
                             continue;
@@ -372,8 +373,6 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                     bool found = false;
                     int found_idx = -1;
 
-                    double max_diff = -1;
-
                     for (int idx2 = 0; idx2 < records.size(); idx2++) {
                         if (idx == idx2 || records[idx2].send) {
                             continue;
@@ -382,12 +381,9 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                         auto& r2 = records[idx2];
 
                         if (!r.proc_to_proc && r.send_zoid == r2.recv_zoid) {
-                            if (r.timestamp - r2.timestamp > max_diff) {
-                                max_diff = (r.timestamp - r2.timestamp);
-                                found = true;
-                                found_idx = idx2;
-                            }
-                            // break;
+                            found = true;
+                            found_idx = idx2;
+                            break;
                         }
 
                         if (r.proc_to_proc && r.send_proc == r2.recv_proc && r.send_dep == r2.dep) {
