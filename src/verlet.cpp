@@ -386,12 +386,12 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                         if (!r.proc_to_proc && r.send_zoid == r2.recv_zoid) {
                             auto send_idx = recv_to_send[idx2];
                             if (send_idx != -1) {
-                                double new_diff = r2.timestamp - records[send_idx].timestamp;
+                                // double new_diff = r2.timestamp - records[send_idx].timestamp;
+                                double new_diff = r2.timestamp;
                                 if (new_diff > max_diff) {
                                     found = true;
                                     found_idx = idx2;
                                     max_diff = new_diff;
-                                    std::cout << "send: " << r.send_zoid << " from: " << r.recv_zoid << " diff: " << new_diff << std::endl;
                                 }
                             }
 
