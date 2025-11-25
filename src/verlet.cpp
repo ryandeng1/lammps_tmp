@@ -3306,6 +3306,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                     }
                     requests_completed[idx] = true;
                     if (idx < zoid_pairs_at_stream.size()) {
+                        auto [src_zoid_num, dst_zoid_num] = zoid_pairs_at_stream[idx];
                         timestamp_mutex.lock();
                         timestamp_records.push_back({
                             src_zoid_num,
@@ -3320,7 +3321,7 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                             false,
                             -1,
                         });
-                        auto [src_zoid_num, dst_zoid_num] = zoid_pairs_at_stream[idx];
+                        timestamp_mutex.unlock();
                         auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[dst_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[dst_zoid_num];
                         stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, src_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
                         zoid_recv_neighbor_counters[zoid.num].fetch_sub(1, std::memory_order_relaxed);
@@ -3328,7 +3329,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                         if (zoid_recv_neighbor_counters[zoid.num].load(std::memory_order_relaxed) == 0
                             && !claimed.test(std::memory_order_relaxed)
                             && !claimed.test_and_set(std::memory_order_relaxed)) {
-                                timestamp_mutex.unlock();
                                 cilk_spawn stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
                                 zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
                                 test_f, test_x, test_v, 
@@ -3426,7 +3426,6 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                             //     false,
                                             //     -1,
                                             // });
-
                                             // timestamp_mutex.unlock();
                                             stencil_md_run_zoid_wrapper_better_work_queue<curr_dt>(starting_timestep, dep, zoid, default_start_t, default_end_t,
                                                 zoid_recv_neighbor_counters, dep_counters, send_r_zoid_to_zoid, send_r_proc_to_proc,
