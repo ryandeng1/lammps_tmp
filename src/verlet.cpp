@@ -391,6 +391,7 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                                     found = true;
                                     found_idx = idx2;
                                     max_diff = new_diff;
+                                    std::cout << "send: " << r.send_zoid << " from: " << r.recv_zoid << " diff: " << new_diff << std::endl;
                                 }
                             }
 
