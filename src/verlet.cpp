@@ -364,13 +364,16 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
                 //     });
                 // }
 
-                // For each send, pick the most recent receive at the sender node with timestamp <= send.timestamp.
+                // For each send, pick the most distant receive at the sender node with timestamp <= send.timestamp.
                 for (int idx = 0; idx < records.size(); idx++) {
                     const auto& r = records[idx];
                     if (!r.send) continue;
                     auto node_key = make_sender_node_key(r);
                     bool found = false;
                     int found_idx = -1;
+
+                    double max_diff = -1;
+
                     for (int idx2 = records.size(); idx2 >= 0; idx2--) {
                         if (idx == idx2 || records[idx2].send) {
                             continue;
@@ -378,10 +381,13 @@ void gather_and_analyze_timestamp_records(std::vector<record>& my_records) {
 
                         auto& r2 = records[idx2];
 
-                        if (!r.proc_to_proc && r.send_zoid == r2.recv_zoid) {
-                            found = true;
-                            found_idx = idx2;
-                            break;
+                        if (!r.proc_to_proc && r.send_zoid == r2.send_zoid && r.recv_zoid == r2.recv_zoid) {
+                            if (r.timestamp - r2.timestamp > max_diff) {
+                                max_diff = (r.timestamp - r2.timestamp);
+                                found = true;
+                                found_idx = idx2;
+                            }
+                            // break;
                         }
 
                         if (r.proc_to_proc && r.send_proc == r2.recv_proc && r.send_dep == r2.dep) {
