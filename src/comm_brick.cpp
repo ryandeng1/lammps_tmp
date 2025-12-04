@@ -773,6 +773,7 @@ void CommBrick::forward_comm(int /*dummy*/)
         if (n) MPI_Send(buf_send, n, MPI_DOUBLE, sendproc[iswap], 0, world);
         if (size_forward_recv[iswap]) MPI_Wait(&request, MPI_STATUS_IGNORE);
         avec->unpack_comm_vel(recvnum[iswap], firstrecv[iswap], buf_recv);
+        num_recv_mpi += size_forward_recv[iswap];
       } else {
         assert(false);
         if (size_forward_recv[iswap])
