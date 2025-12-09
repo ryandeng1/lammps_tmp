@@ -331,11 +331,13 @@ public:
     void SET_CLAIMED_ATOMIC_BOOLS();
 
         template <bool curr_dt>
-    int GET_NUM_CONNECTIONS() {
+    int GET_NUM_CONNECTIONS(bool count_all = false) {
         auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts : send_to_neighbors_many_cuts_next_dt;
         auto& zoid_to_dep = curr_dt ? zoid_num_to_dep : zoid_num_to_dep_next_dt;
         int num_connections = 0;
+        int num_total_connections = 0;
+
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             const auto& procs_to_send_to = stencilMD->send_dep_to_procs[curr_dt][DEFAULT_PIPELINE_STAGE][dep];
             for (int j = 0; j < queues[dep].size(); j++) {
@@ -345,6 +347,8 @@ public:
                     if (neigh_dep == dep + 1 && neigh % comm->nprocs != comm->me) {
                         num_connections++;
                     }
+
+                    num_total_connections++;
                 }
             }
             for (auto& proc : procs_to_send_to) {
@@ -352,6 +356,10 @@ public:
                     num_connections++;
                 }
             }
+        }
+
+        if (count_all) {
+            return num_total_connections;
         }
 
         return num_connections;
