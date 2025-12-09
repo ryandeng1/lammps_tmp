@@ -1015,7 +1015,7 @@ void Verlet::setup_stencil_md_many_zoids() {
 
     int all_connections = 0;
     int all_connections_all = 0;
-    int total_ndoubles_sent = 0;
+    int64_t total_ndoubles_sent = 0;
 
     MPI_Allreduce(&total_connections, &all_connections, 1, MPI_INT, MPI_SUM, world);
     MPI_Allreduce(&total_connections_all, &all_connections_all, 1, MPI_INT, MPI_SUM, world);
