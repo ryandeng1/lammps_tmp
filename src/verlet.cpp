@@ -1008,6 +1008,20 @@ void Verlet::setup_stencil_md_many_zoids() {
     }
 
     MPI_Barrier(world);
+
+    int total_connections = stencilMD->GET_NUM_CONNECTIONS<true>() + stencilMD->GET_NUM_CONNECTIONS<false>();
+    int64_t num_doubles_sent = stencilMD->GET_NUM_DOUBLES_SENT<true>() + stencilMD->GET_NUM_DOUBLES_SENT<false>();
+
+    int all_connections;
+    int total_ndoubles_sent;
+
+    MPI_Allreduce(&total_connections, &all_connections, 1, MPI_INT, MPI_SUM, world);
+    MPI_Allreduce(&num_doubles_sent, &total_ndoubles_sent, 1, MPI_LONG, MPI_SUM, world);
+
+    if (comm->me == 0) {
+        std::cout << BOLDGREEN << "Num connections: " << all_connections << " for: " << 2 * NUM_TIMESTEPS_IN_PARALLEL << " timesteps. " << std::endl;
+        std::cout << BOLDGREEN << "Num bytes: " << total_ndoubles_sent * sizeof(double) << " for: " << 2 * NUM_TIMESTEPS_IN_PARALLEL << " timesteps. " << std::endl;
+    }
 }
 
 /* ----------------------------------------------------------------------
