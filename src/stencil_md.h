@@ -366,11 +366,12 @@ public:
     }
 
     template <bool curr_dt>
-    int64_t GET_NUM_DOUBLES_SENT() {
+    int64_t GET_NUM_DOUBLES_SENT(bool count_all = false) {
         auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts : send_to_neighbors_many_cuts_next_dt;
         auto& zoid_to_dep = curr_dt ? zoid_num_to_dep : zoid_num_to_dep_next_dt;
         int64_t num_doubles_sent = 0;
+        int64_t num_doubles_sent_all = 0;
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             const auto& procs_to_send_to = stencilMD->send_dep_to_procs[curr_dt][DEFAULT_PIPELINE_STAGE][dep];
             for (int j = 0; j < queues[dep].size(); j++) {
@@ -385,6 +386,11 @@ public:
                         int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
                         num_doubles_sent += zoid_ndoubles_send;
                     }
+
+                    int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[DEFAULT_PIPELINE_STAGE][z][i]
+                        : send_zoid_to_zoid_sizes_pipelined_next_dt[DEFAULT_PIPELINE_STAGE][z][i];
+                    int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+                    num_doubles_sent_all += zoid_ndoubles_send;
                 }
 
                 for (auto& proc : procs_to_send_to) {
@@ -393,9 +399,14 @@ public:
                         int size = send_proc_zoid_sizes[curr_dt][DEFAULT_PIPELINE_STAGE].at(pair);
                         size = DEBUG_SEND_RECV_DATA ? size * (3 + 1) : size * 3;
                         num_doubles_sent += size;
+                        num_doubles_sent_all += size;
                     }
                 }
             }
+        }
+
+        if (count_all) {
+            return num_doubles_sent_all;
         }
 
         return num_doubles_sent;
