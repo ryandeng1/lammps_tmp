@@ -330,6 +330,69 @@ public:
 
     void SET_CLAIMED_ATOMIC_BOOLS();
 
+        template <bool curr_dt>
+    int GET_NUM_CONNECTIONS() {
+        auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts : send_to_neighbors_many_cuts_next_dt;
+        auto& zoid_to_dep = curr_dt ? zoid_num_to_dep : zoid_num_to_dep_next_dt;
+        int num_connections = 0;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            const auto& procs_to_send_to = stencilMD->send_dep_to_procs[curr_dt][DEFAULT_PIPELINE_STAGE][dep];
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto z = queues[dep][j].num;
+                for (auto& neigh : send_neighbors[z]) {
+                    int neigh_dep = zoid_to_dep[neigh];
+                    if (neigh_dep == dep + 1 && neigh % comm->nprocs != comm->me) {
+                        num_connections++;
+                    }
+                }
+            }
+            for (auto& proc : procs_to_send_to) {
+                if (proc != comm->me) {
+                    num_connections++;
+                }
+            }
+        }
+
+        return num_connections;
+    }
+
+    template <bool curr_dt>
+    int64_t GET_NUM_DOUBLES_SENT() {
+        auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
+        auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts : send_to_neighbors_many_cuts_next_dt;
+        auto& zoid_to_dep = curr_dt ? zoid_num_to_dep : zoid_num_to_dep_next_dt;
+        int64_t num_doubles_sent = 0;
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            const auto& procs_to_send_to = stencilMD->send_dep_to_procs[curr_dt][DEFAULT_PIPELINE_STAGE][dep];
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto& zoid = queues[dep][j];
+                auto z = zoid.num;
+                for (int i = 0; i < send_neighbors[z].size(); i++) {
+                    auto neigh = send_neighbors[z][i];
+                    int neigh_dep = zoid_to_dep[neigh];
+                    if (neigh_dep == dep + 1 && neigh % comm->nprocs != comm->me) {
+                        int nsend = curr_dt ? send_zoid_to_zoid_sizes_pipelined[DEFAULT_PIPELINE_STAGE][z][i]
+                            : send_zoid_to_zoid_sizes_pipelined_next_dt[DEFAULT_PIPELINE_STAGE][z][i];
+                        int zoid_ndoubles_send = DEBUG_SEND_RECV_DATA ? nsend * (3 + 1) : nsend * 3;
+                        num_doubles_sent += zoid_ndoubles_send;
+                    }
+                }
+
+                for (auto& proc : procs_to_send_to) {
+                    if (proc != comm->me) {
+                        auto pair = std::make_pair(zoid.num, proc);
+                        int size = send_proc_zoid_sizes[curr_dt][DEFAULT_PIPELINE_STAGE].at(pair);
+                        size = DEBUG_SEND_RECV_DATA ? size * (3 + 1) : size * 3;
+                        num_doubles_sent += size;
+                    }
+                }
+            }
+        }
+
+        return num_doubles_sent;
+    }
+
     void reset_timers() {
         for (int w = 0; w < 24; w++) {
             s_compute_time[w] = 0;
