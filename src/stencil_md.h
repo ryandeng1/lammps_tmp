@@ -330,7 +330,7 @@ public:
 
     void SET_CLAIMED_ATOMIC_BOOLS();
 
-        template <bool curr_dt>
+    template <bool curr_dt>
     int GET_NUM_CONNECTIONS(bool count_all = false) {
         auto& queues = curr_dt ? my_queues_many_cuts : my_queues_many_cuts_next_dt;
         auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts : send_to_neighbors_many_cuts_next_dt;
