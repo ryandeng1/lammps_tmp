@@ -1294,6 +1294,9 @@ void Verlet::run(int n) {
 
                 MPI_Allreduce(local_data, global_data, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
+                double max_diff;
+                MPI_Allreduce(&diff, &max_diff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
                 double sum = global_data[0];
                 double sum_sq = global_data[1];
 
@@ -1302,7 +1305,7 @@ void Verlet::run(int n) {
                 double variance = (sum_sq / comm->nprocs) - (mean * mean);
 
                 if (comm->me == 0) {
-                    std::cout << "variance: " << variance << " my diff: " << diff << std::endl;
+                    std::cout << "avg diff: " << mean << " variance in diff: " << variance << " my diff: " << diff << " max diff: " << max_diff << std::endl;
                 }
                 prev_time = curr_time;
             }
