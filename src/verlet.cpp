@@ -1188,6 +1188,9 @@ void Verlet::run(int n) {
 
     double prev_time = -1;
 
+    double avg = 0;
+    double stddev = 0;
+
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < n + 1; i++) {
@@ -1304,10 +1307,12 @@ void Verlet::run(int n) {
                 double mean = sum / comm->nprocs;
                 double variance = (sum_sq / comm->nprocs) - (mean * mean);
 
-                if (comm->me == 0) {
-                    std::cout << "avg diff: " << mean << " stddev in diff: " << sqrt(variance) << " my diff: " << diff << " max diff: " << max_diff << std::endl;
-                }
+                // if (comm->me == 0) {
+                //     std::cout << "avg diff: " << mean << " stddev in diff: " << sqrt(variance) << " my diff: " << diff << " max diff: " << max_diff << std::endl;
+                // }
                 prev_time = curr_time;
+                avg += mean;
+                stddev += sqrt(variance);
             }
             timer->stamp();
             auto begin = std::chrono::high_resolution_clock::now();
@@ -1535,6 +1540,7 @@ void Verlet::run(int n) {
     MPI_Allreduce(&lammps_modify_post_force_duration, &total_modify_post_force_duration, 1, MPI_INT64_T, MPI_SUM, world);
 
     if (comm->me == 0) {
+        std::cout << GREEN << "avg diff: " << avg / n << " avg stddev: " << stddev / n << std::endl;
         std::cout << GREEN << "process: " << comm->me
                   << " LAMMPS COMM DURATION: " << lammps_comm_duration << " forward: " << lammps_forward_comm_duration
                   << " reverse: " << lammps_reverse_comm_duration
