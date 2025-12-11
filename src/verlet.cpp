@@ -27,6 +27,7 @@
 #include "info.h"
 #include "kspace.h"
 #include "modify.h"
+#include "mpi_proto.h"
 #include "neighbor.h"
 #include "output.h"
 #include "pointers.h"
@@ -1185,6 +1186,8 @@ void Verlet::run(int n) {
     int64_t lammps_modify_post_force_duration = 0;
     int64_t lammps_num_atoms = 0;
 
+    double prev_time = -1;
+
     // for (int i = 0; i < n; i++) {
     auto begin_lammps = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < n + 1; i++) {
@@ -1280,6 +1283,29 @@ void Verlet::run(int n) {
         nflag = neighbor->decide();
 
         if (nflag == 0) {
+            if (prev_time == -1) {
+                prev_time = MPI_Wtime();
+            } else {
+                double curr_time = MPI_Wtime();
+                double diff = curr_time - prev_time;
+                // Compute sum of values and sum of squares
+                double local_data[2] = {diff, diff * diff};
+                double global_data[2];
+
+                MPI_Allreduce(local_data, global_data, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+                double sum = global_data[0];
+                double sum_sq = global_data[1];
+
+                // Compute variance
+                double mean = sum / comm->nprocs;
+                double variance = (sum_sq / comm->nprocs) - (mean * mean);
+
+                prev_time = curr_time;
+                if (comm->me == 0) {
+                    std::cout << "time: " << i << " variance: " << variance * 1e6 << std::endl;
+                }
+            }
             timer->stamp();
             auto begin = std::chrono::high_resolution_clock::now();
             comm->forward_comm();
