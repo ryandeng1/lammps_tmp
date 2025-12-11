@@ -1287,7 +1287,7 @@ void Verlet::run(int n) {
                 prev_time = MPI_Wtime();
             } else {
                 double curr_time = MPI_Wtime();
-                double diff = curr_time - prev_time;
+                double diff = (curr_time - prev_time) * 1e6;
                 // Compute sum of values and sum of squares
                 double local_data[2] = {diff, diff * diff};
                 double global_data[2];
@@ -1301,10 +1301,10 @@ void Verlet::run(int n) {
                 double mean = sum / comm->nprocs;
                 double variance = (sum_sq / comm->nprocs) - (mean * mean);
 
-                prev_time = curr_time;
                 if (comm->me == 0) {
-                    std::cout << "time: " << i << " variance: " << variance * 1e6 << std::endl;
+                    std::cout << "variance: " << variance << " my diff: " << diff << std::endl;
                 }
+                prev_time = curr_time;
             }
             timer->stamp();
             auto begin = std::chrono::high_resolution_clock::now();
