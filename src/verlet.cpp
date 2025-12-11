@@ -1305,7 +1305,7 @@ void Verlet::run(int n) {
                 double variance = (sum_sq / comm->nprocs) - (mean * mean);
 
                 if (comm->me == 0) {
-                    std::cout << "avg diff: " << mean << " variance in diff: " << variance << " my diff: " << diff << " max diff: " << max_diff << std::endl;
+                    std::cout << "avg diff: " << mean << " stddev in diff: " << sqrt(variance) << " my diff: " << diff << " max diff: " << max_diff << std::endl;
                 }
                 prev_time = curr_time;
             }
