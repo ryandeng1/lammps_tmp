@@ -1872,7 +1872,7 @@ void Verlet::run(int n) {
         }
     }
 
-    gather_and_analyze_timestamp_records(timestamp_records);
+    // gather_and_analyze_timestamp_records(timestamp_records);
 }
 
 template <bool curr_dt>
