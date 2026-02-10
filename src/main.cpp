@@ -122,35 +122,19 @@ int main(int argc, char **argv)
 
             auto* cpusets = new cpu_set_t[nworkers];
             constexpr int NUM_CORES_PER_SOCKET = 24;
-            constexpr int NUM_CORES_PER_NODE = 24 * 2;
+            constexpr int NUM_SOCKETS = 4;
+            constexpr int NUM_CORES_PER_NODE = NUM_CORES_PER_SOCKET * NUM_SOCKETS;
 
             constexpr bool USE_STREAMS = true;
-            int num_processes_per_node;
-            if (USE_STREAMS) {
-              num_processes_per_node = NUM_CORES_PER_NODE / (nworkers);
-            } else {
-              num_processes_per_node = NUM_CORES_PER_NODE / (nworkers + 1);
-            }
-            int num_nodes = world_size / num_processes_per_node;
-            int num_processes_per_socket = num_processes_per_node / 2;
+            int stride = USE_STREAMS ? nworkers : nworkers + 1;
 
-            int rank_within_node = rank % num_processes_per_node;
+            int num_processes_per_socket = NUM_CORES_PER_SOCKET / stride;
+            int num_processes_per_node   = num_processes_per_socket * NUM_SOCKETS;
 
-            int start;
-            if (USE_STREAMS) {
-              if (rank_within_node >= num_processes_per_socket) {
-                  start = (rank_within_node - num_processes_per_socket) * (nworkers) + NUM_CORES_PER_SOCKET;
-              } else {
-                  start = rank_within_node * (nworkers);
-              }
-            } else {
-              // assume each process gets 1 progress thread if not using streams
-              if (rank_within_node >= num_processes_per_socket) {
-                  start = (rank_within_node - num_processes_per_socket) * (nworkers + 1) + NUM_CORES_PER_SOCKET;
-              } else {
-                  start = rank_within_node * (nworkers + 1);
-              }
-            }
+            int rank_within_node   = rank % num_processes_per_node;
+            int socket_id          = rank_within_node / num_processes_per_socket;
+            int rank_within_socket = rank_within_node % num_processes_per_socket;
+            int start              = socket_id * NUM_CORES_PER_SOCKET + rank_within_socket * stride;
 
             std::stringstream workers_str;
             for (int w = 0; w < nworkers; w++) {
