@@ -1016,9 +1016,8 @@ void Verlet::setup_stencil_md_many_zoids() {
     }
     */
 
-    std::cout << BOLDGREEN << "Initial Force computation passed" << RESET_COLOR << std::endl;
-
     if (TEST_AGAINST_LAMMPS) {
+        std::cout << BOLDGREEN << "Initial Force computation passed" << RESET_COLOR << std::endl;
         delete[] send_f;
         delete[] recv_f;
     }
