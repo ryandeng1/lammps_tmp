@@ -6001,6 +6001,47 @@ public:
 
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
+        // Fail fast if send/recv neighbor maps are not reciprocal.
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto& zoid = queues[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) continue;
+
+                const auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                                                     : send_to_neighbors_many_cuts_next_dt[zoid.num];
+                const auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
+                                                     : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+
+                for (int send_zoid_num : send_neighbors) {
+                    const auto& other_recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[send_zoid_num]
+                                                               : recv_from_neighbors_many_cuts_next_dt[send_zoid_num];
+                    if (std::find(other_recv_neighbors.begin(), other_recv_neighbors.end(), zoid.num) ==
+                        other_recv_neighbors.end()) {
+                        std::cerr << "Non-reciprocal many-cuts neighbor map in CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS: "
+                                  << "curr_dt=" << curr_dt
+                                  << " local_zoid=" << zoid.num
+                                  << " send_neighbor=" << send_zoid_num
+                                  << " (missing reverse recv edge)" << std::endl;
+                        MPI_Abort(world, 1);
+                    }
+                }
+
+                for (int recv_zoid_num : recv_neighbors) {
+                    const auto& other_send_neighbors = curr_dt ? send_to_neighbors_many_cuts[recv_zoid_num]
+                                                               : send_to_neighbors_many_cuts_next_dt[recv_zoid_num];
+                    if (std::find(other_send_neighbors.begin(), other_send_neighbors.end(), zoid.num) ==
+                        other_send_neighbors.end()) {
+                        std::cerr << "Non-reciprocal many-cuts neighbor map in CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS: "
+                                  << "curr_dt=" << curr_dt
+                                  << " local_zoid=" << zoid.num
+                                  << " recv_neighbor=" << recv_zoid_num
+                                  << " (missing reverse send edge)" << std::endl;
+                        MPI_Abort(world, 1);
+                    }
+                }
+            }
+        }
+
         std::vector<int>** zoid_recv_data[NUM_ZOIDS_MANY_CUTS];
         int** zoid_recv_data_sizes[NUM_ZOIDS_MANY_CUTS];
 
