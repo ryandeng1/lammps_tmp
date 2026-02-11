@@ -12638,7 +12638,7 @@ public:
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
                 // auto compute_begin = MPI_Wtime();
-                // auto w = __cilkrts_get_worker_number();
+                auto w = __cilkrts_get_worker_number();
                 // int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
                 int start_chunk = w * chunks_per_worker;
                 for (int c = 0; c < num_chunks; ++c) {
