@@ -5998,6 +5998,8 @@ public:
     void CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS() {
         std::vector<MPI_Request> r;
         r.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1) * 4 / comm->nprocs);
+        MPI_Comm pos_idx_comm = MPI_COMM_NULL;
+        MPI_Comm_dup(world, &pos_idx_comm);
 
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
@@ -6042,6 +6044,48 @@ public:
             }
         }
 
+        // Preflight consistency: every size-message receive we expect must have a matching
+        // send on the peer rank. This catches asymmetric timestep/neighbor accounting early.
+        std::vector<int> size_msgs_sent_to_proc(comm->nprocs, 0);
+        std::vector<int> size_msgs_expected_from_proc(comm->nprocs, 0);
+        std::vector<int> size_msgs_incoming_from_proc(comm->nprocs, 0);
+
+        for (int dep = 0; dep < NUM_DEPS; dep++) {
+            for (int j = 0; j < queues[dep].size(); j++) {
+                auto& zoid = queues[dep][j];
+                if (zoid.num % comm->nprocs != comm->me) continue;
+
+                const auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
+                                                     : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                const auto& send_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                                                     : send_to_neighbors_many_cuts_next_dt[zoid.num];
+
+                for (int recv_zoid_num : recv_neighbors) {
+                    size_msgs_sent_to_proc[recv_zoid_num % comm->nprocs] += NUM_TIMESTEPS_IN_PARALLEL;
+                }
+                for (int send_zoid_num : send_neighbors) {
+                    size_msgs_expected_from_proc[send_zoid_num % comm->nprocs] += NUM_TIMESTEPS_IN_PARALLEL;
+                }
+            }
+        }
+
+        MPI_Alltoall(size_msgs_sent_to_proc.data(), 1, MPI_INT,
+                     size_msgs_incoming_from_proc.data(), 1, MPI_INT, pos_idx_comm);
+
+        for (int src = 0; src < comm->nprocs; src++) {
+            if (size_msgs_expected_from_proc[src] != size_msgs_incoming_from_proc[src]) {
+                std::cerr << "Size-message count mismatch in CONSTRUCT_SEND_POS_IDXS_ZOID_MANY_CUTS: "
+                          << "curr_dt=" << curr_dt
+                          << " me=" << comm->me
+                          << " src=" << src
+                          << " expected_from_src=" << size_msgs_expected_from_proc[src]
+                          << " incoming_from_src=" << size_msgs_incoming_from_proc[src]
+                          << " sent_to_src=" << size_msgs_sent_to_proc[src]
+                          << std::endl;
+                MPI_Abort(world, 1);
+            }
+        }
+
         std::vector<int>** zoid_recv_data[NUM_ZOIDS_MANY_CUTS];
         int** zoid_recv_data_sizes[NUM_ZOIDS_MANY_CUTS];
 
@@ -6078,14 +6122,14 @@ public:
 
                         r.emplace_back();
                         MPI_Isend(&zoid_recv_data_sizes[zoid.num][t][i], 1, MPI_INT,
-                                  recv_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                                  recv_zoid_num % comm->nprocs, mpi_tag, pos_idx_comm, &r[r.size() - 1]);
 
                         if (recv_pos_idxs.size() > 0) {
                             r.emplace_back();
                             // std::vector<int> send_pos_tags;
                             // send_pos_tags.reserve(size);
                             MPI_Isend(zoid_recv_data[zoid.num][t][i].data(), recv_pos_idxs.size(), MPI_INT,
-                                      recv_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                                      recv_zoid_num % comm->nprocs, mpi_tag, pos_idx_comm, &r[r.size() - 1]);
                         }
                     }
                 }
@@ -6122,12 +6166,12 @@ public:
 
                         int nrecv;
                         MPI_Recv(&nrecv, 1, MPI_INT, send_zoid_num % comm->nprocs,
-                                 mpi_tag, world, MPI_STATUS_IGNORE);
+                                 mpi_tag, pos_idx_comm, MPI_STATUS_IGNORE);
 
                         if (nrecv) {
                             int* recv_buf = new int[nrecv];
                             MPI_Recv(recv_buf, nrecv, MPI_INT, send_zoid_num % comm->nprocs,
-                                     mpi_tag, world, MPI_STATUS_IGNORE);
+                                     mpi_tag, pos_idx_comm, MPI_STATUS_IGNORE);
                             zoid.send_pos_idxs_double_buffering[t][i].reserve(nrecv);
                             for (int k = 0; k < nrecv; k++) {
                                 zoid.send_pos_idxs_double_buffering[t][i].push_back(tag_to_idx.at(recv_buf[k]));
@@ -6157,6 +6201,8 @@ public:
                 delete[] zoid_recv_data_sizes[zoid.num];
             }
         }
+
+        MPI_Comm_free(&pos_idx_comm);
     }
 
     template <bool curr_dt>
