@@ -101,7 +101,7 @@ int main(int argc, char **argv)
 #ifdef __linux__
     // if (!stencilMDConfig.ONLY_RUN_LAMMPS) {
     if (!ONLY_RUN_LAMMPS) {
-        constexpr bool USE_MULTI_SOCKET = false;
+        constexpr bool USE_MULTI_SOCKET = true;
         {
             auto calling_thread = pthread_self();
 
