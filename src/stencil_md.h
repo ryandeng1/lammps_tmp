@@ -248,12 +248,12 @@ class MPIX_Stream_Manager {
 
     ~MPIX_Stream_Manager() {
         if (USE_STREAMS) {
-            MPI_Comm_free(&stream_comm);
+            // MPI_Comm_free(&stream_comm);
 
-            for (int i = 0; i < num_streams; i++) {
-                // MPI_Comm_free(&comms[i]);
-                MPIX_Stream_free(&streams[i]);
-            }
+            // for (int i = 0; i < num_streams; i++) {
+            //     // MPI_Comm_free(&comms[i]);
+            //     MPIX_Stream_free(&streams[i]);
+            // }
         }
     }
 };
