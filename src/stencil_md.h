@@ -9236,7 +9236,7 @@ public:
     void SEND_DATA_PROC_TO_PROC(int starting_timestep, int pipeline_stage, int send_dep,
                                 std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
         // auto comm_begin = MPI_Wtime();
-        // auto w = __cilkrts_get_worker_number();
+        auto w = __cilkrts_get_worker_number();
     
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9364,7 +9364,7 @@ public:
                 auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({zoid_num, send_zoid_num});
 
                 // auto comm_begin = MPI_Wtime();
-                // auto w = __cilkrts_get_worker_number();
+                auto w = __cilkrts_get_worker_number();
 
                 if (USE_STREAMS) {
                     manager->m[src_stream_idx].lock();
@@ -9737,7 +9737,7 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        // auto w = __cilkrts_get_worker_number();
+        auto w = __cilkrts_get_worker_number();
         // auto comm_begin = MPI_Wtime();
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
@@ -10226,7 +10226,7 @@ public:
     void UNPACK_POS_VEL_MANY_CUTS_HELPER_PIPELINED(queue_info& zoid, double* buf, int recv_idx, int recv_zoid_num,
                                                    int start_t, int end_t, int pipeline_stage) {
         // auto comm_begin = MPI_Wtime();
-        // auto w = __cilkrts_get_worker_number();
+        auto w = __cilkrts_get_worker_number();
 
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
@@ -11386,7 +11386,7 @@ public:
             : recv_from_neighbors_many_cuts_next_dt[zoid_num];
 
         // auto comm_begin = MPI_Wtime();
-        // auto w = __cilkrts_get_worker_number();
+        auto w = __cilkrts_get_worker_number();
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -11678,7 +11678,7 @@ public:
         int num_send_vel = send_vel_idxs.size();
 
         // auto comm_begin = MPI_Wtime();
-        // auto w = __cilkrts_get_worker_number();
+        auto w = __cilkrts_get_worker_number();
 
         if (DEBUG_SEND_RECV_DATA) {
             for (int i = 0; i < send_force_idxs.size(); i++) {
@@ -12375,7 +12375,7 @@ public:
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
                 // auto compute_begin = MPI_Wtime();
-                // auto w = __cilkrts_get_worker_number();
+                auto w = __cilkrts_get_worker_number();
 
                 // int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
                 int start_chunk = w * chunks_per_worker;
@@ -12431,7 +12431,7 @@ public:
             }
         } else {
             // auto compute_begin = MPI_Wtime();
-            // auto w = __cilkrts_get_worker_number();
+            auto w = __cilkrts_get_worker_number();
 
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -12638,7 +12638,7 @@ public:
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
                 // auto compute_begin = MPI_Wtime();
-                // auto w = __cilkrts_get_worker_number();
+                auto w = __cilkrts_get_worker_number();
                 // int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
                 int start_chunk = w * chunks_per_worker;
                 for (int c = 0; c < num_chunks; ++c) {
@@ -12675,7 +12675,7 @@ public:
             }
         } else {
             // auto compute_begin = MPI_Wtime();
-            // auto w = __cilkrts_get_worker_number();
+            auto w = __cilkrts_get_worker_number();
 
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -12740,7 +12740,7 @@ public:
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
             // auto compute_begin = MPI_Wtime();
-            // auto w = __cilkrts_get_worker_number();
+            auto w = __cilkrts_get_worker_number();
             int num_pairs = 0;
 
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
@@ -13370,7 +13370,7 @@ public:
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
             // auto compute_begin = MPI_Wtime();
-            // auto w = __cilkrts_get_worker_number();
+            auto w = __cilkrts_get_worker_number();
             int num_pairs = 0;
 
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
@@ -14174,7 +14174,7 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
-            // auto w = __cilkrts_get_worker_number();
+            auto w = __cilkrts_get_worker_number();
             // auto compute_begin = MPI_Wtime();
             int num_pairs = 0;
 
@@ -14258,7 +14258,7 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_bonds; c++) {
-            // auto w = __cilkrts_get_worker_number();
+            auto w = __cilkrts_get_worker_number();
             // auto compute_begin = MPI_Wtime();
 
             for (int i = c * BOND_GRAINSIZE; i < (c + 1) * BOND_GRAINSIZE && i < nbonds; i++) {
@@ -14860,7 +14860,7 @@ public:
 
         if (USE_MEMORY) {
             if (nlocal <= LJ_GRAINSIZE) {
-                // auto w = __cilkrts_get_worker_number();
+                auto w = __cilkrts_get_worker_number();
                 // auto compute_begin = MPI_Wtime();
                 int num_pairs = 0;
 
@@ -15245,7 +15245,7 @@ public:
         auto* a0 = pair->a0;
 
         if (nlocal <= GRAINSIZE) {
-            // auto w = __cilkrts_get_worker_number();
+            auto w = __cilkrts_get_worker_number();
             // auto compute_begin = MPI_Wtime();
             int num_pairs = 0;
 
@@ -15328,7 +15328,7 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
-            // auto w = __cilkrts_get_worker_number();
+            auto w = __cilkrts_get_worker_number();
             // auto compute_begin = MPI_Wtime();
             int num_pairs = 0;
 
