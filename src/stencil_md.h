@@ -7200,139 +7200,166 @@ public:
             return;
         }
 
-        std::vector<MPI_Request> r;
-        r.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1) * 4 / comm->nprocs);
+        MPI_Comm force_idx_comm = MPI_COMM_NULL;
+        MPI_Comm_dup(world, &force_idx_comm);
 
-        std::vector<int>** zoid_send_data[NUM_ZOIDS_MANY_CUTS];
-        int** zoid_send_data_sizes[NUM_ZOIDS_MANY_CUTS];
+        struct SendSizeMsg {
+            int dst_proc;
+            int tag;
+            int size;
+        };
+        struct SendDataMsg {
+            int dst_proc;
+            int tag;
+            int payload_idx;
+        };
+        struct RecvExpectation {
+            queue_info* zoid;
+            int t;
+            int neighbor_idx;
+            int src_proc;
+            int tag;
+            int size;
+            std::vector<int> payload;
+        };
+
+        std::vector<std::vector<int>> send_payloads;
+        send_payloads.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1));
+        std::vector<SendSizeMsg> size_sends;
+        std::vector<SendDataMsg> data_sends;
+        std::vector<RecvExpectation> recv_expectations;
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
                 auto& zoid = queues[dep][j];
-                if (zoid.num % comm->nprocs != comm->me) {
-                    continue;
-                }
+                if (zoid.num % comm->nprocs != comm->me) continue;
 
-                zoid_send_data[zoid.num] = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid_send_data_sizes[zoid.num] = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] :
-                                          send_to_neighbors_many_cuts_next_dt[zoid.num];
-
+                const auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    zoid_send_data[zoid.num][t] = new std::vector<int>[send_to_neighbors.size()];
-                    zoid_send_data_sizes[zoid.num][t] = new int[send_to_neighbors.size()];
-
                     for (int i = 0; i < send_to_neighbors.size(); i++) {
                         int send_zoid_num = send_to_neighbors[i];
-
+                        int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                         auto& send_force_idxs = zoid.send_force_idxs_double_buffering[t][i];
 
-                        // int mpi_tag = get_mpi_tag(send_zoid_num, zoid.num, t, t);
-                        int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
-
-                        zoid_send_data[zoid.num][t][i].reserve(send_force_idxs.size());
-                        zoid_send_data_sizes[zoid.num][t][i] = send_force_idxs.size();
+                        send_payloads.emplace_back();
+                        auto& payload = send_payloads.back();
+                        payload.reserve(send_force_idxs.size());
                         for (int k = 0; k < send_force_idxs.size(); k++) {
-                            zoid_send_data[zoid.num][t][i].push_back(zoid.tag_stencil_md[0][send_force_idxs[k]]);
+                            payload.push_back(zoid.tag_stencil_md[0][send_force_idxs[k]]);
                         }
 
-                        r.emplace_back();
-                        MPI_Isend(&zoid_send_data_sizes[zoid.num][t][i], 1, MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
-
-                        if (send_force_idxs.size() > 0) {
-                            r.emplace_back();
-                            // std::vector<int> send_pos_tags;
-                            // send_pos_tags.reserve(size);
-                            MPI_Isend(zoid_send_data[zoid.num][t][i].data(), send_force_idxs.size(), MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                        size_sends.push_back({send_zoid_num % comm->nprocs, mpi_tag, static_cast<int>(payload.size())});
+                        if (!payload.empty()) {
+                            data_sends.push_back({send_zoid_num % comm->nprocs, mpi_tag, static_cast<int>(send_payloads.size() - 1)});
                         }
+                    }
+                }
+
+                const auto& recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
+                                                          : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.recv_force_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
+                    for (int i = 0; i < recv_from_neighbors.size(); i++) {
+                        int recv_zoid_num = recv_from_neighbors[i];
+                        int mpi_tag = get_mpi_tag_many_cuts(zoid.num, recv_zoid_num);
+                        recv_expectations.push_back({&zoid, t, i, recv_zoid_num % comm->nprocs, mpi_tag, 0, {}});
                     }
                 }
             }
         }
 
+        std::vector<MPI_Request> recv_size_reqs(recv_expectations.size(), MPI_REQUEST_NULL);
+        for (int i = 0; i < recv_expectations.size(); i++) {
+            auto& exp = recv_expectations[i];
+            MPI_Irecv(&exp.size, 1, MPI_INT, exp.src_proc, exp.tag, force_idx_comm, &recv_size_reqs[i]);
+        }
+
+        std::vector<MPI_Request> send_size_reqs(size_sends.size(), MPI_REQUEST_NULL);
+        for (int i = 0; i < size_sends.size(); i++) {
+            auto& msg = size_sends[i];
+            MPI_Isend(&msg.size, 1, MPI_INT, msg.dst_proc, msg.tag, force_idx_comm, &send_size_reqs[i]);
+        }
+
+        if (!recv_size_reqs.empty()) MPI_Waitall(recv_size_reqs.size(), recv_size_reqs.data(), MPI_STATUSES_IGNORE);
+        if (!send_size_reqs.empty()) MPI_Waitall(send_size_reqs.size(), send_size_reqs.data(), MPI_STATUSES_IGNORE);
+
+        std::vector<MPI_Request> recv_data_reqs;
+        recv_data_reqs.reserve(recv_expectations.size());
+        for (int i = 0; i < recv_expectations.size(); i++) {
+            auto& exp = recv_expectations[i];
+            if (exp.size <= 0) continue;
+            exp.payload.resize(exp.size);
+            MPI_Request req = MPI_REQUEST_NULL;
+            MPI_Irecv(exp.payload.data(), exp.size, MPI_INT, exp.src_proc, exp.tag, force_idx_comm, &req);
+            recv_data_reqs.push_back(req);
+        }
+
+        std::vector<MPI_Request> send_data_reqs(data_sends.size(), MPI_REQUEST_NULL);
+        for (int i = 0; i < data_sends.size(); i++) {
+            auto& msg = data_sends[i];
+            auto& payload = send_payloads[msg.payload_idx];
+            MPI_Isend(payload.data(), payload.size(), MPI_INT, msg.dst_proc, msg.tag, force_idx_comm, &send_data_reqs[i]);
+        }
+
+        if (!recv_data_reqs.empty()) MPI_Waitall(recv_data_reqs.size(), recv_data_reqs.data(), MPI_STATUSES_IGNORE);
+        if (!send_data_reqs.empty()) MPI_Waitall(send_data_reqs.size(), send_data_reqs.data(), MPI_STATUSES_IGNORE);
+
+        std::vector<std::unordered_map<int, int>> tag_to_idx_by_zoid(NUM_ZOIDS_MANY_CUTS);
+        std::vector<std::map<int, int>> tag_to_timestep_by_zoid(NUM_ZOIDS_MANY_CUTS);
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
                 auto& zoid = queues[dep][j];
-                if (zoid.num % comm->nprocs != comm->me) {
-                    continue;
-                }
-
-                std::unordered_map<int, int> tag_to_idx;
+                if (zoid.num % comm->nprocs != comm->me) continue;
+                auto& m = tag_to_idx_by_zoid[zoid.num];
+                m.reserve(zoid.tag_stencil_md[0].size());
                 for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
-                    tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+                    m[zoid.tag_stencil_md[0][i]] = i;
+                }
+            }
+        }
+
+        for (const auto& exp : recv_expectations) {
+            auto& out = exp.zoid->recv_force_idxs_double_buffering[exp.t][exp.neighbor_idx];
+            out.reserve(exp.payload.size());
+
+            auto& tag_to_idx = tag_to_idx_by_zoid[exp.zoid->num];
+            auto& tag_to_timestep = tag_to_timestep_by_zoid[exp.zoid->num];
+            for (int k = 0; k < exp.payload.size(); k++) {
+                int tag = exp.payload[k];
+                auto it = tag_to_idx.find(tag);
+                if (it == tag_to_idx.end()) {
+                    std::cerr << "Missing tag in CONSTRUCT_RECV_FORCE_IDXS_ZOID_MANY_CUTS: "
+                              << "curr_dt=" << curr_dt << " me=" << comm->me
+                              << " zoid=" << exp.zoid->num << " timestep=" << exp.t
+                              << " recv_tag=" << tag << std::endl;
+                    MPI_Abort(world, 1);
                 }
 
-                auto& recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
-                                                    : recv_from_neighbors_many_cuts_next_dt[zoid.num];
-
-                std::map<int, int> tag_to_timestep;
-
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    zoid.recv_force_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
-
-                    for (int i = 0; i < recv_from_neighbors.size(); i++) {
-                        int recv_zoid_num = recv_from_neighbors[i];
-
-                        // int mpi_tag = get_mpi_tag(zoid.num, recv_zoid_num, t, t);
-                        int mpi_tag = get_mpi_tag_many_cuts(zoid.num, recv_zoid_num);
-
-                        int nrecv;
-                        MPI_Recv(&nrecv, 1, MPI_INT, recv_zoid_num % comm->nprocs,
-                                 mpi_tag, world, MPI_STATUS_IGNORE);
-
-                        if (nrecv) {
-                            int* recv_buf = new int[nrecv];
-                            MPI_Recv(recv_buf, nrecv, MPI_INT, recv_zoid_num % comm->nprocs,
-                                     mpi_tag, world, MPI_STATUS_IGNORE);
-                            zoid.recv_force_idxs_double_buffering[t][i].reserve(nrecv);
-                            for (int k = 0; k < nrecv; k++) {
-                                zoid.recv_force_idxs_double_buffering[t][i].push_back(tag_to_idx.at(recv_buf[k]));
-
-                                if (tag_to_timestep.count(recv_buf[k])) {
-                                    if (tag_to_timestep.at(recv_buf[k]) != t) {
-                                        int other_t = tag_to_timestep.at(recv_buf[k]);
-                                        int tag_idx = tag_to_idx.at(recv_buf[k]);
-
-                                        std::cout << std::setprecision (std::numeric_limits<double>::digits10 + 1)
-                                        << "tag: " << recv_buf[k] << " timestep: " << t << " overlapping recv force timestep: " << tag_to_timestep.at(recv_buf[k])
-                                        << " pos: " << zoid.x_stencil_md[0][tag_idx].x << " " << zoid.x_stencil_md[0][tag_idx].y << " " << zoid.x_stencil_md[0][tag_idx].z
-                                        << " lo: " << zoid.lo[t][0] << " " << zoid.lo[t][1] << " " << zoid.lo[t][2]
-                                        << " hi: " << zoid.hi[t][0] << " " << zoid.hi[t][1] << " " << zoid.hi[t][2]
-                                        << " other lo: " << zoid.lo[other_t][0] << " " << zoid.lo[other_t][1] << " " << zoid.lo[other_t][2]
-                                        << " other hi: " << zoid.hi[other_t][0] << " " << zoid.hi[other_t][1] << " " << zoid.hi[other_t][2]
-                                        << std::endl;
-                                    }
-                                    assert(tag_to_timestep.at(recv_buf[k]) == t);
-                                } else {
-                                    tag_to_timestep[recv_buf[k]] = t;
-                                }
-                            }
-                            delete[] recv_buf;
-                        }
+                int idx = it->second;
+                out.push_back(idx);
+                if (tag_to_timestep.count(tag)) {
+                    if (tag_to_timestep.at(tag) != exp.t) {
+                        int other_t = tag_to_timestep.at(tag);
+                        std::cout << std::setprecision(std::numeric_limits<double>::digits10 + 1)
+                                  << "tag: " << tag << " timestep: " << exp.t
+                                  << " overlapping recv force timestep: " << other_t
+                                  << " pos: " << exp.zoid->x_stencil_md[0][idx].x << " "
+                                  << exp.zoid->x_stencil_md[0][idx].y << " " << exp.zoid->x_stencil_md[0][idx].z
+                                  << " lo: " << exp.zoid->lo[exp.t][0] << " " << exp.zoid->lo[exp.t][1] << " " << exp.zoid->lo[exp.t][2]
+                                  << " hi: " << exp.zoid->hi[exp.t][0] << " " << exp.zoid->hi[exp.t][1] << " " << exp.zoid->hi[exp.t][2]
+                                  << " other lo: " << exp.zoid->lo[other_t][0] << " " << exp.zoid->lo[other_t][1] << " " << exp.zoid->lo[other_t][2]
+                                  << " other hi: " << exp.zoid->hi[other_t][0] << " " << exp.zoid->hi[other_t][1] << " " << exp.zoid->hi[other_t][2]
+                                  << std::endl;
                     }
+                    assert(tag_to_timestep.at(tag) == exp.t);
+                } else {
+                    tag_to_timestep[tag] = exp.t;
                 }
             }
         }
 
-        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
-
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues[dep].size(); j++) {
-                auto &zoid = queues[dep][j];
-                if (zoid.num % comm->nprocs != comm->me) {
-                    continue;
-                }
-
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    delete[] zoid_send_data[zoid.num][t];
-                    delete[] zoid_send_data_sizes[zoid.num][t];
-                }
-
-                delete[] zoid_send_data[zoid.num];
-                delete[] zoid_send_data_sizes[zoid.num];
-            }
-        }
+        MPI_Comm_free(&force_idx_comm);
 
         // debug
         for (int dep = 0; dep < NUM_DEPS; dep++) {
@@ -7374,134 +7401,159 @@ public:
 
     template <bool curr_dt>
     void CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS() {
-        std::vector<MPI_Request> r;
-        r.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1) * 4 / comm->nprocs);
+        MPI_Comm vel_idx_comm = MPI_COMM_NULL;
+        MPI_Comm_dup(world, &vel_idx_comm);
 
         auto& queues = curr_dt ? queues_many_cuts : queues_many_cuts_next_dt;
 
-        std::vector<int>** zoid_send_data[NUM_ZOIDS_MANY_CUTS];
-        int** zoid_send_data_sizes[NUM_ZOIDS_MANY_CUTS];
+        struct SendSizeMsg {
+            int dst_proc;
+            int tag;
+            int size;
+        };
+        struct SendDataMsg {
+            int dst_proc;
+            int tag;
+            int payload_idx;
+        };
+        struct RecvExpectation {
+            queue_info* zoid;
+            int t;
+            int neighbor_idx;
+            int src_proc;
+            int tag;
+            int size;
+            std::vector<int> payload;
+        };
+
+        std::vector<std::vector<int>> send_payloads;
+        send_payloads.reserve(NUM_ZOIDS_MANY_CUTS * (NUM_TIMESTEPS_IN_PARALLEL + 1));
+        std::vector<SendSizeMsg> size_sends;
+        std::vector<SendDataMsg> data_sends;
+        std::vector<RecvExpectation> recv_expectations;
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
                 auto& zoid = queues[dep][j];
-                if (zoid.num % comm->nprocs != comm->me) {
-                    continue;
-                }
+                if (zoid.num % comm->nprocs != comm->me) continue;
 
-                zoid_send_data[zoid.num] = new std::vector<int>*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-                zoid_send_data_sizes[zoid.num] = new int*[NUM_TIMESTEPS_IN_PARALLEL + 1];
-
-                auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num] :
-                                          send_to_neighbors_many_cuts_next_dt[zoid.num];
-
+                const auto& send_to_neighbors = curr_dt ? send_to_neighbors_many_cuts[zoid.num]
+                                                        : send_to_neighbors_many_cuts_next_dt[zoid.num];
                 for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    zoid_send_data[zoid.num][t] = new std::vector<int>[send_to_neighbors.size()];
-                    zoid_send_data_sizes[zoid.num][t] = new int[send_to_neighbors.size()];
-
                     for (int i = 0; i < send_to_neighbors.size(); i++) {
                         int send_zoid_num = send_to_neighbors[i];
-
+                        int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                         auto& send_vel_idxs = zoid.send_vel_idxs_double_buffering[t][i];
 
-                        // int mpi_tag = get_mpi_tag(send_zoid_num, zoid.num, t, t);
-                        int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
-
-                        zoid_send_data[zoid.num][t][i].reserve(send_vel_idxs.size());
-                        zoid_send_data_sizes[zoid.num][t][i] = send_vel_idxs.size();
+                        send_payloads.emplace_back();
+                        auto& payload = send_payloads.back();
+                        payload.reserve(send_vel_idxs.size());
                         for (int k = 0; k < send_vel_idxs.size(); k++) {
-                            zoid_send_data[zoid.num][t][i].push_back(zoid.tag_stencil_md[0][send_vel_idxs[k]]);
+                            payload.push_back(zoid.tag_stencil_md[0][send_vel_idxs[k]]);
                         }
 
-                        r.emplace_back();
-                        MPI_Isend(&zoid_send_data_sizes[zoid.num][t][i], 1, MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
-
-                        if (send_vel_idxs.size() > 0) {
-                            r.emplace_back();
-                            // std::vector<int> send_pos_tags;
-                            // send_pos_tags.reserve(size);
-                            MPI_Isend(zoid_send_data[zoid.num][t][i].data(), send_vel_idxs.size(), MPI_INT, send_zoid_num % comm->nprocs, mpi_tag, world, &r[r.size() - 1]);
+                        size_sends.push_back({send_zoid_num % comm->nprocs, mpi_tag, static_cast<int>(payload.size())});
+                        if (!payload.empty()) {
+                            data_sends.push_back({send_zoid_num % comm->nprocs, mpi_tag, static_cast<int>(send_payloads.size() - 1)});
                         }
+                    }
+                }
+
+                const auto& recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
+                                                          : recv_from_neighbors_many_cuts_next_dt[zoid.num];
+                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
+                    zoid.recv_vel_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
+                    for (int i = 0; i < recv_from_neighbors.size(); i++) {
+                        int recv_zoid_num = recv_from_neighbors[i];
+                        int mpi_tag = get_mpi_tag_many_cuts(zoid.num, recv_zoid_num);
+                        recv_expectations.push_back({&zoid, t, i, recv_zoid_num % comm->nprocs, mpi_tag, 0, {}});
                     }
                 }
             }
         }
 
+        std::vector<MPI_Request> recv_size_reqs(recv_expectations.size(), MPI_REQUEST_NULL);
+        for (int i = 0; i < recv_expectations.size(); i++) {
+            auto& exp = recv_expectations[i];
+            MPI_Irecv(&exp.size, 1, MPI_INT, exp.src_proc, exp.tag, vel_idx_comm, &recv_size_reqs[i]);
+        }
+
+        std::vector<MPI_Request> send_size_reqs(size_sends.size(), MPI_REQUEST_NULL);
+        for (int i = 0; i < size_sends.size(); i++) {
+            auto& msg = size_sends[i];
+            MPI_Isend(&msg.size, 1, MPI_INT, msg.dst_proc, msg.tag, vel_idx_comm, &send_size_reqs[i]);
+        }
+
+        if (!recv_size_reqs.empty()) MPI_Waitall(recv_size_reqs.size(), recv_size_reqs.data(), MPI_STATUSES_IGNORE);
+        if (!send_size_reqs.empty()) MPI_Waitall(send_size_reqs.size(), send_size_reqs.data(), MPI_STATUSES_IGNORE);
+
+        std::vector<MPI_Request> recv_data_reqs;
+        recv_data_reqs.reserve(recv_expectations.size());
+        for (int i = 0; i < recv_expectations.size(); i++) {
+            auto& exp = recv_expectations[i];
+            if (exp.size <= 0) continue;
+            exp.payload.resize(exp.size);
+            MPI_Request req = MPI_REQUEST_NULL;
+            MPI_Irecv(exp.payload.data(), exp.size, MPI_INT, exp.src_proc, exp.tag, vel_idx_comm, &req);
+            recv_data_reqs.push_back(req);
+        }
+
+        std::vector<MPI_Request> send_data_reqs(data_sends.size(), MPI_REQUEST_NULL);
+        for (int i = 0; i < data_sends.size(); i++) {
+            auto& msg = data_sends[i];
+            auto& payload = send_payloads[msg.payload_idx];
+            MPI_Isend(payload.data(), payload.size(), MPI_INT, msg.dst_proc, msg.tag, vel_idx_comm, &send_data_reqs[i]);
+        }
+
+        if (!recv_data_reqs.empty()) MPI_Waitall(recv_data_reqs.size(), recv_data_reqs.data(), MPI_STATUSES_IGNORE);
+        if (!send_data_reqs.empty()) MPI_Waitall(send_data_reqs.size(), send_data_reqs.data(), MPI_STATUSES_IGNORE);
+
+        std::vector<std::unordered_map<int, int>> tag_to_idx_by_zoid(NUM_ZOIDS_MANY_CUTS);
+        std::vector<std::map<int, int>> tag_to_timestep_by_zoid(NUM_ZOIDS_MANY_CUTS);
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
                 auto& zoid = queues[dep][j];
-                if (zoid.num % comm->nprocs != comm->me) {
-                    continue;
-                }
-
-                std::unordered_map<int, int> tag_to_idx;
+                if (zoid.num % comm->nprocs != comm->me) continue;
+                auto& m = tag_to_idx_by_zoid[zoid.num];
+                m.reserve(zoid.tag_stencil_md[0].size());
                 for (int i = 0; i < zoid.tag_stencil_md[0].size(); i++) {
-                    tag_to_idx[zoid.tag_stencil_md[0][i]] = i;
+                    m[zoid.tag_stencil_md[0][i]] = i;
+                }
+            }
+        }
+
+        for (const auto& exp : recv_expectations) {
+            auto& out = exp.zoid->recv_vel_idxs_double_buffering[exp.t][exp.neighbor_idx];
+            out.reserve(exp.payload.size());
+
+            auto& tag_to_idx = tag_to_idx_by_zoid[exp.zoid->num];
+            auto& tag_to_timestep = tag_to_timestep_by_zoid[exp.zoid->num];
+            for (int k = 0; k < exp.payload.size(); k++) {
+                int tag = exp.payload[k];
+                auto it = tag_to_idx.find(tag);
+                if (it == tag_to_idx.end()) {
+                    std::cerr << "Missing tag in CONSTRUCT_RECV_VEL_IDXS_ZOID_MANY_CUTS: "
+                              << "curr_dt=" << curr_dt << " me=" << comm->me
+                              << " zoid=" << exp.zoid->num << " timestep=" << exp.t
+                              << " recv_tag=" << tag << std::endl;
+                    MPI_Abort(world, 1);
                 }
 
-                auto& recv_from_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid.num]
-                                                    : recv_from_neighbors_many_cuts_next_dt[zoid.num];
-
-                std::map<int, int> tag_to_timestep;
-
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    zoid.recv_vel_idxs_double_buffering[t] = new std::vector<int>[recv_from_neighbors.size()];
-
-                    for (int i = 0; i < recv_from_neighbors.size(); i++) {
-                        int recv_zoid_num = recv_from_neighbors[i];
-
-                        // int mpi_tag = get_mpi_tag(zoid.num, recv_zoid_num, t, t);
-                        int mpi_tag = get_mpi_tag_many_cuts(zoid.num, recv_zoid_num);
-
-                        int nrecv;
-                        MPI_Recv(&nrecv, 1, MPI_INT, recv_zoid_num % comm->nprocs,
-                                 mpi_tag, world, MPI_STATUS_IGNORE);
-
-                        if (nrecv) {
-                            int* recv_buf = new int[nrecv];
-                            MPI_Recv(recv_buf, nrecv, MPI_INT, recv_zoid_num % comm->nprocs,
-                                     mpi_tag, world, MPI_STATUS_IGNORE);
-                            zoid.recv_vel_idxs_double_buffering[t][i].reserve(nrecv);
-                            for (int k = 0; k < nrecv; k++) {
-                                zoid.recv_vel_idxs_double_buffering[t][i].push_back(tag_to_idx.at(recv_buf[k]));
-
-                                if (tag_to_timestep.count(recv_buf[k])) {
-                                    if (tag_to_timestep.at(recv_buf[k]) != t) {
-                                        std::cout << "tag: " << recv_buf[k] << " timestep: " << t
-                                                  << " overlapping recv vel timestep: " << tag_to_timestep.at(recv_buf[k])
-                                                  << std::endl;
-                                    }
-                                    assert(tag_to_timestep.at(recv_buf[k]) == t);
-                                } else {
-                                    tag_to_timestep[recv_buf[k]] = t;
-                                }
-
-                            }
-                            delete[] recv_buf;
-                        }
+                out.push_back(it->second);
+                if (tag_to_timestep.count(tag)) {
+                    if (tag_to_timestep.at(tag) != exp.t) {
+                        std::cout << "tag: " << tag << " timestep: " << exp.t
+                                  << " overlapping recv vel timestep: " << tag_to_timestep.at(tag)
+                                  << std::endl;
                     }
+                    assert(tag_to_timestep.at(tag) == exp.t);
+                } else {
+                    tag_to_timestep[tag] = exp.t;
                 }
             }
         }
 
-        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
-
-        for (int dep = 0; dep < NUM_DEPS; dep++) {
-            for (int j = 0; j < queues[dep].size(); j++) {
-                auto &zoid = queues[dep][j];
-                if (zoid.num % comm->nprocs != comm->me) {
-                    continue;
-                }
-
-                for (int t = 0; t < NUM_TIMESTEPS_IN_PARALLEL + 1; t++) {
-                    delete[] zoid_send_data[zoid.num][t];
-                    delete[] zoid_send_data_sizes[zoid.num][t];
-                }
-
-                delete[] zoid_send_data[zoid.num];
-                delete[] zoid_send_data_sizes[zoid.num];
-            }
-        }
+        MPI_Comm_free(&vel_idx_comm);
 
         // debug
         for (int dep = 0; dep < NUM_DEPS; dep++) {
