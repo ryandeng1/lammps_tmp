@@ -101,15 +101,9 @@ int main(int argc, char **argv)
 #ifdef __linux__
     // if (!stencilMDConfig.ONLY_RUN_LAMMPS) {
     if (!ONLY_RUN_LAMMPS) {
-        constexpr bool USE_MULTI_SOCKET = true;
-        if (USE_MULTI_SOCKET) {
+        constexpr bool USE_MULTI_SOCKET = false;
+        {
             auto calling_thread = pthread_self();
-
-            int world_size;
-            MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-
-            int rank;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
             cilk_for (int i = 0; i < 1e6; i++) {
                 if (rand() == 0) {
@@ -118,32 +112,44 @@ int main(int argc, char **argv)
             }
 
             int nworkers = __cilkrts_get_nworkers();
-
-
             auto* cpusets = new cpu_set_t[nworkers];
-            constexpr int NUM_CORES_PER_SOCKET = 24;
-            constexpr int NUM_SOCKETS = 4;
-            constexpr int NUM_CORES_PER_NODE = NUM_CORES_PER_SOCKET * NUM_SOCKETS;
 
-            constexpr bool USE_STREAMS = true;
-            int stride = USE_STREAMS ? nworkers : nworkers + 1;
+            if (USE_MULTI_SOCKET) {
+                int world_size;
+                MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-            int num_processes_per_socket = NUM_CORES_PER_SOCKET / stride;
-            int num_processes_per_node   = num_processes_per_socket * NUM_SOCKETS;
+                int rank;
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-            int rank_within_node   = rank % num_processes_per_node;
-            int socket_id          = rank_within_node / num_processes_per_socket;
-            int rank_within_socket = rank_within_node % num_processes_per_socket;
-            int start              = socket_id * NUM_CORES_PER_SOCKET + rank_within_socket * stride;
+                constexpr int NUM_CORES_PER_SOCKET = 24;
+                constexpr int NUM_SOCKETS = 4;
+                constexpr int NUM_CORES_PER_NODE = NUM_CORES_PER_SOCKET * NUM_SOCKETS;
 
-            std::stringstream workers_str;
-            for (int w = 0; w < nworkers; w++) {
-                CPU_ZERO(&cpusets[w]);
-                CPU_SET(start + w, &cpusets[w]);
-                workers_str << start + w << " ";
+                constexpr bool USE_STREAMS = true;
+                int stride = USE_STREAMS ? nworkers : nworkers + 1;
+
+                int num_processes_per_socket = NUM_CORES_PER_SOCKET / stride;
+                int num_processes_per_node   = num_processes_per_socket * NUM_SOCKETS;
+
+                int rank_within_node   = rank % num_processes_per_node;
+                int socket_id          = rank_within_node / num_processes_per_socket;
+                int rank_within_socket = rank_within_node % num_processes_per_socket;
+                int start              = socket_id * NUM_CORES_PER_SOCKET + rank_within_socket * stride;
+
+                std::stringstream workers_str;
+                for (int w = 0; w < nworkers; w++) {
+                    CPU_ZERO(&cpusets[w]);
+                    CPU_SET(start + w, &cpusets[w]);
+                    workers_str << start + w << " ";
+                }
+
+                std::cout << "rank: " << rank << " workers: " << workers_str.str() << std::endl;
+            } else {
+                for (int w = 0; w < nworkers; w++) {
+                    CPU_ZERO(&cpusets[w]);
+                    CPU_SET(w, &cpusets[w]);
+                }
             }
-
-            std::cout << "rank: " << rank << " workers: " << workers_str.str() << std::endl;
 
             set_worker_affinity(nworkers, cpusets, calling_thread);
             delete[] cpusets;
