@@ -927,7 +927,7 @@ void Verlet::setup_stencil_md_many_zoids() {
             }
         }
 
-        std::cout << "total beneath: " << total_beneath << " npairs: " << total_num_pairs << std::endl;
+        // std::cout << "total beneath: " << total_beneath << " npairs: " << total_num_pairs << std::endl;
     }
 
     // int64_t total_num_pairs = 0;
