@@ -6428,7 +6428,7 @@ public:
             }
         }
 
-        MPI_Waitall(r.size(), r.data(), MPI_STATUS_IGNORE);
+        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
@@ -6868,7 +6868,7 @@ public:
             }
         }
 
-        MPI_Waitall(r.size(), r.data(), MPI_STATUS_IGNORE);
+        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
@@ -7081,7 +7081,7 @@ public:
             }
         }
 
-        MPI_Waitall(r.size(), r.data(), MPI_STATUS_IGNORE);
+        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
@@ -7241,7 +7241,7 @@ public:
             }
         }
 
-        MPI_Waitall(r.size(), r.data(), MPI_STATUS_IGNORE);
+        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
@@ -7410,7 +7410,7 @@ public:
             }
         }
 
-        MPI_Waitall(r.size(), r.data(), MPI_STATUS_IGNORE);
+        MPI_Waitall(r.size(), r.data(), MPI_STATUSES_IGNORE);
 
         for (int dep = 0; dep < NUM_DEPS; dep++) {
             for (int j = 0; j < queues[dep].size(); j++) {
