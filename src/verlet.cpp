@@ -1701,9 +1701,9 @@ void Verlet::run(int n) {
     // run_stencil_md_many_cuts_pipelined(n, test_f, test_x, test_v, zoid_claimed, zoid_claimed2);
     run_stencil_md_many_cuts(2 * NUM_TIMESTEPS_IN_PARALLEL, test_f, test_x, test_v, zoid_claimed, zoid_unpack_self_claimed);
 
-    total_time = 0;
-    total_num_pairs = 0;
-    v_comm_time = 0;
+    // total_time = 0;
+    // total_num_pairs = 0;
+    // v_comm_time = 0;
     stencilMD->reset_timers();
     timestamp_records.clear();
 
@@ -1747,49 +1747,45 @@ void Verlet::run(int n) {
     << " total duration: " << total_duration_stencil_md << std::endl;
     std::cout << output_stream.str();
 
-    double total_compute_time = 0;
-    double total_comm_time = 0;
-    for (int w = 0; w < 24; w++) {
-        total_compute_time += s_compute_time[w];
-        total_comm_time += s_comm_time[w];
+    // double total_compute_time = 0;
+    // double total_comm_time = 0;
+    // for (int w = 0; w < 24; w++) {
+    //     total_compute_time += s_compute_time[w];
+    //     total_comm_time += s_comm_time[w];
+    // }
 
-        // if (comm->me == 0) {
-        //     std::cout << "worker w: " << w << " comm time: " << s_comm_time[w] * 1e6 << " " << " compute time: " << s_compute_time[w] * 1e6 << std::endl;
-        // }
-    }
+    // if (comm->me == 0) {
+    //     std::cout << "total v comm time: " << v_comm_time * 1e6 << std::endl;
+    // }
 
-    if (comm->me == 0) {
-        std::cout << "total v comm time: " << v_comm_time * 1e6 << std::endl;
-    }
+    // total_comm_time += v_comm_time;
 
-    total_comm_time += v_comm_time;
+    // double all_reduce_compute;
+    // double all_reduce_comm;
+    // double all_reduce_other;
 
-    double all_reduce_compute;
-    double all_reduce_comm;
-    double all_reduce_other;
+    // MPI_Allreduce(&total_compute_time, &all_reduce_compute, 1, MPI_DOUBLE, MPI_SUM, world);
+    // MPI_Allreduce(&total_comm_time, &all_reduce_comm, 1, MPI_DOUBLE, MPI_SUM, world);
+    // MPI_Allreduce(&other_time, &all_reduce_other, 1, MPI_DOUBLE, MPI_SUM, world);
 
-    MPI_Allreduce(&total_compute_time, &all_reduce_compute, 1, MPI_DOUBLE, MPI_SUM, world);
-    MPI_Allreduce(&total_comm_time, &all_reduce_comm, 1, MPI_DOUBLE, MPI_SUM, world);
-    MPI_Allreduce(&other_time, &all_reduce_other, 1, MPI_DOUBLE, MPI_SUM, world);
+    // if (comm->me == 0) {
+    //     std::cout << "total compute time: " << total_compute_time * 1e6 << " total comm time: " << total_comm_time * 1e6  << " total other time: " << other_time * 1e6
+    //     << " all reduce compute time: " << all_reduce_compute * 1e6  << " all reduce comm: " << all_reduce_comm * 1e6
+    //     << " percentage comm: " << all_reduce_comm / (all_reduce_comm + all_reduce_compute + all_reduce_other)
+    //     << " percentage compute: " << all_reduce_compute / (all_reduce_comm + all_reduce_compute + all_reduce_other)
+    //     << " percentage other: " << all_reduce_other / (all_reduce_comm + all_reduce_compute + all_reduce_other)
+    //     << std::endl;
+    // }
 
-    if (comm->me == 0) {
-        std::cout << "total compute time: " << total_compute_time * 1e6 << " total comm time: " << total_comm_time * 1e6  << " total other time: " << other_time * 1e6
-        << " all reduce compute time: " << all_reduce_compute * 1e6  << " all reduce comm: " << all_reduce_comm * 1e6
-        << " percentage comm: " << all_reduce_comm / (all_reduce_comm + all_reduce_compute + all_reduce_other)
-        << " percentage compute: " << all_reduce_compute / (all_reduce_comm + all_reduce_compute + all_reduce_other)
-        << " percentage other: " << all_reduce_other / (all_reduce_comm + all_reduce_compute + all_reduce_other)
-        << std::endl;
-    }
+    // int64_t num_pairs_total = total_num_pairs;
+    // double time_total = total_time;
 
-    int64_t num_pairs_total = total_num_pairs;
-    double time_total = total_time;
+    // MPI_Allreduce(MPI_IN_PLACE, &num_pairs_total, 1, MPI_LONG, MPI_SUM, world);
+    // MPI_Allreduce(MPI_IN_PLACE, &time_total, 1, MPI_DOUBLE, MPI_SUM, world);
 
-    MPI_Allreduce(MPI_IN_PLACE, &num_pairs_total, 1, MPI_LONG, MPI_SUM, world);
-    MPI_Allreduce(MPI_IN_PLACE, &time_total, 1, MPI_DOUBLE, MPI_SUM, world);
-
-    if (comm->me == 0) {
-        std::cout << "average throughput: " << num_pairs_total * 1.0 / time_total << std::endl;
-    }
+    // if (comm->me == 0) {
+    //     std::cout << "average throughput: " << num_pairs_total * 1.0 / time_total << std::endl;
+    // }
 
     if (comm->me == 0) {
         for (auto& tup : stencil_md_timings) {
