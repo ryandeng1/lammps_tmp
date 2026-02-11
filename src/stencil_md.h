@@ -58,11 +58,11 @@ constexpr bool USE_STREAMS = true;
 constexpr int NUM_STREAMS = 24;
 constexpr int NUM_PROGRESS_STREAM_ITER = 10;
 
-inline double s_compute_time[24] = {0};
-inline double s_comm_time[24] = {0};
+// inline double s_compute_time[24] = {0};
+// inline double s_comm_time[24] = {0};
 
-inline cilk::opadd_reducer<int64_t> total_num_pairs = 0;
-inline cilk::opadd_reducer<double> total_time = 0;
+// inline cilk::opadd_reducer<int64_t> total_num_pairs = 0;
+// inline cilk::opadd_reducer<double> total_time = 0;
 
 typedef struct {
     int send_zoid;
@@ -394,10 +394,10 @@ public:
     }
 
     void reset_timers() {
-        for (int w = 0; w < 24; w++) {
-            s_compute_time[w] = 0;
-            s_comm_time[w] = 0;
-        }
+        // for (int w = 0; w < 24; w++) {
+        //     s_compute_time[w] = 0;
+        //     s_comm_time[w] = 0;
+        // }
     }
 
     void TEST_FORCE_AGAINST_LAMMPS_DOUBLE_BUFFERING(bool curr_dt, int timestep, queue_info& zoid, Atom* atom_, double** test_f) {
@@ -9235,8 +9235,8 @@ public:
     template <bool curr_dt>
     void SEND_DATA_PROC_TO_PROC(int starting_timestep, int pipeline_stage, int send_dep,
                                 std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        auto comm_begin = MPI_Wtime();
-        auto w = __cilkrts_get_worker_number();
+        // auto comm_begin = MPI_Wtime();
+        // auto w = __cilkrts_get_worker_number();
     
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9314,8 +9314,8 @@ public:
             }
         }
 
-        auto comm_end = MPI_Wtime();
-        s_comm_time[w] += (comm_end - comm_begin);
+        // auto comm_end = MPI_Wtime();
+        // s_comm_time[w] += (comm_end - comm_begin);
     }
 
     template <bool curr_dt>
@@ -9363,8 +9363,8 @@ public:
                 int mpi_tag = get_mpi_tag_many_cuts(send_zoid_num, zoid.num);
                 auto [src_stream_idx, dst_stream_idx] = zoid_to_zoid_to_stream_num[curr_dt_idx].at({zoid_num, send_zoid_num});
 
-                auto comm_begin = MPI_Wtime();
-                auto w = __cilkrts_get_worker_number();
+                // auto comm_begin = MPI_Wtime();
+                // auto w = __cilkrts_get_worker_number();
 
                 if (USE_STREAMS) {
                     manager->m[src_stream_idx].lock();
@@ -9400,8 +9400,8 @@ public:
                 });
                 timestamp_mutex.unlock();
 
-                auto comm_end = MPI_Wtime();
-                s_comm_time[w] += (comm_end - comm_begin);
+                // auto comm_end = MPI_Wtime();
+                // s_comm_time[w] += (comm_end - comm_begin);
             }(starting_timestep, send_dep, zoid, zoid_ndoubles_send, i, send_zoid_num, start_timestep, end_timestep, pipeline_stage, stream_manager, send_request_idxs[i], send_r_zoid_to_zoid);
         }
 
@@ -9737,8 +9737,8 @@ public:
 
     template <bool curr_dt>
     void RECEIVE_DATA_PROC_TO_PROC_AND_ZOID_TO_ZOID_STREAMS(int dep, int stream_num, int pipeline_stage, std::vector<MPI_Request>& r, MPIX_Stream_Manager* manager) {
-        auto w = __cilkrts_get_worker_number();
-        auto comm_begin = MPI_Wtime();
+        // auto w = __cilkrts_get_worker_number();
+        // auto comm_begin = MPI_Wtime();
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -9838,8 +9838,8 @@ public:
             recv_request_idx++;
         }
 
-        auto comm_end = MPI_Wtime();
-        s_comm_time[w] += (comm_end - comm_begin);
+        // auto comm_end = MPI_Wtime();
+        // s_comm_time[w] += (comm_end - comm_begin);
     }
 
     void MPIX_START_PROGRESS_THREAD(MPIX_Stream_Manager* manager) {
@@ -10225,8 +10225,8 @@ public:
     template <bool curr_dt>
     void UNPACK_POS_VEL_MANY_CUTS_HELPER_PIPELINED(queue_info& zoid, double* buf, int recv_idx, int recv_zoid_num,
                                                    int start_t, int end_t, int pipeline_stage) {
-        auto comm_begin = MPI_Wtime();
-        auto w = __cilkrts_get_worker_number();
+        // auto comm_begin = MPI_Wtime();
+        // auto w = __cilkrts_get_worker_number();
 
         auto& recv_zoid = curr_dt ? zoid_num_to_zoid_many_cuts[recv_zoid_num]
                                   : zoid_num_to_zoid_many_cuts_next_dt[recv_zoid_num];
@@ -10424,8 +10424,8 @@ public:
 
         }
 
-        auto comm_end = MPI_Wtime();
-        s_comm_time[w] += (comm_end - comm_begin);
+        // auto comm_end = MPI_Wtime();
+        // s_comm_time[w] += (comm_end - comm_begin);
 
         /*
         auto& recv_force_idxs = zoid.recv_force_idxs_double_buffering_flattened_pipelined[pipeline_stage][recv_idx];
@@ -11385,8 +11385,8 @@ public:
         auto& recv_neighbors = curr_dt ? recv_from_neighbors_many_cuts[zoid_num]
             : recv_from_neighbors_many_cuts_next_dt[zoid_num];
 
-        auto comm_begin = MPI_Wtime();
-        auto w = __cilkrts_get_worker_number();
+        // auto comm_begin = MPI_Wtime();
+        // auto w = __cilkrts_get_worker_number();
 
         constexpr int curr_dt_idx = static_cast<int>(curr_dt);
 
@@ -11440,8 +11440,8 @@ public:
             }
         }
 
-        auto comm_end = MPI_Wtime();
-        s_comm_time[w] += (comm_end - comm_begin);
+        // auto comm_end = MPI_Wtime();
+        // s_comm_time[w] += (comm_end - comm_begin);
     }
 
     template <bool curr_dt>
@@ -11677,8 +11677,8 @@ public:
         int num_send_pos2 = send_pos_idxs2.size();
         int num_send_vel = send_vel_idxs.size();
 
-        auto comm_begin = MPI_Wtime();
-        auto w = __cilkrts_get_worker_number();
+        // auto comm_begin = MPI_Wtime();
+        // auto w = __cilkrts_get_worker_number();
 
         if (DEBUG_SEND_RECV_DATA) {
             for (int i = 0; i < send_force_idxs.size(); i++) {
@@ -11924,8 +11924,8 @@ public:
             }
         }
 
-        auto comm_end = MPI_Wtime();
-        s_comm_time[w] += (comm_end - comm_begin);
+        // auto comm_end = MPI_Wtime();
+        // s_comm_time[w] += (comm_end - comm_begin);
 
         if (DEBUG_SEND_RECV_DATA) {
             return (num_send_force + num_send_pos + num_send_pos2 + num_send_vel) * (3 + 1);
@@ -12374,8 +12374,8 @@ public:
 
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
-                auto compute_begin = MPI_Wtime();
-                auto w = __cilkrts_get_worker_number();
+                // auto compute_begin = MPI_Wtime();
+                // auto w = __cilkrts_get_worker_number();
 
                 // int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
                 int start_chunk = w * chunks_per_worker;
@@ -12422,16 +12422,16 @@ public:
                     }
                 }
 
-                auto compute_end = MPI_Wtime();
-                s_compute_time[w] += (compute_end - compute_begin);
+                // auto compute_end = MPI_Wtime();
+                // s_compute_time[w] += (compute_end - compute_begin);
             }
 
             for (int i = 0; i < num_chunks; i++) {
                 claimed[i].clear(std::memory_order_relaxed);
             }
         } else {
-            auto compute_begin = MPI_Wtime();
-            auto w = __cilkrts_get_worker_number();
+            // auto compute_begin = MPI_Wtime();
+            // auto w = __cilkrts_get_worker_number();
 
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -12463,8 +12463,8 @@ public:
                 }
             }
 
-            auto compute_end = MPI_Wtime();
-            s_compute_time[w] += (compute_end - compute_begin);
+            // auto compute_end = MPI_Wtime();
+            // s_compute_time[w] += (compute_end - compute_begin);
         }
     }
 
@@ -12637,8 +12637,8 @@ public:
 
             #pragma cilk grainsize 1
             cilk_for (int ii = 0; ii < num_chunks; ii++) {
-                auto compute_begin = MPI_Wtime();
-                auto w = __cilkrts_get_worker_number();
+                // auto compute_begin = MPI_Wtime();
+                // auto w = __cilkrts_get_worker_number();
                 // int start_chunk = __cilkrts_get_worker_number() * chunks_per_worker;
                 int start_chunk = w * chunks_per_worker;
                 for (int c = 0; c < num_chunks; ++c) {
@@ -12666,16 +12666,16 @@ public:
                     }
                 }
 
-                auto compute_end = MPI_Wtime();
-                s_compute_time[w] += (compute_end - compute_begin);
+                // auto compute_end = MPI_Wtime();
+                // s_compute_time[w] += (compute_end - compute_begin);
             }
 
             for (int i = 0; i < num_chunks; i++) {
                 claimed[i].clear(std::memory_order_relaxed);
             }
         } else {
-            auto compute_begin = MPI_Wtime();
-            auto w = __cilkrts_get_worker_number();
+            // auto compute_begin = MPI_Wtime();
+            // auto w = __cilkrts_get_worker_number();
 
             for (int idx = 0; idx < nlocal; idx++) {
                 int i = local_idxs[idx];
@@ -12692,8 +12692,8 @@ public:
                 v[i].z += dtfm * f[i].z;
             }
 
-            auto compute_end = MPI_Wtime();
-            s_compute_time[w] += (compute_end - compute_begin);
+            // auto compute_end = MPI_Wtime();
+            // s_compute_time[w] += (compute_end - compute_begin);
         }
     }
 
@@ -12739,8 +12739,8 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
-            auto compute_begin = MPI_Wtime();
-            auto w = __cilkrts_get_worker_number();
+            // auto compute_begin = MPI_Wtime();
+            // auto w = __cilkrts_get_worker_number();
             int num_pairs = 0;
 
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
@@ -12911,11 +12911,11 @@ public:
                 spinlocks[i].unlock();
             }
 
-            auto compute_end = MPI_Wtime();
-            s_compute_time[w] += (compute_end - compute_begin);
-            auto duration = (compute_end - compute_begin) * 1e6;
-            total_time += duration;
-            total_num_pairs += num_pairs;
+            // auto compute_end = MPI_Wtime();
+            // s_compute_time[w] += (compute_end - compute_begin);
+            // auto duration = (compute_end - compute_begin) * 1e6;
+            // total_time += duration;
+            // total_num_pairs += num_pairs;
         }
 
 
@@ -13369,8 +13369,8 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
-            auto compute_begin = MPI_Wtime();
-            auto w = __cilkrts_get_worker_number();
+            // auto compute_begin = MPI_Wtime();
+            // auto w = __cilkrts_get_worker_number();
             int num_pairs = 0;
 
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
@@ -13742,11 +13742,11 @@ public:
                 spinlocks[i].unlock();
             }
 
-            auto compute_end = MPI_Wtime();
-            s_compute_time[w] += (compute_end - compute_begin);
-            auto duration = (compute_end - compute_begin) * 1e6;
-            total_time += duration;
-            total_num_pairs += num_pairs;
+            // auto compute_end = MPI_Wtime();
+            // s_compute_time[w] += (compute_end - compute_begin);
+            // auto duration = (compute_end - compute_begin) * 1e6;
+            // total_time += duration;
+            // total_num_pairs += num_pairs;
         }
 
         /*
@@ -14174,8 +14174,8 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
-            auto w = __cilkrts_get_worker_number();
-            auto compute_begin = MPI_Wtime();
+            // auto w = __cilkrts_get_worker_number();
+            // auto compute_begin = MPI_Wtime();
             int num_pairs = 0;
 
             for (int idx = c * PAIR_GRAINSIZE; idx < (c + 1) * PAIR_GRAINSIZE && idx < nlocal; idx++) {
@@ -14245,11 +14245,11 @@ public:
                 spinlocks[i].unlock();
             }
 
-            auto compute_end = MPI_Wtime();
-            s_compute_time[w] += (compute_end - compute_begin);
-            total_num_pairs += num_pairs;
-            auto duration = (compute_end - compute_begin) * 1e6;
-            total_time += duration;
+            // auto compute_end = MPI_Wtime();
+            // s_compute_time[w] += (compute_end - compute_begin);
+            // total_num_pairs += num_pairs;
+            // auto duration = (compute_end - compute_begin) * 1e6;
+            // total_time += duration;
         }
 
         auto& bond_list = zoid.bond_list_modified[timestep];
@@ -14258,8 +14258,8 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_bonds; c++) {
-            auto w = __cilkrts_get_worker_number();
-            auto compute_begin = MPI_Wtime();
+            // auto w = __cilkrts_get_worker_number();
+            // auto compute_begin = MPI_Wtime();
 
             for (int i = c * BOND_GRAINSIZE; i < (c + 1) * BOND_GRAINSIZE && i < nbonds; i++) {
                 auto& tup = bond_list[i];
@@ -14320,8 +14320,8 @@ public:
                 }
             }
 
-            auto compute_end = MPI_Wtime();
-            s_compute_time[w] += (compute_end - compute_begin);
+            // auto compute_end = MPI_Wtime();
+            // s_compute_time[w] += (compute_end - compute_begin);
         }
 
         /*
@@ -14860,8 +14860,8 @@ public:
 
         if (USE_MEMORY) {
             if (nlocal <= LJ_GRAINSIZE) {
-                auto w = __cilkrts_get_worker_number();
-                auto compute_begin = MPI_Wtime();
+                // auto w = __cilkrts_get_worker_number();
+                // auto compute_begin = MPI_Wtime();
                 int num_pairs = 0;
 
                 for (int idx = 0; idx < nlocal; idx++) {
@@ -14923,12 +14923,12 @@ public:
                     f[i].z += fztmp;
                 }
 
-                auto compute_end = MPI_Wtime();
-                s_compute_time[w] += (compute_end - compute_begin);
+                // auto compute_end = MPI_Wtime();
+                // s_compute_time[w] += (compute_end - compute_begin);
 
-                total_num_pairs += num_pairs;
-                auto duration = (compute_end - compute_begin) * 1e6;
-                total_time += duration;
+                // total_num_pairs += num_pairs;
+                // auto duration = (compute_end - compute_begin) * 1e6;
+                // total_time += duration;
 
                 return;
             }
@@ -14959,7 +14959,7 @@ public:
 
                     if (!claimed[s].test_and_set(std::memory_order_relaxed)) {
                         workers_used[worker_number] = 1;
-                        auto compute_begin = MPI_Wtime();
+                        // auto compute_begin = MPI_Wtime();
                         int num_pairs = 0;
 
                         for (int idx = s * MODIFY_GRAINSIZE; idx < (s + 1) * MODIFY_GRAINSIZE && idx < nlocal; idx++) {
@@ -15024,11 +15024,11 @@ public:
                             f[i].z += fztmp;
                         }
 
-                        auto compute_end = MPI_Wtime();
-                        s_compute_time[worker_number] += (compute_end - compute_begin);
-                        total_num_pairs += num_pairs;
-                        auto duration = (compute_end - compute_begin) * 1e6;
-                        total_time += duration;
+                        // auto compute_end = MPI_Wtime();
+                        // s_compute_time[worker_number] += (compute_end - compute_begin);
+                        // total_num_pairs += num_pairs;
+                        // auto duration = (compute_end - compute_begin) * 1e6;
+                        // total_time += duration;
                     }
                 }
             }
@@ -15042,7 +15042,7 @@ public:
 
             #pragma cilk grainsize 1
             cilk_for (int c = 0; c < num_chunks_reduce; c++) {
-                auto compute_begin = MPI_Wtime();
+                // auto compute_begin = MPI_Wtime();
 
                 for (int local_idx = c * 1024; local_idx < (c + 1) * 1024 && local_idx < num_local_to_global; local_idx++) {
                     int global_idx = local_to_global_idx[local_idx];
@@ -15062,9 +15062,9 @@ public:
                     }
                 }
 
-                auto compute_end = MPI_Wtime();
-                auto duration = (compute_end - compute_begin) * 1e6;
-                total_time += duration;
+                // auto compute_end = MPI_Wtime();
+                // auto duration = (compute_end - compute_begin) * 1e6;
+                // total_time += duration;
             }
 
             /*
@@ -15245,8 +15245,8 @@ public:
         auto* a0 = pair->a0;
 
         if (nlocal <= GRAINSIZE) {
-            auto w = __cilkrts_get_worker_number();
-            auto compute_begin = MPI_Wtime();
+            // auto w = __cilkrts_get_worker_number();
+            // auto compute_begin = MPI_Wtime();
             int num_pairs = 0;
 
             for (int idx = 0; idx < nlocal; idx++) {
@@ -15315,11 +15315,11 @@ public:
                 f[i].z += fztmp;
             }
 
-            auto compute_end = MPI_Wtime();
-            s_compute_time[w] += (compute_end - compute_begin);
-            auto duration = (compute_end - compute_begin) * 1e6;
-            total_time += duration;
-            total_num_pairs += num_pairs;
+            // auto compute_end = MPI_Wtime();
+            // s_compute_time[w] += (compute_end - compute_begin);
+            // auto duration = (compute_end - compute_begin) * 1e6;
+            // total_time += duration;
+            // total_num_pairs += num_pairs;
 
             return;
         }
@@ -15328,8 +15328,8 @@ public:
 
         #pragma cilk grainsize 1
         cilk_for (int c = 0; c < num_chunks_pair; c++) {
-            auto w = __cilkrts_get_worker_number();
-            auto compute_begin = MPI_Wtime();
+            // auto w = __cilkrts_get_worker_number();
+            // auto compute_begin = MPI_Wtime();
             int num_pairs = 0;
 
             for (int idx = c * GRAINSIZE; idx < (c + 1) * GRAINSIZE && idx < nlocal; idx++) {
@@ -15401,12 +15401,12 @@ public:
                 spinlocks[i].unlock();
             }
 
-            auto compute_end = MPI_Wtime();
-            s_compute_time[w] += (compute_end - compute_begin);
+            // auto compute_end = MPI_Wtime();
+            // s_compute_time[w] += (compute_end - compute_begin);
 
-            auto duration = (compute_end - compute_begin) * 1e6;
-            total_time += duration;
-            total_num_pairs += num_pairs;
+            // auto duration = (compute_end - compute_begin) * 1e6;
+            // total_time += duration;
+            // total_num_pairs += num_pairs;
         }
 
         /*
