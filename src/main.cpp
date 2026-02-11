@@ -101,7 +101,7 @@ int main(int argc, char **argv)
 #ifdef __linux__
     // if (!stencilMDConfig.ONLY_RUN_LAMMPS) {
     if (!ONLY_RUN_LAMMPS) {
-        constexpr bool USE_MULTI_SOCKET = false;
+        constexpr bool USE_MULTI_SOCKET = true;
         {
             auto calling_thread = pthread_self();
 
@@ -122,7 +122,7 @@ int main(int argc, char **argv)
                 MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
                 constexpr int NUM_CORES_PER_SOCKET = 24;
-                constexpr int NUM_SOCKETS = 4;
+                constexpr int NUM_SOCKETS = 2;
                 constexpr int NUM_CORES_PER_NODE = NUM_CORES_PER_SOCKET * NUM_SOCKETS;
 
                 constexpr bool USE_STREAMS = true;
