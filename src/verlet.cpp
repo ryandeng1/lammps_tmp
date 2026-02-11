@@ -3332,21 +3332,21 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                     requests_completed[idx] = true;
                     if (idx < zoid_pairs_at_stream.size()) {
                         auto [src_zoid_num, dst_zoid_num] = zoid_pairs_at_stream[idx];
-                        timestamp_mutex.lock();
-                        timestamp_records.push_back({
-                            src_zoid_num,
-                            src_zoid_num % comm->nprocs,
-                            dst_zoid_num,
-                            comm->me,
-                            dep,
-                            MPI_Wtime(),
-                            false,
-                            starting_timestep,
-                            curr_dt,
-                            false,
-                            -1,
-                        });
-                        timestamp_mutex.unlock();
+                        // timestamp_mutex.lock();
+                        // timestamp_records.push_back({
+                        //     src_zoid_num,
+                        //     src_zoid_num % comm->nprocs,
+                        //     dst_zoid_num,
+                        //     comm->me,
+                        //     dep,
+                        //     MPI_Wtime(),
+                        //     false,
+                        //     starting_timestep,
+                        //     curr_dt,
+                        //     false,
+                        //     -1,
+                        // });
+                        // timestamp_mutex.unlock();
                         auto& zoid = curr_dt ? stencilMD->zoid_num_to_zoid_many_cuts[dst_zoid_num] : stencilMD->zoid_num_to_zoid_many_cuts_next_dt[dst_zoid_num];
                         stencilMD->UNPACK_POS_VEL_MANY_CUTS_ZOID_PIPELINED<curr_dt>(zoid, src_zoid_num, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE);
                         zoid_recv_neighbor_counters[zoid.num].fetch_sub(1, std::memory_order_relaxed);
@@ -3416,38 +3416,37 @@ void Verlet::run_stencil_md_many_cuts_process_stream_better_work_queue(int start
                                     int find_idx = std::distance(send_neighbors.begin(), find_it);
                                     // DO NOT unpack force
                                     stencilMD->UNPACK_DATA_MANY_CUTS_HELPER_SELF_PIPELINED<curr_dt>(zoid, recv_idx, recv_zoid_num, find_idx, default_start_t, default_end_t, DEFAULT_PIPELINE_STAGE, false);
-                                    timestamp_mutex.lock();
-                                    int send_dep = curr_dt ? stencilMD->zoid_num_to_dep[recv_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[recv_zoid_num];
+                                    // timestamp_mutex.lock();
+                                    // int send_dep = curr_dt ? stencilMD->zoid_num_to_dep[recv_zoid_num] : stencilMD->zoid_num_to_dep_next_dt[recv_zoid_num];
                                     // sender record
-                                    timestamp_records.push_back({
-                                        recv_zoid_num,
-                                        recv_zoid_num % comm->nprocs,
-                                        zoid.num,
-                                        comm->me,
-                                        send_dep,
-                                        MPI_Wtime(),
-                                        true,
-                                        starting_timestep,
-                                        curr_dt,
-                                        false,
-                                        send_dep,
-                                    });
-
+                                    // timestamp_records.push_back({
+                                    //     recv_zoid_num,
+                                    //     recv_zoid_num % comm->nprocs,
+                                    //     zoid.num,
+                                    //     comm->me,
+                                    //     send_dep,
+                                    //     MPI_Wtime(),
+                                    //     true,
+                                    //     starting_timestep,
+                                    //     curr_dt,
+                                    //     false,
+                                    //     send_dep,
+                                    // });
                                     // receiver record
-                                    timestamp_records.push_back({
-                                        recv_zoid_num,
-                                        recv_zoid_num % comm->nprocs,
-                                        zoid.num,
-                                        comm->me,
-                                        dep,
-                                        MPI_Wtime(),
-                                        false,
-                                        starting_timestep,
-                                        curr_dt,
-                                        false,
-                                        -1,
-                                    });
-                                    timestamp_mutex.unlock();
+                                    // timestamp_records.push_back({
+                                    //     recv_zoid_num,
+                                    //     recv_zoid_num % comm->nprocs,
+                                    //     zoid.num,
+                                    //     comm->me,
+                                    //     dep,
+                                    //     MPI_Wtime(),
+                                    //     false,
+                                    //     starting_timestep,
+                                    //     curr_dt,
+                                    //     false,
+                                    //     -1,
+                                    // });
+                                    // timestamp_mutex.unlock();
                                     zoid_recv_neighbor_counters[zoid.num].fetch_sub(1, std::memory_order_relaxed);
                                     auto& claimed = zoid_claimed[zoid.num];
                                     if (zoid_recv_neighbor_counters[zoid.num].load(std::memory_order_relaxed) == 0) {
