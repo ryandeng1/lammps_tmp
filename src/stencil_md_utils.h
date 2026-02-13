@@ -48,17 +48,17 @@ constexpr int SW = 3;
 constexpr int TERSOFF = 4;
 constexpr int EAM = 5;
 
-// constexpr int EXPERIMENT = BOND_FENE;
+constexpr int EXPERIMENT = BOND_FENE;
 // constexpr int EXPERIMENT = LJ;
 // constexpr int EXPERIMENT = DPD;
 // constexpr int EXPERIMENT = SW;
-constexpr int EXPERIMENT = TERSOFF;
+// constexpr int EXPERIMENT = TERSOFF;
 
 constexpr int NUM_DEPS = 4;
 
 constexpr int NUM_ZOIDS = 4 * 4 * 4;
 
-constexpr int NUM_TIMESTEPS_IN_PARALLEL = 2;
+constexpr int NUM_TIMESTEPS_IN_PARALLEL = 6;
 // constexpr double ADDITIONAL_CUTOFF = 0.4 + 1e-10;
 // constexpr double ADDITIONAL_CUTOFF = 0.3 + 1e-10;
 // constexpr double ADDITIONAL_CUTOFF = 0.5 + 1e-10;
