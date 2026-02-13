@@ -51,8 +51,8 @@ constexpr int EAM = 5;
 // constexpr int EXPERIMENT = BOND_FENE;
 // constexpr int EXPERIMENT = LJ;
 // constexpr int EXPERIMENT = DPD;
-// constexpr int EXPERIMENT = SW;
-constexpr int EXPERIMENT = TERSOFF;
+constexpr int EXPERIMENT = SW;
+// constexpr int EXPERIMENT = TERSOFF;
 
 constexpr int NUM_DEPS = 4;
 
