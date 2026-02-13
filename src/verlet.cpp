@@ -1273,6 +1273,19 @@ void Verlet::run(int n) {
 	    lammps_timings.push_back(std::make_tuple("COMM", "START", comm->me, tv_compute_end.tv_sec * MICROSECOND_FACTOR + tv_compute_end.tv_usec));
 	}
 
+        double max_velocity = 0.0;
+        for (int j = 0; j < atom->nlocal; j++) {
+            double vmag_sq = atom->v[j][0]*atom->v[j][0] +
+                             atom->v[j][1]*atom->v[j][1] +
+                             atom->v[j][2]*atom->v[j][2];
+            if (vmag_sq > max_velocity) max_velocity = vmag_sq;
+        }
+        max_velocity = sqrt(max_velocity);
+        MPI_Allreduce(MPI_IN_PLACE, &max_velocity, 1, MPI_DOUBLE, MPI_MAX, world);
+        if (comm->me == 0) {
+            std::cout << "max vel: " << max_velocity << std::endl;
+        }
+
         // auto end_m = std::chrono::high_resolution_clock::now();
         // auto duration_m = std::chrono::duration_cast<std::chrono::microseconds>(end_m - begin_m).count();
         // lammps_modify_initial_integrate_duration += duration_m;
