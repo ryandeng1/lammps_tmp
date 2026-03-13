@@ -1067,7 +1067,7 @@ public:
 
     static constexpr int NUM_CUTS_X = 8;
     static constexpr int NUM_CUTS_Y = 8;
-    static constexpr int NUM_CUTS_Z = 8;
+    static constexpr int NUM_CUTS_Z = 4;
 
     static constexpr int NUM_ZOIDS_X = NUM_CUTS_X * 2;
     static constexpr int NUM_ZOIDS_Y = NUM_CUTS_Y * 2;
