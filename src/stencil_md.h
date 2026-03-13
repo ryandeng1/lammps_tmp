@@ -4188,7 +4188,8 @@ public:
 
                 zoid.neigh_short[0].resize(zoid.x_stencil_md[0].size());
                 for (int i = 0; i < zoid.x_stencil_md[0].size(); i++) {
-                    zoid.neigh_short[0][i].reserve(1024);
+                    // this uses a lot of memory
+                    // zoid.neigh_short[0][i].reserve(1024);
                 }
             }
         }
